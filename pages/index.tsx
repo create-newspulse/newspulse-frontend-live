@@ -2,17 +2,24 @@
 
 import Head from 'next/head';
 import Script from 'next/script';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import VoiceButton from '../components/VoiceButton';
 import LanguageToggle from '../components/LanguageToggle';
 import { useLanguage } from '../utils/LanguageContext';
 import { motion } from 'framer-motion';
 import AppDownloadSection from '../components/AppDownloadSection';
+import { fetchRssNews } from '../lib/fetchRssNews'; // ✅ Make sure this file exists
 
 export default function HomePage() {
   const { language } = useLanguage();
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
+  const [rssNews, setRssNews] = useState([]);
+
   const toggleVoice = () => setIsVoiceEnabled(prev => !prev);
+
+  useEffect(() => {
+fetchRssNews("World News").then(setRssNews); // ✅ Correct function name
+  }, []);
 
   return (
     <div className={`min-h-screen bg-white text-black font-${language} overflow-x-hidden`}>
@@ -20,6 +27,7 @@ export default function HomePage() {
         <title>News Pulse</title>
         <meta name="description" content="Top headlines & live breaking news from around the world – curated by News Pulse." />
         <link rel="icon" href="/favicon.ico" />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet" />
       </Head>
 
       {/* Google Analytics */}
@@ -56,7 +64,7 @@ export default function HomePage() {
         </motion.div>
       </div>
 
-      {/* Hero Banner */}
+      {/* Hero Section */}
       <div className="bg-gradient-to-r from-blue-500 to-indigo-600 text-center py-16 px-4">
         <h1 className="text-5xl sm:text-7xl font-extrabold text-white">News Pulse</h1>
         <p className="text-white text-lg mt-4 tracking-wide">Your pulse on what matters most.</p>
@@ -66,10 +74,31 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Category Section */}
+      {/* RSS News Section */}
+      <section className="px-4 py-12 max-w-5xl mx-auto">
+        <h2 className="text-3xl font-bold mb-6">📰 Latest RSS Feed News</h2>
+        <ul className="space-y-6">
+          {rssNews.map((item, i) => (
+            <li key={i} className="p-5 border rounded-lg shadow hover:shadow-md transition">
+              <a
+                href={item.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xl font-semibold text-blue-700 hover:underline"
+              >
+                {item.title}
+              </a>
+              <p className="text-sm text-gray-500 mt-2">{item.pubDate}</p>
+              <p className="text-gray-700 mt-2">{item.description?.slice(0, 150)}...</p>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {/* App Download Section */}
       <AppDownloadSection />
 
-      {/* 💼 Monetization / Branding Bar */}
+      {/* Monetization Bar */}
       <section className="bg-gray-50 border-t py-6 px-4 text-center text-sm text-gray-600">
         <div className="flex flex-wrap justify-center gap-6 items-center font-medium text-gray-800">
           <span>💼 <a href="#" className="hover:underline">Advertise With Us</a></span>
@@ -78,28 +107,27 @@ export default function HomePage() {
         </div>
       </section>
 
-{/* 📱 App Download Section */}
-<section className="py-12 px-4 text-center bg-white">
-  <h3 className="text-2xl font-semibold text-gray-800 mb-4">
-    📲 News Pulse in your hand</h3>
-  <p className="text-gray-600 mb-6">Download our app and stay informed wherever you go.</p>
-  <div className="flex justify-center items-center gap-6 flex-wrap">
-    <a href="#" target="_blank" rel="noopener noreferrer">
-      <img
-        src="/google-play-badge.png"
-        alt="Get it on Google Play"
-        className="h-14 hover:scale-105 transition-transform"
-      />
-    </a>
-    <a href="#" target="_blank" rel="noopener noreferrer">
-      <img
-        src="/app-store-badge.png"
-        alt="Download on the App Store"
-        className="h-14 hover:scale-105 transition-transform"
-      />
-    </a>
-  </div>
-</section>
+      {/* Download Badges Section */}
+      <section className="py-12 px-4 text-center bg-white">
+        <h3 className="text-2xl font-semibold text-gray-800 mb-4">📲 News Pulse in your hand</h3>
+        <p className="text-gray-600 mb-6">Download our app and stay informed wherever you go.</p>
+        <div className="flex justify-center items-center gap-6 flex-wrap">
+          <a href="#" target="_blank" rel="noopener noreferrer">
+            <img
+              src="/google-play-badge.png"
+              alt="Get it on Google Play"
+              className="h-14 hover:scale-105 transition-transform"
+            />
+          </a>
+          <a href="#" target="_blank" rel="noopener noreferrer">
+            <img
+              src="/app-store-badge.png"
+              alt="Download on the App Store"
+              className="h-14 hover:scale-105 transition-transform"
+            />
+          </a>
+        </div>
+      </section>
 
       {/* Footer */}
       <footer className="bg-gray-100 border-t border-gray-300 py-10 text-center">
