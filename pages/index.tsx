@@ -11,6 +11,7 @@ import { MobileNavigation } from '../components/MobileNavigation';
 import { OptimizedNewsCard } from '../components/OptimizedComponents';
 import { useResourcePreloader } from '../hooks/usePerformance';
 import { motion, AnimatePresence } from 'framer-motion';
+import AdminContentLoader from '../components/AdminContentLoader';
 
 // Advanced Language Toggle with Premium Design
 const AdvancedLanguageToggle = () => {
@@ -519,62 +520,137 @@ export default function HomePage() {
                 )}
               </motion.div>
 
-              {/* Recent News Grid */}
-              <div className="grid md:grid-cols-2 gap-6">
-                {[
-                  {
-                    title: "Technology Giants Announce New AI Initiatives",
-                    excerpt: "Major tech companies unveil ambitious artificial intelligence projects...",
-                    category: "Technology",
-                    time: "15 mins ago",
-                    image: "🚀"
-                  },
-                  {
-                    title: "Climate Summit Reaches Historic Agreement",
-                    excerpt: "World leaders commit to unprecedented environmental targets...",
-                    category: "Environment",
-                    time: "1 hour ago",
-                    image: "🌍"
-                  },
-                  {
-                    title: "Sports Championship Finals Set",
-                    excerpt: "Exciting matchups confirmed for this weekend's championship games...",
-                    category: "Sports",
-                    time: "2 hours ago",
-                    image: "⚽"
-                  },
-                  {
-                    title: "Cultural Festival Celebrates Diversity",
-                    excerpt: "Annual celebration brings together communities from around the world...",
-                    category: "Culture",
-                    time: "3 hours ago",
-                    image: "🎭"
-                  }
-                ].map((article, index) => (
-                  <motion.div
-                    key={index}
-                    initial={{ opacity: 0, y: 30 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.6, delay: index * 0.1 }}
-                    whileHover={{ y: -5, scale: 1.02 }}
-                    className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 cursor-pointer group"
-                  >
-                    <div className="text-4xl mb-4">{article.image}</div>
-                    <div className="flex items-center space-x-2 mb-3">
-                      <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-xs font-semibold">
-                        {article.category}
-                      </span>
-                      <span className="text-gray-500 text-xs">{article.time}</span>
+              {/* Live Admin Content Grid */}
+              <AdminContentLoader limit={8} showBreaking={true}>
+                {({ news, breakingNews, loading, isConnected }) => (
+                  <div className="space-y-8">
+                    {/* Breaking News Banner */}
+                    {breakingNews.length > 0 && (
+                      <motion.div
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        className="bg-gradient-to-r from-red-600 to-red-700 rounded-2xl p-6 text-white shadow-xl"
+                      >
+                        <div className="flex items-center space-x-3 mb-4">
+                          <div className="bg-white text-red-600 px-3 py-1 rounded-full text-sm font-bold animate-pulse">
+                            🔴 BREAKING
+                          </div>
+                          <div className="text-sm opacity-90">
+                            {new Date(breakingNews[0].publishedAt).toLocaleTimeString()}
+                          </div>
+                        </div>
+                        <h3 className="text-xl font-bold mb-2">{breakingNews[0].title}</h3>
+                        <p className="text-red-100">{breakingNews[0].excerpt || breakingNews[0].content?.substring(0, 150) + '...'}</p>
+                      </motion.div>
+                    )}
+
+                    {/* News Grid */}
+                    <div className="grid md:grid-cols-2 gap-6">
+                      {loading ? (
+                        // Loading skeleton
+                        Array.from({ length: 4 }).map((_, index) => (
+                          <div key={index} className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 animate-pulse">
+                            <div className="w-12 h-12 bg-gray-200 rounded-full mb-4"></div>
+                            <div className="flex space-x-2 mb-3">
+                              <div className="w-16 h-6 bg-gray-200 rounded-full"></div>
+                              <div className="w-20 h-6 bg-gray-200 rounded-full"></div>
+                            </div>
+                            <div className="w-full h-6 bg-gray-200 rounded mb-2"></div>
+                            <div className="w-3/4 h-4 bg-gray-200 rounded"></div>
+                          </div>
+                        ))
+                      ) : (
+                        news.map((article, index) => (
+                          <motion.div
+                            key={article._id || index}
+                            initial={{ opacity: 0, y: 30 }}
+                            whileInView={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.6, delay: index * 0.1 }}
+                            whileHover={{ y: -5, scale: 1.02 }}
+                            className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700 cursor-pointer group relative"
+                            onClick={() => window.location.href = `/news/${article._id || article.slug}`}
+                          >
+                            {/* Article Image or Icon */}
+                            <div className="mb-4">
+                              {article.image && article.image !== '/fallback.jpg' ? (
+                                <img 
+                                  src={article.image} 
+                                  alt={article.title}
+                                  className="w-full h-32 object-cover rounded-lg"
+                                  loading="lazy"
+                                />
+                              ) : (
+                                <div className="text-4xl">
+                                  {article.category === 'Technology' ? '🚀' :
+                                   article.category === 'Sports' ? '⚽' :
+                                   article.category === 'Business' ? '💼' :
+                                   article.category === 'Health' ? '🏥' :
+                                   article.category === 'Environment' ? '🌍' :
+                                   article.category === 'Culture' ? '🎭' : '📰'}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Article Meta */}
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center space-x-2">
+                                <span className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-3 py-1 rounded-full text-xs font-semibold">
+                                  {article.category}
+                                </span>
+                                <span className="text-gray-500 dark:text-gray-400 text-xs">
+                                  {new Date(article.publishedAt).toLocaleString()}
+                                </span>
+                              </div>
+                              
+                              {/* Connection Status Indicator */}
+                              <div className="flex items-center space-x-2">
+                                {isConnected ? (
+                                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Live from Admin Panel"></div>
+                                ) : (
+                                  <div className="w-2 h-2 bg-yellow-500 rounded-full" title="Cached Content"></div>
+                                )}
+                                
+                                {/* Bookmark Button */}
+                                <BookmarkButton 
+                                  article={article} 
+                                  className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Article Content */}
+                            <h4 className="font-bold text-gray-900 dark:text-white mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-2">
+                              {article.title}
+                            </h4>
+                            
+                            <p className="text-gray-600 dark:text-gray-300 text-sm line-clamp-3 leading-relaxed">
+                              {article.excerpt || article.content?.substring(0, 150) + '...'}
+                            </p>
+
+                            {/* Article Stats */}
+                            <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+                              <div className="flex items-center space-x-4 text-xs text-gray-500 dark:text-gray-400">
+                                <span className="flex items-center space-x-1">
+                                  <span>👁️</span>
+                                  <span>{article.reads || 0}</span>
+                                </span>
+                                <span className="flex items-center space-x-1">
+                                  <span>💬</span>
+                                  <span>{article.engagement || 0}%</span>
+                                </span>
+                              </div>
+                              
+                              <div className="text-xs text-gray-400 dark:text-gray-500">
+                                {article.source === 'fallback' ? 'Cached' : 'Live'}
+                              </div>
+                            </div>
+                          </motion.div>
+                        ))
+                      )}
                     </div>
-                    <h4 className="font-bold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">
-                      {article.title}
-                    </h4>
-                    <p className="text-gray-600 text-sm leading-relaxed">
-                      {article.excerpt}
-                    </p>
-                  </motion.div>
-                ))}
-              </div>
+                  </div>
+                )}
+              </AdminContentLoader>
             </div>
 
             {/* Sidebar - Trending & Live Updates */}
