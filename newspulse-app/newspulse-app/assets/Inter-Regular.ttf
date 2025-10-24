@@ -1,0 +1,33 @@
+import React from 'react';
+import { Text, View, StyleSheet } from 'react-native';
+import { useFonts } from 'expo-font';
+import AppLoading from 'expo-app-loading'; // Optional for splash while loading
+
+export default function App() {
+  const [fontsLoaded] = useFonts({
+    'Inter-Regular': require('./assets/fonts/Inter-Regular.ttf'),
+  });
+
+  if (!fontsLoaded) {
+    return <AppLoading />;
+  }
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.headline}>News Pulse is Live!</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headline: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 24,
+    color: '#333',
+  },
+});

@@ -1,0 +1,25 @@
+{
+  "name": "newspulse-app",
+  "version": "1.0.0",
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "web": "expo start --web",
+    "android": "expo start --android",
+    "ios": "expo start --ios"
+  },
+  "dependencies": {
+    "expo": "~53.0.9",
+    "expo-splash-screen": "~0.30.8",
+    "expo-asset": "~8.12.1",
+    "expo-constants": "~15.4.3",
+    "expo-file-system": "~16.5.1",
+    "expo-status-bar": "~1.12.1",
+    "@expo/metro-runtime": "~5.0.4",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "react-native": "0.73.11",
+    "react-native-web": "~0.19.6"
+  },
+  "private": true
+}
