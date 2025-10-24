@@ -12,6 +12,7 @@ import { OptimizedNewsCard } from '../components/OptimizedComponents';
 import { useResourcePreloader } from '../hooks/usePerformance';
 import { motion, AnimatePresence } from 'framer-motion';
 import AdminContentLoader from '../components/AdminContentLoader';
+import AdminDashboard from '../components/AdminDashboard';
 
 // Advanced Language Toggle with Premium Design
 const AdvancedLanguageToggle = () => {
@@ -1046,6 +1047,9 @@ export default function HomePage() {
           </div>
         </div>
       </footer>
+
+      {/* Admin Dashboard Widget - Only show in development or for admin users */}
+      {process.env.NODE_ENV === 'development' && <AdminDashboard />}
     </div>
   );
 }
