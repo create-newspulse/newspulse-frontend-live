@@ -5,11 +5,6 @@ module.exports = {
   
   // Fix for Vercel deployment and workspace detection
   outputFileTracingRoot: __dirname,
-  
-  // Experimental features for better performance
-  experimental: {
-    gzipSize: true,
-  },
 
   images: {
     domains: [
