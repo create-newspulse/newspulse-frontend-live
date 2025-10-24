@@ -22,6 +22,7 @@
     "@types/react": "^19.1.4",
     "@types/react-dom": "^19.1.4",
     "autoprefixer": "^10.4.19",
+    "critters": "^0.0.23",
     "glob": "^11.0.0",
     "postcss": "^8.4.38",
     "rimraf": "^6.0.1",
