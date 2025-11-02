@@ -1,6 +1,7 @@
 import Head from 'next/head';
 import Script from 'next/script';
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
 import { useLanguage } from '../utils/LanguageContext';
 import { useTheme } from '../utils/ThemeContext';
 import { useLiveNews, useNewsSearch } from '../hooks/useLiveNews';
@@ -258,13 +259,25 @@ const AdvancedSearchBar = ({ onSearch, articles = [] }) => {
 };
 
 const categories = [
-  'Politics', 'Regional', 'National', 'International',
-  'Business', 'Glamorous', 'Lifestyle', 'Science', 'Technology'
+  'Breaking',
+  'Regional',
+  'National',
+  'International',
+  'Business',
+  'Sci-Tech',
+  'Sports',
+  'Lifestyle',
+  'Glamour',
+  'Web Stories',
+  'Viral Videos',
+  'Editorial',
+  'Youth Pulse'
 ];
 
 export default function HomePage() {
   const { language } = useLanguage();
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(false);
+  const router = useRouter();
   
   // Live news integration
   const { news, loading, error, lastUpdated, refreshNews, loadCategoryNews } = useLiveNews();
@@ -402,21 +415,23 @@ export default function HomePage() {
               initial={{ opacity: 0, x: -100 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 1.5, duration: 1 }}
-              className="bg-red-600/90 backdrop-blur-sm rounded-full px-6 py-3 inline-flex items-center space-x-3 shadow-2xl border border-red-400/30"
+              className="bg-red-600/90 backdrop-blur-sm rounded-full px-6 py-3 inline-flex items-center space-x-3 shadow-2xl border border-red-400/30 min-w-0"
             >
               <motion.span
                 animate={{ scale: [1, 1.2, 1] }}
                 transition={{ duration: 1, repeat: Infinity }}
                 className="w-3 h-3 bg-white rounded-full"
               />
-              <span className="text-sm font-semibold uppercase tracking-wider">Breaking News</span>
-              <motion.div
-                animate={{ x: [0, -100] }}
-                transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-                className="text-sm"
-              >
-                Stay updated with the latest developments around the world
-              </motion.div>
+              <span className="text-sm font-semibold uppercase tracking-wider shrink-0">BREAKING NEWS</span>
+              <div className="relative flex-1 overflow-hidden min-w-0" aria-live="polite">
+                <motion.div
+                  className="text-sm whitespace-nowrap pr-6"
+                  animate={{ x: ['100%', '-100%'] }}
+                  transition={{ duration: 18, repeat: Infinity, ease: 'linear' }}
+                >
+                  Stay updated with the latest developments around the world
+                </motion.div>
+              </div>
             </motion.div>
           </motion.div>
         </div>
@@ -469,6 +484,7 @@ export default function HomePage() {
                 whileInView={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.8 }}
                 className="mb-8"
+                id="breaking"
               >
                 <div className="flex items-center space-x-3 mb-6">
                   <motion.div
@@ -766,15 +782,53 @@ export default function HomePage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
             {categories.map((category, index) => {
-              const categoryIcons = {
-                'Politics': '🏛️',
+              const categoryIcons: Record<string, string> = {
+                'Breaking': '🛑',
+                'Regional': '🗺️',
+                'National': '🏛️',
+                'International': '🌍',
                 'Business': '💼',
-                'Technology': '🚀',
+                'Sci-Tech': '�',
                 'Sports': '⚽',
-                'Entertainment': '🎬',
-                'Health': '🏥',
-                'Science': '🔬',
-                'World': '🌍'
+                'Lifestyle': '🧘',
+                'Glamour': '✨',
+                'Web Stories': '📚',
+                'Viral Videos': '🎥',
+                'Editorial': '🖋️',
+                'Youth Pulse': '🎓'
+              };
+
+              const routeMap: Record<string, string | { type: 'anchor', target: string }> = {
+                'Breaking': { type: 'anchor', target: '#breaking' },
+                'Regional': '/regional',
+                'National': '/national',
+                'International': '/international',
+                'Business': '/business',
+                'Sci-Tech': '/science-technology',
+                'Sports': '/sports',
+                'Lifestyle': '/lifestyle',
+                'Glamour': '/glamour',
+                'Web Stories': '/web-stories',
+                'Viral Videos': '/viral-videos',
+                'Editorial': '/editorial',
+                'Youth Pulse': '/youth-pulse'
+              };
+
+              const handleCategoryClick = (cat: string) => {
+                const target = routeMap[cat];
+                if (!target) return;
+                if (typeof target === 'string') {
+                  router.push(target);
+                } else if (target.type === 'anchor') {
+                  // Smooth scroll to anchor
+                  const el = document.querySelector(target.target);
+                  if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  } else {
+                    // Fallback: navigate to home with hash
+                    router.push('/' + target.target);
+                  }
+                }
               };
               
               return (
@@ -789,6 +843,7 @@ export default function HomePage() {
                     boxShadow: "0 20px 40px rgba(0,0,0,0.1)"
                   }}
                   className="group cursor-pointer"
+                  onClick={() => handleCategoryClick(category)}
                 >
                   <div className="bg-white rounded-3xl p-8 text-center shadow-lg border border-gray-100 hover:border-blue-200 transition-all duration-300 h-full">
                     <motion.div

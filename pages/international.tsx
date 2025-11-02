@@ -4,20 +4,20 @@ import LanguageToggle from '../components/LanguageToggle';
 import fetchTopNewswithAutoKey from '../lib/fetchTopNewsAuto';
 
 export default function InternationalNews() {
-  const { language, setLanguage } = useLanguage();
-  const [topHeadlines, setTopHeadlines] = useState([]);
+  const { language } = useLanguage();
+  const [topHeadlines, setTopHeadlines] = useState<any[]>([]);
 
+  // Fetch whenever language changes
   useEffect(() => {
-    setLanguage('english');
-    fetchTopNewswithAutoKey('english').then(setTopHeadlines);
-  }, []);
+    fetchTopNewswithAutoKey(language).then(setTopHeadlines);
+  }, [language]);
 
   return (
     <>
       <LanguageToggle />
-      <main className="p-4 font-english">
+      <main className={`p-4 ${language === 'hindi' ? 'font-hindi' : 'font-english'}`}>
         <h1 className="text-4xl font-bold text-center text-blue-700">
-          🔵 News Pulse – English
+          🔵 News Pulse – {language === 'hindi' ? 'Hindi' : language === 'gujarati' ? 'Gujarati' : 'English'}
         </h1>
         {topHeadlines.length > 0 ? (
           <ul className="mt-6 space-y-2">
