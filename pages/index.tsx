@@ -289,13 +289,15 @@ export default function HomePage() {
   const { bookmarkCount } = useBookmarks();
   const { isDark, toggleTheme } = useTheme();
   const { preloadImage, preloadFont } = useResourcePreloader();
+  const [mounted, setMounted] = useState(false);
 
   // Preload critical resources
   useEffect(() => {
     // Preload hero background images
     preloadImage('https://images.unsplash.com/photo-1569163139394-de4e4f43e4e5?w=1200');
-    // Preload fonts
-    preloadFont('/fonts/inter-var.woff2');
+    // Avoid preloading a non-existent local font in dev to prevent 404 noise
+    // preloadFont('/fonts/inter-var.woff2');
+    setMounted(true);
   }, [preloadImage, preloadFont]);
   
   // Handle search with analytics
@@ -340,27 +342,26 @@ export default function HomePage() {
         {/* Animated Background */}
         <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
           <div className="absolute inset-0 bg-black/40"></div>
-          <div className="absolute inset-0">
-            {[...Array(20)].map((_, i) => (
-              <motion.div
-                key={i}
-                className="absolute w-2 h-2 bg-white/20 rounded-full"
-                style={{
-                  left: `${Math.random() * 100}%`,
-                  top: `${Math.random() * 100}%`,
-                }}
-                animate={{
-                  y: [0, -100, 0],
-                  opacity: [0, 1, 0],
-                }}
-                transition={{
-                  duration: 3 + Math.random() * 2,
-                  repeat: Infinity,
-                  delay: Math.random() * 2,
-                }}
-              />
-            ))}
-          </div>
+          {/* Render animated particles only on client to avoid hydration mismatch */}
+          {mounted && (
+            <div className="absolute inset-0" suppressHydrationWarning>
+              {Array.from({ length: 20 }).map((_, i) => {
+                const left = Math.random() * 100;
+                const top = Math.random() * 100;
+                const duration = 3 + Math.random() * 2;
+                const delay = Math.random() * 2;
+                return (
+                  <motion.div
+                    key={i}
+                    className="absolute w-2 h-2 bg-white/20 rounded-full"
+                    style={{ left: `${left}%`, top: `${top}%` }}
+                    animate={{ y: [0, -100, 0], opacity: [0, 1, 0] }}
+                    transition={{ duration, repeat: Infinity, delay }}
+                  />
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Content */}
