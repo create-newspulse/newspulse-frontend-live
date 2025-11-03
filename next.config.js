@@ -7,13 +7,14 @@ module.exports = {
   outputFileTracingRoot: __dirname,
 
   images: {
-    domains: [
-      'cdn.newsapi.org',
-      'images.unsplash.com',
-      'media.licdn.com',
-      'static.toiimg.com',
-      'gnews.io',
-      'cdn.gulte.com',
+    // Migrate from deprecated `images.domains` to `remotePatterns`
+    remotePatterns: [
+      { protocol: 'https', hostname: 'cdn.newsapi.org', pathname: '/**' },
+      { protocol: 'https', hostname: 'images.unsplash.com', pathname: '/**' },
+      { protocol: 'https', hostname: 'media.licdn.com', pathname: '/**' },
+      { protocol: 'https', hostname: 'static.toiimg.com', pathname: '/**' },
+      { protocol: 'https', hostname: 'gnews.io', pathname: '/**' },
+      { protocol: 'https', hostname: 'cdn.gulte.com', pathname: '/**' },
     ],
   },
 
