@@ -1,21 +1,40 @@
 import Head from 'next/head';
-import dynamic from 'next/dynamic';
-
-const YouthPulse = dynamic(() => import('../components/YouthPulse'), { ssr: false });
+import { useRef, useState } from 'react';
+import YouthHero from '../components/youth/YouthHero';
+import CategoryGrid from '../components/youth/CategoryGrid';
+import FeaturedStories from '../components/youth/FeaturedStories';
+import SubmitStoryModal from '../components/youth/SubmitStoryModal';
+import { youthCategories, youthStories } from '../utils/youthData';
 
 export default function YouthPulsePage() {
+  const [open, setOpen] = useState(false);
+  const catRef = useRef<HTMLDivElement>(null);
+
+  const scrollToCategories = () => {
+    catRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   return (
     <div className="min-h-screen bg-white dark:bg-dark-primary text-black dark:text-dark-text">
       <Head>
-        <title>Youth Pulse - News Pulse</title>
-        <meta name="description" content="Campus news, careers, exams, and youth achievements." />
+        <title>🎓 Youth Pulse • NewsPulse</title>
+        <meta
+          name="description"
+          content="Your daily pulse on student life, campus buzz, exams, careers and young achievers."
+        />
       </Head>
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <h1 className="text-3xl font-extrabold mb-6">🎓 Youth Pulse</h1>
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border shadow-sm">
-          <YouthPulse />
+
+      <main className="mx-auto w-full max-w-6xl px-4 py-8">
+        <YouthHero onExplore={scrollToCategories} onSubmit={() => setOpen(true)} />
+
+        <div ref={catRef}>
+          <CategoryGrid categories={youthCategories} />
         </div>
-      </div>
+
+        <FeaturedStories stories={youthStories.slice(0, 5)} />
+      </main>
+
+      <SubmitStoryModal open={open} onClose={() => setOpen(false)} />
     </div>
   );
 }

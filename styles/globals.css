@@ -37,14 +37,8 @@
   }
 }
 
-/* Font optimization */
-@font-face {
-  font-family: 'Inter';
-  font-style: normal;
-  font-weight: 100 900;
-  font-display: swap;
-  src: url('/fonts/inter-var.woff2') format('woff2');
-}
+/* Font optimization (disabled custom file to avoid 404 in production).
+   Rely on system fonts via Tailwind default stack. */
 
 /* Smooth scrolling */
 html {

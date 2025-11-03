@@ -7,8 +7,7 @@ export default class MyDocument extends Document {
     return (
       <Html>
         <Head>
-          {/* PWA Manifest and Meta Tags */}
-          <link rel="manifest" href="/manifest.json" />
+          {/* Meta Tags */}
           <meta name="theme-color" content="#3b82f6" />
           <meta name="apple-mobile-web-app-capable" content="yes" />
           <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -19,7 +18,7 @@ export default class MyDocument extends Document {
           <meta name="msapplication-TileColor" content="#3b82f6" />
           <meta name="msapplication-tap-highlight" content="no" />
           
-          {/* App Icons */}
+          {/* App Icons (favicons) */}
           <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180x180.png" />
           <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32x32.png" />
           <link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-16x16.png" />

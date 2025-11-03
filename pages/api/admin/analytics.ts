@@ -36,12 +36,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Add server-side metadata
+    // Be defensive about runtime fields to avoid crashes (e.g., req.connection can be undefined)
+    const clientIp = (req.headers['x-forwarded-for'] as string)
+      || (req.socket && req.socket.remoteAddress)
+      || null;
+
     const analyticsData = {
       ...data,
       timestamp: new Date().toISOString(),
-      ip: req.headers['x-forwarded-for'] || req.connection.remoteAddress,
-      userAgent: req.headers['user-agent'],
-      referer: req.headers.referer,
+      ip: clientIp,
+      userAgent: req.headers['user-agent'] || null,
+      referer: (req.headers as any)['referer'] || (req.headers as any)['referrer'] || null,
       serverTimestamp: Date.now()
     };
 

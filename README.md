@@ -13,12 +13,10 @@
 - **Responsive design** for all devices
 - **Advanced typography** with optimized fonts
 
-### 📱 **Progressive Web App (PWA)**
-- **Installable** on mobile and desktop
-- **Offline reading** capabilities
-- **Push notifications** for breaking news
-- **Service worker** for caching
-- **App-like experience**
+### 📱 **PWA (disabled by default)**
+- PWA features (install/offline/service worker) are disabled by default for a simpler setup.
+- No service worker or web app manifest is shipped in production.
+- You can re-enable later by adding a manifest and a SW, and wiring them in `_document.tsx` and `_app.tsx`.
 
 ### 🔍 **Advanced Search**
 - **Real-time suggestions** with autocomplete
@@ -111,9 +109,8 @@ newspulse-frontend/
 │   ├── _document.tsx   # Document structure
 │   └── index.tsx       # Homepage
 ├── public/              # Static assets
-│   ├── icons/          # PWA icons
-│   ├── manifest.json   # PWA manifest
-│   └── sw.js          # Service worker
+│   ├── icons/          # Favicons / app icons
+│   └── favicon.ico     # Site favicon
 ├── styles/              # Global styles
 ├── utils/               # Context providers
 │   ├── LanguageContext.tsx
@@ -140,11 +137,10 @@ NEXT_PUBLIC_SITE_URL=https://your-domain.com
 
 ### PWA Configuration
 
-The PWA is pre-configured with:
-- **Offline support** via service worker
-- **Installable** on all platforms
-- **Push notifications** ready
-- **Caching strategies** optimized
+PWA is currently disabled. To enable PWA:
+1) Create `public/manifest.json` and reference it from `pages/_document.tsx`.
+2) Add a `public/sw.js` and register it from `pages/_app.tsx` (production only).
+3) Provide a full set of icons under `public/icons/` and update the manifest.
 
 ## 📊 Performance
 
@@ -258,3 +254,19 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 **Built with ❤️ by the News Pulse Team**
 
 **⭐ Star this repository if you found it helpful!**
+
+## 🧪 Development tips: Service Worker and Fast Refresh
+
+During local development, a stale service worker can interfere with Next.js Fast Refresh and HMR.
+
+- The app only registers the service worker in production.
+- The service worker itself has a localhost guard and will unregister on activate if it ever runs locally.
+
+If you still see repeated “Fast Refresh had to perform a full reload” messages:
+
+1. Open DevTools → Application → Service Workers → click Unregister.
+2. In Application → Storage, click “Clear site data”.
+3. Close all tabs for the app and open a fresh private window.
+4. Restart the dev server: `npm run dev`.
+
+This ensures no cached app shell or SW is fighting with Next’s dev server.

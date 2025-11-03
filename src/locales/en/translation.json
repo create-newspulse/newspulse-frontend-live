@@ -1,0 +1,20 @@
+{
+  "nav": {
+    "home": "Home",
+    "breaking": "Breaking",
+    "categories": "Categories",
+    "search": "Search",
+    "bookmarks": "Bookmarks",
+    "settings": "Settings",
+    "menu": "Menu",
+    "installApp": "Install App",
+    "newsletter": "Newsletter"
+  },
+  "hero": {
+    "tagline": "Your Pulse on the World's Latest News",
+    "description": "Experience news like never before with AI-powered insights, real-time updates, and immersive storytelling"
+  },
+  "search": {
+    "placeholder": "Search news, topics, or keywords..."
+  }
+}

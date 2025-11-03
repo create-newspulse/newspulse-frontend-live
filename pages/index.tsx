@@ -13,7 +13,7 @@ import { OptimizedNewsCard } from '../components/OptimizedComponents';
 import { useResourcePreloader } from '../hooks/usePerformance';
 import { motion, AnimatePresence } from 'framer-motion';
 import AdminContentLoader from '../components/AdminContentLoader';
-import AdminDashboard from '../components/AdminDashboard';
+// AdminDashboard widget removed per request
 
 // Advanced Language Toggle with Premium Design
 const AdvancedLanguageToggle = () => {
@@ -393,9 +393,6 @@ export default function HomePage() {
             >
               <p className="text-2xl md:text-3xl mb-4 font-light">
                 Your <span className="font-bold text-cyan-300">Pulse</span> on the World's Latest News
-              </p>
-              <p className="text-lg md:text-xl opacity-80 max-w-3xl mx-auto leading-relaxed">
-                Experience news like never before with AI-powered insights, real-time updates, and immersive storytelling
               </p>
             </motion.div>
 
@@ -1104,8 +1101,7 @@ export default function HomePage() {
         </div>
       </footer>
 
-      {/* Admin Dashboard Widget - Only show in development or for admin users */}
-      {process.env.NODE_ENV === 'development' && <AdminDashboard />}
+      {/* AdminDashboard widget removed */}
     </div>
   );
 }

@@ -21,6 +21,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const type = Array.isArray(event) ? event[0] : event
 
   try {
+    // Normalize body: sendBeacon may send text/plain; try to parse JSON if it's a string
+    let payload: any = req.body ?? {}
+    if (typeof payload === 'string') {
+      try {
+        payload = JSON.parse(payload)
+      } catch {
+        // keep as-is if not JSON
+      }
+    }
+
     // Prefer proxying through our existing admin proxy route to keep behavior consistent
     const proto = (req.headers['x-forwarded-proto'] as string) || 'http'
     const host = req.headers.host
@@ -29,7 +39,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const resp = await fetch(`${baseUrl}/api/admin/analytics`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, data: req.body || {} })
+      body: JSON.stringify({ type, data: payload })
     })
 
     // Bubble up the admin proxy response but never fail hard

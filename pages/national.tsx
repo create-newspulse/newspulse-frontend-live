@@ -42,12 +42,15 @@ export default function NationalOverview() {
         <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5 mb-10">
           {STATES.map((r) => {
             const label = getRegionName(language as any, 'state', r.slug, r.name);
-            const searchData = `${r.name.toLowerCase()} ${label.toLowerCase()}`;
+            const searchData = `${r.name.toLowerCase()} ${label.toLowerCase()} ${r.capital?.toLowerCase() || ''}`;
             return (
               <Link key={r.slug} href={`/national/${r.slug}`} className="group block bg-white dark:bg-gray-800 rounded-2xl border shadow-sm hover:shadow-md transition p-5" data-region={searchData}>
                 <div className="text-3xl mb-2">🏳️</div>
                 <div className="font-semibold text-lg group-hover:text-blue-600">{label}</div>
-                <div className="text-xs text-gray-500">{tHeading(language as any, 'state')}</div>
+                <div className="text-xs text-gray-500">
+                  {tHeading(language as any, 'state')}
+                  {r.capital ? ` · Capital: ${r.capital}` : ''}
+                </div>
               </Link>
             );
           })}
@@ -57,12 +60,15 @@ export default function NationalOverview() {
         <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
           {UNION_TERRITORIES.map((r) => {
             const label = getRegionName(language as any, 'ut', r.slug, r.name);
-            const searchData = `${r.name.toLowerCase()} ${label.toLowerCase()}`;
+            const searchData = `${r.name.toLowerCase()} ${label.toLowerCase()} ${r.capital?.toLowerCase() || ''}`;
             return (
               <Link key={r.slug} href={`/national/${r.slug}`} className="group block bg-white dark:bg-gray-800 rounded-2xl border shadow-sm hover:shadow-md transition p-5" data-region={searchData}>
                 <div className="text-3xl mb-2">🏴</div>
                 <div className="font-semibold text-lg group-hover:text-blue-600">{label}</div>
-                <div className="text-xs text-gray-500">{tHeading(language as any, 'union-territory')}</div>
+                <div className="text-xs text-gray-500">
+                  {tHeading(language as any, 'union-territory')}
+                  {r.capital ? ` · Capital: ${r.capital}` : ''}
+                </div>
               </Link>
             );
           })}

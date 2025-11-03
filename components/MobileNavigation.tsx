@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/router';
 import { BookmarkCounter } from './BookmarkButton';
+// Reverted: remove react-i18next usage and inline LanguageSelector
 
 interface MobileNavigationProps {
   isDark?: boolean;

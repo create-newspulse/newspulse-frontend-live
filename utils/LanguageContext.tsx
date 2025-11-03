@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import i18n from '../lib/i18n';
 
 interface LanguageContextType {
   language: string;
@@ -8,7 +9,7 @@ interface LanguageContextType {
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  // Initialize from localStorage if available; fallback to browser or 'english'
+  // Revert to legacy codes: 'english' | 'hindi' | 'gujarati'
   const [language, setLanguage] = useState<string>('english');
 
   useEffect(() => {
@@ -17,7 +18,6 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
       if (saved) {
         setLanguage(saved);
       } else if (typeof window !== 'undefined') {
-        // Optional: infer from browser language
         const nav = navigator.language.toLowerCase();
         if (nav.startsWith('hi')) setLanguage('hindi');
         else if (nav.startsWith('gu')) setLanguage('gujarati');
@@ -30,6 +30,10 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     try {
       if (typeof window !== 'undefined') localStorage.setItem('lang', language);
     } catch {}
+    // Keep react-i18next in sync (will receive legacy labels)
+    if (i18n.language !== language) {
+      i18n.changeLanguage(language).catch(() => {});
+    }
   }, [language]);
 
   return (
