@@ -1,15 +1,11 @@
 {
   "version": 2,
-  "name": "news-pulse",
   
-  "routes": [
+  
+  "rewrites": [
     {
-      "src": "/sitemap.xml",
-      "dest": "/api/sitemap"
-    },
-    {
-      "src": "/robots.txt",
-      "dest": "/robots.txt"
+      "source": "/sitemap.xml",
+      "destination": "/api/sitemap"
     }
   ],
   "env": {
