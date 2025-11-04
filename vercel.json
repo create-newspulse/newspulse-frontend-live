@@ -1,12 +1,7 @@
 {
   "version": 2,
   "name": "news-pulse",
-  "builds": [
-    {
-      "src": "next.config.js",
-      "use": "@vercel/next"
-    }
-  ],
+  
   "routes": [
     {
       "src": "/sitemap.xml",
