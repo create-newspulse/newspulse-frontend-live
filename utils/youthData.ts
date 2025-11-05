@@ -30,16 +30,6 @@ export const youthCategories: YouthCategory[] = [
     toHex: '#8B5CF6',
   },
   {
-    slug: 'inspiration-hub',
-    title: 'Inspiration Hub',
-    emoji: '🌄',
-    description: 'Relaxing nature, positivity, and mindful breaks',
-    gradientFrom: 'sky-500',
-    gradientTo: 'violet-500',
-    fromHex: '#0EA5E9',
-    toHex: '#8B5CF6',
-  },
-  {
     slug: 'campus-buzz',
     title: 'Campus Buzz',
     emoji: '🔥',

@@ -1,0 +1,18 @@
+{
+  "sections": [
+    {
+      "id": "drone-tv",
+      "title": "DroneTV – Scenic Nature Relaxation (Auto Embed)",
+      "emoji": "�",
+      "videoUrl": "https://www.youtube.com/embed/YVYNY6ez_uw",
+      "note": "Auto embed from YouTube. For peaceful and safe viewing."
+    },
+    {
+      "id": "daily-wonders",
+      "title": "Daily Wonders – Uplifting Visual Quotes",
+      "emoji": "✨",
+      "videoUrl": "https://www.youtube.com/embed/qtYGQT-9Sc4",
+      "note": "Visual inspiration and calm moments."
+    }
+  ]
+}

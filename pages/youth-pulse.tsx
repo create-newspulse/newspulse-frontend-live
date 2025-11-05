@@ -31,7 +31,10 @@ export default function YouthPulsePage() {
           <CategoryGrid categories={youthCategories} />
         </div>
 
-        <FeaturedStories stories={youthStories.slice(0, 5)} />
+        {/* Hide Inspiration Hub items from Youth Pulse featured stories */}
+        <FeaturedStories
+          stories={youthStories.filter((s) => s.category.toLowerCase() !== 'inspiration hub'.toLowerCase()).slice(0, 5)}
+        />
       </main>
 
       <SubmitStoryModal open={open} onClose={() => setOpen(false)} />

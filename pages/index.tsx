@@ -271,7 +271,8 @@ const categories = [
   'Web Stories',
   'Viral Videos',
   'Editorial',
-  'Youth Pulse'
+  'Youth Pulse',
+  'Inspiration Hub'
 ];
 
 export default function HomePage() {
@@ -793,7 +794,8 @@ export default function HomePage() {
                 'Web Stories': '📚',
                 'Viral Videos': '🎥',
                 'Editorial': '🖋️',
-                'Youth Pulse': '🎓'
+                'Youth Pulse': '🎓',
+                'Inspiration Hub': '🌄'
               };
 
               const routeMap: Record<string, string | { type: 'anchor', target: string }> = {
@@ -809,7 +811,8 @@ export default function HomePage() {
                 'Web Stories': '/web-stories',
                 'Viral Videos': '/viral-videos',
                 'Editorial': '/editorial',
-                'Youth Pulse': '/youth-pulse'
+                'Youth Pulse': '/youth-pulse',
+                'Inspiration Hub': '/inspiration-hub'
               };
 
               const handleCategoryClick = (cat: string) => {
