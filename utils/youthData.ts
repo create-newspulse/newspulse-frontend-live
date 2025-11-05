@@ -30,6 +30,16 @@ export const youthCategories: YouthCategory[] = [
     toHex: '#8B5CF6',
   },
   {
+    slug: 'inspiration-hub',
+    title: 'Inspiration Hub',
+    emoji: '🌄',
+    description: 'Relaxing nature, positivity, and mindful breaks',
+    gradientFrom: 'sky-500',
+    gradientTo: 'violet-500',
+    fromHex: '#0EA5E9',
+    toHex: '#8B5CF6',
+  },
+  {
     slug: 'campus-buzz',
     title: 'Campus Buzz',
     emoji: '🔥',
@@ -72,6 +82,16 @@ export const youthCategories: YouthCategory[] = [
 ];
 
 export const youthStories: YouthStory[] = [
+  {
+    id: 100,
+    title: 'DroneTV – Scenic Nature Relaxation (Auto Embed)',
+    summary:
+      'Soothing aerial journeys to help you pause and recharge. Curated for safe viewing.',
+    category: 'Inspiration Hub',
+    image:
+      'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1600&auto=format&fit=crop',
+    date: 'Nov 2025',
+  },
   {
     id: 1,
     title: 'AI Tools That Help Students Study Smarter in 2025',
@@ -127,6 +147,7 @@ export const youthStories: YouthStory[] = [
 export const getStoriesByCategory = (slug: string): YouthStory[] => {
   const map: Record<string, string> = {
     'youth-pulse': 'Youth Pulse',
+    'inspiration-hub': 'Inspiration Hub',
     'campus-buzz': 'Campus Buzz',
     'govt-exam-updates': 'Govt Exam Updates',
     'career-boosters': 'Career Boosters',
