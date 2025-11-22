@@ -25,6 +25,7 @@ export default function NavBar() {
           <li><a href="/about" className="hover:text-blue-600">About</a></li>
           <li><a href="/contact" className="hover:text-blue-600">Contact</a></li>
           <li><a href="/news" className="text-blue-700 hover:underline">📰 Top News</a></li>
+          <li><a href="/community-reporter" className="hover:text-blue-600">Community Reporter</a></li>
         </ul>
       </div>
 
@@ -36,6 +37,7 @@ export default function NavBar() {
           <li><a href="/about" className="block hover:text-blue-600">About</a></li>
           <li><a href="/contact" className="block hover:text-blue-600">Contact</a></li>
           <li><a href="/news" className="block text-blue-700 hover:underline">📰 Top News</a></li>
+          <li><a href="/community-reporter" className="block hover:text-blue-600">Community Reporter</a></li>
         </ul>
       )}
     </nav>

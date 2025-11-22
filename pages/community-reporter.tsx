@@ -96,7 +96,7 @@ const CommunityReporterPage: React.FC = () => {
       });
       if (!res.ok) throw new Error('Request failed');
       setForm(initialState);
-      setSuccessMessage('Thank you! Your story has been submitted and is under review by the NewsPulse team.');
+      setSuccessMessage('Thank you! Your story has been submitted and is under review by the News Pulse team.');
     } catch (err) {
       setErrorMessage('We couldn’t submit your story. Please try again or check your details.');
     } finally {
@@ -263,7 +263,7 @@ const CommunityReporterPage: React.FC = () => {
                 className="mt-1 h-5 w-5 rounded border-gray-300 focus:ring-blue-500"
               />
               <label htmlFor="confirm" className="text-sm leading-relaxed">
-                I confirm this story is true to the best of my knowledge and I accept the NewsPulse contributor policy.
+                I confirm this story is true to the best of my knowledge and I accept the News Pulse contributor policy.
               </label>
             </div>
             {errors.confirm && <p className="text-red-600 text-xs -mt-4 mb-2">{errors.confirm}</p>}

@@ -272,7 +272,8 @@ const categories = [
   'Viral Videos',
   'Editorial',
   'Youth Pulse',
-  'Inspiration Hub'
+  'Inspiration Hub',
+  'Community Reporter'
 ];
 
 export default function HomePage() {
@@ -314,6 +315,17 @@ export default function HomePage() {
   };
 
   const toggleVoice = () => setIsVoiceEnabled(prev => !prev);
+
+  // Footer Quick Links with explicit hrefs (added Community Reporter)
+  const quickLinks: { label: string; href: string }[] = [
+    { label: 'About Us', href: '/about' },
+    { label: 'Editorial Policy', href: '/editorial' },
+    { label: 'Privacy Policy', href: '/privacy-policy' },
+    { label: 'Terms of Service', href: '/terms-of-service' },
+    { label: 'Contact', href: '/contact' },
+    { label: 'Careers', href: '/careers' },
+    { label: 'Community Reporter', href: '/community-reporter' }
+  ];
 
   return (
     <div className="min-h-screen bg-white dark:bg-dark-primary text-black dark:text-dark-text overflow-x-hidden transition-colors duration-300">
@@ -796,6 +808,7 @@ export default function HomePage() {
                 'Editorial': '🖋️',
                 'Youth Pulse': '🎓',
                 'Inspiration Hub': '🌄'
+                , 'Community Reporter': '📝'
               };
 
               const routeMap: Record<string, string | { type: 'anchor', target: string }> = {
@@ -813,6 +826,7 @@ export default function HomePage() {
                 'Editorial': '/editorial',
                 'Youth Pulse': '/youth-pulse',
                 'Inspiration Hub': '/inspiration-hub'
+                , 'Community Reporter': '/community-reporter'
               };
 
               const handleCategoryClick = (cat: string) => {
@@ -859,7 +873,7 @@ export default function HomePage() {
                     </h3>
                     
                     <p className="text-gray-600 text-sm mb-6">
-                      Latest updates and breaking stories
+                      {category === 'Community Reporter' ? 'Submit your local stories & tips' : 'Latest updates and breaking stories'}
                     </p>
                     
                     <motion.div
@@ -870,7 +884,7 @@ export default function HomePage() {
                     />
                     
                     <div className="mt-4 text-blue-600 font-semibold text-sm group-hover:text-purple-600 transition-colors">
-                      Explore Now →
+                      {category === 'Community Reporter' ? 'Contribute Now →' : 'Explore Now →'}
                     </div>
                   </div>
                 </motion.div>
@@ -1054,14 +1068,14 @@ export default function HomePage() {
               <div>
                 <h4 className="text-xl font-bold mb-6 text-blue-400">Quick Links</h4>
                 <ul className="space-y-3">
-                  {['About Us', 'Editorial Policy', 'Privacy Policy', 'Terms of Service', 'Contact', 'Careers'].map((link, index) => (
-                    <li key={index}>
+                  {quickLinks.map((item) => (
+                    <li key={item.label}>
                       <motion.a
-                        href="#"
+                        href={item.href}
                         whileHover={{ x: 5 }}
                         className="text-gray-300 hover:text-white transition-colors duration-200"
                       >
-                        {link}
+                        {item.label}
                       </motion.a>
                     </li>
                   ))}
