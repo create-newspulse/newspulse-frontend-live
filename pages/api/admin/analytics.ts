@@ -9,6 +9,10 @@ import axios from 'axios';
 
 const ADMIN_API_URL = process.env.NEXT_PUBLIC_ADMIN_API_URL || 'http://localhost:5000/api';
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY;
+// Allow disabling admin analytics in non-prod or when backend not available
+const ADMIN_ANALYTICS_ENABLED =
+  (process.env.NODE_ENV === 'production' && process.env.NEXT_PUBLIC_DISABLE_ADMIN_ANALYTICS !== 'true') ||
+  process.env.NEXT_PUBLIC_ENABLE_ADMIN_ANALYTICS === 'true';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Set CORS headers
@@ -50,18 +54,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       serverTimestamp: Date.now()
     };
 
-    // Try to send to admin panel
-    try {
-      await axios.post(`${ADMIN_API_URL}/analytics/${type}`, analyticsData, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(ADMIN_API_KEY && { Authorization: `Bearer ${ADMIN_API_KEY}` })
-        },
-        timeout: 5000
-      });
-    } catch (adminError) {
-      // Silent fail for analytics - don't break user experience
-      console.warn('Analytics tracking failed:', adminError);
+    // Try to send to admin panel (only when enabled)
+    if (ADMIN_ANALYTICS_ENABLED) {
+      try {
+        await axios.post(`${ADMIN_API_URL}/analytics/${type}`, analyticsData, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...(ADMIN_API_KEY && { Authorization: `Bearer ${ADMIN_API_KEY}` })
+          },
+          timeout: 5000
+        });
+      } catch (adminError) {
+        // Silent fail for analytics - don't break user experience; keep dev console clean
+        if (process.env.NODE_ENV === 'production') {
+          console.warn('Analytics tracking failed:', adminError);
+        }
+      }
     }
 
     // Always return success to frontend

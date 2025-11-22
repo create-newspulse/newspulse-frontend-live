@@ -16,22 +16,18 @@ function MyApp({ Component, pageProps }) {
       gtag.pageview(url);
     };
     router.events.on('routeChangeComplete', handleRouteChange);
-    
-    // Disable Service Worker entirely: unregister any existing SW and clear caches
-    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations?.().then((registrations) => {
-        registrations.forEach((reg) => reg.unregister());
-      });
-      // Clear caches created by any previous SW
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (window as any).caches?.keys?.().then((keys: string[]) => {
-        keys.forEach((key) => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (window as any).caches.delete(key);
-        });
-      });
+    // Register Service Worker for PWA caching (production only)
+    if (process.env.NODE_ENV === 'production') {
+      if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+      }
+    } else {
+      // In dev, ensure no SW is controlling the page to avoid caching HMR assets
+      if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations?.().then((regs) => regs.forEach((r) => r.unregister()));
+      }
     }
-    
+
     return () => {
       router.events.off('routeChangeComplete', handleRouteChange);
     };
