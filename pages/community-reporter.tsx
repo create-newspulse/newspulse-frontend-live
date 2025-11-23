@@ -40,7 +40,8 @@ const CommunityReporterPage: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState('');
 
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || '';
-  const submitUrl = API_BASE ? `${API_BASE}/api/community/submissions` : '/api/community/submissions';
+  // Phase 1 submission endpoint
+  const submitUrl = API_BASE ? `${API_BASE}/api/community-reporter/submissions` : '/api/community-reporter/submissions';
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
@@ -94,11 +95,11 @@ const CommunityReporterPage: React.FC = () => {
             story: form.story.trim(),
         }),
       });
-      if (!res.ok) throw new Error('Request failed');
+      if (res.status !== 201) throw new Error('Non-201 status');
       setForm(initialState);
-      setSuccessMessage('Thank you! Your story has been submitted and is under review by the News Pulse team.');
+      setSuccessMessage('Thank you! Your story was submitted for review.');
     } catch (err) {
-      setErrorMessage('We couldn’t submit your story. Please try again or check your details.');
+      setErrorMessage('Unable to submit right now. Please try again later.');
     } finally {
       setSubmitting(false);
     }
