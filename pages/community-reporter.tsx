@@ -118,8 +118,10 @@ const CommunityReporterPage: React.FC = () => {
         confirm: form.confirm,
       };
 
-      // Use same-origin Next.js API route to bypass browser CORS
-      const requestUrl = `/api/community/submissions`;
+      // Use same-origin Next.js API route to bypass browser CORS.
+      // If the current page URL includes ?debug=1, forward it to the API for richer diagnostics.
+      const isDebug = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('debug') === '1';
+      const requestUrl = `/api/community/submissions${isDebug ? '?debug=1' : ''}`;
       console.log('[CommunityReporter] Request URL', requestUrl);
       const res = await fetch(requestUrl, {
         method: 'POST',
