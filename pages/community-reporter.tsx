@@ -39,9 +39,10 @@ const CommunityReporterPage: React.FC = () => {
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
-  const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || '';
-  // Phase 1 submission endpoint
-  const submitUrl = API_BASE ? `${API_BASE}/api/community-reporter/submissions` : '/api/community-reporter/submissions';
+  // Public backend base URL (env override -> fallback)
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://newspulse-backend-real.onrender.com';
+  // Normalized endpoint (remove any trailing slashes from base)
+  const submitEndpoint = `${API_BASE_URL.replace(/\/+$/,'')}/api/community/submissions`;
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
@@ -83,22 +84,35 @@ const CommunityReporterPage: React.FC = () => {
     if (!validate()) return;
     setSubmitting(true);
     try {
-      const res = await fetch(submitUrl, {
+      const res = await fetch(submitEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: form.name.trim(),
-            email: form.email.trim(),
-            location: form.location.trim(),
-            category: form.category,
-            headline: form.headline.trim(),
-            story: form.story.trim(),
+          email: form.email.trim(),
+          location: form.location.trim(),
+          category: form.category,
+          headline: form.headline.trim(),
+          story: form.story.trim(),
         }),
       });
-      if (res.status !== 201) throw new Error('Non-201 status');
-      setForm(initialState);
-      setSuccessMessage('Thank you! Your story was submitted for review.');
+
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch (_) {
+        // Ignore JSON parse errors (e.g., empty body); rely on status code.
+      }
+
+      if (res.status === 201 && (data?.success === true || data === null)) {
+        setForm(initialState);
+        setSuccessMessage('Thank you! Your story was submitted for review.');
+      } else {
+        // Treat any non-201 or missing success flag as failure.
+        setErrorMessage('Unable to submit right now. Please try again later.');
+      }
     } catch (err) {
+      // Network / fetch-level failure
       setErrorMessage('Unable to submit right now. Please try again later.');
     } finally {
       setSubmitting(false);
