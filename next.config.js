@@ -36,8 +36,8 @@ module.exports = {
       // Permit our known CDNs plus data/blob
       "img-src 'self' data: blob: https://*.googleusercontent.com https://*.gstatic.com https://tpc.googlesyndication.com https://pagead2.googlesyndication.com https://images.unsplash.com https://media.licdn.com https://static.toiimg.com https://gnews.io https://cdn.gulte.com",
       "font-src 'self' data: https://fonts.gstatic.com",
-      // Connect for analytics, dev websockets, and local admin API
-      "connect-src 'self' https://www.google-analytics.com https://region1.google-analytics.com https://pagead2.googlesyndication.com http://localhost:5000 ws: wss:",
+      // Connect for analytics, dev websockets, local admin API, and backend API
+      "connect-src 'self' https://newspulse-backend-real.onrender.com https://www.google-analytics.com https://region1.google-analytics.com https://pagead2.googlesyndication.com http://localhost:5000 ws: wss:",
       // Allow embeds for Google ads as well as YouTube players used by Inspiration Hub
       "frame-src https://*.google.com https://*.doubleclick.net https://pagead2.googlesyndication.com https://www.youtube.com https://www.youtube-nocookie.com",
       "media-src 'self' blob:",
