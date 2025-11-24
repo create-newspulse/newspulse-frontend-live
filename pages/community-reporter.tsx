@@ -97,6 +97,7 @@ const CommunityReporterPage: React.FC = () => {
           category: form.category,
           headline: form.headline.trim(),
           story: form.story.trim(),
+          confirm: !!form.confirm,
         }),
       });
       console.log('[CommunityReporter] Response status', res.status);

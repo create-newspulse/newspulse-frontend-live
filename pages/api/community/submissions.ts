@@ -24,6 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           category: req.body?.category,
           headlineLen: typeof (req.body?.headline) === 'string' ? req.body.headline.length : undefined,
           storyLen: typeof (req.body?.story) === 'string' ? req.body.story.length : undefined,
+          confirm: typeof (req.body?.confirm) === 'boolean' ? req.body.confirm : undefined,
         },
       })
     } catch {}
