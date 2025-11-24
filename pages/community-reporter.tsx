@@ -114,8 +114,8 @@ const CommunityReporterPage: React.FC = () => {
         mediaLink: form.mediaLink?.trim() || '',
       };
 
-      // Call backend endpoint directly
-      const requestUrl = `${API_BASE_URL}/api/community/submissions`;
+      // Use same-origin Next.js API route to bypass browser CORS
+      const requestUrl = `/api/community/submissions`;
       console.log('[CommunityReporter] Request URL', requestUrl);
       const res = await fetch(requestUrl, {
         method: 'POST',
