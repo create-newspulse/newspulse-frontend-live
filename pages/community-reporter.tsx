@@ -105,13 +105,17 @@ const CommunityReporterPage: React.FC = () => {
     try {
       // Build payload using backend field names
       const payload = {
+        // Provide both legacy and new field name variants for compatibility
         userName: form.name.trim(),
+        name: form.name.trim(),
         email: form.email.trim(),
         location: form.location.trim(),
         category: mapCategoryToBackend(form.category),
         headline: form.headline.trim(),
         body: form.story.trim(),
+        story: form.story.trim(),
         mediaLink: form.mediaLink?.trim() || '',
+        confirm: form.confirm,
       };
 
       // Use same-origin Next.js API route to bypass browser CORS
