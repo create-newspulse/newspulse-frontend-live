@@ -41,7 +41,7 @@ const CommunityReporterPage: React.FC = () => {
 
   // Public backend base URL (env override -> fallback)
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://newspulse-backend-real.onrender.com';
-  // Normalized endpoint (remove any trailing slashes from base)
+  // Normalized endpoint (remove any trailing slashes from base) (kept for clarity but we will also build explicit requestUrl)
   const submitEndpoint = `${API_BASE_URL.replace(/\/+$/,'')}/api/community/submissions`;
 
   const validate = () => {
@@ -84,7 +84,9 @@ const CommunityReporterPage: React.FC = () => {
     if (!validate()) return;
     setSubmitting(true);
     try {
-      const res = await fetch(submitEndpoint, {
+      const requestUrl = `${API_BASE_URL}/api/community/submissions`;
+      console.log('[CommunityReporter] Request URL', requestUrl);
+      const res = await fetch(requestUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -96,19 +98,19 @@ const CommunityReporterPage: React.FC = () => {
           story: form.story.trim(),
         }),
       });
+      console.log('[CommunityReporter] Response status', res.status);
 
       let data: any = null;
       try {
         data = await res.json();
       } catch (_) {
-        // Ignore JSON parse errors (e.g., empty body); rely on status code.
+        // Ignore JSON parse errors (e.g., empty body); rely on status code only.
       }
 
-      if (res.status === 201 && (data?.success === true || data === null)) {
+      if (res.ok && data?.success !== false) {
         setForm(initialState);
         setSuccessMessage('Thank you! Your story was submitted for review.');
       } else {
-        // Treat any non-201 or missing success flag as failure.
         setErrorMessage('Unable to submit right now. Please try again later.');
       }
     } catch (err) {
