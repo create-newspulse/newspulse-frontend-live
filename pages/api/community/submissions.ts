@@ -58,11 +58,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       console.log('[Community API] Upstream status/body', upstream.status, raw?.slice(0, 200))
     } catch {}
 
-    // Mirror status. Ensure JSON response shape is consistent and include message if any.
-    if (data !== null && typeof data === 'object') {
-      return res.status(upstream.status).json(data)
+    // Debug flag: append upstream headers + normalized keys for troubleshooting 500 errors
+    const debugEnabled = req.query.debug === '1'
+    const basePayload = (data !== null && typeof data === 'object')
+      ? data
+      : { success: upstream.ok, message: raw }
+
+    if (debugEnabled) {
+      const headerObj: Record<string, string> = {}
+      upstream.headers.forEach((v, k) => { headerObj[k] = v })
+      ;(basePayload as any)._debug = {
+        upstreamStatus: upstream.status,
+        upstreamOk: upstream.ok,
+        upstreamHeaders: headerObj,
+        normalizedPayloadKeys: Object.keys(incoming),
+        fieldPresence: {
+          name: typeof incoming.name === 'string',
+          userName: typeof incoming.userName === 'string',
+          email: typeof incoming.email === 'string',
+          location: typeof incoming.location === 'string',
+          category: incoming.category,
+          headline: typeof incoming.headline === 'string',
+          story: typeof incoming.story === 'string',
+          body: typeof incoming.body === 'string',
+          mediaLink: typeof incoming.mediaLink === 'string',
+          confirm: typeof incoming.confirm === 'boolean'
+        }
+      }
     }
-    return res.status(upstream.status).json({ success: upstream.ok, message: raw })
+
+    return res.status(upstream.status).json(basePayload)
   } catch (error: any) {
     console.error('[Community API] Internal proxy error', error?.message)
     return res.status(500).json({ success: false, error: 'Proxy internal error', detail: error?.message })
