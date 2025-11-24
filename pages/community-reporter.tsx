@@ -11,6 +11,7 @@ interface FormState {
   category: string;
   headline: string;
   story: string;
+  mediaLink?: string;
   confirm: boolean;
 }
 
@@ -21,6 +22,7 @@ const initialState: FormState = {
   category: '',
   headline: '',
   story: '',
+  mediaLink: '',
   confirm: false,
 };
 
@@ -84,21 +86,24 @@ const CommunityReporterPage: React.FC = () => {
     if (!validate()) return;
     setSubmitting(true);
     try {
-      // Call our own Next.js API route to bypass browser CORS
-      const requestUrl = `/api/community/submissions`;
+      // Build payload using backend field names
+      const payload = {
+        userName: form.name.trim(),
+        email: form.email.trim(),
+        location: form.location.trim(),
+        category: form.category,
+        headline: form.headline.trim(),
+        body: form.story.trim(),
+        mediaLink: form.mediaLink?.trim() || undefined,
+      };
+
+      // Call backend endpoint directly
+      const requestUrl = `${API_BASE_URL}/api/community/submissions`;
       console.log('[CommunityReporter] Request URL', requestUrl);
       const res = await fetch(requestUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: form.name.trim(),
-          email: form.email.trim(),
-          location: form.location.trim(),
-          category: form.category,
-          headline: form.headline.trim(),
-          story: form.story.trim(),
-          confirm: !!form.confirm,
-        }),
+        body: JSON.stringify(payload),
       });
       console.log('[CommunityReporter] Response status', res.status);
 
