@@ -40,6 +40,23 @@ const CommunityReporterPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  // Map UI labels to backend-friendly slugs
+  const mapCategoryToBackend = (label: string) => {
+    switch (label) {
+      case 'Regional':
+        return 'regional';
+      case 'Youth / Campus':
+        return 'youth';
+      case 'Civic Issue':
+        return 'civic';
+      case 'Lifestyle / Culture':
+        return 'lifestyle';
+      case 'General Tip':
+        return 'general';
+      default:
+        return label?.toLowerCase().replace(/\s+\/\s+|\s+/g, '-');
+    }
+  };
 
   // Public backend base URL (env override -> fallback)
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://newspulse-backend-real.onrender.com';
@@ -91,10 +108,10 @@ const CommunityReporterPage: React.FC = () => {
         userName: form.name.trim(),
         email: form.email.trim(),
         location: form.location.trim(),
-        category: form.category,
+        category: mapCategoryToBackend(form.category),
         headline: form.headline.trim(),
         body: form.story.trim(),
-        mediaLink: form.mediaLink?.trim() || undefined,
+        mediaLink: form.mediaLink?.trim() || '',
       };
 
       // Call backend endpoint directly
@@ -102,7 +119,7 @@ const CommunityReporterPage: React.FC = () => {
       console.log('[CommunityReporter] Request URL', requestUrl);
       const res = await fetch(requestUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify(payload),
       });
       console.log('[CommunityReporter] Response status', res.status);
