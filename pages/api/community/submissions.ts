@@ -12,25 +12,42 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const targetUrl = `${API_BASE_URL.replace(/\/+$/, '')}/api/community/submissions`
 
   try {
+    // Minimal diagnostics without logging PII content
+    try {
+      console.log('[Community API] Forwarding submission to backend', {
+        url: targetUrl,
+        // Do not log field values; only presence/lengths
+        fields: {
+          name: typeof (req.body?.name) === 'string',
+          email: typeof (req.body?.email) === 'string',
+          location: typeof (req.body?.location) === 'string',
+          category: req.body?.category,
+          headlineLen: typeof (req.body?.headline) === 'string' ? req.body.headline.length : undefined,
+          storyLen: typeof (req.body?.story) === 'string' ? req.body.story.length : undefined,
+        },
+      })
+    } catch {}
+
     const upstream = await fetch(targetUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(req.body ?? {}),
     })
 
-    // Try to parse JSON; if not JSON, pass through status with empty body
+    // Read as text then attempt JSON parse for robust handling
+    const raw = await upstream.text()
     let data: any = null
-    try {
-      data = await upstream.json()
-    } catch {
-      // ignore
-    }
+    try { data = raw ? JSON.parse(raw) : null } catch {}
 
-    // Mirror status. Ensure JSON response shape is consistent.
+    try {
+      console.log('[Community API] Upstream status/body', upstream.status, raw?.slice(0, 200))
+    } catch {}
+
+    // Mirror status. Ensure JSON response shape is consistent and include message if any.
     if (data !== null && typeof data === 'object') {
       return res.status(upstream.status).json(data)
     }
-    return res.status(upstream.status).json({ success: upstream.ok })
+    return res.status(upstream.status).json({ success: upstream.ok, message: raw })
   } catch (error: any) {
     return res.status(502).json({ success: false, error: 'Upstream error' })
   }

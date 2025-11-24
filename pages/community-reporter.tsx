@@ -112,7 +112,9 @@ const CommunityReporterPage: React.FC = () => {
         setForm(initialState);
         setSuccessMessage('Thank you! Your story was submitted for review.');
       } else {
-        setErrorMessage('Unable to submit right now. Please try again later.');
+        const msg = typeof data?.message === 'string' ? data.message : (typeof data?.error === 'string' ? data.error : null);
+        if (msg) console.warn('[CommunityReporter] Backend error:', msg);
+        setErrorMessage(msg || 'Unable to submit right now. Please try again later.');
       }
     } catch (err) {
       // Network / fetch-level failure
