@@ -16,14 +16,18 @@ function MyApp({ Component, pageProps }) {
       gtag.pageview(url);
     };
     router.events.on('routeChangeComplete', handleRouteChange);
-    // Register Service Worker for PWA caching (production only)
-    if (process.env.NODE_ENV === 'production') {
-      if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/service-worker.js').catch(() => {});
-      }
-    } else {
-      // In dev, ensure no SW is controlling the page to avoid caching HMR assets
-      if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+    // PWA service worker registration is opt-in via NEXT_PUBLIC_ENABLE_PWA=true
+    const enablePwa = process.env.NEXT_PUBLIC_ENABLE_PWA === 'true';
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      if (process.env.NODE_ENV === 'production') {
+        if (enablePwa) {
+          navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+        } else {
+          // Ensure no SW is controlling the page to avoid 410 fetch errors
+          navigator.serviceWorker.getRegistrations?.().then((regs) => regs.forEach((r) => r.unregister()));
+        }
+      } else {
+        // In dev, ensure no SW is controlling the page to avoid caching HMR assets
         navigator.serviceWorker.getRegistrations?.().then((regs) => regs.forEach((r) => r.unregister()));
       }
     }
