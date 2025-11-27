@@ -5,20 +5,22 @@ import Head from 'next/head';
 // Route: /community-reporter
 
 interface FormState {
-  name: string;
-  email: string;
-  location: string;
+  name: string; // Full name (required)
+  email: string; // Email (required)
+  location: string; // City / State / Country (required in Phase 1)
+  ageGroup: string; // Age group (required)
   category: string;
   headline: string;
   story: string;
   mediaLink?: string;
-  confirm: boolean;
+  confirm: boolean; // Contributor + truth policy acceptance (required)
 }
 
 const initialState: FormState = {
   name: '',
   email: '',
   location: '',
+  ageGroup: '',
   category: '',
   headline: '',
   story: '',
@@ -65,12 +67,14 @@ const CommunityReporterPage: React.FC = () => {
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
-    if (!form.name.trim()) newErrors.name = 'Name is required.';
+    if (!form.name.trim()) newErrors.name = 'Full name is required.';
     if (!form.email.trim()) {
       newErrors.email = 'Email is required.';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
       newErrors.email = 'Enter a valid email.';
     }
+    if (!form.location.trim()) newErrors.location = 'Location is required.';
+    if (!form.ageGroup) newErrors.ageGroup = 'Select an age group.';
     if (!form.category) newErrors.category = 'Select a category.';
     if (!form.headline.trim()) newErrors.headline = 'Headline is required.';
     if (form.headline.length > 150) newErrors.headline = 'Headline exceeds 150 characters.';
@@ -79,7 +83,7 @@ const CommunityReporterPage: React.FC = () => {
     } else if (form.story.trim().length < 50) {
       newErrors.story = 'Story must be at least 50 characters.';
     }
-    if (!form.confirm) newErrors.confirm = 'You must confirm authenticity & policy.';
+    if (!form.confirm) newErrors.confirm = 'You must accept the policy and confirm truth.';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -105,7 +109,7 @@ const CommunityReporterPage: React.FC = () => {
     try {
       // Build payload using backend field names
       const payload = {
-        // Provide both legacy and new field name variants for compatibility
+        // Existing / legacy fields
         userName: form.name.trim(),
         name: form.name.trim(),
         email: form.email.trim(),
@@ -116,6 +120,12 @@ const CommunityReporterPage: React.FC = () => {
         story: form.story.trim(),
         mediaLink: form.mediaLink?.trim() || '',
         confirm: form.confirm,
+        // Phase 1 reporter detail extensions
+        reporterName: form.name.trim(),
+        reporterEmail: form.email.trim(),
+        reporterLocation: form.location.trim(),
+        reporterAgeGroup: form.ageGroup,
+        acceptedPolicy: form.confirm,
       };
 
       // Use same-origin Next.js API route to bypass browser CORS.
@@ -198,48 +208,77 @@ const CommunityReporterPage: React.FC = () => {
               </div>
             )}
 
-            {/* Name */}
-            <div>
-              <label htmlFor="name" className="block font-medium mb-1">Name *</label>
-              <input
-                id="name"
-                name="name"
-                type="text"
-                required
-                value={form.name}
-                onChange={handleChange}
-                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              {errors.name && <p className="text-red-600 text-xs mt-1">{errors.name}</p>}
-            </div>
+            {/* Reporter Details Section */}
+            <div className="space-y-6 border-b border-gray-200 dark:border-gray-700 pb-6">
+              <h3 className="text-xl font-semibold">Reporter details</h3>
 
-            {/* Email */}
-            <div>
-              <label htmlFor="email" className="block font-medium mb-1">Email *</label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                required
-                value={form.email}
-                onChange={handleChange}
-                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              {errors.email && <p className="text-red-600 text-xs mt-1">{errors.email}</p>}
-            </div>
+              {/* Full Name */}
+              <div>
+                <label htmlFor="name" className="block font-medium mb-1">Full name *</label>
+                <input
+                  id="name"
+                  name="name"
+                  type="text"
+                  required
+                  value={form.name}
+                  onChange={handleChange}
+                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">Your real name (we will not show it publicly without your permission).</p>
+                {errors.name && <p className="text-red-600 text-xs mt-1">{errors.name}</p>}
+              </div>
 
-            {/* Location */}
-            <div>
-              <label htmlFor="location" className="block font-medium mb-1">Location (optional)</label>
-              <input
-                id="location"
-                name="location"
-                type="text"
-                placeholder="City, State"
-                value={form.location}
-                onChange={handleChange}
-                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              {/* Email */}
+              <div>
+                <label htmlFor="email" className="block font-medium mb-1">Email *</label>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  required
+                  value={form.email}
+                  onChange={handleChange}
+                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">For verification and updates about your story.</p>
+                {errors.email && <p className="text-red-600 text-xs mt-1">{errors.email}</p>}
+              </div>
+
+              {/* Location */}
+              <div>
+                <label htmlFor="location" className="block font-medium mb-1">City / State / Country *</label>
+                <input
+                  id="location"
+                  name="location"
+                  type="text"
+                  required
+                  placeholder="Ahmedabad, Gujarat, India"
+                  value={form.location}
+                  onChange={handleChange}
+                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                {errors.location && <p className="text-red-600 text-xs mt-1">{errors.location}</p>}
+              </div>
+
+              {/* Age Group */}
+              <div>
+                <label htmlFor="ageGroup" className="block font-medium mb-1">Age group *</label>
+                <select
+                  id="ageGroup"
+                  name="ageGroup"
+                  required
+                  value={form.ageGroup}
+                  onChange={handleChange}
+                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select age group</option>
+                  <option value="Under 18">Under 18</option>
+                  <option value="18–24">18–24</option>
+                  <option value="25–40">25–40</option>
+                  <option value="41+">41+</option>
+                </select>
+                {errors.ageGroup && <p className="text-red-600 text-xs mt-1">{errors.ageGroup}</p>}
+              </div>
             </div>
 
             {/* Category */}
@@ -301,7 +340,7 @@ const CommunityReporterPage: React.FC = () => {
               {errors.story && <p className="text-red-600 text-xs mt-1">{errors.story}</p>}
             </div>
 
-            {/* Confirm */}
+            {/* Contributor Policy + Truth Confirmation */}
             <div className="flex items-start space-x-3">
               <input
                 id="confirm"
@@ -312,7 +351,7 @@ const CommunityReporterPage: React.FC = () => {
                 className="mt-1 h-5 w-5 rounded border-gray-300 focus:ring-blue-500"
               />
               <label htmlFor="confirm" className="text-sm leading-relaxed">
-                I confirm this story is true to the best of my knowledge and I accept the News Pulse contributor policy.
+                I accept the News Pulse Contributor Policy and Privacy Policy and confirm this story is true to the best of my knowledge.
               </label>
             </div>
             {errors.confirm && <p className="text-red-600 text-xs -mt-4 mb-2">{errors.confirm}</p>}
