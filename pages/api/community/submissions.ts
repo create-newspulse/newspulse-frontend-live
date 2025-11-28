@@ -1,54 +1,26 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 
 // Server-side proxy to avoid browser CORS. Forwards POST to backend with a
-// minimal, backend-compatible payload to prevent schema mismatches.
+// minimal, backend-compatible payload (headline, story, category only).
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://newspulse-backend-real.onrender.com'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST')
-    return res.status(405).json({ success: false, error: 'method_not_allowed' })
+    return res.status(405).json({ code: 'method_not_allowed' })
   }
 
   const targetUrl = `${API_BASE_URL.replace(/\/+$/, '')}/api/community/submissions`
 
   try {
-    const raw = (req.body && typeof req.body === 'object') ? req.body : {}
+    const body = (req.body && typeof req.body === 'object') ? req.body as Record<string, any> : {}
 
-    // Normalize incoming fields from the client
-    const name = (raw.name || raw.userName || '').toString().trim()
-    const email = (raw.email || '').toString().trim()
-    const location = (raw.location || raw.city || '').toString().trim()
-    const category = (raw.category ?? '').toString()
-    const headline = (raw.headline || '').toString().trim()
-    const storyText = (raw.story || raw.body || '').toString().trim()
+    // Map field names to the minimal backend expectation
+    const headline = (body.headline || body.title || '').toString().trim()
+    const story = (body.story || body.body || body.content || '').toString().trim()
+    const category = (body.category || '').toString()
 
-    // Build minimal backend payload – DO NOT include new reporter-detail fields
-    // Keep story under the legacy key that backend accepted; include both for safety
-    const backendPayload: Record<string, any> = {
-      name,
-      email,
-      location,
-      category,
-      headline,
-      body: storyText,
-      story: storyText,
-    }
-    // Backward-compat aliases to accommodate older backend field names
-    // - Some older handlers expect 'city' instead of 'location'
-    // - Some older handlers expect 'userName' alongside 'name'
-    if (location && !('city' in backendPayload)) backendPayload.city = location
-    if (name && !('userName' in backendPayload)) backendPayload.userName = name
-
-    // Small diagnostic without PII values
-    try {
-      console.log('[community-submit] forwarding', {
-        url: targetUrl,
-        keys: Object.keys(backendPayload),
-        headlineLen: headline.length,
-        storyLen: storyText.length,
-      })
-    } catch {}
+    const backendPayload = { headline, story, category }
 
     const upstream = await fetch(targetUrl, {
       method: 'POST',
@@ -56,33 +28,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       body: JSON.stringify(backendPayload),
     })
 
-    const upstreamText = await upstream.text()
-    let upstreamJson: any = null
-    try { upstreamJson = upstreamText ? JSON.parse(upstreamText) : null } catch {}
-
-    const debugEnabled = req.query.debug === '1'
     if (!upstream.ok) {
-      console.error('[community-submit] upstream error', upstream.status, upstreamText?.slice(0, 200))
-      if (debugEnabled) {
-        return res.status(502).json({
-          success: false,
-          error: 'submit_failed',
-          _debug: {
-            upstreamStatus: upstream.status,
-            keys: Object.keys(backendPayload),
-          },
-        })
-      }
-      return res.status(502).json({ success: false, error: 'submit_failed' })
+      // Log concise server-side detail only
+      console.error('[community-submit] upstream', upstream.status, upstream.statusText)
+      return res.status(500).json({ code: 'submit_failed' })
     }
 
-    // Success passthrough (prefer JSON if available)
-    if (upstreamJson && typeof upstreamJson === 'object') {
-      return res.status(200).json(upstreamJson)
+    // Forward upstream JSON if available
+    const text = await upstream.text()
+    try {
+      const json = text ? JSON.parse(text) : { success: true }
+      return res.status(200).json(json)
+    } catch {
+      return res.status(200).json({ success: true })
     }
-    return res.status(200).json({ success: true })
   } catch (err: any) {
-    console.error('[community-submit] proxy exception', err?.message)
-    return res.status(500).json({ success: false, error: 'submit_failed' })
+    console.error('[community-submit] exception', err?.message)
+    return res.status(500).json({ code: 'submit_failed' })
   }
 }
