@@ -9,7 +9,7 @@ interface FormState {
   email: string; // Email (required)
   location: string; // City / State / Country (required in Phase 1)
   ageGroup: string; // Age group (required)
-  category: string;
+  category: string; // Stores slug value e.g. 'regional'
   headline: string;
   story: string;
   mediaLink?: string;
@@ -28,12 +28,12 @@ const initialState: FormState = {
   confirm: false,
 };
 
-const categories = [
-  'Regional',
-  'Youth / Campus',
-  'Civic Issue',
-  'Lifestyle / Culture',
-  'General Tip',
+const categories: { value: string; label: string }[] = [
+  { value: 'regional', label: 'Regional' },
+  { value: 'youth_campus', label: 'Youth / Campus' },
+  { value: 'civic_issue', label: 'Civic Issue' },
+  { value: 'lifestyle_culture', label: 'Lifestyle / Culture' },
+  { value: 'general_tip', label: 'General Tip' },
 ];
 
 const CommunityReporterPage: React.FC = () => {
@@ -42,23 +42,7 @@ const CommunityReporterPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
-  // Map UI labels to backend-friendly slugs
-  const mapCategoryToBackend = (label: string) => {
-    switch (label) {
-      case 'Regional':
-        return 'regional';
-      case 'Youth / Campus':
-        return 'youth';
-      case 'Civic Issue':
-        return 'civic';
-      case 'Lifestyle / Culture':
-        return 'lifestyle';
-      case 'General Tip':
-        return 'general';
-      default:
-        return label?.toLowerCase().replace(/\s+\/\s+|\s+/g, '-');
-    }
-  };
+  // Category values already use stable slugs; no mapping required.
 
   // Public backend base URL (env override -> fallback)
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://newspulse-backend-real.onrender.com';
@@ -109,29 +93,25 @@ const CommunityReporterPage: React.FC = () => {
     try {
       // Build payload using backend field names
       const payload = {
-        // Existing / legacy fields
-        userName: form.name.trim(),
-        name: form.name.trim(),
-        email: form.email.trim(),
-        location: form.location.trim(),
-        category: mapCategoryToBackend(form.category),
-        headline: form.headline.trim(),
-        body: form.story.trim(),
-        story: form.story.trim(),
-        mediaLink: form.mediaLink?.trim() || '',
-        confirm: form.confirm,
-        // Phase 1 reporter detail extensions
         reporterName: form.name.trim(),
         reporterEmail: form.email.trim(),
-        reporterLocation: form.location.trim(),
-        reporterAgeGroup: form.ageGroup,
+        ageGroup: form.ageGroup,
+        location: form.location.trim(),
+        category: form.category, // already a slug
+        headline: form.headline.trim(),
+        story: form.story.trim(),
+        // extras still included for backward compatibility if backend expects them
+        name: form.name.trim(),
+        email: form.email.trim(),
+        body: form.story.trim(),
+        confirm: form.confirm,
         acceptedPolicy: form.confirm,
       };
 
       // Use same-origin Next.js API route to bypass browser CORS.
       // If the current page URL includes ?debug=1, forward it to the API for richer diagnostics.
       const isDebug = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('debug') === '1';
-      const requestUrl = `/api/community/submissions${isDebug ? '?debug=1' : ''}`;
+      const requestUrl = '/api/community/submissions';
       console.log('[CommunityReporter] Request URL', requestUrl);
       const res = await fetch(requestUrl, {
         method: 'POST',
@@ -139,6 +119,10 @@ const CommunityReporterPage: React.FC = () => {
         body: JSON.stringify(payload),
       });
       console.log('[CommunityReporter] Response status', res.status);
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('Community submission failed:', res.status, errorText);
+      }
 
       let data: any = null;
       try {
@@ -294,7 +278,7 @@ const CommunityReporterPage: React.FC = () => {
               >
                 <option value="">Select a category</option>
                 {categories.map((c) => (
-                  <option key={c} value={c}>{c}</option>
+                  <option key={c.value} value={c.value}>{c.label}</option>
                 ))}
               </select>
               {errors.category && <p className="text-red-600 text-xs mt-1">{errors.category}</p>}
