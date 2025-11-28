@@ -34,6 +34,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       body: storyText,
       story: storyText,
     }
+    // Backward-compat aliases to accommodate older backend field names
+    // - Some older handlers expect 'city' instead of 'location'
+    // - Some older handlers expect 'userName' alongside 'name'
+    if (location && !('city' in backendPayload)) backendPayload.city = location
+    if (name && !('userName' in backendPayload)) backendPayload.userName = name
 
     // Small diagnostic without PII values
     try {
@@ -55,8 +60,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     let upstreamJson: any = null
     try { upstreamJson = upstreamText ? JSON.parse(upstreamText) : null } catch {}
 
+    const debugEnabled = req.query.debug === '1'
     if (!upstream.ok) {
       console.error('[community-submit] upstream error', upstream.status, upstreamText?.slice(0, 200))
+      if (debugEnabled) {
+        return res.status(502).json({
+          success: false,
+          error: 'submit_failed',
+          _debug: {
+            upstreamStatus: upstream.status,
+            keys: Object.keys(backendPayload),
+          },
+        })
+      }
       return res.status(502).json({ success: false, error: 'submit_failed' })
     }
 
