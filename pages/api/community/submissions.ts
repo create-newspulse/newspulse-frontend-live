@@ -15,12 +15,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const body = (req.body && typeof req.body === 'object') ? req.body as Record<string, any> : {}
 
-    // Map field names to the minimal backend expectation
+    // Map from new form fields to backend expectations
+    const name = (body.fullName || body.name || body.userName || '').toString().trim()
+    const email = (body.email || '').toString().trim()
+    const city = (body.city || body.location || '').toString().trim()
     const headline = (body.headline || body.title || '').toString().trim()
     const story = (body.story || body.body || body.content || '').toString().trim()
     const category = (body.category || '').toString()
+    const consent = typeof body.acceptPolicy === 'boolean' ? body.acceptPolicy : (typeof body.confirm === 'boolean' ? body.confirm : undefined)
+    const ageGroup = (body.ageGroup ?? '').toString()
 
-    const backendPayload = { headline, story, category }
+    const backendPayload: Record<string, any> = {
+      name,
+      email,
+      city,
+      headline,
+      body: story,
+      category,
+    }
+    if (typeof consent === 'boolean') backendPayload.consent = consent
+    if (ageGroup) backendPayload.ageGroup = ageGroup
 
     const upstream = await fetch(targetUrl, {
       method: 'POST',
@@ -31,7 +45,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!upstream.ok) {
       // Log concise server-side detail only
       console.error('[community-submit] upstream', upstream.status, upstream.statusText)
-      return res.status(500).json({ code: 'submit_failed' })
+      return res.status(500).json({ error: 'submit_failed' })
     }
 
     // Forward upstream JSON if available
@@ -44,6 +58,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   } catch (err: any) {
     console.error('[community-submit] exception', err?.message)
-    return res.status(500).json({ code: 'submit_failed' })
+    return res.status(500).json({ error: 'submit_failed' })
   }
 }
