@@ -30,9 +30,7 @@
     "utils/**/*.ts",
     "utils/**/*.tsx",
     "hooks/**/*.ts",
-    "hooks/**/*.tsx",
-    "src/**/*.ts",
-    "src/**/*.tsx"
+    "hooks/**/*.tsx"
   ],
   "exclude": [
     "node_modules",
