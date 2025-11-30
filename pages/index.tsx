@@ -324,7 +324,8 @@ export default function HomePage() {
     { label: 'Terms of Service', href: '/terms-of-service' },
     { label: 'Contact', href: '/contact' },
     { label: 'Careers', href: '/careers' },
-    { label: 'Community Reporter', href: '/community-reporter' }
+    { label: 'Community Reporter', href: '/community-reporter' },
+    { label: 'Journalist Desk', href: '/journalist-desk' }
   ];
 
   return (
@@ -346,7 +347,7 @@ export default function HomePage() {
           animate={{ x: '-100%' }}
           transition={{ duration: 30, repeat: Infinity, ease: 'linear' }}
         >
-          🔴 Live | 🗞️ Breaking: Market surges after Fed decision 🔸 India to host G20 AI Summit 🔸 Global protests rise over climate delay...
+          You’re viewing the preview edition of News Pulse. Some sections and features are still being refined and new updates are rolling out step by step.
         </motion.div>
       </div>
 
@@ -440,7 +441,7 @@ export default function HomePage() {
                   animate={{ x: ['100%', '-100%'] }}
                   transition={{ duration: 18, repeat: Infinity, ease: 'linear' }}
                 >
-                  Stay updated with the latest developments around the world
+                  News Pulse – Preview Edition is live. Thank you for testing with us.
                 </motion.div>
               </div>
             </motion.div>

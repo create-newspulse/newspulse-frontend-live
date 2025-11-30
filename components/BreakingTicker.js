@@ -54,22 +54,24 @@ export default function BreakingTicker({
       (headline) => headline && typeof headline.text === 'string' && headline.text.trim() !== ''
     );
 
-    setHeadlines(validHeadlines);
+    // Use default preview message if no valid headlines are available
+    setHeadlines(
+      validHeadlines.length > 0
+        ? validHeadlines
+        : [
+            {
+              id: 'preview-default-1',
+              text: 'News Pulse – Preview Edition is live. Thank you for testing with us.',
+              source: null,
+            },
+          ]
+    );
     setIsLoading(false);
     setLastUpdated(new Date().toLocaleTimeString());
     retryCount.current = 0;
 
-    if (validHeadlines.length === 0) {
-      setError(
-        language === 'gujarati'
-          ? 'ગુજરાતી સમાચાર હાલમાં ઉપલબ્ધ નથી।'
-          : language === 'hindi'
-          ? 'हिन्दी समाचार अभी उपलब्ध नहीं हैं।'
-          : 'No valid headlines available.'
-      );
-    } else {
-      setError(null);
-    }
+    // Clear error when using default or valid headlines
+    setError(null);
   }, [category, language]);
 
   useEffect(() => {
