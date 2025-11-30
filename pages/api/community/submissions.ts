@@ -15,9 +15,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const body = (req.body && typeof req.body === 'object') ? req.body as Record<string, any> : {}
 
-    // Map from new form fields to backend expectations
-    const name = (body.fullName || body.name || body.userName || '').toString().trim()
-    const email = (body.email || '').toString().trim()
+    // Map from our form keys to backend expectations (be lenient with aliases)
+    const name = (body.reporterName || body.fullName || body.name || body.userName || '').toString().trim()
+    const email = (body.reporterEmail || body.email || '').toString().trim()
+    const phone = (body.reporterPhone || body.phone || '').toString().trim()
     const city = (body.city || body.location || '').toString().trim()
     const headline = (body.headline || body.title || '').toString().trim()
     const story = (body.story || body.body || body.content || '').toString().trim()
@@ -28,6 +29,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const backendPayload: Record<string, any> = {
       name,
       email,
+      phone,
       city,
       headline,
       body: story,
@@ -35,6 +37,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     if (typeof consent === 'boolean') backendPayload.consent = consent
     if (ageGroup) backendPayload.ageGroup = ageGroup
+    // Send the original payload as `meta` for non-breaking backend visibility if useful
+    backendPayload.meta = { ...(body || {}) }
 
     const upstream = await fetch(targetUrl, {
       method: 'POST',
@@ -43,9 +47,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     })
 
     if (!upstream.ok) {
-      // Log concise server-side detail only
-      console.error('[community-submit] upstream', upstream.status, upstream.statusText)
-      return res.status(500).json({ error: 'submit_failed' })
+      const errorText = await upstream.text().catch(() => '')
+      console.error('[community-submit] upstream', upstream.status, upstream.statusText, errorText)
+      // Forward upstream status if possible for easier debugging
+      return res.status(upstream.status || 500).json({ error: 'submit_failed', upstream: errorText || upstream.statusText })
     }
 
     // Forward upstream JSON if available
