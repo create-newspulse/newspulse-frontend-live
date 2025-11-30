@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 
 export type AnnouncementBarProps = {
   className?: string;
@@ -35,37 +36,31 @@ const AnnouncementBar: React.FC<AnnouncementBarProps> = ({ className }) => {
     <section
       role="status"
       aria-label="Site announcement"
-      className={`
-        w-full border-b border-slate-300 dark:border-slate-700
-        bg-slate-900 text-slate-50 dark:bg-slate-800/90 backdrop-blur
-        px-4 py-2 text-sm
-        flex flex-col md:flex-row md:items-center md:justify-between gap-1 md:gap-4
-        ${className || ''}`.replace(/\s+/g,' ').trim()}
+      className={`w-full border-b border-slate-800/60 bg-slate-900 text-slate-50 backdrop-blur px-4 py-2 text-xs sm:text-sm ${className || ''}`}
     >
-      <div className="flex items-start md:items-center gap-2">
-        <span className="text-lg md:text-base" aria-hidden="true">✨</span>
-        <div className="leading-snug">
-          <strong className="font-semibold block md:inline">News Pulse – Preview Edition</strong>
-          <span className="block md:inline md:ml-2 text-[13px] md:text-sm text-slate-200">
+      <div className="mx-auto max-w-6xl flex items-start sm:items-center gap-3">
+        <div className="flex flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-2 leading-snug">
+          <div className="font-semibold flex items-center gap-2">
+            <span aria-hidden="true">✨</span>
+            <span>News Pulse – Preview Edition</span>
+          </div>
+          <p className="text-[11px] sm:text-xs md:text-sm text-slate-200">
             You’re viewing the preview edition of News Pulse. Some sections and features are still being refined and new updates are rolling out step by step.
-          </span>
+          </p>
         </div>
-      </div>
-      <div className="flex items-center gap-4 ml-auto">
-        <a
-          href="/about"
-          className="text-xs md:text-sm font-medium text-sky-300 hover:text-sky-200 focus:outline-none focus:ring-2 focus:ring-sky-500 rounded"
-        >
-          Learn more
-        </a>
-        <button
-          type="button"
-          onClick={handleClose}
-          aria-label="Dismiss announcement"
-          className="text-slate-300 hover:text-white text-sm px-2 py-1 rounded focus:outline-none focus:ring-2 focus:ring-slate-400"
-        >
-          ×
-        </button>
+        <div className="flex items-center gap-3 pl-2">
+          <Link href="/about" className="text-[11px] font-medium underline-offset-2 hover:underline text-sky-300">
+            Learn more
+          </Link>
+          <button
+            type="button"
+            onClick={handleClose}
+            aria-label="Dismiss announcement"
+            className="rounded-full p-1 text-slate-300 hover:bg-slate-800 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
+          >
+            <span aria-hidden="true">×</span>
+          </button>
+        </div>
       </div>
     </section>
   );
