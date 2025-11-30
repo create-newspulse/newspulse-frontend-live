@@ -1,31 +1,71 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import Head from 'next/head';
 
 // Phase 1 Community Reporter Submission Page
 // Route: /community-reporter
 
-interface FormState {
-  name: string; // Full name (required)
-  email: string; // Email (required)
-  location: string; // City / State / Country (required in Phase 1)
-  ageGroup: string; // Age group (required)
+type ReporterType = 'community' | 'journalist';
+
+interface ReporterSignUpState {
+  fullName: string;
+  email: string;
+  phone: string;
+  city: string;
+  state: string;
+  country: string;
+  preferredLanguages: string[];
+  heardAbout?: string;
+  isProfessionalJournalist: boolean;
+  communityInterests: string[];
+  organisationName?: string;
+  organisationType?: 'print' | 'tv' | 'radio' | 'digital' | 'freelance' | 'other';
+  positionTitle?: string;
+  beatsProfessional?: string[];
+  yearsExperience?: string;
+  websiteOrPortfolio?: string;
+  linkedin?: string;
+  twitter?: string;
+  journalistCharterAccepted: boolean;
+  generalEthicsAccepted: boolean;
+}
+
+interface StoryFormState {
+  ageGroup: string;
   category: string; // Stores slug value e.g. 'regional'
   headline: string;
   story: string;
   mediaLink?: string;
-  confirm: boolean; // Contributor + truth policy acceptance (required)
 }
 
-const initialState: FormState = {
-  name: '',
+const initialSignUp: ReporterSignUpState = {
+  fullName: '',
   email: '',
-  location: '',
+  phone: '',
+  city: '',
+  state: '',
+  country: 'India',
+  preferredLanguages: [],
+  heardAbout: '',
+  isProfessionalJournalist: false,
+  communityInterests: [],
+  organisationName: '',
+  organisationType: undefined,
+  positionTitle: '',
+  beatsProfessional: [],
+  yearsExperience: '',
+  websiteOrPortfolio: '',
+  linkedin: '',
+  twitter: '',
+  journalistCharterAccepted: false,
+  generalEthicsAccepted: false,
+};
+
+const initialStory: StoryFormState = {
   ageGroup: '',
   category: '',
   headline: '',
   story: '',
   mediaLink: '',
-  confirm: false,
 };
 
 const categories: { value: string; label: string }[] = [
@@ -36,8 +76,15 @@ const categories: { value: string; label: string }[] = [
   { value: 'general_tip', label: 'General Tip' },
 ];
 
+const LANG_OPTIONS = ['en', 'hi', 'gu'];
+const COMMUNITY_INTERESTS = ['Local issues','Youth','Politics','Civic','Education','Health','Environment','Sports','Culture'];
+const PROFESSIONAL_BEATS = ['Politics','Crime','Business','Education','Civic','Sports','Entertainment','Tech','Other'];
+
 const CommunityReporterPage: React.FC = () => {
-  const [form, setForm] = useState<FormState>(initialState);
+  const [step, setStep] = useState<1 | 2>(1);
+  const [reporterType, setReporterType] = useState<ReporterType>('community');
+  const [signUpData, setSignUpData] = useState<ReporterSignUpState>(initialSignUp);
+  const [story, setStory] = useState<StoryFormState>(initialStory);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
@@ -49,98 +96,93 @@ const CommunityReporterPage: React.FC = () => {
   // Normalized endpoint (remove any trailing slashes from base) (kept for clarity but we will also build explicit requestUrl)
   const submitEndpoint = `${API_BASE_URL.replace(/\/+$/,'')}/api/community/submissions`;
 
-  const validate = () => {
-    const newErrors: Record<string, string> = {};
-    if (!form.name.trim()) newErrors.name = 'Full name is required.';
-    if (!form.email.trim()) {
-      newErrors.email = 'Email is required.';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-      newErrors.email = 'Enter a valid email.';
+  const validateStep1 = () => {
+    const e: Record<string, string> = {};
+    if (!signUpData.fullName.trim()) e.fullName = 'Full name is required.';
+    if (!signUpData.email.trim()) e.email = 'Email is required.';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signUpData.email)) e.email = 'Enter a valid email.';
+    if (!signUpData.phone.trim()) e.phone = 'Phone is required.';
+    if (!signUpData.city.trim()) e.city = 'City is required.';
+    if (!signUpData.state.trim()) e.state = 'State is required.';
+    if (!signUpData.country.trim()) e.country = 'Country is required.';
+    if (!signUpData.generalEthicsAccepted) e.generalEthicsAccepted = 'You must accept ethics policy.';
+    if (reporterType === 'journalist') {
+      if (!signUpData.journalistCharterAccepted) e.journalistCharterAccepted = 'Charter acceptance required.';
+      if (!signUpData.organisationName?.trim()) e.organisationName = 'Organisation name is required.';
+      if (!signUpData.positionTitle?.trim()) e.positionTitle = 'Position title is required.';
     }
-    if (!form.location.trim()) newErrors.location = 'Location is required.';
-    if (!form.ageGroup) newErrors.ageGroup = 'Select an age group.';
-    if (!form.category) newErrors.category = 'Select a category.';
-    if (!form.headline.trim()) newErrors.headline = 'Headline is required.';
-    if (form.headline.length > 150) newErrors.headline = 'Headline exceeds 150 characters.';
-    if (!form.story.trim()) {
-      newErrors.story = 'Story is required.';
-    } else if (form.story.trim().length < 50) {
-      newErrors.story = 'Story must be at least 50 characters.';
-    }
-    if (!form.confirm) newErrors.confirm = 'You must accept the policy and confirm truth.';
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    setErrors(e);
+    return Object.keys(e).length === 0;
   };
 
-  const handleChange: React.ChangeEventHandler<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement> = (e) => {
-    const { name, value, type, checked } = e.target as HTMLInputElement;
-    setForm((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
-    if (errors[name]) {
-      setErrors((prev) => {
-        const copy = { ...prev };
-        delete copy[name];
-        return copy;
-      });
-    }
+  const validateStep2 = () => {
+    const e: Record<string, string> = {};
+    if (!story.ageGroup) e.ageGroup = 'Select an age group.';
+    if (!story.category) e.category = 'Select a category.';
+    if (!story.headline.trim()) e.headline = 'Headline is required.';
+    if (story.headline.length > 150) e.headline = 'Headline exceeds 150 characters.';
+    if (!story.story.trim()) e.story = 'Story is required.';
+    else if (story.story.trim().length < 50) e.story = 'Story must be at least 50 characters.';
+    setErrors(e);
+    return Object.keys(e).length === 0;
   };
 
-  const handleSubmit: React.FormEventHandler<HTMLFormElement> = async (e) => {
+  const handleSubmitStep2: React.FormEventHandler<HTMLFormElement> = async (e) => {
     e.preventDefault();
     setSuccessMessage('');
     setErrorMessage('');
-    if (!validate()) return;
+    if (!validateStep2()) return;
     setSubmitting(true);
     try {
-      // Build payload using backend field names
       const payload = {
-        reporterName: form.name.trim(),
-        reporterEmail: form.email.trim(),
-        ageGroup: form.ageGroup,
-        location: form.location.trim(),
-        category: form.category, // already a slug
-        headline: form.headline.trim(),
-        story: form.story.trim(),
-        // extras still included for backward compatibility if backend expects them
-        name: form.name.trim(),
-        email: form.email.trim(),
-        body: form.story.trim(),
-        confirm: form.confirm,
-        acceptedPolicy: form.confirm,
+        reporterName: signUpData.fullName.trim(),
+        reporterEmail: signUpData.email.trim(),
+        reporterPhone: signUpData.phone.trim(),
+        ageGroup: story.ageGroup,
+        city: signUpData.city.trim(),
+        state: signUpData.state.trim(),
+        country: signUpData.country.trim(),
+        category: story.category,
+        headline: story.headline.trim(),
+        story: story.story.trim(),
+        // Derived + extra fields
+        reporterType: reporterType,
+        isProfessionalJournalist: reporterType === 'journalist',
+        preferredLanguages: signUpData.preferredLanguages,
+        communityInterests: signUpData.communityInterests,
+        journalistCharterAccepted: signUpData.journalistCharterAccepted,
+        generalEthicsAccepted: signUpData.generalEthicsAccepted,
+        organisationName: signUpData.organisationName?.trim() || undefined,
+        organisationType: signUpData.organisationType || undefined,
+        positionTitle: signUpData.positionTitle?.trim() || undefined,
+        beatsProfessional: signUpData.beatsProfessional || [],
+        yearsExperience: signUpData.yearsExperience || undefined,
+        websiteOrPortfolio: signUpData.websiteOrPortfolio?.trim() || undefined,
+        socialLinks: {
+          linkedin: signUpData.linkedin?.trim() || undefined,
+          twitter: signUpData.twitter?.trim() || undefined,
+        },
+        heardAbout: signUpData.heardAbout?.trim() || undefined,
       };
 
-      // Use same-origin Next.js API route to bypass browser CORS.
-      // If the current page URL includes ?debug=1, forward it to the API for richer diagnostics.
-      const isDebug = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('debug') === '1';
       const requestUrl = '/api/community/submissions';
-      console.log('[CommunityReporter] Request URL', requestUrl);
       const res = await fetch(requestUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify(payload),
       });
-      console.log('[CommunityReporter] Response status', res.status);
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error('Community submission failed:', res.status, errorText);
-      }
-
       let data: any = null;
-      try {
-        data = await res.json();
-      } catch (_) {
-        // Ignore JSON parse errors (e.g., empty body); rely on status code only.
-      }
-
+      try { data = await res.json(); } catch {}
       if (res.ok && data?.success !== false) {
-        setForm(initialState);
+        setSignUpData(initialSignUp);
+        setStory(initialStory);
+        setStep(1);
+        setReporterType('community');
         setSuccessMessage('Thank you! Your story was submitted for review.');
       } else {
-        const msg = typeof data?.message === 'string' ? data.message : (typeof data?.error === 'string' ? data.error : null);
-        if (msg) console.warn('[CommunityReporter] Backend error:', msg);
-        setErrorMessage(msg || 'Unable to submit right now. Please try again later.');
+        setErrorMessage(data?.message || data?.error || 'Unable to submit right now. Please try again later.');
       }
     } catch (err) {
-      // Network / fetch-level failure
       setErrorMessage('Unable to submit right now. Please try again later.');
     } finally {
       setSubmitting(false);
@@ -150,8 +192,8 @@ const CommunityReporterPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-white dark:bg-dark-primary text-black dark:text-dark-text">
       <Head>
-        <title>Community Reporter | News Pulse</title>
-        <meta name="description" content="Submit local stories and tips to News Pulse." />
+        <title>Community Reporter – Submit Your Story | News Pulse</title>
+        <meta name="description" content="Submit your story to News Pulse. For community reporters and professional journalists: Step 1 for reporter details with ethics/charter, Step 2 for your story." />
       </Head>
 
       {/* Hero / Intro */}
@@ -173,183 +215,241 @@ const CommunityReporterPage: React.FC = () => {
               <li>Campus / youth stories must be authentic and respectful.</li>
             </ul>
           </div>
+          <div className="px-4">
+            <div className="max-w-3xl mx-auto flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2 text-sm">
+                <span className={`px-3 py-1 rounded-full ${step === 1 ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>Step 1: Reporter Details</span>
+                <span className={`px-3 py-1 rounded-full ${step === 2 ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>Step 2: Submit Your Story</span>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
       {/* Form Section */}
       <section className="py-10 px-4">
         <div className="max-w-3xl mx-auto">
-          <form onSubmit={handleSubmit} className="space-y-6 bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700">
-            <h2 className="text-2xl font-bold mb-2">Submit Your Story</h2>
-            {successMessage && (
-              <div className="rounded-md bg-green-50 border border-green-200 p-4 text-green-800 text-sm">
-                {successMessage}
-              </div>
+          <form onSubmit={step === 1 ? undefined : handleSubmitStep2} className="space-y-6 bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700">
+            <h2 className="text-2xl font-bold mb-2">{step === 1 ? 'Reporter Details' : 'Submit Your Story'}</h2>
+                    {step === 1 && (
+                      <div className="space-y-6 border-b border-gray-200 dark:border-gray-700 pb-6">
+                        {/* Identity */}
+                        <div>
+                          <label htmlFor="fullName" className="block font-medium mb-1">Full name *</label>
+                          <input id="fullName" type="text" value={signUpData.fullName} onChange={e => setSignUpData(s => ({ ...s, fullName: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                          {errors.fullName && <p className="text-red-600 text-xs mt-1">{errors.fullName}</p>}
+                        </div>
+                        <div>
+                          <label htmlFor="email" className="block font-medium mb-1">Email *</label>
+                          <input id="email" type="email" value={signUpData.email} onChange={e => setSignUpData(s => ({ ...s, email: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                          {errors.email && <p className="text-red-600 text-xs mt-1">{errors.email}</p>}
+                        </div>
+                        <div>
+                          <label htmlFor="phone" className="block font-medium mb-1">Phone *</label>
+                          <input id="phone" type="tel" value={signUpData.phone} onChange={e => setSignUpData(s => ({ ...s, phone: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                          {errors.phone && <p className="text-red-600 text-xs mt-1">{errors.phone}</p>}
+                          <p className="text-xs text-gray-500 mt-1">For verification only, never shown publicly.</p>
+                        </div>
+                        <div className="grid md:grid-cols-3 gap-4">
+                          <div>
+                            <label htmlFor="city" className="block font-medium mb-1">City *</label>
+                            <input id="city" type="text" value={signUpData.city} onChange={e => setSignUpData(s => ({ ...s, city: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                            {errors.city && <p className="text-red-600 text-xs mt-1">{errors.city}</p>}
+                          </div>
+                          <div>
+                            <label htmlFor="state" className="block font-medium mb-1">State *</label>
+                            <input id="state" type="text" value={signUpData.state} onChange={e => setSignUpData(s => ({ ...s, state: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                            {errors.state && <p className="text-red-600 text-xs mt-1">{errors.state}</p>}
+                          </div>
+                          <div>
+                            <label htmlFor="country" className="block font-medium mb-1">Country *</label>
+                            <input id="country" type="text" value={signUpData.country} onChange={e => setSignUpData(s => ({ ...s, country: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                            {errors.country && <p className="text-red-600 text-xs mt-1">{errors.country}</p>}
+                          </div>
+                        </div>
+
+                        {/* Preferred languages */}
+                        <div>
+                          <label className="block font-medium mb-2">Preferred languages</label>
+                          <div className="flex flex-wrap gap-2">
+                            {LANG_OPTIONS.map(code => (
+                              <button type="button" key={code} onClick={() => setSignUpData(s => ({ ...s, preferredLanguages: s.preferredLanguages.includes(code) ? s.preferredLanguages.filter(l => l !== code) : [...s.preferredLanguages, code] }))} className={`px-3 py-1 rounded-full border ${signUpData.preferredLanguages.includes(code) ? 'bg-purple-600 text-white border-purple-600' : 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 border-gray-300 dark:border-gray-600'}`}>{code}</button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Heard about NP */}
+                        <div>
+                          <label htmlFor="heardAbout" className="block font-medium mb-1">How did you hear about News Pulse? (optional)</label>
+                          <input id="heardAbout" type="text" value={signUpData.heardAbout || ''} onChange={e => setSignUpData(s => ({ ...s, heardAbout: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                        </div>
+
+                        {/* Reporter type toggle */}
+                        <div>
+                          <label className="block font-medium mb-2">I am</label>
+                          <div className="flex flex-col md:flex-row gap-3">
+                            <label className="inline-flex items-center gap-2">
+                              <input type="radio" name="reporterType" checked={reporterType === 'community'} onChange={() => { setReporterType('community'); setSignUpData(s => ({ ...s, isProfessionalJournalist: false })); }} />
+                              <span>I am a Community Reporter</span>
+                            </label>
+                            <label className="inline-flex items-center gap-2">
+                              <input type="radio" name="reporterType" checked={reporterType === 'journalist'} onChange={() => { setReporterType('journalist'); setSignUpData(s => ({ ...s, isProfessionalJournalist: true })); }} />
+                              <span>I am a Professional Journalist / Media Person</span>
+                            </label>
+                          </div>
+                        </div>
+
+                        {reporterType === 'community' && (
+                          <div>
+                            <label className="block font-medium mb-2">What kind of stories are you interested in?</label>
+                            <div className="flex flex-wrap gap-2">
+                              {COMMUNITY_INTERESTS.map(i => (
+                                <button type="button" key={i} onClick={() => setSignUpData(s => ({ ...s, communityInterests: s.communityInterests.includes(i) ? s.communityInterests.filter(v => v !== i) : [...s.communityInterests, i] }))} className={`px-3 py-1 rounded-full border ${signUpData.communityInterests.includes(i) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 border-gray-300 dark:border-gray-600'}`}>{i}</button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {reporterType === 'journalist' && (
+                          <div className="space-y-4">
+                            <div>
+                              <label htmlFor="organisationName" className="block font-medium mb-1">Organisation name *</label>
+                              <input id="organisationName" type="text" value={signUpData.organisationName || ''} onChange={e => setSignUpData(s => ({ ...s, organisationName: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                              {errors.organisationName && <p className="text-red-600 text-xs mt-1">{errors.organisationName}</p>}
+                            </div>
+                            <div>
+                              <label htmlFor="organisationType" className="block font-medium mb-1">Organisation type</label>
+                              <select id="organisationType" value={signUpData.organisationType || ''} onChange={e => setSignUpData(s => ({ ...s, organisationType: (e.target.value || undefined) as ReporterSignUpState['organisationType'] }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2">
+                                <option value="">Select type</option>
+                                <option value="print">Print</option>
+                                <option value="tv">TV</option>
+                                <option value="radio">Radio</option>
+                                <option value="digital">Digital</option>
+                                <option value="freelance">Freelance</option>
+                                <option value="other">Other</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label htmlFor="positionTitle" className="block font-medium mb-1">Position / Role *</label>
+                              <input id="positionTitle" type="text" value={signUpData.positionTitle || ''} onChange={e => setSignUpData(s => ({ ...s, positionTitle: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                              {errors.positionTitle && <p className="text-red-600 text-xs mt-1">{errors.positionTitle}</p>}
+                            </div>
+                            <div>
+                              <label className="block font-medium mb-2">Primary beats</label>
+                              <div className="flex flex-wrap gap-2">
+                                {PROFESSIONAL_BEATS.map(beat => (
+                                  <button type="button" key={beat} onClick={() => setSignUpData(s => ({ ...s, beatsProfessional: (s.beatsProfessional || []).includes(beat) ? (s.beatsProfessional || []).filter(b => b !== beat) : [ ...(s.beatsProfessional || []), beat ] }))} className={`px-3 py-1 rounded-full border ${(signUpData.beatsProfessional || []).includes(beat) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 border-gray-300 dark:border-gray-600'}`}>{beat}</button>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="grid md:grid-cols-2 gap-4">
+                              <div>
+                                <label htmlFor="yearsExperience" className="block font-medium mb-1">Years of experience</label>
+                                <select id="yearsExperience" value={signUpData.yearsExperience || ''} onChange={e => setSignUpData(s => ({ ...s, yearsExperience: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2">
+                                  <option value="">Select range</option>
+                                  <option value="0-1">0-1</option>
+                                  <option value="2-4">2-4</option>
+                                  <option value="5-9">5-9</option>
+                                  <option value="10+">10+</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label htmlFor="websiteOrPortfolio" className="block font-medium mb-1">Website / portfolio</label>
+                                <input id="websiteOrPortfolio" type="url" value={signUpData.websiteOrPortfolio || ''} onChange={e => setSignUpData(s => ({ ...s, websiteOrPortfolio: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                              </div>
+                            </div>
+                            <div className="grid md:grid-cols-2 gap-4">
+                              <div>
+                                <label htmlFor="linkedin" className="block font-medium mb-1">LinkedIn</label>
+                                <input id="linkedin" type="url" value={signUpData.linkedin || ''} onChange={e => setSignUpData(s => ({ ...s, linkedin: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                              </div>
+                              <div>
+                                <label htmlFor="twitter" className="block font-medium mb-1">Twitter / X</label>
+                                <input id="twitter" type="url" value={signUpData.twitter || ''} onChange={e => setSignUpData(s => ({ ...s, twitter: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Ethics / Charter */}
+                        <div className="space-y-3">
+                          <div className="flex items-start gap-3">
+                            <input id="ethics" type="checkbox" checked={signUpData.generalEthicsAccepted} onChange={e => setSignUpData(s => ({ ...s, generalEthicsAccepted: e.target.checked }))} className="mt-1 h-5 w-5 rounded border-gray-300 focus:ring-blue-500" />
+                            <label htmlFor="ethics" className="text-sm leading-relaxed">I agree not to submit fake or unlawful stories and I accept that News Pulse may fact-check and reject my submissions.</label>
+                          </div>
+                          {errors.generalEthicsAccepted && <p className="text-red-600 text-xs -mt-2">{errors.generalEthicsAccepted}</p>}
+                          {reporterType === 'journalist' && (
+                            <div className="flex items-start gap-3">
+                              <input id="charter" type="checkbox" checked={signUpData.journalistCharterAccepted} onChange={e => setSignUpData(s => ({ ...s, journalistCharterAccepted: e.target.checked }))} className="mt-1 h-5 w-5 rounded border-gray-300 focus:ring-blue-500" />
+                              <label htmlFor="charter" className="text-sm leading-relaxed">I accept the News Pulse Journalist Charter and agree not to misuse the News Pulse name for threats, money, or favours.</label>
+                            </div>
+                          )}
+                          {errors.journalistCharterAccepted && <p className="text-red-600 text-xs -mt-2">{errors.journalistCharterAccepted}</p>}
+                        </div>
+
+                        {/* Next */}
+                        <div className="pt-2">
+                          <button type="button" onClick={() => { if (validateStep1()) setStep(2); }} className={`w-full font-semibold px-6 py-3 rounded-lg transition-colors ${'bg-blue-600 hover:bg-blue-700 text-white'} focus:outline-none focus:ring-2 focus:ring-blue-500`}>
+                            Next
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+            {step === 2 && (
+              <>
+                {/* Category */}
+                <div>
+                  <label htmlFor="category" className="block font-medium mb-1">Category *</label>
+                  <select id="category" value={story.category} onChange={e => setStory(s => ({ ...s, category: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2">
+                    <option value="">Select a category</option>
+                    {categories.map(c => (<option key={c.value} value={c.value}>{c.label}</option>))}
+                  </select>
+                  {errors.category && <p className="text-red-600 text-xs mt-1">{errors.category}</p>}
+                </div>
+
+                {/* Headline */}
+                <div>
+                  <label htmlFor="headline" className="block font-medium mb-1">Headline *</label>
+                  <input id="headline" type="text" maxLength={150} value={story.headline} onChange={e => setStory(s => ({ ...s, headline: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                  <div className="flex justify-between mt-1">
+                    <p className="text-xs text-gray-500">Max 150 characters</p>
+                    <p className="text-xs text-gray-500">{story.headline.length}/150</p>
+                  </div>
+                  {errors.headline && <p className="text-red-600 text-xs mt-1">{errors.headline}</p>}
+                </div>
+
+                {/* Story */}
+                <div>
+                  <label htmlFor="storyBody" className="block font-medium mb-1">Story *</label>
+                  <textarea id="storyBody" rows={7} value={story.story} onChange={e => setStory(s => ({ ...s, story: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y" placeholder="Describe the event, issue, or tip in detail..." />
+                  <div className="flex justify-between mt-1">
+                    <p className="text-xs text-gray-500">Minimum 50 characters</p>
+                    <p className="text-xs text-gray-500">{story.story.trim().length} chars</p>
+                  </div>
+                  {errors.story && <p className="text-red-600 text-xs mt-1">{errors.story}</p>}
+                </div>
+
+                {/* Age Group */}
+                <div>
+                  <label htmlFor="ageGroup" className="block font-medium mb-1">Age group *</label>
+                  <select id="ageGroup" value={story.ageGroup} onChange={e => setStory(s => ({ ...s, ageGroup: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2">
+                    <option value="">Select age group</option>
+                    <option value="Under 18">Under 18</option>
+                    <option value="18–24">18–24</option>
+                    <option value="25–40">25–40</option>
+                    <option value="41+">41+</option>
+                  </select>
+                  {errors.ageGroup && <p className="text-red-600 text-xs mt-1">{errors.ageGroup}</p>}
+                </div>
+
+                {/* Controls */}
+                <div className="flex items-center gap-3">
+                  <button type="button" onClick={() => setStep(1)} className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600">Back</button>
+                  <button type="submit" disabled={submitting} className={`px-6 py-2 rounded-lg font-semibold ${submitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}>{submitting ? 'Submitting…' : 'Submit Story'}</button>
+                </div>
+              </>
             )}
-            {errorMessage && (
-              <div className="rounded-md bg-red-50 border border-red-200 p-4 text-red-800 text-sm">
-                {errorMessage}
-              </div>
-            )}
-
-            {/* Reporter Details Section */}
-            <div className="space-y-6 border-b border-gray-200 dark:border-gray-700 pb-6">
-              <h3 className="text-xl font-semibold">Reporter details</h3>
-
-              {/* Full Name */}
-              <div>
-                <label htmlFor="name" className="block font-medium mb-1">Full name *</label>
-                <input
-                  id="name"
-                  name="name"
-                  type="text"
-                  required
-                  value={form.name}
-                  onChange={handleChange}
-                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">Your real name (we will not show it publicly without your permission).</p>
-                {errors.name && <p className="text-red-600 text-xs mt-1">{errors.name}</p>}
-              </div>
-
-              {/* Email */}
-              <div>
-                <label htmlFor="email" className="block font-medium mb-1">Email *</label>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  required
-                  value={form.email}
-                  onChange={handleChange}
-                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">For verification and updates about your story.</p>
-                {errors.email && <p className="text-red-600 text-xs mt-1">{errors.email}</p>}
-              </div>
-
-              {/* Location */}
-              <div>
-                <label htmlFor="location" className="block font-medium mb-1">City / State / Country *</label>
-                <input
-                  id="location"
-                  name="location"
-                  type="text"
-                  required
-                  placeholder="Ahmedabad, Gujarat, India"
-                  value={form.location}
-                  onChange={handleChange}
-                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                {errors.location && <p className="text-red-600 text-xs mt-1">{errors.location}</p>}
-              </div>
-
-              {/* Age Group */}
-              <div>
-                <label htmlFor="ageGroup" className="block font-medium mb-1">Age group *</label>
-                <select
-                  id="ageGroup"
-                  name="ageGroup"
-                  required
-                  value={form.ageGroup}
-                  onChange={handleChange}
-                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select age group</option>
-                  <option value="Under 18">Under 18</option>
-                  <option value="18–24">18–24</option>
-                  <option value="25–40">25–40</option>
-                  <option value="41+">41+</option>
-                </select>
-                {errors.ageGroup && <p className="text-red-600 text-xs mt-1">{errors.ageGroup}</p>}
-              </div>
-            </div>
-
-            {/* Category */}
-            <div>
-              <label htmlFor="category" className="block font-medium mb-1">Category *</label>
-              <select
-                id="category"
-                name="category"
-                required
-                value={form.category}
-                onChange={handleChange}
-                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Select a category</option>
-                {categories.map((c) => (
-                  <option key={c.value} value={c.value}>{c.label}</option>
-                ))}
-              </select>
-              {errors.category && <p className="text-red-600 text-xs mt-1">{errors.category}</p>}
-            </div>
-
-            {/* Headline */}
-            <div>
-              <label htmlFor="headline" className="block font-medium mb-1">Headline *</label>
-              <input
-                id="headline"
-                name="headline"
-                type="text"
-                required
-                maxLength={150}
-                value={form.headline}
-                onChange={handleChange}
-                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <div className="flex justify-between mt-1">
-                <p className="text-xs text-gray-500">Max 150 characters</p>
-                <p className="text-xs text-gray-500">{form.headline.length}/150</p>
-              </div>
-              {errors.headline && <p className="text-red-600 text-xs mt-1">{errors.headline}</p>}
-            </div>
-
-            {/* Story */}
-            <div>
-              <label htmlFor="story" className="block font-medium mb-1">Story *</label>
-              <textarea
-                id="story"
-                name="story"
-                required
-                rows={7}
-                value={form.story}
-                onChange={handleChange}
-                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-                placeholder="Describe the event, issue, or tip in detail..."
-              />
-              <div className="flex justify-between mt-1">
-                <p className="text-xs text-gray-500">Minimum 50 characters</p>
-                <p className="text-xs text-gray-500">{form.story.trim().length} chars</p>
-              </div>
-              {errors.story && <p className="text-red-600 text-xs mt-1">{errors.story}</p>}
-            </div>
-
-            {/* Contributor Policy + Truth Confirmation */}
-            <div className="flex items-start space-x-3">
-              <input
-                id="confirm"
-                name="confirm"
-                type="checkbox"
-                checked={form.confirm}
-                onChange={handleChange}
-                className="mt-1 h-5 w-5 rounded border-gray-300 focus:ring-blue-500"
-              />
-              <label htmlFor="confirm" className="text-sm leading-relaxed">
-                I accept the News Pulse Contributor Policy and Privacy Policy and confirm this story is true to the best of my knowledge.
-              </label>
-            </div>
-            {errors.confirm && <p className="text-red-600 text-xs -mt-4 mb-2">{errors.confirm}</p>}
-
-            {/* Submit Button */}
-            <div>
-              <button
-                type="submit"
-                disabled={submitting}
-                className={`w-full font-semibold px-6 py-3 rounded-lg transition-colors ${submitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'} focus:outline-none focus:ring-2 focus:ring-blue-500`}
-              >
-                {submitting ? 'Submitting…' : 'Submit Story'}
-              </button>
-            </div>
 
             <p className="text-xs text-gray-500 pt-2 border-t border-gray-200 dark:border-gray-700">
               Note: Nothing is auto-published. Every submission is reviewed manually for safety, ethics, and accuracy.
