@@ -22,7 +22,8 @@ export const MobileNavigation: React.FC<MobileNavigationProps> = ({
     { label: 'Categories', icon: '📂', href: '/categories', active: false },
     { label: 'Search', icon: '🔍', href: '/search', active: false },
     { label: 'Bookmarks', icon: '🔖', href: '/bookmarks', active: false },
-    { label: 'Settings', icon: '⚙️', href: '/settings', active: false }
+    { label: 'Settings', icon: '⚙️', href: '/settings', active: false },
+    { label: 'Journalist Desk', icon: '📝', href: '/journalist-desk', active: router.pathname === '/journalist-desk' }
   ];
 
   const toggleMenu = () => {
@@ -128,7 +129,7 @@ export const MobileNavigation: React.FC<MobileNavigationProps> = ({
                       onClick={(e) => {
                         e.preventDefault();
                         closeMenu();
-                        // Add navigation logic here
+                        router.push(item.href);
                       }}
                       className={`
                         flex items-center space-x-4 p-4 rounded-xl transition-all duration-200
@@ -178,7 +179,7 @@ export const MobileNavigation: React.FC<MobileNavigationProps> = ({
               key={item.href}
               whileTap={{ scale: 0.9 }}
               onClick={() => {
-                // Add navigation logic here
+                router.push(item.href);
               }}
               className={`
                 flex flex-col items-center space-y-1 p-2 rounded-lg min-w-[60px]
