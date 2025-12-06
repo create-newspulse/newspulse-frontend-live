@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import Head from 'next/head';
+import { submitCommunityStory, SubmitCommunityStoryResult } from '../src/lib/communityReporterApi';
+import { useCommunityReporterConfig } from '../src/hooks/useCommunityReporterConfig';
 
 // Phase 1 Community Reporter Submission Page
 // Route: /community-reporter
@@ -86,15 +88,15 @@ const CommunityReporterPage: React.FC = () => {
   const [signUpData, setSignUpData] = useState<ReporterSignUpState>(initialSignUp);
   const [story, setStory] = useState<StoryFormState>(initialStory);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [submitting, setSubmitting] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
-  const [errorMessage, setErrorMessage] = useState('');
+  const [submitStatus, setSubmitStatus] = useState<'idle'|'submitting'|'success'|'error'>('idle');
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitResult, setSubmitResult] = useState<SubmitCommunityStoryResult | null>(null);
+  const { config } = useCommunityReporterConfig();
+  const myStoriesEnabled = config?.communityMyStoriesEnabled ?? true;
   // Category values already use stable slugs; no mapping required.
 
   // Public backend base URL (env override -> fallback)
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://newspulse-backend-real.onrender.com';
-  // Normalized endpoint (remove any trailing slashes from base) (kept for clarity but we will also build explicit requestUrl)
-  const submitEndpoint = `${API_BASE_URL.replace(/\/+$/,'')}/api/community/submissions`;
 
   const validateStep1 = () => {
     const e: Record<string, string> = {};
@@ -129,63 +131,62 @@ const CommunityReporterPage: React.FC = () => {
 
   const handleSubmitStep2: React.FormEventHandler<HTMLFormElement> = async (e) => {
     e.preventDefault();
-    setSuccessMessage('');
-    setErrorMessage('');
+    setSubmitError(null);
+    setSubmitResult(null);
+    setSubmitStatus('idle');
     if (!validateStep2()) return;
-    setSubmitting(true);
+    setSubmitStatus('submitting');
     try {
       const payload = {
-        reporterName: signUpData.fullName.trim(),
-        reporterEmail: signUpData.email.trim(),
-        reporterPhone: signUpData.phone.trim(),
-        ageGroup: story.ageGroup,
-        city: signUpData.city.trim(),
-        state: signUpData.state.trim(),
-        country: signUpData.country.trim(),
-        category: story.category,
-        headline: story.headline.trim(),
-        story: story.story.trim(),
-        // Derived + extra fields
-        reporterType: reporterType,
-        isProfessionalJournalist: reporterType === 'journalist',
-        preferredLanguages: signUpData.preferredLanguages,
-        communityInterests: signUpData.communityInterests,
-        journalistCharterAccepted: signUpData.journalistCharterAccepted,
-        generalEthicsAccepted: signUpData.generalEthicsAccepted,
-        organisationName: signUpData.organisationName?.trim() || undefined,
-        organisationType: signUpData.organisationType || undefined,
-        positionTitle: signUpData.positionTitle?.trim() || undefined,
-        beatsProfessional: signUpData.beatsProfessional || [],
-        yearsExperience: signUpData.yearsExperience || undefined,
-        websiteOrPortfolio: signUpData.websiteOrPortfolio?.trim() || undefined,
-        socialLinks: {
-          linkedin: signUpData.linkedin?.trim() || undefined,
-          twitter: signUpData.twitter?.trim() || undefined,
+        reporter: {
+          fullName: signUpData.fullName.trim(),
+          email: signUpData.email.trim(),
+          phone: signUpData.phone.trim(),
+          city: signUpData.city.trim(),
+          state: signUpData.state.trim(),
+          country: signUpData.country.trim(),
+          preferredLanguages: signUpData.preferredLanguages,
+          heardAbout: signUpData.heardAbout?.trim() || '',
+          reporterType: reporterType === 'journalist' ? 'journalist' : 'community',
+          beats: signUpData.beatsProfessional || [],
+          agreesToEthics: signUpData.generalEthicsAccepted === true,
         },
-        heardAbout: signUpData.heardAbout?.trim() || undefined,
+        story: {
+          category: story.category,
+          headline: story.headline.trim(),
+          body: story.story.trim(),
+          ageGroup: story.ageGroup,
+          locationCity: signUpData.city.trim(),
+          locationState: signUpData.state.trim(),
+          urgency: 'normal',
+          canContact: true,
+        },
       };
-
-      const requestUrl = '/api/community/submissions';
-      const res = await fetch(requestUrl, {
+      const res = await fetch('/api/community-reporter/submit', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      let data: any = null;
-      try { data = await res.json(); } catch {}
-      if (res.ok && data?.success !== false) {
-        setSignUpData(initialSignUp);
-        setStory(initialStory);
-        setStep(1);
-        setReporterType('community');
-        setSuccessMessage('Thank you! Your story was submitted for review.');
+      const data: any = await res.json().catch(() => ({}));
+      const ok = res.ok && (data?.ok !== false);
+      if (ok) {
+        const mapped: SubmitCommunityStoryResult = {
+          ok: true,
+          referenceId: data?.referenceId || data?.id || '',
+          status: data?.status || 'Under review',
+          reporterType: reporterType,
+        };
+        setSubmitResult(mapped);
+        setSubmitStatus('success');
       } else {
-        setErrorMessage(data?.message || data?.error || 'Unable to submit right now. Please try again later.');
+        setSubmitError('We couldn’t submit your story right now. Please try again in a few minutes.');
+        setSubmitStatus('error');
       }
     } catch (err) {
-      setErrorMessage('Unable to submit right now. Please try again later.');
+      setSubmitError('We couldn’t submit your story right now. Please try again in a few minutes.');
+      setSubmitStatus('error');
     } finally {
-      setSubmitting(false);
+      // Status already set; no extra action here
     }
   };
 
@@ -444,9 +445,52 @@ const CommunityReporterPage: React.FC = () => {
                 </div>
 
                 {/* Controls */}
-                <div className="flex items-center gap-3">
+                {/* Status messages */}
+                {submitStatus === 'error' && (
+                  <div className="mt-4 p-4 border border-red-300 bg-red-50 text-red-700 rounded-lg">
+                    <p className="font-semibold">We couldn’t submit your story right now. Please try again in a few minutes.</p>
+                    {submitError && <p className="text-xs mt-1">{submitError}</p>}
+                  </div>
+                )}
+
+                {submitStatus === 'success' && submitResult && (
+                  <div className="mt-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">
+                    <p className="font-semibold">Your story has been submitted successfully for review.</p>
+                    <p className="mt-1">Our editorial team will manually verify it before publishing.</p>
+                    {submitResult.referenceId && (
+                      <p className="mt-1"><span className="font-semibold">Your reference ID:</span> {submitResult.referenceId}</p>
+                    )}
+                    <p className="mt-2 text-xs text-green-900/80">You can track this and your other stories from the 'My Community Stories' page.</p>
+                    <div className="mt-2 text-xs text-green-900/80 space-y-1">
+                      <p>Reporter type: {submitResult.reporterType === 'journalist' ? 'Professional Journalist / Media' : 'Community Reporter'}</p>
+                      <p>Status: {submitResult.status || 'Under review'}</p>
+                    </div>
+                    <div className="mt-3 flex gap-3">
+                      <button
+                        type="button"
+                        className="px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-800"
+                        onClick={() => {
+                          setStory(initialStory);
+                          setSubmitStatus('idle');
+                          setSubmitResult(null);
+                          setSubmitError(null);
+                        }}
+                      >
+                        Submit another story
+                      </button>
+                      {myStoriesEnabled ? (
+                        <a href="/community-reporter/my-stories" className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold" onClick={() => { try { window.localStorage.setItem('np.communityReporter.email', signUpData.email.trim()); } catch {} }}>View My Community Stories</a>
+                      ) : (
+                        <span className="text-sm text-gray-600 dark:text-gray-300">Status tracking for community stories is temporarily offline. Our editorial team will still review your story.</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Controls */}
+                <div className="flex items-center gap-3 mt-4">
                   <button type="button" onClick={() => setStep(1)} className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600">Back</button>
-                  <button type="submit" disabled={submitting} className={`px-6 py-2 rounded-lg font-semibold ${submitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}>{submitting ? 'Submitting…' : 'Submit Story'}</button>
+                  <button type="submit" disabled={submitStatus === 'submitting'} className={`px-6 py-2 rounded-lg font-semibold ${submitStatus === 'submitting' ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}>{submitStatus === 'submitting' ? 'Submitting…' : 'Submit Story'}</button>
                 </div>
               </>
             )}
