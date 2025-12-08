@@ -1,5 +1,6 @@
 import Head from 'next/head';
 import React, { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/router';
 import { useCommunityReporterConfig } from '../../src/hooks/useCommunityReporterConfig';
 
 type CommunityStorySummary = {
@@ -23,9 +24,11 @@ const statusColor = (s: string) => {
 };
 
 const CommunityReporterMyStoriesPage: React.FC = () => {
+  const router = useRouter();
   const { config, isLoading: cfgLoading, error: cfgError } = useCommunityReporterConfig();
   const enabled = config?.communityMyStoriesEnabled ?? true;
   const [email, setEmail] = useState('');
+  const [reporterId, setReporterId] = useState<string | null>(null);
   const [stories, setStories] = useState<CommunityStorySummary[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,10 +36,19 @@ const CommunityReporterMyStoriesPage: React.FC = () => {
 
   useEffect(() => {
     try {
-      const saved = window.localStorage.getItem('np.communityReporter.email');
-      if (saved) setEmail(saved);
+      const savedEmail = window.localStorage.getItem('np.communityReporter.email');
+      if (savedEmail) setEmail(savedEmail);
+      const savedReporterId = window.localStorage.getItem('npReporterId');
+      if (savedReporterId) setReporterId(savedReporterId);
     } catch {}
   }, []);
+
+  useEffect(() => {
+    if (router.isReady) {
+      const qRep = typeof router.query.reporterId === 'string' ? router.query.reporterId : null;
+      if (qRep) setReporterId(qRep);
+    }
+  }, [router.isReady, router.query]);
 
   const counts = useMemo(() => {
     const total = stories.length;
@@ -49,21 +61,27 @@ const CommunityReporterMyStoriesPage: React.FC = () => {
 
   const loadStories = async () => {
     const em = email.trim();
-    if (!em || !em.includes('@')) {
-      setError('Please enter a valid email address.');
-      setStories([]);
-      setHasLoadedOnce(true);
-      return;
-    }
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/community-reporter/my-stories?email=${encodeURIComponent(em)}`);
+      const qs = reporterId ? `reporterId=${encodeURIComponent(reporterId)}` : `email=${encodeURIComponent(em)}`;
+      if (!reporterId && (!em || !em.includes('@'))) {
+        setError('We couldn’t find your reporter profile. Please submit a new story from the Community Reporter page.');
+        setStories([]);
+        setHasLoadedOnce(true);
+        setIsLoading(false);
+        return;
+      }
+      const res = await fetch(`/api/community-reporter/my-stories?${qs}`);
       const data = await res.json().catch(() => null);
       if (res.ok && data && data.ok) {
-        setStories(Array.isArray(data.stories) ? data.stories : []);
+        const items = Array.isArray(data.items) ? data.items : (Array.isArray(data.stories) ? data.stories : []);
+        setStories(items);
         setHasLoadedOnce(true);
-        try { window.localStorage.setItem('np.communityReporter.email', em); } catch {}
+        try {
+          if (em) window.localStorage.setItem('np.communityReporter.email', em);
+          if (reporterId) window.localStorage.setItem('npReporterId', reporterId);
+        } catch {}
       } else {
         setError(data?.message || 'Could not load your stories right now.');
         setStories([]);
@@ -177,6 +195,12 @@ const CommunityReporterMyStoriesPage: React.FC = () => {
                   </table>
                 </div>
               </div>
+            </div>
+          )}
+
+          {router.query.submitted && (
+            <div className="mt-6 mb-2 rounded-md border border-green-300 bg-green-50 px-4 py-3 text-sm">
+              ✅ <strong>Story submitted for review.</strong> Your reference ID: <code>{String(router.query.ref || '')}</code>
             </div>
           )}
 

@@ -168,18 +168,26 @@ const CommunityReporterPage: React.FC = () => {
         body: JSON.stringify(payload),
       });
       const data: any = await res.json().catch(() => ({}));
-      const ok = res.ok && (data?.ok !== false);
+      const ok = res.ok && (data?.ok === true);
       if (ok) {
+        try {
+          if (typeof window !== 'undefined' && data?.reporterId) {
+            window.localStorage.setItem('npReporterId', String(data.reporterId));
+          }
+        } catch {}
+        const ref = data?.reference || data?.referenceId || '';
         const mapped: SubmitCommunityStoryResult = {
           ok: true,
-          referenceId: data?.referenceId || data?.id || '',
+          referenceId: ref,
           status: data?.status || 'Under review',
           reporterType: reporterType,
         };
         setSubmitResult(mapped);
         setSubmitStatus('success');
+        // Optional link at bottom already present; main nav handled by user action
       } else {
-        setSubmitError('We couldn’t submit your story right now. Please try again in a few minutes.');
+        const msg = data?.message || 'We couldn’t submit your story right now. Please try again in a few minutes.';
+        setSubmitError(msg);
         setSubmitStatus('error');
       }
     } catch (err) {
