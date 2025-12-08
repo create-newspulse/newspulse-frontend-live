@@ -13,12 +13,13 @@ export function useCommunityReporterConfig() {
     let cancelled = false;
     setIsLoading(true);
     setError(null);
-    fetch('/api/community-reporter/config', { headers: { Accept: 'application/json' } })
+    // Use new public settings endpoint
+    fetch('/api/public/community/settings', { headers: { Accept: 'application/json' } })
       .then(async (res) => {
         const data = await res.json().catch(() => null);
         if (cancelled) return;
-        if (res.ok && data && data.ok) {
-          const enabled = Boolean(data.communityMyStoriesEnabled);
+        if (res.ok && data && data.ok && data.settings) {
+          const enabled = Boolean(data.settings.allowMyStoriesPortal);
           setConfig({ communityMyStoriesEnabled: enabled });
         } else {
           setError('CONFIG_FETCH_FAILED');

@@ -1,7 +1,7 @@
 import Head from 'next/head';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
-import { useCommunityReporterConfig } from '../../src/hooks/useCommunityReporterConfig';
+import Link from 'next/link';
 
 type CommunityStorySummary = {
   id: string;
@@ -16,30 +16,76 @@ type CommunityStorySummary = {
 
 const statusColor = (s: string) => {
   const k = (s || '').toLowerCase();
-  if (k === 'pending' || k === 'under_review') return 'bg-blue-100 text-blue-800';
-  if (k === 'approved' || k === 'published') return 'bg-green-100 text-green-800';
+  if (k === 'draft') return 'bg-gray-100 text-gray-800';
+  if (k === 'pending' || k === 'under_review' || k === 'under-review') return 'bg-blue-100 text-blue-800';
+  if (k === 'approved') return 'bg-green-100 text-green-800';
+  if (k === 'published') return 'bg-emerald-100 text-emerald-800';
   if (k === 'rejected') return 'bg-red-100 text-red-800';
   if (k === 'withdrawn') return 'bg-orange-100 text-orange-800';
   return 'bg-gray-100 text-gray-800';
 };
 
+type CommunitySettingsPublic = {
+  communityReporterEnabled: boolean;
+  allowNewSubmissions: boolean;
+  allowMyStoriesPortal: boolean;
+  allowJournalistApplications: boolean;
+};
+
 const CommunityReporterMyStoriesPage: React.FC = () => {
   const router = useRouter();
-  const { config, isLoading: cfgLoading, error: cfgError } = useCommunityReporterConfig();
-  const enabled = config?.communityMyStoriesEnabled ?? true;
+  const [settings, setSettings] = useState<CommunitySettingsPublic | null>(null);
+  const [settingsLoading, setSettingsLoading] = useState<boolean>(true);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [reporterId, setReporterId] = useState<string | null>(null);
   const [stories, setStories] = useState<CommunityStorySummary[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  // Fetch public community settings on mount
+  useEffect(() => {
+    let cancelled = false;
+    setSettingsLoading(true);
+    setSettingsError(null);
+    fetch('/api/public/community/settings', { headers: { Accept: 'application/json' } })
+      .then(async (res) => {
+        const data = await res.json().catch(() => null);
+        if (cancelled) return;
+        if (res.ok && data && data.ok === true && data.settings) {
+          setSettings({
+            communityReporterEnabled: Boolean(data.settings.communityReporterEnabled),
+            allowNewSubmissions: Boolean(data.settings.allowNewSubmissions),
+            allowMyStoriesPortal: Boolean(data.settings.allowMyStoriesPortal),
+            allowJournalistApplications: Boolean(data.settings.allowJournalistApplications),
+          });
+        } else {
+          setSettingsError('SETTINGS_FETCH_FAILED');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setSettingsError('SETTINGS_FETCH_EXCEPTION');
+      })
+      .finally(() => {
+        if (!cancelled) setSettingsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     try {
-      const savedEmail = window.localStorage.getItem('np.communityReporter.email');
-      if (savedEmail) setEmail(savedEmail);
-      const savedReporterId = window.localStorage.getItem('npReporterId');
-      if (savedReporterId) setReporterId(savedReporterId);
+      const newEmail = window.localStorage.getItem('np_communityReporterEmail');
+      const newId = window.localStorage.getItem('np_communityReporterId');
+      // Backward compatibility
+      const oldEmail = window.localStorage.getItem('np.communityReporter.email');
+      const oldId = window.localStorage.getItem('npReporterId');
+      const useEmail = newEmail || oldEmail || '';
+      const useId = newId || oldId || '';
+      if (useEmail) setEmail(useEmail);
+      if (useId) setReporterId(useId);
     } catch {}
   }, []);
 
@@ -64,23 +110,30 @@ const CommunityReporterMyStoriesPage: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const qs = reporterId ? `reporterId=${encodeURIComponent(reporterId)}` : `email=${encodeURIComponent(em)}`;
-      if (!reporterId && (!em || !em.includes('@'))) {
-        setError('We couldn’t find your reporter profile. Please submit a new story from the Community Reporter page.');
+      const hasId = reporterId && reporterId.trim();
+      const hasEmail = em && em.includes('@');
+      if (!hasId && !hasEmail) {
+        setError("We couldn't find your reporter profile. Please submit a new story first.");
         setStories([]);
         setHasLoadedOnce(true);
-        setIsLoading(false);
         return;
       }
+      const qs = hasId ? `reporterId=${encodeURIComponent(String(reporterId))}` : `email=${encodeURIComponent(em)}`;
       const res = await fetch(`/api/community-reporter/my-stories?${qs}`);
       const data = await res.json().catch(() => null);
-      if (res.ok && data && data.ok) {
-        const items = Array.isArray(data.items) ? data.items : (Array.isArray(data.stories) ? data.stories : []);
+      if (res.ok && (data?.ok === true || data?.success === true)) {
+        const items = Array.isArray(data?.items)
+          ? data.items
+          : Array.isArray(data?.stories)
+          ? data.stories
+          : Array.isArray(data?.data?.stories)
+          ? data.data.stories
+          : [];
         setStories(items);
         setHasLoadedOnce(true);
         try {
-          if (em) window.localStorage.setItem('np.communityReporter.email', em);
-          if (reporterId) window.localStorage.setItem('npReporterId', reporterId);
+          if (em) window.localStorage.setItem('np_communityReporterEmail', em);
+          if (reporterId) window.localStorage.setItem('np_communityReporterId', reporterId);
         } catch {}
       } else {
         setError(data?.message || 'Could not load your stories right now.');
@@ -96,7 +149,47 @@ const CommunityReporterMyStoriesPage: React.FC = () => {
     }
   };
 
-  if (cfgLoading) {
+  const handleWithdraw = async (story: CommunityStorySummary) => {
+    try {
+      if (typeof window !== 'undefined') {
+        const proceed = window.confirm('Are you sure you want to withdraw this story?');
+        if (!proceed) return;
+      }
+      const sid = String(story.id || story.referenceId || '').trim();
+      if (!sid) return;
+      setLoadingId(sid);
+      const reporterId = (typeof window !== 'undefined') ? window.localStorage.getItem('np_communityReporterId') : null;
+      const res = await fetch(`/api/community-reporter/${encodeURIComponent(sid)}/withdraw`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ reporterId }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && (data?.ok === true || data?.success === true)) {
+        setToast('Story withdrawn successfully.');
+        await loadStories();
+      } else {
+        setToast('Could not withdraw this story.');
+      }
+    } catch (err) {
+      setToast('Could not withdraw this story.');
+    } finally {
+      setLoadingId(null);
+      setTimeout(() => setToast(null), 2500);
+    }
+  };
+
+  const canUsePortal = settings ? (settings.communityReporterEnabled && settings.allowMyStoriesPortal) : false;
+
+  // Auto-load on mount when identity exists and portal is enabled
+  useEffect(() => {
+    // Only trigger after first identity read
+    if (canUsePortal && (email || reporterId)) loadStories();
+    else setHasLoadedOnce(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [email, reporterId, canUsePortal]);
+
+  if (settingsLoading && !settings) {
     return (
       <div className="min-h-screen bg-white dark:bg-dark-primary text-black dark:text-dark-text grid place-items-center">
         <p className="text-sm text-gray-700 dark:text-gray-300">Loading settings…</p>
@@ -104,7 +197,7 @@ const CommunityReporterMyStoriesPage: React.FC = () => {
     );
   }
 
-  if (!enabled) {
+  if (settings && (!settings.communityReporterEnabled || !settings.allowMyStoriesPortal)) {
     return (
       <div className="min-h-screen bg-white dark:bg-dark-primary text-black dark:text-dark-text">
         <Head>
@@ -113,7 +206,7 @@ const CommunityReporterMyStoriesPage: React.FC = () => {
         <section className="py-12 px-4">
           <div className="max-w-3xl mx-auto">
             <h1 className="text-3xl font-black mb-3">My Community Stories is temporarily unavailable</h1>
-            <p className="text-sm text-gray-700 dark:text-gray-300 mb-6">This reporter tool is currently turned off by News Pulse. Please try again later or contact the newsroom if you need help about a submission.</p>
+            <p className="text-sm text-gray-700 dark:text-gray-300 mb-6">My Community Stories is currently unavailable. Please contact News Pulse if you have questions about your submissions.</p>
             <a href="/community-reporter" className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white">Back to Community Reporter</a>
           </div>
         </section>
@@ -130,21 +223,31 @@ const CommunityReporterMyStoriesPage: React.FC = () => {
 
       <section className="py-12 px-4">
         <div className="max-w-4xl mx-auto">
-          <h1 className="text-3xl font-black mb-2">My Community Stories</h1>
-          <p className="text-sm text-gray-700 dark:text-gray-300 mb-6">Enter the same email address you used while submitting stories to see their status.</p>
-
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 p-6 mb-6">
-            <div className="flex flex-col md:flex-row gap-3 items-start md:items-end">
-              <div className="flex-1 w-full">
-                <label htmlFor="email" className="block text-sm font-medium mb-1">Email address</label>
-                <input id="email" type="email" value={email} onChange={e=>setEmail(e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" placeholder="you@example.com" />
-              </div>
-              <button onClick={loadStories} disabled={isLoading} className={`px-5 py-2 rounded-lg font-semibold ${isLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}>{isLoading ? 'Loading…' : 'View My Stories'}</button>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-3xl font-black mb-1">My Community Stories</h1>
+              {(email || reporterId) && (
+                <p className="text-xs text-gray-500">
+                  Using {reporterId ? 'Reporter ID' : 'Email'}:{' '}
+                  <span className="font-medium">{reporterId || email}</span>
+                </p>
+              )}
+              <p className="mt-2 text-xs text-gray-600 dark:text-gray-300">
+                You can withdraw a story only while it is under review. Once approved or published, withdrawal is handled by the editorial team.
+              </p>
             </div>
-            {error && (
-              <div className="mt-4 rounded-lg border border-red-300 bg-red-50 text-red-700 px-4 py-3 text-sm">{error}</div>
-            )}
+            <Link href="/community-reporter" className="text-sm px-4 py-2 rounded-full border border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-gray-800">+ Submit new story</Link>
           </div>
+
+          {toast && (
+            <div className="mb-4 rounded-md border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-800 dark:text-gray-100">
+              {toast}
+            </div>
+          )}
+
+          {error && (
+            <div className="mb-4 rounded-lg border border-red-300 bg-red-50 text-red-700 px-4 py-3 text-sm">{error}</div>
+          )}
 
           {!error && hasLoadedOnce && stories.length === 0 && (
             <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-3 text-sm text-gray-800 dark:text-gray-200">
@@ -166,7 +269,6 @@ const CommunityReporterMyStoriesPage: React.FC = () => {
                   <table className="min-w-full text-sm">
                     <thead>
                       <tr className="text-left border-b border-gray-200 dark:border-gray-700">
-                        <th className="py-3 pr-4">Reference ID</th>
                         <th className="py-3 pr-4">Headline</th>
                         <th className="py-3 pr-4">Category</th>
                         <th className="py-3 pr-4">Location</th>
@@ -176,10 +278,12 @@ const CommunityReporterMyStoriesPage: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {stories.map((s) => (
+                       {stories.map((s) => (
                         <tr key={s.id} className="border-b border-gray-100 dark:border-gray-700">
-                          <td className="py-3 pr-4">{s.referenceId || '-'}</td>
-                          <td className="py-3 pr-4">{s.headline}</td>
+                          <td className="py-3 pr-4">
+                            <div className="font-medium">{s.headline}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">Ref ID: {s.id || s.referenceId || '-'}</div>
+                          </td>
                           <td className="py-3 pr-4">{s.category}</td>
                           <td className="py-3 pr-4">{[s.city, s.state].filter(Boolean).join(', ') || '-'}</td>
                           <td className="py-3 pr-4">
@@ -187,7 +291,18 @@ const CommunityReporterMyStoriesPage: React.FC = () => {
                           </td>
                           <td className="py-3 pr-4">{new Date(s.createdAt).toLocaleDateString()}</td>
                           <td className="py-3 pr-4">
-                            <button className="px-3 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white">View</button>
+                            <div className="flex items-center gap-3">
+                              <button className="px-3 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white">View</button>
+                              {['under_review','pending'].includes((s.status || '').toLowerCase()) && (
+                                <button
+                                  onClick={() => handleWithdraw(s)}
+                                  disabled={loadingId === (s.id || s.referenceId)}
+                                  className={`text-xs ${loadingId === (s.id || s.referenceId) ? 'text-gray-400 cursor-not-allowed' : 'text-red-600 hover:underline'}`}
+                                >
+                                  Withdraw
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -195,12 +310,6 @@ const CommunityReporterMyStoriesPage: React.FC = () => {
                   </table>
                 </div>
               </div>
-            </div>
-          )}
-
-          {router.query.submitted && (
-            <div className="mt-6 mb-2 rounded-md border border-green-300 bg-green-50 px-4 py-3 text-sm">
-              ✅ <strong>Story submitted for review.</strong> Your reference ID: <code>{String(router.query.ref || '')}</code>
             </div>
           )}
 

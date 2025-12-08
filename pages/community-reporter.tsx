@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Head from 'next/head';
+import Link from 'next/link';
 import { submitCommunityStory, SubmitCommunityStoryResult } from '../src/lib/communityReporterApi';
 import { useCommunityReporterConfig } from '../src/hooks/useCommunityReporterConfig';
 
@@ -92,11 +93,53 @@ const CommunityReporterPage: React.FC = () => {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitResult, setSubmitResult] = useState<SubmitCommunityStoryResult | null>(null);
   const { config } = useCommunityReporterConfig();
-  const myStoriesEnabled = config?.communityMyStoriesEnabled ?? true;
+  const myStoriesEnabledLegacy = config?.communityMyStoriesEnabled ?? true;
+  type CommunitySettingsPublic = {
+    communityReporterEnabled: boolean;
+    allowNewSubmissions: boolean;
+    allowMyStoriesPortal: boolean;
+    allowJournalistApplications: boolean;
+  };
+  const [settings, setSettings] = useState<CommunitySettingsPublic | null>(null);
+  const [settingsLoading, setSettingsLoading] = useState<boolean>(true);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
   // Category values already use stable slugs; no mapping required.
 
   // Public backend base URL (env override -> fallback)
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://newspulse-backend-real.onrender.com';
+
+  // Fetch public community settings on mount
+  useEffect(() => {
+    let cancelled = false;
+    setSettingsLoading(true);
+    setSettingsError(null);
+    fetch('/api/public/community/settings', { headers: { Accept: 'application/json' } })
+      .then(async (res) => {
+        const data = await res.json().catch(() => null);
+        if (cancelled) return;
+        if (res.ok && data && data.ok === true && data.settings) {
+          setSettings({
+            communityReporterEnabled: Boolean(data.settings.communityReporterEnabled),
+            allowNewSubmissions: Boolean(data.settings.allowNewSubmissions),
+            allowMyStoriesPortal: Boolean(data.settings.allowMyStoriesPortal),
+            allowJournalistApplications: Boolean(data.settings.allowJournalistApplications),
+          });
+        } else {
+          setSettingsError('SETTINGS_FETCH_FAILED');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setSettingsError('SETTINGS_FETCH_EXCEPTION');
+      })
+      .finally(() => {
+        if (!cancelled) setSettingsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const myStoriesEnabled = settings ? Boolean(settings.allowMyStoriesPortal) : myStoriesEnabledLegacy;
+  const readonlyMode = settings ? (settings.communityReporterEnabled === true && settings.allowNewSubmissions === false) : false;
+  const journalistApplicationsOpen = settings ? Boolean(settings.allowJournalistApplications) : true;
 
   const validateStep1 = () => {
     const e: Record<string, string> = {};
@@ -161,6 +204,13 @@ const CommunityReporterPage: React.FC = () => {
           urgency: 'normal',
           canContact: true,
         },
+        // Additional reporter fields for verification of professional journalists
+        isProfessional: reporterType === 'journalist',
+        organisation: (signUpData.organisationName || '').trim(),
+        roleOrTitle: (signUpData.positionTitle || '').trim(),
+        yearsExperience: (signUpData.yearsExperience || '').trim(),
+        portfolioLinks: (signUpData.websiteOrPortfolio || '').trim(),
+        agreedToJournalistCharter: signUpData.journalistCharterAccepted === true,
       };
       const res = await fetch('/api/community-reporter/submit', {
         method: 'POST',
@@ -170,12 +220,17 @@ const CommunityReporterPage: React.FC = () => {
       const data: any = await res.json().catch(() => ({}));
       const ok = res.ok && (data?.ok === true);
       if (ok) {
+        // Extract and persist reporter identity for My Stories
+        const storyId = data?.storyId || data?.id || data?.reference || data?.referenceId || '';
+        const reporterId = data?.reporterId || data?.reporter?.id || '';
+        const reporterEmail = data?.reporterEmail || data?.reporter?.email || signUpData.email?.trim();
         try {
-          if (typeof window !== 'undefined' && data?.reporterId) {
-            window.localStorage.setItem('npReporterId', String(data.reporterId));
+          if (typeof window !== 'undefined') {
+            if (reporterId) window.localStorage.setItem('np_communityReporterId', String(reporterId));
+            if (reporterEmail) window.localStorage.setItem('np_communityReporterEmail', String(reporterEmail));
           }
         } catch {}
-        const ref = data?.reference || data?.referenceId || '';
+        const ref = String(storyId || '');
         const mapped: SubmitCommunityStoryResult = {
           ok: true,
           referenceId: ref,
@@ -198,6 +253,38 @@ const CommunityReporterPage: React.FC = () => {
     }
   };
 
+  // Loading state while settings load
+  if (settingsLoading && !settings) {
+    return (
+      <div className="min-h-screen bg-white dark:bg-dark-primary text-black dark:text-dark-text grid place-items-center">
+        <p className="text-sm text-gray-700 dark:text-gray-300">Loading settings…</p>
+      </div>
+    );
+  }
+
+  // Closed state when program disabled
+  if (settings && !settings.communityReporterEnabled) {
+    return (
+      <div className="min-h-screen bg-white dark:bg-dark-primary text-black dark:text-dark-text">
+        <Head>
+          <title>Community Reporter – Currently Unavailable | News Pulse</title>
+        </Head>
+        <section className="relative py-16 px-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-900">
+          <div className="max-w-4xl mx-auto">
+            <h1 className="text-4xl md:text-5xl font-black mb-6 bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600">
+              News Pulse Community Reporter
+            </h1>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 p-6">
+              <p className="text-lg md:text-xl leading-relaxed text-gray-700 dark:text-gray-300">
+                The Community Reporter program is currently not available. Please check again later.
+              </p>
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-white dark:bg-dark-primary text-black dark:text-dark-text">
       <Head>
@@ -214,6 +301,11 @@ const CommunityReporterPage: React.FC = () => {
           <p className="text-lg md:text-xl leading-relaxed mb-6 text-gray-700 dark:text-gray-300">
             Share impactful local stories, emerging issues, campus updates, and verified tips. Every submission is manually reviewed by our editorial team before publishing.
           </p>
+          <div className="mb-4">
+            <Link href="/community-reporter/my-stories" className="text-sm text-blue-700 hover:underline">
+              Already submitted stories? View My Community Stories
+            </Link>
+          </div>
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 p-6 mb-4">
             <h2 className="text-xl font-semibold mb-3">Submission Guidelines</h2>
             <ul className="list-disc ml-5 space-y-1 text-sm text-gray-600 dark:text-gray-300">
@@ -240,39 +332,49 @@ const CommunityReporterPage: React.FC = () => {
         <div className="max-w-3xl mx-auto">
           <form onSubmit={step === 1 ? undefined : handleSubmitStep2} className="space-y-6 bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700">
             <h2 className="text-2xl font-bold mb-2">{step === 1 ? 'Reporter Details' : 'Submit Your Story'}</h2>
+            {readonlyMode && (
+              <div className="mb-4 rounded-md border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-900">
+                Submissions are temporarily paused. You can still read about the program below.
+              </div>
+            )}
+                    {step === 1 && (
+                      <p className="text-xs text-gray-600 dark:text-gray-300 -mt-1 mb-2">
+                        Working journalist? Select 'Professional Journalist' above to share your press details for verification.
+                      </p>
+                    )}
                     {step === 1 && (
                       <div className="space-y-6 border-b border-gray-200 dark:border-gray-700 pb-6">
                         {/* Identity */}
                         <div>
                           <label htmlFor="fullName" className="block font-medium mb-1">Full name *</label>
-                          <input id="fullName" type="text" value={signUpData.fullName} onChange={e => setSignUpData(s => ({ ...s, fullName: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                          <input id="fullName" type="text" value={signUpData.fullName} onChange={e => setSignUpData(s => ({ ...s, fullName: e.target.value }))} disabled={readonlyMode} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
                           {errors.fullName && <p className="text-red-600 text-xs mt-1">{errors.fullName}</p>}
                         </div>
                         <div>
                           <label htmlFor="email" className="block font-medium mb-1">Email *</label>
-                          <input id="email" type="email" value={signUpData.email} onChange={e => setSignUpData(s => ({ ...s, email: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                          <input id="email" type="email" value={signUpData.email} onChange={e => setSignUpData(s => ({ ...s, email: e.target.value }))} disabled={readonlyMode} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
                           {errors.email && <p className="text-red-600 text-xs mt-1">{errors.email}</p>}
                         </div>
                         <div>
                           <label htmlFor="phone" className="block font-medium mb-1">Phone *</label>
-                          <input id="phone" type="tel" value={signUpData.phone} onChange={e => setSignUpData(s => ({ ...s, phone: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                          <input id="phone" type="tel" value={signUpData.phone} onChange={e => setSignUpData(s => ({ ...s, phone: e.target.value }))} disabled={readonlyMode} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
                           {errors.phone && <p className="text-red-600 text-xs mt-1">{errors.phone}</p>}
                           <p className="text-xs text-gray-500 mt-1">For verification only, never shown publicly.</p>
                         </div>
                         <div className="grid md:grid-cols-3 gap-4">
                           <div>
                             <label htmlFor="city" className="block font-medium mb-1">City *</label>
-                            <input id="city" type="text" value={signUpData.city} onChange={e => setSignUpData(s => ({ ...s, city: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                            <input id="city" type="text" value={signUpData.city} onChange={e => setSignUpData(s => ({ ...s, city: e.target.value }))} disabled={readonlyMode} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
                             {errors.city && <p className="text-red-600 text-xs mt-1">{errors.city}</p>}
                           </div>
                           <div>
                             <label htmlFor="state" className="block font-medium mb-1">State *</label>
-                            <input id="state" type="text" value={signUpData.state} onChange={e => setSignUpData(s => ({ ...s, state: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                            <input id="state" type="text" value={signUpData.state} onChange={e => setSignUpData(s => ({ ...s, state: e.target.value }))} disabled={readonlyMode} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
                             {errors.state && <p className="text-red-600 text-xs mt-1">{errors.state}</p>}
                           </div>
                           <div>
                             <label htmlFor="country" className="block font-medium mb-1">Country *</label>
-                            <input id="country" type="text" value={signUpData.country} onChange={e => setSignUpData(s => ({ ...s, country: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                            <input id="country" type="text" value={signUpData.country} onChange={e => setSignUpData(s => ({ ...s, country: e.target.value }))} disabled={readonlyMode} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
                             {errors.country && <p className="text-red-600 text-xs mt-1">{errors.country}</p>}
                           </div>
                         </div>
@@ -282,7 +384,7 @@ const CommunityReporterPage: React.FC = () => {
                           <label className="block font-medium mb-2">Preferred languages</label>
                           <div className="flex flex-wrap gap-2">
                             {LANG_OPTIONS.map(code => (
-                              <button type="button" key={code} onClick={() => setSignUpData(s => ({ ...s, preferredLanguages: s.preferredLanguages.includes(code) ? s.preferredLanguages.filter(l => l !== code) : [...s.preferredLanguages, code] }))} className={`px-3 py-1 rounded-full border ${signUpData.preferredLanguages.includes(code) ? 'bg-purple-600 text-white border-purple-600' : 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 border-gray-300 dark:border-gray-600'}`}>{code}</button>
+                              <button type="button" key={code} onClick={() => setSignUpData(s => ({ ...s, preferredLanguages: s.preferredLanguages.includes(code) ? s.preferredLanguages.filter(l => l !== code) : [...s.preferredLanguages, code] }))} disabled={readonlyMode} className={`px-3 py-1 rounded-full border ${signUpData.preferredLanguages.includes(code) ? 'bg-purple-600 text-white border-purple-600' : 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 border-gray-300 dark:border-gray-600'}`}>{code}</button>
                             ))}
                           </div>
                         </div>
@@ -290,7 +392,7 @@ const CommunityReporterPage: React.FC = () => {
                         {/* Heard about NP */}
                         <div>
                           <label htmlFor="heardAbout" className="block font-medium mb-1">How did you hear about News Pulse? (optional)</label>
-                          <input id="heardAbout" type="text" value={signUpData.heardAbout || ''} onChange={e => setSignUpData(s => ({ ...s, heardAbout: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                          <input id="heardAbout" type="text" value={signUpData.heardAbout || ''} onChange={e => setSignUpData(s => ({ ...s, heardAbout: e.target.value }))} disabled={readonlyMode} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
                         </div>
 
                         {/* Reporter type toggle */}
@@ -298,13 +400,17 @@ const CommunityReporterPage: React.FC = () => {
                           <label className="block font-medium mb-2">I am</label>
                           <div className="flex flex-col md:flex-row gap-3">
                             <label className="inline-flex items-center gap-2">
-                              <input type="radio" name="reporterType" checked={reporterType === 'community'} onChange={() => { setReporterType('community'); setSignUpData(s => ({ ...s, isProfessionalJournalist: false })); }} />
+                              <input type="radio" name="reporterType" checked={reporterType === 'community'} onChange={() => { setReporterType('community'); setSignUpData(s => ({ ...s, isProfessionalJournalist: false })); }} disabled={readonlyMode} />
                               <span>I am a Community Reporter</span>
                             </label>
-                            <label className="inline-flex items-center gap-2">
-                              <input type="radio" name="reporterType" checked={reporterType === 'journalist'} onChange={() => { setReporterType('journalist'); setSignUpData(s => ({ ...s, isProfessionalJournalist: true })); }} />
-                              <span>I am a Professional Journalist / Media Person</span>
-                            </label>
+                            {journalistApplicationsOpen ? (
+                              <label className="inline-flex items-center gap-2">
+                                <input type="radio" name="reporterType" checked={reporterType === 'journalist'} onChange={() => { setReporterType('journalist'); setSignUpData(s => ({ ...s, isProfessionalJournalist: true })); }} disabled={readonlyMode} />
+                                <span>I am a Professional Journalist / Media Person</span>
+                              </label>
+                            ) : (
+                              <p className="text-xs text-gray-600 dark:text-gray-300">Journalist verification applications are currently closed.</p>
+                            )}
                           </div>
                         </div>
 
@@ -313,7 +419,7 @@ const CommunityReporterPage: React.FC = () => {
                             <label className="block font-medium mb-2">What kind of stories are you interested in?</label>
                             <div className="flex flex-wrap gap-2">
                               {COMMUNITY_INTERESTS.map(i => (
-                                <button type="button" key={i} onClick={() => setSignUpData(s => ({ ...s, communityInterests: s.communityInterests.includes(i) ? s.communityInterests.filter(v => v !== i) : [...s.communityInterests, i] }))} className={`px-3 py-1 rounded-full border ${signUpData.communityInterests.includes(i) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 border-gray-300 dark:border-gray-600'}`}>{i}</button>
+                                <button type="button" key={i} onClick={() => setSignUpData(s => ({ ...s, communityInterests: s.communityInterests.includes(i) ? s.communityInterests.filter(v => v !== i) : [...s.communityInterests, i] }))} disabled={readonlyMode} className={`px-3 py-1 rounded-full border ${signUpData.communityInterests.includes(i) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 border-gray-300 dark:border-gray-600'}`}>{i}</button>
                               ))}
                             </div>
                           </div>
@@ -323,12 +429,12 @@ const CommunityReporterPage: React.FC = () => {
                           <div className="space-y-4">
                             <div>
                               <label htmlFor="organisationName" className="block font-medium mb-1">Organisation name *</label>
-                              <input id="organisationName" type="text" value={signUpData.organisationName || ''} onChange={e => setSignUpData(s => ({ ...s, organisationName: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                              <input id="organisationName" type="text" value={signUpData.organisationName || ''} onChange={e => setSignUpData(s => ({ ...s, organisationName: e.target.value }))} disabled={readonlyMode || !journalistApplicationsOpen} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
                               {errors.organisationName && <p className="text-red-600 text-xs mt-1">{errors.organisationName}</p>}
                             </div>
                             <div>
                               <label htmlFor="organisationType" className="block font-medium mb-1">Organisation type</label>
-                              <select id="organisationType" value={signUpData.organisationType || ''} onChange={e => setSignUpData(s => ({ ...s, organisationType: (e.target.value || undefined) as ReporterSignUpState['organisationType'] }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2">
+                              <select id="organisationType" value={signUpData.organisationType || ''} onChange={e => setSignUpData(s => ({ ...s, organisationType: (e.target.value || undefined) as ReporterSignUpState['organisationType'] }))} disabled={readonlyMode || !journalistApplicationsOpen} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2">
                                 <option value="">Select type</option>
                                 <option value="print">Print</option>
                                 <option value="tv">TV</option>
@@ -339,8 +445,8 @@ const CommunityReporterPage: React.FC = () => {
                               </select>
                             </div>
                             <div>
-                              <label htmlFor="positionTitle" className="block font-medium mb-1">Position / Role *</label>
-                              <input id="positionTitle" type="text" value={signUpData.positionTitle || ''} onChange={e => setSignUpData(s => ({ ...s, positionTitle: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                              <label htmlFor="positionTitle" className="block font-medium mb-1">Role / Title *</label>
+                              <input id="positionTitle" type="text" value={signUpData.positionTitle || ''} onChange={e => setSignUpData(s => ({ ...s, positionTitle: e.target.value }))} disabled={readonlyMode || !journalistApplicationsOpen} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
                               {errors.positionTitle && <p className="text-red-600 text-xs mt-1">{errors.positionTitle}</p>}
                             </div>
                             <div>
@@ -354,7 +460,7 @@ const CommunityReporterPage: React.FC = () => {
                             <div className="grid md:grid-cols-2 gap-4">
                               <div>
                                 <label htmlFor="yearsExperience" className="block font-medium mb-1">Years of experience</label>
-                                <select id="yearsExperience" value={signUpData.yearsExperience || ''} onChange={e => setSignUpData(s => ({ ...s, yearsExperience: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2">
+                                <select id="yearsExperience" value={signUpData.yearsExperience || ''} onChange={e => setSignUpData(s => ({ ...s, yearsExperience: e.target.value }))} disabled={readonlyMode || !journalistApplicationsOpen} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2">
                                   <option value="">Select range</option>
                                   <option value="0-1">0-1</option>
                                   <option value="2-4">2-4</option>
@@ -363,18 +469,18 @@ const CommunityReporterPage: React.FC = () => {
                                 </select>
                               </div>
                               <div>
-                                <label htmlFor="websiteOrPortfolio" className="block font-medium mb-1">Website / portfolio</label>
-                                <input id="websiteOrPortfolio" type="url" value={signUpData.websiteOrPortfolio || ''} onChange={e => setSignUpData(s => ({ ...s, websiteOrPortfolio: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                                <label htmlFor="websiteOrPortfolio" className="block font-medium mb-1">Portfolio / clips link(s)</label>
+                                <input id="websiteOrPortfolio" type="url" value={signUpData.websiteOrPortfolio || ''} onChange={e => setSignUpData(s => ({ ...s, websiteOrPortfolio: e.target.value }))} disabled={readonlyMode || !journalistApplicationsOpen} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
                               </div>
                             </div>
                             <div className="grid md:grid-cols-2 gap-4">
                               <div>
                                 <label htmlFor="linkedin" className="block font-medium mb-1">LinkedIn</label>
-                                <input id="linkedin" type="url" value={signUpData.linkedin || ''} onChange={e => setSignUpData(s => ({ ...s, linkedin: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                                <input id="linkedin" type="url" value={signUpData.linkedin || ''} onChange={e => setSignUpData(s => ({ ...s, linkedin: e.target.value }))} disabled={readonlyMode || !journalistApplicationsOpen} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
                               </div>
                               <div>
                                 <label htmlFor="twitter" className="block font-medium mb-1">Twitter / X</label>
-                                <input id="twitter" type="url" value={signUpData.twitter || ''} onChange={e => setSignUpData(s => ({ ...s, twitter: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                                <input id="twitter" type="url" value={signUpData.twitter || ''} onChange={e => setSignUpData(s => ({ ...s, twitter: e.target.value }))} disabled={readonlyMode || !journalistApplicationsOpen} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
                               </div>
                             </div>
                           </div>
@@ -383,22 +489,32 @@ const CommunityReporterPage: React.FC = () => {
                         {/* Ethics / Charter */}
                         <div className="space-y-3">
                           <div className="flex items-start gap-3">
-                            <input id="ethics" type="checkbox" checked={signUpData.generalEthicsAccepted} onChange={e => setSignUpData(s => ({ ...s, generalEthicsAccepted: e.target.checked }))} className="mt-1 h-5 w-5 rounded border-gray-300 focus:ring-blue-500" />
+                            <input id="ethics" type="checkbox" checked={signUpData.generalEthicsAccepted} onChange={e => setSignUpData(s => ({ ...s, generalEthicsAccepted: e.target.checked }))} disabled={readonlyMode} className="mt-1 h-5 w-5 rounded border-gray-300 focus:ring-blue-500" />
                             <label htmlFor="ethics" className="text-sm leading-relaxed">I agree not to submit fake or unlawful stories and I accept that News Pulse may fact-check and reject my submissions.</label>
                           </div>
                           {errors.generalEthicsAccepted && <p className="text-red-600 text-xs -mt-2">{errors.generalEthicsAccepted}</p>}
                           {reporterType === 'journalist' && (
                             <div className="flex items-start gap-3">
-                              <input id="charter" type="checkbox" checked={signUpData.journalistCharterAccepted} onChange={e => setSignUpData(s => ({ ...s, journalistCharterAccepted: e.target.checked }))} className="mt-1 h-5 w-5 rounded border-gray-300 focus:ring-blue-500" />
+                              <input id="charter" type="checkbox" checked={signUpData.journalistCharterAccepted} onChange={e => setSignUpData(s => ({ ...s, journalistCharterAccepted: e.target.checked }))} disabled={readonlyMode || !journalistApplicationsOpen} className="mt-1 h-5 w-5 rounded border-gray-300 focus:ring-blue-500" />
                               <label htmlFor="charter" className="text-sm leading-relaxed">I accept the News Pulse Journalist Charter and agree not to misuse the News Pulse name for threats, money, or favours.</label>
                             </div>
                           )}
                           {errors.journalistCharterAccepted && <p className="text-red-600 text-xs -mt-2">{errors.journalistCharterAccepted}</p>}
+                          {reporterType === 'journalist' && (
+                            <p className="text-xs text-gray-600 dark:text-gray-300">
+                              Your details will be reviewed by the News Pulse editorial team before verification.
+                            </p>
+                          )}
                         </div>
 
                         {/* Next */}
                         <div className="pt-2">
-                          <button type="button" onClick={() => { if (validateStep1()) setStep(2); }} className={`w-full font-semibold px-6 py-3 rounded-lg transition-colors ${'bg-blue-600 hover:bg-blue-700 text-white'} focus:outline-none focus:ring-2 focus:ring-blue-500`}>
+                          <button
+                            type="button"
+                            onClick={() => { if (validateStep1()) setStep(2); }}
+                            disabled={readonlyMode || (reporterType === 'journalist' && (!journalistApplicationsOpen || !signUpData.journalistCharterAccepted))}
+                            className={`w-full font-semibold px-6 py-3 rounded-lg transition-colors ${ (readonlyMode || (reporterType === 'journalist' && (!journalistApplicationsOpen || !signUpData.journalistCharterAccepted))) ? 'bg-gray-400 cursor-not-allowed text-white' : 'bg-blue-600 hover:bg-blue-700 text-white' } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                          >
                             Next
                           </button>
                         </div>
@@ -410,7 +526,7 @@ const CommunityReporterPage: React.FC = () => {
                 {/* Category */}
                 <div>
                   <label htmlFor="category" className="block font-medium mb-1">Category *</label>
-                  <select id="category" value={story.category} onChange={e => setStory(s => ({ ...s, category: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2">
+                  <select id="category" value={story.category} onChange={e => setStory(s => ({ ...s, category: e.target.value }))} disabled={readonlyMode} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2">
                     <option value="">Select a category</option>
                     {categories.map(c => (<option key={c.value} value={c.value}>{c.label}</option>))}
                   </select>
@@ -420,7 +536,7 @@ const CommunityReporterPage: React.FC = () => {
                 {/* Headline */}
                 <div>
                   <label htmlFor="headline" className="block font-medium mb-1">Headline *</label>
-                  <input id="headline" type="text" maxLength={150} value={story.headline} onChange={e => setStory(s => ({ ...s, headline: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                  <input id="headline" type="text" maxLength={150} value={story.headline} onChange={e => setStory(s => ({ ...s, headline: e.target.value }))} disabled={readonlyMode} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
                   <div className="flex justify-between mt-1">
                     <p className="text-xs text-gray-500">Max 150 characters</p>
                     <p className="text-xs text-gray-500">{story.headline.length}/150</p>
@@ -431,7 +547,7 @@ const CommunityReporterPage: React.FC = () => {
                 {/* Story */}
                 <div>
                   <label htmlFor="storyBody" className="block font-medium mb-1">Story *</label>
-                  <textarea id="storyBody" rows={7} value={story.story} onChange={e => setStory(s => ({ ...s, story: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y" placeholder="Describe the event, issue, or tip in detail..." />
+                  <textarea id="storyBody" rows={7} value={story.story} onChange={e => setStory(s => ({ ...s, story: e.target.value }))} disabled={readonlyMode} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y" placeholder="Describe the event, issue, or tip in detail..." />
                   <div className="flex justify-between mt-1">
                     <p className="text-xs text-gray-500">Minimum 50 characters</p>
                     <p className="text-xs text-gray-500">{story.story.trim().length} chars</p>
@@ -442,7 +558,7 @@ const CommunityReporterPage: React.FC = () => {
                 {/* Age Group */}
                 <div>
                   <label htmlFor="ageGroup" className="block font-medium mb-1">Age group *</label>
-                  <select id="ageGroup" value={story.ageGroup} onChange={e => setStory(s => ({ ...s, ageGroup: e.target.value }))} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2">
+                  <select id="ageGroup" value={story.ageGroup} onChange={e => setStory(s => ({ ...s, ageGroup: e.target.value }))} disabled={readonlyMode} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2">
                     <option value="">Select age group</option>
                     <option value="Under 18">Under 18</option>
                     <option value="18–24">18–24</option>
@@ -463,10 +579,10 @@ const CommunityReporterPage: React.FC = () => {
 
                 {submitStatus === 'success' && submitResult && (
                   <div className="mt-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">
-                    <p className="font-semibold">Your story has been submitted successfully for review.</p>
+                    <p className="font-semibold">✅ Story submitted for review</p>
                     <p className="mt-1">Our editorial team will manually verify it before publishing.</p>
                     {submitResult.referenceId && (
-                      <p className="mt-1"><span className="font-semibold">Your reference ID:</span> {submitResult.referenceId}</p>
+                      <p className="mt-1"><span className="font-semibold">Reference ID:</span> {submitResult.referenceId}</p>
                     )}
                     <p className="mt-2 text-xs text-green-900/80">You can track this and your other stories from the 'My Community Stories' page.</p>
                     <div className="mt-2 text-xs text-green-900/80 space-y-1">
@@ -487,7 +603,7 @@ const CommunityReporterPage: React.FC = () => {
                         Submit another story
                       </button>
                       {myStoriesEnabled ? (
-                        <a href="/community-reporter/my-stories" className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold" onClick={() => { try { window.localStorage.setItem('np.communityReporter.email', signUpData.email.trim()); } catch {} }}>View My Community Stories</a>
+                        <a href="/community-reporter/my-stories" className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold" onClick={() => { try { window.localStorage.setItem('np_communityReporterEmail', signUpData.email.trim()); } catch {} }}>View My Community Stories</a>
                       ) : (
                         <span className="text-sm text-gray-600 dark:text-gray-300">Status tracking for community stories is temporarily offline. Our editorial team will still review your story.</span>
                       )}
@@ -498,7 +614,7 @@ const CommunityReporterPage: React.FC = () => {
                 {/* Controls */}
                 <div className="flex items-center gap-3 mt-4">
                   <button type="button" onClick={() => setStep(1)} className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600">Back</button>
-                  <button type="submit" disabled={submitStatus === 'submitting'} className={`px-6 py-2 rounded-lg font-semibold ${submitStatus === 'submitting' ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}>{submitStatus === 'submitting' ? 'Submitting…' : 'Submit Story'}</button>
+                  <button type="submit" disabled={readonlyMode || submitStatus === 'submitting'} className={`px-6 py-2 rounded-lg font-semibold ${(readonlyMode || submitStatus === 'submitting') ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}>{submitStatus === 'submitting' ? 'Submitting…' : 'Submit Story'}</button>
                 </div>
               </>
             )}
