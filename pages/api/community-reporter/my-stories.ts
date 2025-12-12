@@ -1,6 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+// Align with other community-reporter proxies (submit/withdraw)
+const API_BASE_URL =
+  process.env.NEWS_PULSE_BACKEND_URL ||
+  process.env.API_BASE_URL ||
+  'http://localhost:5000';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -8,11 +12,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ ok: false, message: 'METHOD_NOT_ALLOWED' });
   }
 
-  const reporterId = String(req.query.reporterId ?? '').trim();
-  const email = String(req.query.email ?? '').trim();
-  const base = API_BASE_URL.replace(/\/+$/,'');
-  const qs = reporterId ? `reporterId=${encodeURIComponent(reporterId)}` : `email=${encodeURIComponent(email)}`;
-  const targetUrl = `${base}/api/community-reporter/my-stories?${qs}`;
+  const emailRaw = String(req.query.email ?? '').trim();
+  if (!emailRaw) {
+    return res.status(400).json({ ok: false, message: 'email is required' });
+  }
+
+  const email = emailRaw.toLowerCase();
+  const base = (API_BASE_URL || '').toString().trim().replace(/\/+$/, '');
+  const targetUrl = `${base}/api/community-reporter/my-stories?email=${encodeURIComponent(email)}`;
 
   try {
     const upstream = await fetch(targetUrl, {
@@ -23,20 +30,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const text = await upstream.text().catch(() => '');
 
     if (!upstream.ok) {
-      console.error('[community-reporter/my-stories] upstream error', upstream.status, text);
       let json: any = null;
       try { json = text ? JSON.parse(text) : null; } catch {}
+      console.error('[api/community-reporter/my-stories] upstream error', upstream.status, text);
       return res.status(upstream.status || 500).json(json || { ok: false, message: 'UPSTREAM_ERROR' });
     }
 
     try {
-      const json = text ? JSON.parse(text) : { ok: true, items: [] };
-      return res.status(upstream.status || 200).json(json);
-    } catch {
-      return res.status(upstream.status || 200).json({ ok: true, items: [] });
+      const raw = text ? JSON.parse(text) : {};
+      const stories = Array.isArray((raw as any).stories)
+        ? (raw as any).stories
+        : Array.isArray((raw as any).items)
+        ? (raw as any).items
+        : Array.isArray((raw as any).data?.stories)
+        ? (raw as any).data.stories
+        : [];
+      return res.status(200).json({ ok: true, stories });
+    } catch (parseErr) {
+      console.error('[api/community-reporter/my-stories] parse error', parseErr);
+      return res.status(500).json({ ok: false, message: 'PROXY_PARSE_ERROR' });
     }
-  } catch (err: any) {
-    console.error('[community-reporter/my-stories] exception', err);
-    return res.status(500).json({ ok: false, message: 'EXCEPTION' });
+  } catch (err) {
+    console.error('[api/community-reporter/my-stories] exception', err);
+    return res.status(500).json({ ok: false, message: 'PROXY_ERROR' });
   }
 }

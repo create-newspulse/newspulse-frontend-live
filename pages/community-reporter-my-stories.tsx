@@ -1,3 +1,4 @@
+// v1 Reporter Portal: summary bar, status filter, view modal
 import React, { useEffect, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
@@ -14,6 +15,9 @@ type ReporterStory = {
   state?: string;
   status: StoryStatus;
   createdAt: string;
+  // Optional fields that may come from backend; keeping types strict
+  referenceId?: string;
+  reviewNote?: string;
 };
 
 // const SAMPLE_STORIES: ReporterStory[] = [
@@ -40,17 +44,21 @@ type ReporterStory = {
 // Use Next.js API proxy to avoid CSP and CORS issues
 const PROXY_BASE = '/api';
 
-function statusBadge(status: StoryStatus) {
-  switch (status) {
-    case 'pending':
-      return 'bg-yellow-100 text-yellow-800';
-    case 'approved':
-      return 'bg-green-100 text-green-800';
-    case 'rejected':
-      return 'bg-red-100 text-red-800';
-    default:
-      return 'bg-gray-100 text-gray-700';
+type StoryStatusBucket = 'under-review' | 'published' | 'rejected';
+
+function mapStoryStatus(raw?: string): {
+  label: string;
+  bucket: StoryStatusBucket;
+  badgeClass: string;
+} {
+  const s = (raw || '').toLowerCase();
+  if (s === 'approved' || s === 'published') {
+    return { label: 'Published', bucket: 'published', badgeClass: 'bg-green-100 text-green-800' };
   }
+  if (s === 'rejected') {
+    return { label: 'Rejected', bucket: 'rejected', badgeClass: 'bg-red-100 text-red-800' };
+  }
+  return { label: 'Under review', bucket: 'under-review', badgeClass: 'bg-yellow-100 text-yellow-800' };
 }
 
 type FeatureToggleProps = {
@@ -65,25 +73,32 @@ const MyCommunityStoriesPage: React.FC<FeatureToggleProps> = ({ communityReporte
   const [error, setError] = useState<string | null>(null);
   const [reporterEmail, setReporterEmail] = useState<string | null>(null);
   const [submittedFlag, setSubmittedFlag] = useState<boolean>(false);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'under-review' | 'published' | 'rejected'>('all');
+  const [selectedStory, setSelectedStory] = useState<ReporterStory | null>(null);
 
-  // later we’ll use this email to fetch real stories
+  // Resolve reporter email: prefer query param, then localStorage fallbacks
   useEffect(() => {
+    const qEmail = typeof router.query?.email === 'string' ? router.query.email.trim() : '';
+    if (qEmail) {
+      setReporterEmail(qEmail);
+      return;
+    }
     if (typeof window === 'undefined') return;
     // Prefer the new identity key saved after submission
-    const savedEmail = window.localStorage.getItem('np_cr_email');
+    const savedEmail = window.localStorage.getItem('np_cr_email') || window.localStorage.getItem('np_communityReporterEmail');
     if (savedEmail && savedEmail.trim()) {
       setReporterEmail(savedEmail.trim());
-    } else {
-      // Fallback to older stored profile if present
-      const raw = window.localStorage.getItem('npCommunityReporterProfile');
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw);
-          if (parsed?.email) setReporterEmail(String(parsed.email).trim());
-        } catch {}
-      }
+      return;
     }
-  }, []);
+    // Fallback to older stored profile if present
+    const raw = window.localStorage.getItem('npCommunityReporterProfile');
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed?.email) setReporterEmail(String(parsed.email).trim());
+      } catch {}
+    }
+  }, [router.query?.email]);
 
   // Detect success flag from query
   useEffect(() => {
@@ -96,39 +111,23 @@ const MyCommunityStoriesPage: React.FC<FeatureToggleProps> = ({ communityReporte
   useEffect(() => {
     const fetchStories = async () => {
       if (!reporterEmail) return;
+      const normalized = reporterEmail.trim().toLowerCase();
       setLoading(true);
       setError(null);
+      console.log('[MyStories] loading for email', normalized);
       try {
-        const url = `${PROXY_BASE}/community-reporter/my-stories?email=${encodeURIComponent(reporterEmail)}`;
-        if (process.env.NODE_ENV !== 'production') {
-          console.debug('[my-stories] requesting', url);
-        }
+        const url = `${PROXY_BASE}/community-reporter/my-stories?email=${encodeURIComponent(normalized)}`;
         const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' } });
-        if (process.env.NODE_ENV !== 'production') {
-          console.debug('[my-stories] status', res.status);
-        }
-        let data: any = null;
-        try { data = await res.json(); } catch (parseErr) {
-          if (process.env.NODE_ENV !== 'production') {
-            console.warn('[my-stories] failed to parse JSON');
-          }
-        }
-        if (res.ok && data?.success === true) {
-          setStories(Array.isArray(data?.data?.stories) ? data.data.stories : []);
-          if (process.env.NODE_ENV !== 'production') {
-            console.debug('[my-stories] stories count', Array.isArray(data?.data?.stories) ? data.data.stories.length : 0);
-          }
+        let data: unknown = null;
+        try { data = await res.json(); } catch {}
+        if (res.ok && data && typeof data === 'object' && (data as any).ok === true) {
+          const incoming = (data as any).stories ?? (data as any).data?.stories ?? [];
+          setStories(Array.isArray(incoming) ? incoming : []);
         } else {
-          if (process.env.NODE_ENV !== 'production') {
-            console.error('[my-stories] error body', data);
-          }
           setError('Could not load your stories');
           setStories([]);
         }
-      } catch (err: any) {
-        if (process.env.NODE_ENV !== 'production') {
-          console.error('[my-stories] request failed', err?.message);
-        }
+      } catch {
         setError('Could not load your stories');
         setStories([]);
       } finally {
@@ -172,7 +171,7 @@ const MyCommunityStoriesPage: React.FC<FeatureToggleProps> = ({ communityReporte
             {reporterEmail && (
               <p className="mt-1 text-xs text-gray-500">
                 Showing stories for:{' '}
-                <span className="font-medium">{reporterEmail}</span>
+                <span className="font-medium">{reporterEmail.trim().toLowerCase()}</span>
               </p>
             )}
           </div>
@@ -218,68 +217,172 @@ const MyCommunityStoriesPage: React.FC<FeatureToggleProps> = ({ communityReporte
             </div>
           </div>
         ) : (!loading && !error && stories.length > 0 ? (
-          <div className="overflow-x-auto rounded-xl border border-gray-200">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left font-semibold">Headline</th>
-                  <th className="px-4 py-3 text-left font-semibold">Category</th>
-                  <th className="px-4 py-3 text-left font-semibold">Location</th>
-                  <th className="px-4 py-3 text-left font-semibold">Status</th>
-                  <th className="px-4 py-3 text-left font-semibold">Created</th>
-                  <th className="px-4 py-3 text-right font-semibold">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stories.map((story) => (
-                  <tr key={story.id} className="border-t border-gray-100">
-                    <td className="px-4 py-3 align-top">
-                      <div className="font-medium">{story.headline}</div>
-                      <div className="text-xs text-gray-500">Ref ID: {story.id}</div>
-                    </td>
-                    <td className="px-4 py-3 align-top">
-                      <span className="text-xs bg-gray-100 rounded-full px-2 py-1">
-                        {story.category}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 align-top text-xs text-gray-600">
-                      {story.city || '-'}
-                      {story.state ? `, ${story.state}` : ''}
-                    </td>
-                    <td className="px-4 py-3 align-top">
-                      <span
-                        className={
-                          'inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ' +
-                          statusBadge(story.status)
-                        }
-                      >
-                        {story.status === 'pending'
-                          ? 'Under review'
-                          : story.status === 'approved'
-                          ? 'Approved'
-                          : 'Rejected'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 align-top text-xs text-gray-500">
-                      {new Intl.DateTimeFormat('en-GB', {
-                        dateStyle: 'short',
-                        timeStyle: 'short',
-                        timeZone: 'UTC',
-                      }).format(new Date(story.createdAt))}
-                    </td>
-                    <td className="px-4 py-3 align-top text-right">
-                      <button
-                        type="button"
-                        className="text-xs px-3 py-1 rounded-full border border-gray-300 hover:bg-gray-50"
-                      >
-                        View
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <>
+            {/* Summary bar */}
+            {(() => {
+              const totals = stories.reduce(
+                (acc, st) => {
+                  const b = mapStoryStatus(st.status).bucket;
+                  acc.total += 1;
+                  if (b === 'published') acc.published += 1;
+                  else if (b === 'rejected') acc.rejected += 1;
+                  else acc.underReview += 1;
+                  return acc;
+                },
+                { total: 0, published: 0, rejected: 0, underReview: 0 }
+              );
+              return (
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-slate-50 px-4 py-3">
+                  <div className="text-sm text-gray-700">
+                    <span className="font-medium">Stories submitted:</span> {totals.total} {' | '}
+                    <span className="font-medium">Published:</span> {totals.published} {' | '}
+                    <span className="font-medium">Rejected:</span> {totals.rejected}
+                  </div>
+                  {/* Filter control */}
+                  <div className="text-sm">
+                    <label className="mr-2 text-gray-600">Filter by status:</label>
+                    <select
+                      className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm"
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value as 'all' | 'under-review' | 'published' | 'rejected')}
+                    >
+                      <option value="all">All</option>
+                      <option value="under-review">Under review</option>
+                      <option value="published">Published</option>
+                      <option value="rejected">Rejected</option>
+                    </select>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {(() => {
+              const filteredStories = stories.filter((st) => {
+                if (statusFilter === 'all') return true;
+                return mapStoryStatus(st.status).bucket === statusFilter;
+              });
+              return (
+                <div className="overflow-x-auto rounded-xl border border-gray-200">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-semibold">Ref ID</th>
+                        <th className="px-4 py-3 text-left font-semibold">Headline</th>
+                        <th className="px-4 py-3 text-left font-semibold">Category</th>
+                        <th className="px-4 py-3 text-left font-semibold">City</th>
+                        <th className="px-4 py-3 text-left font-semibold">Date</th>
+                        <th className="px-4 py-3 text-left font-semibold">Status</th>
+                        <th className="px-4 py-3 text-right font-semibold">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredStories.map((story) => {
+                        const m = mapStoryStatus(story.status);
+                        const ref = story.referenceId || story.id;
+                        return (
+                          <tr key={story.id} className="border-t border-gray-100">
+                            <td className="px-4 py-3 align-top text-xs text-gray-600">{ref}</td>
+                            <td className="px-4 py-3 align-top">
+                              <div className="font-medium">{story.headline}</div>
+                            </td>
+                            <td className="px-4 py-3 align-top">
+                              <span className="text-xs bg-gray-100 rounded-full px-2 py-1">{story.category}</span>
+                            </td>
+                            <td className="px-4 py-3 align-top text-xs text-gray-600">{story.city || '-'}</td>
+                            <td className="px-4 py-3 align-top text-xs text-gray-500">
+                              {new Intl.DateTimeFormat('en-GB', {
+                                day: '2-digit', month: 'short', year: 'numeric',
+                                timeZone: 'UTC',
+                              }).format(new Date(story.createdAt))}
+                            </td>
+                            <td className="px-4 py-3 align-top">
+                              <span className={"inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium " + m.badgeClass}>{m.label}</span>
+                            </td>
+                            <td className="px-4 py-3 align-top text-right">
+                              <button
+                                type="button"
+                                className="text-xs px-3 py-1 rounded-full border border-gray-300 hover:bg-gray-50"
+                                onClick={() => setSelectedStory(story)}
+                              >
+                                View
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
+
+            {/* Reporter details link + safety note */}
+            <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs text-gray-600">
+              <button
+                type="button"
+                className="inline-flex items-center px-3 py-1 rounded-full border border-blue-600 text-blue-600 hover:bg-blue-50"
+                onClick={() => {
+                  const email = reporterEmail || '';
+                  router.push(`/community-reporter?email=${encodeURIComponent(email)}`);
+                }}
+              >
+                Update my reporter details
+              </button>
+              <div className="text-gray-500">
+                If a story is published and you want it changed or removed, contact the News Pulse editorial team.
+              </div>
+            </div>
+
+            {/* Modal */}
+            {selectedStory && (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+                onClick={() => setSelectedStory(null)}
+              >
+                <div
+                  className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="mb-2 flex items-center justify-between">
+                    <h2 className="text-xl font-bold">{selectedStory.headline}</h2>
+                    {(() => {
+                      const m = mapStoryStatus(selectedStory.status);
+                      return <span className={"ml-3 inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium " + m.badgeClass}>{m.label}</span>;
+                    })()}
+                  </div>
+                  <div className="mb-3 text-xs text-gray-600">
+                    <span className="mr-2">Category: <span className="font-medium">{selectedStory.category}</span></span>
+                    <span className="mr-2">City: <span className="font-medium">{selectedStory.city || '-'}</span></span>
+                    <span>
+                      Date: <span className="font-medium">{new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(selectedStory.createdAt))}</span>
+                    </span>
+                  </div>
+                  <div className="whitespace-pre-wrap rounded-md border border-gray-200 bg-gray-50 p-3 text-sm text-gray-800">
+                    {(() => {
+                      const s: any = selectedStory || {};
+                      const content = s.body || s.text || s.story || s.content || s.details || s.description || s.bodyText || s.fullText || '';
+                      return content ? content : selectedStory.headline;
+                    })()}
+                  </div>
+                  {selectedStory.reviewNote ? (
+                    <div className="mt-3 text-sm">
+                      <div className="mb-1 font-medium">Editor note (if any)</div>
+                      <div className="rounded-md border border-gray-200 bg-gray-50 p-3 text-gray-800">{selectedStory.reviewNote}</div>
+                    </div>
+                  ) : null}
+                  <div className="mt-4 text-right">
+                    <button
+                      type="button"
+                      className="text-sm px-4 py-2 rounded-full border border-gray-300 hover:bg-gray-50"
+                      onClick={() => setSelectedStory(null)}
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         ) : null)}
       </main>
     </div>

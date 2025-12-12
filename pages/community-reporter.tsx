@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 import type { GetServerSideProps } from 'next';
 import { submitCommunityStory, SubmitCommunityStoryResult } from '../src/lib/communityReporterApi';
 import { useCommunityReporterConfig } from '../src/hooks/useCommunityReporterConfig';
@@ -39,6 +40,9 @@ interface StoryFormState {
   headline: string;
   story: string;
   mediaLink?: string;
+  storyCity?: string;
+  storyState?: string;
+  priority?: 'normal' | 'high';
 }
 
 const initialSignUp: ReporterSignUpState = {
@@ -70,6 +74,9 @@ const initialStory: StoryFormState = {
   headline: '',
   story: '',
   mediaLink: '',
+  storyCity: '',
+  storyState: '',
+  priority: 'normal',
 };
 
 const categories: { value: string; label: string }[] = [
@@ -90,6 +97,7 @@ type FeatureToggleProps = {
 };
 
 const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporterClosed, reporterPortalClosed }) => {
+  const router = useRouter();
   const [step, setStep] = useState<1 | 2>(1);
   const [reporterType, setReporterType] = useState<ReporterType>('community');
   const [signUpData, setSignUpData] = useState<ReporterSignUpState>(initialSignUp);
@@ -207,7 +215,9 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
           ageGroup: story.ageGroup,
           locationCity: signUpData.city.trim(),
           locationState: signUpData.state.trim(),
-          urgency: 'normal',
+          storyCity: (story.storyCity || '').trim(),
+          storyState: (story.storyState || '').trim(),
+          urgency: (story.priority === 'high' ? 'high' : 'normal'),
           canContact: true,
         },
         // Additional reporter fields for verification of professional journalists
@@ -332,7 +342,10 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
           </p>
           <div className="mb-4">
             {(!reporterPortalClosed && myStoriesEnabled) ? (
-              <Link href="/community-reporter/my-stories" className="text-sm text-blue-700 hover:underline">
+              <Link
+                href={`/community-reporter/my-stories${signUpData.email ? `?email=${encodeURIComponent(signUpData.email.trim().toLowerCase())}` : ''}`}
+                className="text-sm text-blue-700 hover:underline"
+              >
                 Already submitted stories? View My Community Stories
               </Link>
             ) : null}
@@ -564,6 +577,61 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
                   {errors.category && <p className="text-red-600 text-xs mt-1">{errors.category}</p>}
                 </div>
 
+                {/* Location (story-specific) */}
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="storyCity" className="block font-medium mb-1">Story city / area (where did this happen?)</label>
+                    <input
+                      id="storyCity"
+                      type="text"
+                      placeholder="e.g., Navrangpura, Ahmedabad"
+                      value={story.storyCity || ''}
+                      onChange={e => setStory(s => ({ ...s, storyCity: e.target.value }))}
+                      disabled={readonlyMode}
+                      className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="storyState" className="block font-medium mb-1">State</label>
+                    <input
+                      id="storyState"
+                      type="text"
+                      placeholder="e.g., Gujarat"
+                      value={story.storyState || ''}
+                      onChange={e => setStory(s => ({ ...s, storyState: e.target.value }))}
+                      disabled={readonlyMode}
+                      className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2"
+                    />
+                  </div>
+                </div>
+
+                {/* Urgency toggle */}
+                <div>
+                  <label className="block font-medium mb-2">Is this urgent or time-sensitive?</label>
+                  <div className="flex items-center gap-4">
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="priority"
+                        checked={(story.priority || 'normal') === 'normal'}
+                        onChange={() => setStory(s => ({ ...s, priority: 'normal' }))}
+                        disabled={readonlyMode}
+                      />
+                      <span>Normal</span>
+                    </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="priority"
+                        checked={(story.priority || 'normal') === 'high'}
+                        onChange={() => setStory(s => ({ ...s, priority: 'high' }))}
+                        disabled={readonlyMode}
+                      />
+                      <span>Urgent</span>
+                    </label>
+                  </div>
+                </div>
+
                 {/* Headline */}
                 <div>
                   <label htmlFor="headline" className="block font-medium mb-1">Headline *</label>
@@ -572,6 +640,7 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
                     <p className="text-xs text-gray-500">Max 150 characters</p>
                     <p className="text-xs text-gray-500">{story.headline.length}/150</p>
                   </div>
+                  <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">Keep it specific, avoid opinion or adjectives.</p>
                   {errors.headline && <p className="text-red-600 text-xs mt-1">{errors.headline}</p>}
                 </div>
 
@@ -583,7 +652,14 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
                     <p className="text-xs text-gray-500">Minimum 50 characters</p>
                     <p className="text-xs text-gray-500">{story.story.trim().length} chars</p>
                   </div>
+                  <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">Explain what happened, where, when, who is involved. Add only facts you are sure about.</p>
                   {errors.story && <p className="text-red-600 text-xs mt-1">{errors.story}</p>}
+                </div>
+
+                {/* Attachments placeholder */}
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-3">
+                  <p className="font-semibold text-sm">Photos / documents (coming soon)</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">For now, describe visuals in your story. In future, you’ll be able to upload safely.</p>
                 </div>
 
                 {/* Age Group */}
@@ -608,19 +684,25 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
                   </div>
                 )}
 
-                {submitStatus === 'success' && submitResult && (
+                    {submitStatus === 'success' && submitResult && (
                   <div className="mt-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">
                     <p className="font-semibold">✅ Story submitted for review</p>
-                    <p className="mt-1">Our editorial team will manually verify it before publishing.</p>
                     {submitResult.referenceId && (
-                      <p className="mt-1"><span className="font-semibold">Reference ID:</span> {submitResult.referenceId}</p>
+                      <p className="mt-1">Your reference ID: {submitResult.referenceId}</p>
                     )}
-                    <p className="mt-2 text-xs text-green-900/80">You can track this and your other stories from the 'My Community Stories' page.</p>
-                    <div className="mt-2 text-xs text-green-900/80 space-y-1">
-                      <p>Reporter type: {submitResult.reporterType === 'journalist' ? 'Professional Journalist / Media' : 'Community Reporter'}</p>
-                      <p>Status: {submitResult.status || 'Under review'}</p>
-                    </div>
+                    <p className="mt-1">Status: Under review. Usually reviewed within 24–48 hours.</p>
                     <div className="mt-3 flex gap-3">
+                      <button
+                        type="button"
+                        className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+                        onClick={() => {
+                          try { window.localStorage.setItem('np_cr_email', signUpData.email.trim().toLowerCase()); } catch {}
+                          const target = `/community-reporter/my-stories?email=${encodeURIComponent(signUpData.email.trim().toLowerCase())}`;
+                          router.push(target);
+                        }}
+                      >
+                        View My Community Stories
+                      </button>
                       <button
                         type="button"
                         className="px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-800"
@@ -633,11 +715,6 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
                       >
                         Submit another story
                       </button>
-                      {myStoriesEnabled ? (
-                        <a href="/community-reporter/my-stories" className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold" onClick={() => { try { window.localStorage.setItem('np_communityReporterEmail', signUpData.email.trim()); } catch {} }}>View My Community Stories</a>
-                      ) : (
-                        <span className="text-sm text-gray-600 dark:text-gray-300">Status tracking for community stories is temporarily offline. Our editorial team will still review your story.</span>
-                      )}
                     </div>
                   </div>
                 )}

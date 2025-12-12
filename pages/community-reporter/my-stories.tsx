@@ -13,6 +13,9 @@ type CommunityStorySummary = {
   state?: string;
   status: string;
   createdAt: string;
+  submittedAt?: string;
+  priority?: string;
+  urgency?: string;
 };
 
 const statusColor = (s: string) => {
@@ -43,14 +46,15 @@ const CommunityReporterMyStoriesPage: React.FC<FeatureToggleProps> = ({ communit
   const [settings, setSettings] = useState<CommunitySettingsPublic | null>(null);
   const [settingsLoading, setSettingsLoading] = useState<boolean>(true);
   const [settingsError, setSettingsError] = useState<string | null>(null);
-  const [email, setEmail] = useState('');
-  const [reporterId, setReporterId] = useState<string | null>(null);
+  // Single source of truth for reporter email
+  const [reporterEmail, setReporterEmail] = useState<string | null>(null);
   const [stories, setStories] = useState<CommunityStorySummary[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [selectedStory, setSelectedStory] = useState<CommunityStorySummary | null>(null);
 
   // Fetch public community settings on mount
   useEffect(() => {
@@ -81,26 +85,32 @@ const CommunityReporterMyStoriesPage: React.FC<FeatureToggleProps> = ({ communit
     return () => { cancelled = true; };
   }, []);
 
+  // Resolve reporter email: query ?email, else localStorage np_cr_email, else profile JSON
   useEffect(() => {
-    try {
-      const newEmail = window.localStorage.getItem('np_communityReporterEmail');
-      const newId = window.localStorage.getItem('np_communityReporterId');
-      // Backward compatibility
-      const oldEmail = window.localStorage.getItem('np.communityReporter.email');
-      const oldId = window.localStorage.getItem('npReporterId');
-      const useEmail = newEmail || oldEmail || '';
-      const useId = newId || oldId || '';
-      if (useEmail) setEmail(useEmail);
-      if (useId) setReporterId(useId);
-    } catch {}
-  }, []);
-
-  useEffect(() => {
+    // From query if present
     if (router.isReady) {
-      const qRep = typeof router.query.reporterId === 'string' ? router.query.reporterId : null;
-      if (qRep) setReporterId(qRep);
+      const qEmail = typeof router.query.email === 'string' ? router.query.email.trim() : '';
+      if (qEmail) {
+        setReporterEmail(qEmail);
+        return;
+      }
     }
-  }, [router.isReady, router.query]);
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = window.localStorage.getItem('np_cr_email');
+      if (stored && stored.trim()) {
+        setReporterEmail(stored.trim());
+        return;
+      }
+      const profileRaw = window.localStorage.getItem('npCommunityReporterProfile');
+      if (profileRaw) {
+        try {
+          const p = JSON.parse(profileRaw);
+          if (p && p.email) setReporterEmail(String(p.email).trim());
+        } catch {}
+      }
+    } catch {}
+  }, [router.isReady, router.query.email]);
 
   const counts = useMemo(() => {
     const total = stories.length;
@@ -112,42 +122,41 @@ const CommunityReporterMyStoriesPage: React.FC<FeatureToggleProps> = ({ communit
   }, [stories]);
 
   const loadStories = async () => {
-    const em = email.trim();
+    const em = (reporterEmail || '').trim();
     setIsLoading(true);
     setError(null);
     try {
-      const hasId = reporterId && reporterId.trim();
       const hasEmail = em && em.includes('@');
-      if (!hasId && !hasEmail) {
-        setError("We couldn't find your reporter profile. Please submit a new story first.");
+      if (!hasEmail) {
+        setError("We couldn't find your reporter email. Please submit a new story first.");
         setStories([]);
         setHasLoadedOnce(true);
         return;
       }
-      const qs = hasId ? `reporterId=${encodeURIComponent(String(reporterId))}` : `email=${encodeURIComponent(em)}`;
-      const res = await fetch(`/api/community-reporter/my-stories?${qs}`);
+      const res = await fetch(`/api/community-reporter/my-stories?email=${encodeURIComponent(em.toLowerCase())}`);
       const data = await res.json().catch(() => null);
       if (res.ok && (data?.ok === true || data?.success === true)) {
-        const items = Array.isArray(data?.items)
-          ? data.items
-          : Array.isArray(data?.stories)
+        const items = Array.isArray(data?.stories)
           ? data.stories
+          : Array.isArray(data?.items)
+          ? data.items
           : Array.isArray(data?.data?.stories)
           ? data.data.stories
           : [];
         setStories(items);
         setHasLoadedOnce(true);
         try {
-          if (em) window.localStorage.setItem('np_communityReporterEmail', em);
-          if (reporterId) window.localStorage.setItem('np_communityReporterId', reporterId);
+          if (em) window.localStorage.setItem('np_cr_email', em.toLowerCase());
         } catch {}
       } else {
-        setError(data?.message || 'Could not load your stories right now.');
+        setError(data?.message || "Couldn't load your stories right now. Please try again later.");
+        try { console.error('[my-stories] upstream not ok', { status: res.status, data }); } catch {}
         setStories([]);
         setHasLoadedOnce(true);
       }
     } catch (err) {
-      setError('Could not load your stories right now.');
+      setError("Couldn't load your stories right now. Please try again later.");
+      try { console.error('[my-stories] exception while loading', err); } catch {}
       setStories([]);
       setHasLoadedOnce(true);
     } finally {
@@ -189,11 +198,10 @@ const CommunityReporterMyStoriesPage: React.FC<FeatureToggleProps> = ({ communit
 
   // Auto-load on mount when identity exists and portal is enabled
   useEffect(() => {
-    // Only trigger after first identity read
-    if (canUsePortal && (email || reporterId)) loadStories();
+    if (reporterEmail) loadStories();
     else setHasLoadedOnce(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [email, reporterId, canUsePortal]);
+  }, [reporterEmail]);
 
   // Hard-close via feature toggle
   if (communityReporterClosed || reporterPortalClosed) {
@@ -250,10 +258,9 @@ const CommunityReporterMyStoriesPage: React.FC<FeatureToggleProps> = ({ communit
           <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-3xl font-black mb-1">My Community Stories</h1>
-              {(email || reporterId) && (
+              {reporterEmail && (
                 <p className="text-xs text-gray-500">
-                  Using {reporterId ? 'Reporter ID' : 'Email'}:{' '}
-                  <span className="font-medium">{reporterId || email}</span>
+                  Using Email: <span className="font-medium">{reporterEmail}</span>
                 </p>
               )}
               <p className="mt-2 text-xs text-gray-600 dark:text-gray-300">
@@ -269,13 +276,19 @@ const CommunityReporterMyStoriesPage: React.FC<FeatureToggleProps> = ({ communit
             </div>
           )}
 
+          {isLoading && (
+            <div className="mb-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-3 text-sm text-gray-800 dark:text-gray-200">
+              Loading your stories…
+            </div>
+          )}
+
           {error && (
             <div className="mb-4 rounded-lg border border-red-300 bg-red-50 text-red-700 px-4 py-3 text-sm">{error}</div>
           )}
 
           {!error && hasLoadedOnce && stories.length === 0 && (
             <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-3 text-sm text-gray-800 dark:text-gray-200">
-              No stories found for this email yet. Submit a story first, or check the email you entered.
+              No stories found for this email yet...
             </div>
           )}
 
@@ -302,10 +315,20 @@ const CommunityReporterMyStoriesPage: React.FC<FeatureToggleProps> = ({ communit
                       </tr>
                     </thead>
                     <tbody>
-                       {stories.map((s) => (
+                       {stories.map((s) => {
+                          const urgent = String((s as any).priority || (s as any).urgency || '').toLowerCase() === 'high';
+                          const dtRaw = s.createdAt || (s.submittedAt || '');
+                          const dt = dtRaw ? new Date(dtRaw) : null;
+                          const dateStr = dt ? dt.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
+                          return (
                         <tr key={s.id} className="border-b border-gray-100 dark:border-gray-700">
                           <td className="py-3 pr-4">
-                            <div className="font-medium">{s.headline}</div>
+                            <div className="font-medium flex items-center gap-2">
+                              <span>{s.headline}</span>
+                              {urgent && (
+                                <span className="inline-flex items-center text-[10px] uppercase tracking-wide px-2 py-0.5 rounded bg-red-600 text-white">Urgent</span>
+                              )}
+                            </div>
                             <div className="text-xs text-gray-500 dark:text-gray-400">Ref ID: {s.id || s.referenceId || '-'}</div>
                           </td>
                           <td className="py-3 pr-4">{s.category}</td>
@@ -313,10 +336,15 @@ const CommunityReporterMyStoriesPage: React.FC<FeatureToggleProps> = ({ communit
                           <td className="py-3 pr-4">
                             <span className={`px-2 py-1 rounded-md ${statusColor(s.status)}`}>{s.status}</span>
                           </td>
-                          <td className="py-3 pr-4">{new Date(s.createdAt).toLocaleDateString()}</td>
+                          <td className="py-3 pr-4">{dateStr}</td>
                           <td className="py-3 pr-4">
                             <div className="flex items-center gap-3">
-                              <button className="px-3 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white">View</button>
+                              <button
+                                onClick={() => setSelectedStory(s)}
+                                className="px-3 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white"
+                              >
+                                View
+                              </button>
                               {['under_review','pending'].includes((s.status || '').toLowerCase()) && (
                                 <button
                                   onClick={() => handleWithdraw(s)}
@@ -329,7 +357,8 @@ const CommunityReporterMyStoriesPage: React.FC<FeatureToggleProps> = ({ communit
                             </div>
                           </td>
                         </tr>
-                      ))}
+                          );
+                       })}
                     </tbody>
                   </table>
                 </div>
@@ -337,8 +366,58 @@ const CommunityReporterMyStoriesPage: React.FC<FeatureToggleProps> = ({ communit
             </div>
           )}
 
-          <div className="mt-6">
+          {/* View Modal */}
+          {selectedStory && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+              onClick={() => setSelectedStory(null)}
+            >
+              <div
+                className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white dark:bg-gray-900 p-6 shadow-xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="mb-2 flex items-center justify-between">
+                  <h2 className="text-xl font-bold">{selectedStory.headline}</h2>
+                  <span className={`ml-3 inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${statusColor(selectedStory.status)}`}>
+                    {selectedStory.status}
+                  </span>
+                </div>
+                <div className="mb-3 text-xs text-gray-600 dark:text-gray-300">
+                  <span className="mr-2">Category: <span className="font-medium">{selectedStory.category}</span></span>
+                  <span className="mr-2">Location: <span className="font-medium">{[selectedStory.city, selectedStory.state].filter(Boolean).join(', ') || '-'}</span></span>
+                  <span>
+                    Date: <span className="font-medium">{
+                      (() => {
+                        const dtRaw = selectedStory.createdAt || selectedStory.submittedAt || ''
+                        const dt = dtRaw ? new Date(dtRaw) : null
+                        return dt ? dt.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '-'
+                      })()
+                    }</span>
+                  </span>
+                </div>
+                <div className="whitespace-pre-wrap rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-3 text-sm text-gray-800 dark:text-gray-100">
+                  {(() => {
+                    const s: any = selectedStory || {}
+                    const body = s.body || s.text || s.story || s.content || s.details || s.description || s.bodyText || s.fullText
+                    return body ? String(body) : selectedStory.headline
+                  })()}
+                </div>
+                <div className="mt-4 text-right">
+                  <button
+                    type="button"
+                    className="text-sm px-4 py-2 rounded-full border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800"
+                    onClick={() => setSelectedStory(null)}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="mt-6 flex items-center gap-3">
             <a href="/community-reporter" className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600">Back to Community Reporter</a>
+            <Link href="/community-reporter" className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white">Submit new story</Link>
           </div>
         </div>
       </section>
