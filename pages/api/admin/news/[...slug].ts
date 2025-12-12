@@ -41,8 +41,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     res.status(200).json(adminResponse.data)
   } catch (error: any) {
+    // Gracefully handle 404s for GET routes without noisy logs
+    const status = error?.response?.status
+    if (status === 404 && req.method === 'GET') {
+      return res.status(200).json({ items: [], source: 'empty' })
+    }
+
     // Do not break the app; provide sensible fallbacks
-    console.warn('Admin news subroute proxy error:', error?.message || error)
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('Admin news subroute proxy error:', error?.message || error)
+    }
 
     if (req.method === 'GET') {
       // For breaking/trending, return an empty items list as a safe default

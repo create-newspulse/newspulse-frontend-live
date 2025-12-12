@@ -51,7 +51,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(200).json(adminResponse.data);
 
   } catch (error: any) {
-    console.warn('Admin API proxy error:', error.message);
+    // Gracefully handle 404 from backend without noisy logs
+    const status = error?.response?.status;
+    if (status === 404 && req.method === 'GET') {
+      return res.status(200).json({ items: [], source: 'empty' });
+    }
+
+    // Minimal logging for other errors
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('Admin API proxy error:', error?.message);
+    }
     
     // Fallback response when admin panel is unavailable
     if (req.method === 'GET') {

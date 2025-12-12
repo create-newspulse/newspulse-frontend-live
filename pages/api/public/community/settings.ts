@@ -1,44 +1,59 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+type CommunitySettings = {
+  communityReporterClosed: boolean;
+  reporterPortalClosed: boolean;
+  updatedAt: string | null;
+};
 
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse,
+  res: NextApiResponse<CommunitySettings | { error: string }>,
 ) {
   if (req.method !== 'GET') {
-    res.setHeader('Allow', 'GET')
-    return res.status(405).json({ ok: false, message: 'METHOD_NOT_ALLOWED' })
+    return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const base = (API_BASE_URL || '').replace(/\/+$/, '')
-  const targetUrl = `${base}/api/public/community/settings`
-
   try {
-    const upstream = await fetch(targetUrl, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-    })
+    const base = process.env.NEXT_PUBLIC_API_URL
 
-    const text = await upstream.text().catch(() => '')
-
-    if (!upstream.ok) {
-      let json: any = null
-      try { json = text ? JSON.parse(text) : null } catch {}
-      return res
-        .status(upstream.status || 500)
-        .json(json || { ok: false, message: 'Could not load community settings.' })
+    // Default: everything open
+    let toggles: CommunitySettings = {
+      communityReporterClosed: false,
+      reporterPortalClosed: false,
+      updatedAt: null,
     }
 
     try {
-      const json = text ? JSON.parse(text) : { ok: false }
-      return res.status(upstream.status || 200).json(json)
-    } catch {
-      return res.status(upstream.status || 200).json({ ok: false })
+      if (!base) {
+        console.warn('[api/public/community/settings] NEXT_PUBLIC_API_URL not set; using defaults')
+      } else {
+        const r = await fetch(`${base.replace(/\/+$/, '')}/api/public/feature-toggles`, { cache: 'no-store' })
+        if (r.ok) {
+          const data = await r.json()
+          const s = (data && (data.settings ?? null)) || data
+          toggles = {
+            communityReporterClosed: !!s.communityReporterClosed,
+            reporterPortalClosed: !!s.reporterPortalClosed,
+            updatedAt: s.updatedAt ?? null,
+          }
+        } else {
+          console.warn('[api/public/community/settings] backend status', r.status, r.statusText)
+        }
+      }
+    } catch (err: any) {
+      console.warn('[api/public/community/settings] backend fetch failed:', err?.message ?? err)
+      // keep defaults, don't throw
     }
+
+    // Always return 200 with a safe JSON payload
+    return res.status(200).json(toggles)
   } catch (err) {
-    return res
-      .status(500)
-      .json({ ok: false, message: 'Could not load community settings.' })
+    console.error('[api/public/community/settings] error:', err)
+    return res.status(200).json({
+      communityReporterClosed: false,
+      reporterPortalClosed: false,
+      updatedAt: null,
+    })
   }
 }

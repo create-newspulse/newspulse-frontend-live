@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
+import type { GetServerSideProps } from 'next';
 import { submitCommunityStory, SubmitCommunityStoryResult } from '../src/lib/communityReporterApi';
 import { useCommunityReporterConfig } from '../src/hooks/useCommunityReporterConfig';
 
@@ -83,7 +84,12 @@ const LANG_OPTIONS = ['en', 'hi', 'gu'];
 const COMMUNITY_INTERESTS = ['Local issues','Youth','Politics','Civic','Education','Health','Environment','Sports','Culture'];
 const PROFESSIONAL_BEATS = ['Politics','Crime','Business','Education','Civic','Sports','Entertainment','Tech','Other'];
 
-const CommunityReporterPage: React.FC = () => {
+type FeatureToggleProps = {
+  communityReporterClosed: boolean;
+  reporterPortalClosed: boolean;
+};
+
+const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporterClosed, reporterPortalClosed }) => {
   const [step, setStep] = useState<1 | 2>(1);
   const [reporterType, setReporterType] = useState<ReporterType>('community');
   const [signUpData, setSignUpData] = useState<ReporterSignUpState>(initialSignUp);
@@ -253,6 +259,29 @@ const CommunityReporterPage: React.FC = () => {
     }
   };
 
+  // If globally closed via feature toggle, show closed message immediately
+  if (communityReporterClosed) {
+    return (
+      <div className="min-h-screen bg-white dark:bg-dark-primary text-black dark:text-dark-text">
+        <Head>
+          <title>Community Reporter – Temporarily Closed | News Pulse</title>
+        </Head>
+        <section className="relative py-16 px-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-900">
+          <div className="max-w-4xl mx-auto">
+            <h1 className="text-4xl md:text-5xl font-black mb-6 bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600">
+              News Pulse Community Reporter
+            </h1>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 p-6">
+              <p className="text-lg md:text-xl leading-relaxed text-gray-700 dark:text-gray-300">
+                Temporarily closed. Please check back soon.
+              </p>
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   // Loading state while settings load
   if (settingsLoading && !settings) {
     return (
@@ -302,9 +331,11 @@ const CommunityReporterPage: React.FC = () => {
             Share impactful local stories, emerging issues, campus updates, and verified tips. Every submission is manually reviewed by our editorial team before publishing.
           </p>
           <div className="mb-4">
-            <Link href="/community-reporter/my-stories" className="text-sm text-blue-700 hover:underline">
-              Already submitted stories? View My Community Stories
-            </Link>
+            {(!reporterPortalClosed && myStoriesEnabled) ? (
+              <Link href="/community-reporter/my-stories" className="text-sm text-blue-700 hover:underline">
+                Already submitted stories? View My Community Stories
+              </Link>
+            ) : null}
           </div>
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 p-6 mb-4">
             <h2 className="text-xl font-semibold mb-3">Submission Guidelines</h2>
@@ -630,3 +661,18 @@ const CommunityReporterPage: React.FC = () => {
 };
 
 export default CommunityReporterPage;
+
+export const getServerSideProps: GetServerSideProps<FeatureToggleProps> = async () => {
+  const base = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000').replace(/\/+$/, '');
+  let communityReporterClosed = false;
+  let reporterPortalClosed = false;
+  try {
+    const resp = await fetch(`${base}/api/public/feature-toggles`, { headers: { Accept: 'application/json' } });
+    const data = await resp.json().catch(() => null as any);
+    if (resp.ok && data) {
+      communityReporterClosed = Boolean(data.communityReporterClosed);
+      reporterPortalClosed = Boolean(data.reporterPortalClosed);
+    }
+  } catch {}
+  return { props: { communityReporterClosed, reporterPortalClosed } };
+};

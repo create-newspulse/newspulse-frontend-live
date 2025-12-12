@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
+import type { GetServerSideProps } from 'next';
 
 type StoryStatus = 'pending' | 'approved' | 'rejected';
 
@@ -52,7 +53,12 @@ function statusBadge(status: StoryStatus) {
   }
 }
 
-const MyCommunityStoriesPage: React.FC = () => {
+type FeatureToggleProps = {
+  communityReporterClosed: boolean;
+  reporterPortalClosed: boolean;
+};
+
+const MyCommunityStoriesPage: React.FC<FeatureToggleProps> = ({ communityReporterClosed, reporterPortalClosed }) => {
   const router = useRouter();
   const [stories, setStories] = useState<ReporterStory[]>([]);
   const [loading, setLoading] = useState(false);
@@ -131,6 +137,23 @@ const MyCommunityStoriesPage: React.FC = () => {
     };
     fetchStories();
   }, [reporterEmail]);
+
+  // Closed state if reporter portal or entire program is closed
+  if (communityReporterClosed || reporterPortalClosed) {
+    return (
+      <div className="min-h-screen bg-white text-black">
+        <Head>
+          <title>Community Reporter Portal – Temporarily Closed | News Pulse</title>
+        </Head>
+        <main className="max-w-4xl mx-auto px-4 py-16">
+          <h1 className="text-3xl font-black mb-4">Community Reporter Portal</h1>
+          <div className="bg-white rounded-xl shadow-md border border-gray-200 p-6">
+            <p className="text-lg text-gray-700">Temporarily closed. Please check back soon.</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white text-black">
@@ -264,3 +287,18 @@ const MyCommunityStoriesPage: React.FC = () => {
 };
 
 export default MyCommunityStoriesPage;
+
+export const getServerSideProps: GetServerSideProps<FeatureToggleProps> = async () => {
+  const base = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000').replace(/\/+$/, '');
+  let communityReporterClosed = false;
+  let reporterPortalClosed = false;
+  try {
+    const resp = await fetch(`${base}/api/public/feature-toggles`, { headers: { Accept: 'application/json' } });
+    const data = await resp.json().catch(() => null as any);
+    if (resp.ok && data) {
+      communityReporterClosed = Boolean(data.communityReporterClosed);
+      reporterPortalClosed = Boolean(data.reporterPortalClosed);
+    }
+  } catch {}
+  return { props: { communityReporterClosed, reporterPortalClosed } };
+};

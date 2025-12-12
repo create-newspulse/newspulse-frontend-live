@@ -1,7 +1,23 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 export default function NavBar() {
   const [isOpen, setIsOpen] = useState(false);
+  const [hideCommunityReporter, setHideCommunityReporter] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch('/api/public/feature-toggles', { headers: { Accept: 'application/json' } });
+        const data = await res.json().catch(() => null);
+        if (!cancelled && res.ok && data) {
+          setHideCommunityReporter(Boolean(data.communityReporterClosed));
+        }
+      } catch {}
+    };
+    load();
+    return () => { cancelled = true; };
+  }, []);
 
   return (
     <nav className="sticky top-0 z-50 bg-white shadow-md">
@@ -25,7 +41,9 @@ export default function NavBar() {
           <li><a href="/about" className="hover:text-blue-600">About</a></li>
           <li><a href="/contact" className="hover:text-blue-600">Contact</a></li>
           <li><a href="/news" className="text-blue-700 hover:underline">📰 Top News</a></li>
-          <li><a href="/community-reporter" className="hover:text-blue-600">Community Reporter</a></li>
+          {!hideCommunityReporter && (
+            <li><a href="/community-reporter" className="hover:text-blue-600">Community Reporter</a></li>
+          )}
         </ul>
       </div>
 
@@ -37,7 +55,9 @@ export default function NavBar() {
           <li><a href="/about" className="block hover:text-blue-600">About</a></li>
           <li><a href="/contact" className="block hover:text-blue-600">Contact</a></li>
           <li><a href="/news" className="block text-blue-700 hover:underline">📰 Top News</a></li>
-          <li><a href="/community-reporter" className="block hover:text-blue-600">Community Reporter</a></li>
+          {!hideCommunityReporter && (
+            <li><a href="/community-reporter" className="block hover:text-blue-600">Community Reporter</a></li>
+          )}
         </ul>
       )}
     </nav>
