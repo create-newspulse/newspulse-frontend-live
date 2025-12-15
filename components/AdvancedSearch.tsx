@@ -1,18 +1,31 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 
-export const AdvancedSearchBar = ({ onSearch, articles = [] }) => {
+type SearchArticle = {
+  title: string;
+  excerpt?: string;
+  category?: string;
+};
+
+type SearchPayload = {
+  query: string;
+  category: string;
+  timestamp: number;
+};
+
+export const AdvancedSearchBar: React.FC<{
+  onSearch: (payload: SearchPayload) => void;
+  articles?: SearchArticle[];
+}> = ({ onSearch, articles = [] }) => {
   const [query, setQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
   
   // Search suggestions based on current articles
-  const suggestions = useMemo(() => {
+  const suggestions = useMemo<string[]>(() => {
     if (!query || query.length < 2) return [];
     
-    const words = articles.flatMap(article => 
-      article.title.toLowerCase().split(' ')
-    );
+    const words = articles.flatMap((article) => article.title.toLowerCase().split(' '));
     
     const uniqueWords = Array.from(new Set(words))
       .filter(word => 
@@ -24,7 +37,7 @@ export const AdvancedSearchBar = ({ onSearch, articles = [] }) => {
     return uniqueWords;
   }, [query, articles]);
 
-  const handleSearch = (searchQuery = query) => {
+  const handleSearch = (searchQuery: string = query) => {
     if (searchQuery.trim()) {
       onSearch({
         query: searchQuery,
@@ -102,25 +115,25 @@ export const AdvancedSearchBar = ({ onSearch, articles = [] }) => {
 };
 
 // Hook for search functionality
-export const useNewsSearch = (articles) => {
-  const [searchResults, setSearchResults] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
+export const useNewsSearch = (articles: SearchArticle[]) => {
+  const [searchResults, setSearchResults] = useState<SearchArticle[]>([]);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isSearching, setIsSearching] = useState<boolean>(false);
 
-  const performSearch = async ({ query, category }) => {
+  const performSearch = async ({ query, category }: { query: string; category: string }) => {
     setIsSearching(true);
     setSearchQuery(query);
 
     // Simulate API delay
     await new Promise(resolve => setTimeout(resolve, 300));
 
-    const results = articles.filter(article => {
+    const results = articles.filter((article) => {
       const matchesQuery = 
         article.title.toLowerCase().includes(query.toLowerCase()) ||
-        article.excerpt.toLowerCase().includes(query.toLowerCase());
+        (article.excerpt ? article.excerpt.toLowerCase().includes(query.toLowerCase()) : false);
       
       const matchesCategory = 
-        category === 'all' || article.category === category;
+        category === 'all' || (article.category ? article.category === category : false);
 
       return matchesQuery && matchesCategory;
     });

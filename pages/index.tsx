@@ -184,7 +184,7 @@ const AdvancedDarkModeToggle = () => {
 const AdvancedSearchBar = ({ onSearch, articles = [] }) => {
   const [query, setQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
-  const [suggestions, setSuggestions] = useState([]);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
 
   useEffect(() => {
     if (query.length > 1) {

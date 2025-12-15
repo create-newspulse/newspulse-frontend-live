@@ -179,13 +179,14 @@ export const useAdminData = (options: UseAdminDataOptions = {}) => {
  * 🎯 Admin Configuration Hook
  */
 export const useAdminConfig = () => {
-  const [config, setConfig] = useState(null);
+  type AdminConfig = Record<string, unknown>;
+  const [config, setConfig] = useState<AdminConfig | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchConfig = async () => {
       try {
-        const [siteConfig, liveSettings] = await Promise.all([
+        const [siteConfig, liveSettings] = await Promise.all<AdminConfig[]>([
           configApi.getConfig(),
           configApi.getLiveSettings()
         ]);

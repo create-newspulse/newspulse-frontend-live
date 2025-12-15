@@ -17,7 +17,13 @@
     "isolatedModules": true,
     "jsx": "react-jsx",
     "incremental": true,
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "strictNullChecks": true
   },
   "include": [
     "next-env.d.ts",
@@ -30,7 +36,9 @@
     "utils/**/*.ts",
     "utils/**/*.tsx",
     "hooks/**/*.ts",
-    "hooks/**/*.tsx"
+    "hooks/**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

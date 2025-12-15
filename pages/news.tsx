@@ -2,8 +2,16 @@
 import { useEffect, useState } from 'react';
 import Head from 'next/head';
 
+type NewsApiArticle = {
+  title: string;
+  description?: string;
+  url?: string;
+  publishedAt?: string;
+  source?: { name?: string };
+};
+
 export default function News() {
-  const [articles, setArticles] = useState([]);
+  const [articles, setArticles] = useState<NewsApiArticle[]>([]);
 
   useEffect(() => {
     const fetchNews = async () => {
@@ -11,7 +19,7 @@ export default function News() {
         `https://newsapi.org/v2/top-headlines?country=in&pageSize=5&apiKey=d6cda5432c664498a61b9716f315f772`
       );
       const data = await res.json();
-      setArticles(data.articles || []);
+      setArticles((data.articles || []) as NewsApiArticle[]);
     };
 
     fetchNews();
@@ -33,7 +41,7 @@ export default function News() {
               className="bg-white p-4 rounded-xl shadow-md border-l-4 border-blue-600 transition hover:shadow-lg"
             >
               <h2 className="text-xl font-semibold text-gray-800">{article.title}</h2>
-              <p className="text-sm text-gray-500">{article.source.name} – {new Date(article.publishedAt).toLocaleString()}</p>
+              <p className="text-sm text-gray-500">{(article.source?.name || 'Unknown source')} – {new Date(article.publishedAt || '').toLocaleString()}</p>
               <p className="mt-2 text-gray-700">{article.description}</p>
               {article.url && (
                 <a

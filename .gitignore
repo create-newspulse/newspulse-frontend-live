@@ -61,3 +61,6 @@ sw.js.map
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
+
+*storybook.log
+storybook-static
