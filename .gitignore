@@ -66,3 +66,6 @@ components/ExploreCategories.tsx
 vitest.config.ts
 vitest.shims.d.ts
 
+.env.local
+**/.env.local
+
