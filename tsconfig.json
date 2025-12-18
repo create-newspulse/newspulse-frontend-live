@@ -27,6 +27,7 @@
   },
   "include": [
     "next-env.d.ts",
+    "styled-jsx.d.ts",
     "pages/**/*.ts",
     "pages/**/*.tsx",
     "components/**/*.ts",
@@ -44,6 +45,7 @@
     "node_modules",
     "**/AppData/**",
     "**/Microsoft/**",
-    "**/Office/**"
+    "**/Office/**",
+    "components/_backup/**"
   ]
 }

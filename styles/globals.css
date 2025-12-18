@@ -3,6 +3,14 @@
 @tailwind utilities;
 
 /* Performance optimizations */
+html, body {
+  overflow-x: hidden;
+}
+
+/* Hide horizontal scrollbar for custom scroll areas */
+.no-scrollbar::-webkit-scrollbar{ display:none; }
+.no-scrollbar{ scrollbar-width:none; }
+
 @layer utilities {
   .line-clamp-1 {
     display: -webkit-box;

@@ -1,9 +1,11 @@
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-import AdminContentLoader from '../../../../components/AdminContentLoader';
+import { useRegionalPulse } from '../../../../features/regional/useRegionalPulse';
+import { matchesCity } from '../../../../features/regional/api';
 import LanguageToggle from '../../../../components/LanguageToggle';
 import { useLanguage } from '../../../../utils/LanguageContext';
 import { getGujaratCityName, getStateName, tHeading } from '../../../../utils/localizedNames';
+import type { GetStaticProps } from 'next';
 
 function normalize(s: string) {
   return (s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -20,6 +22,7 @@ export default function GujaratCityPage() {
   const router = useRouter();
   const { city } = router.query as { city?: string };
   const { language } = useLanguage();
+  const { feed, loading } = useRegionalPulse();
   const slug = (city || '').toString();
   const displayNameFallback = (slug || '').replace(/-/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
   const displayName = getGujaratCityName(language as any, slug, displayNameFallback || 'City');
@@ -41,32 +44,46 @@ export default function GujaratCityPage() {
           <p className="text-gray-600">Local updates mentioning this {tHeading(language as any, 'city').toLowerCase()} filtered from {tHeading(language as any, 'regional')} feed.</p>
         </div>
 
-        <AdminContentLoader category="Regional" limit={80}>
-          {({ news, loading }) => {
-            const filtered = city ? news.filter((a) => matchCity(a, displayName)) : news;
-            return (
-              <div className="grid md:grid-cols-2 gap-6">
-                {loading ? (
-                  Array.from({ length: 8 }).map((_, i) => (
-                    <div key={i} className="p-6 rounded-2xl border shadow-sm animate-pulse bg-gray-50" />
-                  ))
-                ) : filtered.length ? (
-                  filtered.map((article: any, idx: number) => (
-                    <a key={idx} href={`/news/${article._id || article.slug || '#'}`} className="block p-6 rounded-2xl border shadow-sm hover:shadow-md bg-white dark:bg-gray-800 transition">
-                      <div className="text-xs text-gray-500 mb-2">{new Date(article.publishedAt).toLocaleString()}</div>
-                      <h3 className="font-bold text-lg mb-2">{article.title}</h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3">{article.excerpt || article.content?.slice(0,160) + '...'}</p>
-                      <div className="mt-3 text-xs text-gray-400">Source: {article.source || 'News Pulse'}</div>
-                    </a>
-                  ))
-                ) : (
-                  <div className="col-span-2 text-gray-600">No stories found for {displayName} yet. Try broader {tHeading(language as any, 'regional')} news.</div>
-                )}
-              </div>
-            );
-          }}
-        </AdminContentLoader>
+        {(() => {
+          const filtered = city ? feed.filter((a) => matchesCity(a as any, displayName)) : feed;
+          return (
+            <div className="grid md:grid-cols-2 gap-6">
+              {loading ? (
+                Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="p-6 rounded-2xl border shadow-sm animate-pulse bg-gray-50" />
+                ))
+              ) : filtered.length ? (
+                filtered.map((article: any, idx: number) => (
+                  <a key={idx} href={`/news/${article._id || article.slug || '#'}`} className="block p-6 rounded-2xl border shadow-sm hover:shadow-md bg-white dark:bg-gray-800 transition">
+                    <div className="text-xs text-gray-500 mb-2">{article.publishedAt ? new Date(article.publishedAt).toLocaleString() : ''}</div>
+                    <h3 className="font-bold text-lg mb-2">{article.title}</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3">{article.excerpt || (article.content ? (article.content as string).slice(0,160) + '...' : '')}</p>
+                    <div className="mt-3 text-xs text-gray-400">Source: {article.source || 'News Pulse'}</div>
+                  </a>
+                ))
+              ) : (
+                <div className="col-span-2 text-gray-600">No stories found for {displayName} yet. Try broader {tHeading(language as any, 'regional')} news.</div>
+              )}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
+}
+
+export const getStaticProps: GetStaticProps = async ({ locale }) => {
+  const { getMessages } = await import('../../../../lib/getMessages');
+  return {
+    props: {
+      messages: await getMessages(locale as string),
+    },
+  };
+};
+
+export async function getStaticPaths() {
+  return {
+    paths: [],
+    fallback: 'blocking',
+  };
 }

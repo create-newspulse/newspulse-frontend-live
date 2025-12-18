@@ -1,6 +1,7 @@
 // pages/gujarat.tsx
 import { useEffect, useState } from 'react';
 import { fetchRssNews } from '../lib/fetchRssNews';
+import type { GetStaticProps } from 'next';
 
 export default function GujaratNews() {
   const [news, setNews] = useState<any[]>([]);
@@ -24,3 +25,12 @@ export default function GujaratNews() {
     </div>
   );
 }
+
+export const getStaticProps: GetStaticProps = async ({ locale }) => {
+  const { getMessages } = await import('../lib/getMessages');
+  return {
+    props: {
+      messages: await getMessages(locale as string),
+    },
+  };
+};

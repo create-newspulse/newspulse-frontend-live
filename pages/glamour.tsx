@@ -1,7 +1,10 @@
 import Head from 'next/head';
 import AdminContentLoader from '../components/AdminContentLoader';
+import type { GetStaticProps } from 'next';
+import { useTranslations } from 'next-intl';
 
 export default function GlamourPage() {
+  const t = useTranslations('categories');
   return (
     <div className="min-h-screen bg-white dark:bg-dark-primary text-black dark:text-dark-text">
       <Head>
@@ -9,7 +12,7 @@ export default function GlamourPage() {
         <meta name="description" content="Glamour, entertainment, and celebrity updates." />
       </Head>
       <div className="max-w-6xl mx-auto px-4 py-8">
-        <h1 className="text-3xl font-extrabold mb-6">✨ Glamour</h1>
+        <h1 className="text-3xl font-extrabold mb-6">✨ {t('glamour')}</h1>
         <AdminContentLoader category="Glamour" limit={20}>
           {({ news, loading }) => (
             <div className="grid md:grid-cols-2 gap-6">
@@ -35,3 +38,12 @@ export default function GlamourPage() {
     </div>
   );
 }
+
+export const getStaticProps: GetStaticProps = async ({ locale }) => {
+  const { getMessages } = await import('../lib/getMessages');
+  return {
+    props: {
+      messages: await getMessages(locale as string),
+    },
+  };
+};

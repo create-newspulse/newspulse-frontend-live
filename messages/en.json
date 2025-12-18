@@ -1,0 +1,68 @@
+{
+  "nav": {
+    "brand": "News Pulse",
+    "home": "Home",
+    "videos": "Videos",
+    "search": "Search",
+    "login": "Login",
+    "language": "Language",
+    "style": "Style",
+    "viewAll": "View all",
+    "editorial": "Editorial",
+    "about": "About",
+    "contact": "Contact",
+    "topNews": "Top News",
+    "communityReporter": "Community Reporter"
+  },
+  "tickers": {
+    "live": "LIVE",
+    "liveUpdates": "LIVE UPDATES",
+    "breakingNews": "BREAKING NEWS",
+    "noBreaking": "No breaking news right now — stay tuned",
+    "updated": "Updated:",
+    "loading": "Loading headlines..."
+  },
+  "trending": {
+    "title": "Trending",
+    "breaking": "Breaking",
+    "sports": "Sports",
+    "goldRates": "Gold rates",
+    "fuelPrices": "Fuel Prices",
+    "weather": "Weather",
+    "gujarat": "Gujarat",
+    "markets": "Markets",
+    "techAi": "Tech & AI",
+    "education": "Education"
+  },
+  "categories": {
+    "breaking": "Breaking",
+    "regional": "Regional",
+    "national": "National",
+    "international": "International",
+    "business": "Business",
+    "scienceTech": "Science & Technology",
+    "sports": "Sports",
+    "lifestyle": "Lifestyle",
+    "glamour": "Glamour",
+    "webStories": "Web Stories",
+    "viralVideos": "Viral Videos",
+    "editorial": "Editorial",
+    "youthPulse": "Youth Pulse",
+    "inspirationHub": "Inspiration Hub",
+    "communityReporter": "Community Reporter"
+  },
+  "sections": {
+    "exploreCategories": "Explore Categories",
+    "spotlight": "Spotlight",
+    "latest": "Latest",
+    "freshUpdates": "Fresh updates",
+    "tapToFilter": "Tap to filter",
+    "exploreNow": "Explore Now →"
+  },
+  "common": {
+    "installApp": "Install App",
+    "newsletter": "Newsletter",
+    "listen": "Listen",
+    "mute": "Mute"
+  }
+}

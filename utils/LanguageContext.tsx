@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import i18n from '../lib/i18n';
+import { useRouter } from 'next/router';
 
 interface LanguageContextType {
   language: string;
@@ -9,32 +9,43 @@ interface LanguageContextType {
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  // Revert to legacy codes: 'english' | 'hindi' | 'gujarati'
+  // Maintain legacy codes for compatibility with existing components
   const [language, setLanguage] = useState<string>('english');
+  const router = useRouter();
 
-  useEffect(() => {
-    try {
-      const saved = typeof window !== 'undefined' ? localStorage.getItem('lang') : null;
-      if (saved) {
-        setLanguage(saved);
-      } else if (typeof window !== 'undefined') {
-        const nav = navigator.language.toLowerCase();
-        if (nav.startsWith('hi')) setLanguage('hindi');
-        else if (nav.startsWith('gu')) setLanguage('gujarati');
-        else setLanguage('english');
-      }
-    } catch {}
-  }, []);
-
-  useEffect(() => {
-    try {
-      if (typeof window !== 'undefined') localStorage.setItem('lang', language);
-    } catch {}
-    // Keep react-i18next in sync (will receive legacy labels)
-    if (i18n.language !== language) {
-      i18n.changeLanguage(language).catch(() => {});
+  const toLegacy = (locale: string | undefined) => {
+    switch (locale) {
+      case 'hi': return 'hindi';
+      case 'gu': return 'gujarati';
+      default: return 'english';
     }
-  }, [language]);
+  };
+
+  const toLocale = (legacy: string) => {
+    switch (legacy) {
+      case 'hindi': return 'hi';
+      case 'gujarati': return 'gu';
+      default: return 'en';
+    }
+  };
+
+  useEffect(() => {
+    // Initialize from router locale (preferred) or from storage
+    const initialize = () => {
+      const current = toLegacy((router.locale as string) || 'en');
+      try {
+        const saved = typeof window !== 'undefined' ? localStorage.getItem('lang') : null;
+        setLanguage(saved ? saved : current);
+      } catch {
+        setLanguage(current);
+      }
+    };
+    initialize();
+    // Update when locale changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router.locale]);
+
+  // Legacy context now mirrors router locale only; translation comes from next-intl
 
   return (
     <LanguageContext.Provider value={{ language, setLanguage }}>

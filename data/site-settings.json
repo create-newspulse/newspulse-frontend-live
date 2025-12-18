@@ -1,0 +1,11 @@
+{
+  "catFlow": "rtl",
+  "showExploreCategories": true,
+  "showCategoryStrip": true,
+  "showTrendingStrip": true,
+  "showLiveTvCard": false,
+  "showQuickTools": false,
+  "showSnapshots": true,
+  "showAppPromo": true,
+  "showFooter": true
+}

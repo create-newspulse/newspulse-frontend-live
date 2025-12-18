@@ -1,14 +1,16 @@
 import Head from 'next/head';
 import { useRef, useState } from 'react';
+import type { GetStaticProps } from 'next';
 import YouthHero from '../components/youth/YouthHero';
 import CategoryGrid from '../components/youth/CategoryGrid';
 import FeaturedStories from '../components/youth/FeaturedStories';
 import SubmitStoryModal from '../components/youth/SubmitStoryModal';
-import { youthCategories, youthStories } from '../utils/youthData';
+import { useYouthPulse } from '../features/youthPulse/useYouthPulse';
 
 export default function YouthPulsePage() {
   const [open, setOpen] = useState(false);
   const catRef = useRef<HTMLDivElement>(null);
+  const { topics, trending } = useYouthPulse();
 
   const scrollToCategories = () => {
     catRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -28,16 +30,23 @@ export default function YouthPulsePage() {
         <YouthHero onExplore={scrollToCategories} onSubmit={() => setOpen(true)} />
 
         <div ref={catRef}>
-          <CategoryGrid categories={youthCategories} />
+          <CategoryGrid categories={topics as any} />
         </div>
 
         {/* Hide Inspiration Hub items from Youth Pulse featured stories */}
-        <FeaturedStories
-          stories={youthStories.filter((s) => s.category.toLowerCase() !== 'inspiration hub'.toLowerCase()).slice(0, 5)}
-        />
+        <FeaturedStories stories={trending.slice(0, 5) as any} />
       </main>
 
       <SubmitStoryModal open={open} onClose={() => setOpen(false)} />
     </div>
   );
 }
+
+export const getStaticProps: GetStaticProps = async ({ locale }) => {
+  const { getMessages } = await import('../lib/getMessages');
+  return {
+    props: {
+      messages: await getMessages(locale as string),
+    },
+  };
+};

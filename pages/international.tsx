@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLanguage } from '../utils/LanguageContext';
 import LanguageToggle from '../components/LanguageToggle';
 import fetchTopNewswithAutoKey from '../lib/fetchTopNewsAuto';
+import type { GetStaticProps } from 'next';
 
 export default function InternationalNews() {
   const { language } = useLanguage();
@@ -36,3 +37,12 @@ export default function InternationalNews() {
     </>
   );
 }
+
+export const getStaticProps: GetStaticProps = async ({ locale }) => {
+  const { getMessages } = await import('../lib/getMessages');
+  return {
+    props: {
+      messages: await getMessages(locale as string),
+    },
+  };
+};

@@ -1,4 +1,6 @@
 import Head from 'next/head';
+import React from 'react';
+import type { GetStaticProps } from 'next';
 
 export default function TestPage() {
   return (
@@ -11,3 +13,12 @@ export default function TestPage() {
     </div>
   );
 }
+
+export const getStaticProps: GetStaticProps = async ({ locale }) => {
+  const { getMessages } = await import('../lib/getMessages');
+  return {
+    props: {
+      messages: await getMessages(locale as string),
+    },
+  };
+};

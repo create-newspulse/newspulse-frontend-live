@@ -1,4 +1,5 @@
 import Head from 'next/head';
+import type { GetStaticProps } from 'next';
 import AdminContentLoader from '../components/AdminContentLoader';
 
 export default function EditorialPage() {
@@ -35,3 +36,12 @@ export default function EditorialPage() {
     </div>
   );
 }
+
+export const getStaticProps: GetStaticProps = async ({ locale }) => {
+  const { getMessages } = await import('../lib/getMessages');
+  return {
+    props: {
+      messages: await getMessages(locale as string),
+    },
+  };
+};

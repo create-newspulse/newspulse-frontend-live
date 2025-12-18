@@ -1,9 +1,4 @@
-export default function BreakingTicker({ onHeadlinesUpdate }) {
-  useEffect(() => {
-    onHeadlinesUpdate([]);
-  }, []);
-  return <div>Breaking Ticker</div>;
-}
+import { useEffect, useState, useRef, useCallback } from 'react';
 
 const fetchHeadlines = async (category = '', language = 'english') => {
   try {
@@ -24,8 +19,7 @@ const fetchHeadlines = async (category = '', language = 'english') => {
 };
 
 export default function BreakingTicker({
-  speed = 50,
-  pauseOnHover = true,
+  speed = 24, // seconds for one full scroll
   className = '',
   pollingInterval = 300000, // 5 minutes
   category = '',
@@ -101,32 +95,37 @@ export default function BreakingTicker({
     );
   }
 
+  // Build marquee text with separators
+  const marqueeText = (headlines && headlines.length
+    ? headlines.map(h => h?.text).filter(Boolean)
+    : []).join('  •  ');
+
   return (
     <div className={`bg-royal-blue text-white py-2 ${fontClass} ${className}`}>
-      <div className="flex items-center space-x-3">
-        <span className="text-red-500 animate-pulse px-4" aria-hidden="true">
-          🔴 LIVE
+      <div className="flex items-center gap-3 px-3">
+        <span
+          className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-extrabold text-white border"
+          style={{ borderColor: 'rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.10)' }}
+        >
+          <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse" aria-hidden="true"></span>
+          {language === 'gujarati' ? 'લાઇવ' : language === 'hindi' ? 'लाइव' : 'Live'}
+          {lastUpdated ? (
+            <span className="opacity-90">
+              {' '}
+              • {language === 'gujarati' ? 'અપડેટ' : language === 'hindi' ? 'अपडेट' : 'Updated'} {lastUpdated}
+            </span>
+          ) : null}
         </span>
-        <div className="flex-1">
-          <Marquee
-            speed={speed}
-            pauseOnHover={pauseOnHover}
-            gradient={false}
-            className="text-white"
-          >
-            {headlines.map((headline, index) => (
-              <span key={headline.id || index} className="mx-4">
-                {headline.text} {headline.source && <span className="text-gray-300 text-sm">({headline.source})</span>}
-              </span>
-            ))}
-          </Marquee>
+
+        <div
+          className="relative min-w-0 flex-1 overflow-hidden"
+          style={{ WebkitMaskImage: 'linear-gradient(to right, black 0%, black 90%, transparent)', maskImage: 'linear-gradient(to right, black 0%, black 90%, transparent)' }}
+        >
+          <div className="whitespace-nowrap font-semibold animate-marquee" style={{ animationDuration: `${speed}s` }}>
+            <span className="pr-10">{marqueeText}</span>
+            <span className="pr-10">{marqueeText}</span>
+          </div>
         </div>
-        {lastUpdated && (
-          <span className="text-gray-300 text-sm px-4" aria-hidden="true">
-            {language === 'gujarati' ? 'અપડેટ: ' : language === 'hindi' ? 'अपडेट: ' : 'Updated: '}
-            {lastUpdated}
-          </span>
-        )}
       </div>
     </div>
   );

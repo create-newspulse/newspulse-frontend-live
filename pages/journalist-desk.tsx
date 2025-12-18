@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import Head from 'next/head';
+import type { GetStaticProps } from 'next';
 
 type OrgType = 'print' | 'tv' | 'radio' | 'digital' | 'freelance' | 'other';
 
@@ -291,3 +292,12 @@ const JournalistDeskPage: React.FC = () => {
 };
 
 export default JournalistDeskPage;
+
+export const getStaticProps: GetStaticProps = async ({ locale }) => {
+  const { getMessages } = await import('../lib/getMessages');
+  return {
+    props: {
+      messages: await getMessages(locale as string),
+    },
+  };
+};

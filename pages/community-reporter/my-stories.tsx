@@ -149,7 +149,7 @@ const CommunityReporterMyStoriesPage: React.FC<FeatureToggleProps> = ({ communit
 
 export default CommunityReporterMyStoriesPage;
 
-export const getServerSideProps: GetServerSideProps<FeatureToggleProps> = async () => {
+export const getServerSideProps: GetServerSideProps<FeatureToggleProps> = async ({ locale }) => {
   const base = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000').replace(/\/+$/, '');
   let communityReporterClosed = false;
   let reporterPortalClosed = false;
@@ -161,5 +161,6 @@ export const getServerSideProps: GetServerSideProps<FeatureToggleProps> = async 
       reporterPortalClosed = Boolean(data.reporterPortalClosed);
     }
   } catch {}
-  return { props: { communityReporterClosed, reporterPortalClosed } };
+  const { getMessages } = await import('../../lib/getMessages');
+  return { props: { communityReporterClosed, reporterPortalClosed, messages: await getMessages(locale as string) } };
 };

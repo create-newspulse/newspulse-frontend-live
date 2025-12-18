@@ -1,0 +1,68 @@
+{
+  "nav": {
+    "brand": "न्यूज़ पल्स",
+    "home": "होम",
+    "videos": "वीडियो",
+    "search": "खोजें",
+    "login": "लॉगिन",
+    "language": "भाषा",
+    "style": "स्टाइल",
+    "viewAll": "सभी देखें",
+    "editorial": "संपादकीय",
+    "about": "हमारे बारे में",
+    "contact": "संपर्क",
+    "topNews": "टॉप न्यूज़",
+    "communityReporter": "कम्युनिटी रिपोर्टर"
+  },
+  "tickers": {
+    "live": "लाइव",
+    "liveUpdates": "ताज़ा अपडेट",
+    "breakingNews": "ब्रेकिंग न्यूज़",
+    "noBreaking": "अभी कोई ब्रेकिंग नहीं — जुड़े रहें",
+    "updated": "अपडेट:",
+    "loading": "हेडलाइन लोड हो रही हैं..."
+  },
+  "trending": {
+    "title": "ट्रेंडिंग",
+    "breaking": "ब्रेकिंग",
+    "sports": "खेल",
+    "goldRates": "सोने के भाव",
+    "fuelPrices": "ईंधन के भाव",
+    "weather": "मौसम",
+    "gujarat": "गुजरात",
+    "markets": "बाज़ार",
+    "techAi": "टेक और एआई",
+    "education": "शिक्षा"
+  },
+  "categories": {
+    "breaking": "ब्रेकिंग",
+    "regional": "क्षेत्रीय",
+    "national": "राष्ट्रीय",
+    "international": "अंतरराष्ट्रीय",
+    "business": "बिज़नेस",
+    "scienceTech": "विज्ञान और तकनीक",
+    "sports": "खेल",
+    "lifestyle": "लाइफ़स्टाइल",
+    "glamour": "ग्लैमर",
+    "webStories": "वेब स्टोरीज़",
+    "viralVideos": "वायरल वीडियो",
+    "editorial": "संपादकीय",
+    "youthPulse": "यूथ पल्स",
+    "inspirationHub": "प्रेरणा केंद्र",
+    "communityReporter": "कम्युनिटी रिपोर्टर"
+  },
+  "sections": {
+    "exploreCategories": "श्रेणियाँ देखें",
+    "spotlight": "स्पॉटलाइट",
+    "latest": "नवीनतम",
+    "freshUpdates": "ताज़ा अपडेट",
+    "tapToFilter": "फ़िल्टर करने के लिए टैप करें",
+    "exploreNow": "अभी देखें →"
+  },
+  "common": {
+    "installApp": "ऐप इंस्टॉल करें",
+    "newsletter": "न्यूज़लेटर",
+    "listen": "सुनें",
+    "mute": "मौन"
+  }
+}

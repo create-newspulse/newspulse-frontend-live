@@ -5,28 +5,26 @@ import * as gtag from '../lib/gtag';
 import { LanguageProvider } from '../utils/LanguageContext';
 import { ThemeProvider } from '../utils/ThemeContext';
 import '../styles/globals.css';
-// i18n temporarily disabled
+import SafeIntlProvider from '../lib/SafeIntlProvider';
 
 function MyApp({ Component, pageProps }) {
   const router = useRouter();
 
   useEffect(() => {
-    const handleRouteChange = (url) => {
+    const handleRouteChange = (url: string) => {
       gtag.pageview(url);
     };
     router.events.on('routeChangeComplete', handleRouteChange);
-    // PWA service worker registration is opt-in via NEXT_PUBLIC_ENABLE_PWA=true
+
     const enablePwa = process.env.NEXT_PUBLIC_ENABLE_PWA === 'true';
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
       if (process.env.NODE_ENV === 'production') {
         if (enablePwa) {
           navigator.serviceWorker.register('/service-worker.js').catch(() => {});
         } else {
-          // Ensure no SW is controlling the page to avoid 410 fetch errors
           navigator.serviceWorker.getRegistrations?.().then((regs) => regs.forEach((r) => r.unregister()));
         }
       } else {
-        // In dev, ensure no SW is controlling the page to avoid caching HMR assets
         navigator.serviceWorker.getRegistrations?.().then((regs) => regs.forEach((r) => r.unregister()));
       }
     }
@@ -36,30 +34,38 @@ function MyApp({ Component, pageProps }) {
     };
   }, [router.events]);
 
+  const messagesFromPage = pageProps?.messages;
+  const locale = pageProps?.locale || router.locale || 'en';
+
+  if (process.env.NODE_ENV !== 'production' && !messagesFromPage) {
+    console.warn('[i18n] Missing pageProps.messages. Ensure getStaticProps/getServerSideProps returns messages.');
+  }
+
+  const enMessages = require('../messages/en.json');
+  const finalMessages = (messagesFromPage as any)?.default ?? messagesFromPage ?? enMessages.default ?? enMessages;
+
   return (
     <>
       {/* Google Analytics */}
-      <Script
-        src={`https://www.googletagmanager.com/gtag/js?id=${process.env.NEXT_PUBLIC_GA_ID}`}
-        strategy="afterInteractive"
-      />
+      <Script src={`https://www.googletagmanager.com/gtag/js?id=${process.env.NEXT_PUBLIC_GA_ID}`} strategy="afterInteractive" />
       <Script
         id="gtag-init"
         strategy="afterInteractive"
         dangerouslySetInnerHTML={{
           __html: `
             window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
+            function gtag(){dataLayer.push(arguments);} 
             gtag('js', new Date());
             gtag('config', '${process.env.NEXT_PUBLIC_GA_ID}');
           `,
         }}
       />
 
-      {/* App with Context and Tailwind */}
       <ThemeProvider>
         <LanguageProvider>
-          <Component {...pageProps} />
+          <SafeIntlProvider messages={finalMessages} locale={locale} onError={() => {}}>
+            <Component {...pageProps} />
+          </SafeIntlProvider>
         </LanguageProvider>
       </ThemeProvider>
     </>

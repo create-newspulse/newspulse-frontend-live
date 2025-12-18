@@ -1,15 +1,18 @@
+import {useTranslations} from 'next-intl';
+
 const TrendingNow = () => {
+  const t = useTranslations();
   const trending = [
-    '🚀 ISRO set to launch next-gen satellite',
-    '🎬 New Bollywood blockbuster breaks records',
-    '📱 India becomes world’s 2nd largest smartphone market',
-    '🏏 India wins Test series against England',
-    '🧪 Breakthrough in cancer research announced',
+    t('trending.breaking'),
+    t('trending.sports'),
+    t('trending.goldRates'),
+    t('trending.fuelPrices'),
+    t('trending.weather'),
   ];
 
   return (
     <section className="mt-10 bg-gray-50 p-4 rounded-lg shadow-md">
-      <h2 className="text-xl font-semibold mb-3">🔥 Trending Now</h2>
+      <h2 className="text-xl font-semibold mb-3">🔥 {t('trending.title')}</h2>
       <ul className="list-disc list-inside text-gray-800 space-y-1">
         {trending.map((item, idx) => (
           <li key={idx}>{item}</li>

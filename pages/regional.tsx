@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLanguage } from "../utils/LanguageContext";
+import { useRegionalPulse } from "../src/features/regional/useRegionalPulse";
 
 /**
- * Regional – Gujarat (NewsPulse)
+ * Regional – Gujarat (News Pulse)
  * -------------------------------------------------------
  * Drop-in page for Next.js (Pages Router).
  * - TailwindCSS based, no external UI libs required
@@ -290,41 +291,21 @@ function ClientTime({ iso }: { iso?: string }) {
 
 export default function RegionalGujaratPage() {
   const { language, setLanguage } = useLanguage();
-  const [filter, setFilter] = useState<FilterKey>("all");
-  const [query, setQuery] = useState("");
-  const [cities, setCities] = useState<City[]>(FALLBACK_TOP_CITIES);
-  const [districts, setDistricts] = useState<District[]>(FALLBACK_DISTRICTS);
-  const [news, setNews] = useState<NewsItem[]>(FALLBACK_NEWS);
-  const [youth, setYouth] = useState<NewsItem[]>([]);
-  const [metrics, setMetrics] = useState<any>(null);
+  const {
+    FILTERS: R_FILTERS,
+    filter,
+    setFilter,
+    query,
+    setQuery,
+    filteredCities,
+    districts,
+    news,
+    youth,
+    metrics,
+    highlightsText,
+  } = useRegionalPulse("gujarat");
   const voice = useVoiceReader();
 
-  useEffect(() => {
-    fetchRegionalNews("gujarat").then(setNews);
-    fetchYouthVoices("gujarat").then(setYouth);
-    fetchCivicMetrics("gujarat").then(setMetrics);
-  }, []);
-
-  const filteredCities = useMemo(() => {
-    const q = query.toLowerCase();
-    return cities.filter((c) => {
-      const byQuery = !q || c.name.toLowerCase().includes(q);
-      const byFilter =
-        filter === "all" ||
-        (filter === "smart" && c.badges?.includes("Smart City")) ||
-        (filter === "industrial" && c.badges?.some((b) => /Industrial|Refinery|Ceramics|Port/i.test(b))) ||
-        (filter === "coastal" && c.badges?.includes("Coastal")) ||
-        (filter === "tribal" && c.badges?.includes("Tribal"));
-      return byQuery && byFilter;
-    });
-  }, [cities, filter, query]);
-
-  const highlightsText = useMemo(() => {
-    return news
-      .slice(0, 5)
-      .map((n) => n.title + ". ")
-      .join(" ");
-  }, [news]);
 
   
 
@@ -365,7 +346,7 @@ export default function RegionalGujaratPage() {
         {/* Controls */}
         <div className="mt-5 flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
           <div className="flex flex-wrap gap-2">
-            {FILTERS.map((f) => (
+            {R_FILTERS.map((f) => (
               <button
                 key={f.key}
                 onClick={() => setFilter(f.key)}

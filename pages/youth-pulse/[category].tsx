@@ -1,14 +1,26 @@
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { getStoriesByCategory, youthCategories } from '../../utils/youthData';
+import { useEffect, useState } from 'react';
+import { useYouthPulse } from '../../features/youthPulse/useYouthPulse';
+import type { YouthStory } from '../../features/youthPulse/types';
 
 export default function YouthCategoryPage() {
   const router = useRouter();
   const { category } = router.query as { category?: string };
+  const { topics, getByCategory } = useYouthPulse();
+  const [stories, setStories] = useState<YouthStory[]>([]);
+  const meta = topics.find((c) => c.slug === category);
 
-  const stories = category ? getStoriesByCategory(category) : [];
-  const meta = youthCategories.find((c) => c.slug === category);
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (!category) return;
+      const list = await getByCategory(category);
+      if (mounted) setStories(list);
+    })();
+    return () => { mounted = false; };
+  }, [category, getByCategory]);
 
   return (
     <div className="min-h-screen bg-white dark:bg-dark-primary text-black dark:text-dark-text">

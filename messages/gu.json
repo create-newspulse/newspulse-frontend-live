@@ -1,0 +1,68 @@
+{
+  "nav": {
+    "brand": "ન્યૂઝ પલ્સ",
+    "home": "હોમ",
+    "videos": "વિડિયો",
+    "search": "શોધો",
+    "login": "લૉગિન",
+    "language": "ભાષા",
+    "style": "સ્ટાઇલ",
+    "viewAll": "બધું જુઓ",
+    "editorial": "સંપાદકીય",
+    "about": "વિશે",
+    "contact": "સંપર્ક",
+    "topNews": "ટોપ સમાચાર",
+    "communityReporter": "કમ્યુનિટી રિપોર્ટર"
+  },
+  "tickers": {
+    "live": "લાઈવ",
+    "liveUpdates": "લાઇવ અપડેટ્સ",
+    "breakingNews": "બ્રેકિંગ સમાચાર",
+    "noBreaking": "હાલ કોઈ બ્રેકિંગ નથી — જોડાયેલા રહો",
+    "updated": "અપડેટ:",
+    "loading": "હેડલાઇન્સ લોડ થઈ રહી છે..."
+  },
+  "trending": {
+    "title": "ટ્રેન્ડિંગ",
+    "breaking": "બ્રેકિંગ",
+    "sports": "સ્પોર્ટ્સ",
+    "goldRates": "સોનાના ભાવ",
+    "fuelPrices": "ઇંધણના ભાવ",
+    "weather": "હવામાન",
+    "gujarat": "ગુજરાત",
+    "markets": "માર્કેટ્સ",
+    "techAi": "ટેક અને એઆઈ",
+    "education": "શિક્ષણ"
+  },
+  "categories": {
+    "breaking": "બ્રેકિંગ",
+    "regional": "પ્રાદેશિક",
+    "national": "રાષ્ટ્રીય",
+    "international": "આંતરરાષ્ટ્રીય",
+    "business": "બિઝનેસ",
+    "scienceTech": "વિજ્ઞાન અને ટેક્નોલોજી",
+    "sports": "ખેલકુદ",
+    "lifestyle": "લાઇફસ્ટાઇલ",
+    "glamour": "ગ્લેમર",
+    "webStories": "વેબ સ્ટોરીઝ",
+    "viralVideos": "વાયરલ વિડિઓઝ",
+    "editorial": "સંપાદકીય",
+    "youthPulse": "યુથ પલ્સ",
+    "inspirationHub": "પ્રેરણા હબ",
+    "communityReporter": "કમ્યુનિટી રિપોર્ટર"
+  },
+  "sections": {
+    "exploreCategories": "વિભાગો શોધો",
+    "spotlight": "સ્પોટલાઇટ",
+    "latest": "તાજા",
+    "freshUpdates": "તાજા અપડેટ્સ",
+    "tapToFilter": "ફિલ્ટર કરવા માટે ટેપ કરો",
+    "exploreNow": "હમણાં જુઓ →"
+  },
+  "common": {
+    "installApp": "ઍપ ઇન્સ્ટોલ કરો",
+    "newsletter": "ન્યૂઝલેટર",
+    "listen": "સાંભળો",
+    "mute": "મ્યૂટ"
+  }
+}

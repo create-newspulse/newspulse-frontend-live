@@ -1,6 +1,7 @@
 // pages/news.tsx
 import { useEffect, useState } from 'react';
 import Head from 'next/head';
+import type { GetStaticProps } from 'next';
 
 type NewsApiArticle = {
   title: string;
@@ -60,4 +61,13 @@ export default function News() {
     </>
   );
 }
+
+export const getStaticProps: GetStaticProps = async ({ locale }) => {
+  const { getMessages } = await import('../lib/getMessages');
+  return {
+    props: {
+      messages: await getMessages(locale as string),
+    },
+  };
+};
 

@@ -4,6 +4,7 @@ import LanguageToggle from '../components/LanguageToggle';
 import { STATES, UNION_TERRITORIES } from '../utils/india';
 import { useLanguage } from '../utils/LanguageContext';
 import { getRegionName, tHeading } from '../utils/localizedNames';
+import type { GetStaticProps } from 'next';
 
 export default function NationalOverview() {
   const { language } = useLanguage();
@@ -77,3 +78,12 @@ export default function NationalOverview() {
     </div>
   );
 }
+
+export const getStaticProps: GetStaticProps = async ({ locale }) => {
+  const { getMessages } = await import('../lib/getMessages');
+  return {
+    props: {
+      messages: await getMessages(locale as string),
+    },
+  };
+};

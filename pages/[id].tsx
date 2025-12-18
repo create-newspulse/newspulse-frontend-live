@@ -1,4 +1,5 @@
 import React from 'react';
+import type { GetStaticProps } from 'next';
 import { useRouter } from 'next/router';
 
 const DynamicNewsPage: React.FC = () => {
@@ -16,3 +17,19 @@ const DynamicNewsPage: React.FC = () => {
 };
 
 export default DynamicNewsPage;
+
+export const getStaticProps: GetStaticProps = async ({ locale }) => {
+  const { getMessages } = await import('../lib/getMessages');
+  return {
+    props: {
+      messages: await getMessages(locale as string),
+    },
+  };
+};
+
+export async function getStaticPaths() {
+  return {
+    paths: [],
+    fallback: 'blocking',
+  };
+}

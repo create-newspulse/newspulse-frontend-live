@@ -1,12 +1,14 @@
 // components/TrendingStories.js
 import Image from 'next/image';
+import {useTranslations} from 'next-intl';
 
 const TrendingStories = ({ articles }) => {
+  const t = useTranslations();
   if (!articles || articles.length === 0) return null;
 
   return (
     <section className="mt-8">
-      <h2 className="text-xl font-bold mb-3 text-red-600">🔥 Trending Now</h2>
+      <h2 className="text-xl font-bold mb-3 text-red-600">🔥 {t('trending.title')}</h2>
       <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
         {articles.slice(0, 8).map((article, index) => (
           <div

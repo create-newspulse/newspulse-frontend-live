@@ -26,6 +26,24 @@ module.exports = {
     GNEWS_API_KEY: process.env.GNEWS_API_KEY,
   },
 
+  // Internationalization (Pages Router)
+  i18n: {
+    locales: ['en', 'hi', 'gu'],
+    defaultLocale: 'en',
+    // Next 16 only allows disabling detection here; routing handles locale
+    localeDetection: false,
+  },
+
+  // Allow cross-origin dev requests to Next.js internal /_next/* from LAN/IP origins
+  // This suppresses the warning: "Cross origin request detected ... configure allowedDevOrigins"
+  // Only used in development and ignored in production
+  allowedDevOrigins: [
+    'localhost',
+    '127.0.0.1',
+    // Add your LAN IP(s) used to access the dev server
+    '10.145.86.143',
+  ],
+
     async headers() {
       // Add a strict Content Security Policy and include GTM image beacon domain
       const csp = [

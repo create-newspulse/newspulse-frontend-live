@@ -1,4 +1,7 @@
 import Head from 'next/head';
+import React from 'react';
+import type { GetStaticProps } from 'next';
+import { useTranslations } from 'next-intl';
 
 const mockVideos = [
   { title: 'Street Food Chef Goes Viral', thumb: 'https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?w=800', url: '#' },
@@ -7,7 +10,8 @@ const mockVideos = [
   { title: 'Adorable Puppy Compilation', thumb: 'https://images.unsplash.com/photo-1517849845537-4d257902454a?w=800', url: '#' }
 ];
 
-export default function ViralVideosPage() {
+export default function ViralVideos() {
+  const t = useTranslations('categories');
   return (
     <div className="min-h-screen bg-white dark:bg-dark-primary text-black dark:text-dark-text">
       <Head>
@@ -15,7 +19,7 @@ export default function ViralVideosPage() {
         <meta name="description" content="Trending viral videos curated for you." />
       </Head>
       <div className="max-w-6xl mx-auto px-4 py-8">
-        <h1 className="text-3xl font-extrabold mb-6">🎥 Viral Videos</h1>
+        <h1 className="text-3xl font-extrabold mb-6">🎥 {t('viralVideos')}</h1>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {mockVideos.map((v, i) => (
             <a key={i} href={v.url} className="block bg-white dark:bg-gray-800 rounded-2xl border shadow-sm hover:shadow-md transition overflow-hidden">
@@ -31,3 +35,12 @@ export default function ViralVideosPage() {
     </div>
   );
 }
+
+export const getStaticProps: GetStaticProps = async ({ locale }) => {
+  const { getMessages } = await import('../lib/getMessages');
+  return {
+    props: {
+      messages: await getMessages(locale as string),
+    },
+  };
+};

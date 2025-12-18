@@ -1,8 +1,11 @@
 // pages/science-technology.tsx
 import { useEffect, useState } from "react";
 import { fetchRssNews } from "../lib/fetchRssNews";
+import type { GetStaticProps } from 'next';
+import { useTranslations } from 'next-intl';
 
 export default function ScienceTechnology() {
+  const t = useTranslations('categories');
   const [news, setNews] = useState<any[]>([]);
 
   useEffect(() => {
@@ -11,7 +14,7 @@ export default function ScienceTechnology() {
 
   return (
     <div className="p-6">
-      <h1 className="text-3xl font-bold mb-4">🧪 Science & Technology</h1>
+      <h1 className="text-3xl font-bold mb-4">🧪 {t('scienceTech')}</h1>
       <ul className="space-y-3">
         {news.map((item, index) => (
           <li key={index}>
@@ -24,3 +27,12 @@ export default function ScienceTechnology() {
     </div>
   );
 }
+
+export const getStaticProps: GetStaticProps = async ({ locale }) => {
+  const { getMessages } = await import('../lib/getMessages');
+  return {
+    props: {
+      messages: await getMessages(locale as string),
+    },
+  };
+};

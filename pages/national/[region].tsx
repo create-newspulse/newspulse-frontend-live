@@ -5,6 +5,7 @@ import LanguageToggle from '../../components/LanguageToggle';
 import { ALL_REGIONS } from '../../utils/india';
 import { useLanguage } from '../../utils/LanguageContext';
 import { getRegionName, tHeading } from '../../utils/localizedNames';
+import type { GetStaticProps } from 'next';
 
 function normalize(s: string) {
   return (s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -72,4 +73,20 @@ export default function RegionPage() {
       </div>
     </div>
   );
+}
+
+export const getStaticProps: GetStaticProps = async ({ locale }) => {
+  const { getMessages } = await import('../../lib/getMessages');
+  return {
+    props: {
+      messages: await getMessages(locale as string),
+    },
+  };
+};
+
+export async function getStaticPaths() {
+  return {
+    paths: [],
+    fallback: 'blocking',
+  };
 }

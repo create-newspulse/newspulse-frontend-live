@@ -1,4 +1,5 @@
 import React from 'react';
+import type { GetStaticProps } from 'next';
 
 export default function Offline() {
   return (
@@ -12,3 +13,12 @@ export default function Offline() {
     </main>
   );
 }
+
+export const getStaticProps: GetStaticProps = async ({ locale }) => {
+  const { getMessages } = await import('../lib/getMessages');
+  return {
+    props: {
+      messages: await getMessages(locale as string),
+    },
+  };
+};

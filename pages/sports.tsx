@@ -1,3 +1,16 @@
+import React from 'react';
+import type { GetStaticProps } from 'next';
+import { useTranslations } from 'next-intl';
+
+export const getStaticProps: GetStaticProps = async ({ locale }) => {
+  const { getMessages } = await import('../lib/getMessages');
+  return {
+    props: {
+      messages: await getMessages(locale as string),
+    },
+  };
+};
+// Removed duplicate default export to fix build
 import Head from 'next/head';
 import AdminContentLoader from '../components/AdminContentLoader';
 

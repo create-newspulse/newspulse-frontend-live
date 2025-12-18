@@ -1,7 +1,10 @@
 import Head from 'next/head';
 import AdminContentLoader from '../components/AdminContentLoader';
+import type { GetStaticProps } from 'next';
+import { useTranslations } from 'next-intl';
 
 export default function LifestylePage() {
+  const t = useTranslations('categories');
   return (
     <div className="min-h-screen bg-white dark:bg-dark-primary text-black dark:text-dark-text">
       <Head>
@@ -9,7 +12,7 @@ export default function LifestylePage() {
         <meta name="description" content="Lifestyle trends, wellness, travel, and culture." />
       </Head>
       <div className="max-w-6xl mx-auto px-4 py-8">
-        <h1 className="text-3xl font-extrabold mb-6">🧘 Lifestyle</h1>
+        <h1 className="text-3xl font-extrabold mb-6">🧘 {t('lifestyle')}</h1>
         <AdminContentLoader category="Lifestyle" limit={20}>
           {({ news, loading }) => (
             <div className="grid md:grid-cols-2 gap-6">
@@ -35,3 +38,12 @@ export default function LifestylePage() {
     </div>
   );
 }
+
+export const getStaticProps: GetStaticProps = async ({ locale }) => {
+  const { getMessages } = await import('../lib/getMessages');
+  return {
+    props: {
+      messages: await getMessages(locale as string),
+    },
+  };
+};

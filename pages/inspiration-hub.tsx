@@ -4,6 +4,7 @@ import DroneTVSection from '../components/inspiration/DroneTVSection';
 import DailyWondersSection from '../components/inspiration/DailyWondersSection';
 import type { InspirationItem } from '../components/inspiration/InspirationCard';
 import data from '../data/inspiration.json';
+import type { GetStaticProps } from 'next';
 
 export default function InspirationHubPage() {
   const sections = (data.sections as InspirationItem[]) || [];
@@ -50,3 +51,12 @@ export default function InspirationHubPage() {
     </div>
   );
 }
+
+export const getStaticProps: GetStaticProps = async ({ locale }) => {
+  const { getMessages } = await import('../lib/getMessages');
+  return {
+    props: {
+      messages: await getMessages(locale as string),
+    },
+  };
+};

@@ -1,1125 +1,1999 @@
-import Head from 'next/head';
-import Script from 'next/script';
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/router';
-import { useLanguage } from '../utils/LanguageContext';
-import { useTheme } from '../utils/ThemeContext';
-import { useLiveNews, useNewsSearch } from '../hooks/useLiveNews';
-import { usePageAnalytics, usePerformanceMonitoring, trackFeatureUsage, trackSearch } from '../hooks/useAnalytics';
-import { useBookmarks } from '../hooks/useBookmarks';
-import { BookmarkButton, BookmarkCounter } from '../components/BookmarkButton';
-import { MobileNavigation } from '../components/MobileNavigation';
-import { OptimizedNewsCard } from '../components/OptimizedComponents';
-import { useResourcePreloader } from '../hooks/usePerformance';
-import { motion, AnimatePresence } from 'framer-motion';
-import AdminContentLoader from '../components/AdminContentLoader';
-// AdminDashboard widget removed per request
+"use client";
 
-// Advanced Language Toggle with Premium Design
-const AdvancedLanguageToggle = () => {
-  const { language, setLanguage } = useLanguage();
-  const [isOpen, setIsOpen] = useState(false);
-  
-  const languages = [
-    { code: 'english', label: 'English', flag: '🇺🇸', native: 'English' },
-    { code: 'hindi', label: 'Hindi', flag: '🇮🇳', native: 'हिन्दी' },
-    { code: 'gujarati', label: 'Gujarati', flag: '🇮🇳', native: 'ગુજરાતી' }
-  ];
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useRegionalPulse } from "../src/features/regional/useRegionalPulse";
+import { useYouthPulse } from "../features/youthPulse/useYouthPulse";
+import type { GetStaticProps } from "next";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  ArrowRight,
+  Bell,
+  BookOpen,
+  Briefcase,
+  Check,
+  ChevronDown,
+  Cpu,
+  Flame,
+  Flag,
+  Globe,
+  GraduationCap,
+  Home,
+  Leaf,
+  Menu,
+  PenLine,
+  Play,
+  Radio,
+  Search,
+  Settings,
+  Sparkles,
+  Trophy,
+  Users,
+  Video,
+  X,
+  MapPin,
+  LogIn,
+} from "lucide-react";
 
-  const currentLang = languages.find(lang => lang.code === language) || languages[0];
+/**
+ * News Pulse – Frontend UI V14.5.3 (Preview-Safe)
+ * - Space between LIVE UPDATES (blue) and BREAKING NEWS (red)
+ * - Explore Categories card like screenshot
+ * - ✅ Explore Categories now follows Settings -> Category direction (LTR/RTL) (order + layout)
+ * - ON/OFF toggles for major blocks
+ * - App Promo + Footer sections included (toggleable)
+ * - ✅ Optional backend settings sync: /api/site-settings/public (safe if not ready)
+ */
 
-  const handleLanguageChange = (langCode: string) => {
-    setLanguage(langCode);
-    setIsOpen(false);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('lang', langCode);
-    }
-  };
+const cx = (...c: Array<string | false | null | undefined>) => c.filter(Boolean).join(" ");
+const PREF_KEY = "newspulse.ui.v14_5_3.prefs";
 
-  return (
-    <div className="relative">
-      <motion.button
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center space-x-2 bg-white/10 backdrop-blur-md border border-white/20 rounded-full px-4 py-2 text-white hover:bg-white/20 transition-all duration-300"
-      >
-        <span className="text-lg">{currentLang.flag}</span>
-        <span className="font-medium">{currentLang.native}</span>
-        <motion.span
-          animate={{ rotate: isOpen ? 180 : 0 }}
-          className="text-sm"
-        >
-          ▼
-        </motion.span>
-      </motion.button>
+const THEMES = [
+  {
+    id: "aurora",
+    name: "Aurora",
+    mode: "light",
+    bg:
+      "radial-gradient(900px circle at 18% 12%, rgba(37,99,235,0.14), transparent 50%), radial-gradient(800px circle at 78% 18%, rgba(124,58,237,0.12), transparent 54%), radial-gradient(900px circle at 62% 86%, rgba(16,185,129,0.10), transparent 58%), linear-gradient(180deg, #f8fafc 0%, #f6f7ff 40%, #ffffff 100%)",
+    surface: "rgba(255,255,255,0.92)",
+    surface2: "rgba(255,255,255,0.72)",
+    border: "rgba(15,23,42,0.10)",
+    text: "#0b1220",
+    sub: "rgba(15,23,42,0.72)",
+    muted: "rgba(15,23,42,0.52)",
+    chip: "rgba(15,23,42,0.045)",
+    chipHover: "rgba(15,23,42,0.075)",
+    accent: "#2563eb",
+    accent2: "#7c3aed",
+    live: "#dc2626",
+    breaking: "#b91c1c",
+  },
+  {
+    id: "midnight",
+    name: "Midnight",
+    mode: "dark",
+    bg:
+      "radial-gradient(1000px circle at 16% 12%, rgba(59,130,246,0.26), transparent 48%), radial-gradient(900px circle at 78% 18%, rgba(168,85,247,0.20), transparent 52%), radial-gradient(900px circle at 65% 88%, rgba(34,197,94,0.14), transparent 56%), linear-gradient(180deg, #050814 0%, #060a18 42%, #050814 100%)",
+    surface: "rgba(255,255,255,0.070)",
+    surface2: "rgba(255,255,255,0.048)",
+    border: "rgba(255,255,255,0.11)",
+    text: "rgba(255,255,255,0.96)",
+    sub: "rgba(255,255,255,0.72)",
+    muted: "rgba(255,255,255,0.58)",
+    chip: "rgba(255,255,255,0.06)",
+    chipHover: "rgba(255,255,255,0.095)",
+    accent: "#38bdf8",
+    accent2: "#a78bfa",
+    live: "#ef4444",
+    breaking: "#f97316",
+  },
+] as const;
 
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: -10, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -10, scale: 0.95 }}
-            className="absolute top-full mt-2 left-0 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-50 min-w-[200px]"
-          >
-            {languages.map((lang, index) => (
-              <motion.button
-                key={lang.code}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.1 }}
-                onClick={() => handleLanguageChange(lang.code)}
-                className={`w-full flex items-center space-x-3 px-4 py-3 text-left hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all duration-200 ${
-                  language === lang.code ? 'bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-900' : 'text-gray-700'
-                }`}
-              >
-                <span className="text-xl">{lang.flag}</span>
-                <div>
-                  <div className="font-medium">{lang.label}</div>
-                  <div className="text-sm opacity-70">{lang.native}</div>
-                </div>
-                {language === lang.code && (
-                  <span className="ml-auto text-blue-600">✓</span>
-                )}
-              </motion.button>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
+const getTheme = (id: string) => THEMES.find((t) => t.id === id) || THEMES[0];
+
+const CATEGORIES = [
+  { key: "breaking", label: "Breaking", Icon: Flame },
+  { key: "regional", label: "Regional", Icon: MapPin },
+  { key: "national", label: "National", Icon: Flag },
+  { key: "international", label: "International", Icon: Globe },
+  { key: "business", label: "Business", Icon: Briefcase },
+  { key: "science", label: "Science & Technology", Icon: Cpu },
+  { key: "sports", label: "Sports", Icon: Trophy },
+  { key: "lifestyle", label: "Lifestyle", Icon: Leaf },
+  { key: "glamour", label: "Glamour", Icon: Sparkles },
+  { key: "webstories", label: "Web Stories", Icon: BookOpen },
+  { key: "viral", label: "Viral Videos", Icon: Video },
+  { key: "editorial", label: "Editorial", Icon: PenLine },
+  { key: "youth", label: "Youth Pulse", Icon: GraduationCap, badge: "NEW" },
+  { key: "inspiration", label: "Inspiration Hub", Icon: Sparkles },
+  { key: "community", label: "Community Reporter", Icon: Users },
+] as const;
+
+// Map categories to real routes where available
+const CATEGORY_ROUTES: Record<string, string> = {
+  breaking: "/breaking",
+  regional: "/regional",
+  national: "/national",
+  youth: "/youth-pulse",
+  community: "/community-reporter",
+  editorial: "/editorial",
+  inspiration: "/inspiration-hub",
 };
 
-// Advanced Voice Button with Premium Animation
-const AdvancedVoiceButton = () => {
-  const [isListening, setIsListening] = useState(false);
-  const [voiceAnimation, setVoiceAnimation] = useState(false);
-
-  const handleVoiceClick = () => {
-    setIsListening(!isListening);
-    setVoiceAnimation(true);
-    setTimeout(() => setVoiceAnimation(false), 2000);
-    // Add voice functionality here
-  };
-
-  return (
-    <motion.button
-      whileHover={{ scale: 1.05 }}
-      whileTap={{ scale: 0.95 }}
-      onClick={handleVoiceClick}
-      className={`relative inline-flex items-center px-6 py-3 rounded-full font-semibold transition-all duration-300 shadow-lg ${
-        isListening 
-          ? 'bg-gradient-to-r from-red-500 to-pink-600 text-white shadow-red-200' 
-          : 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-blue-200 hover:shadow-xl'
-      }`}
-    >
-      <motion.span 
-        animate={voiceAnimation ? { 
-          scale: [1, 1.2, 1], 
-          rotate: [0, 360, 0] 
-        } : {}}
-        className="mr-3 text-xl"
-      >
-        �
-      </motion.span>
-      <span className="relative">
-        {isListening ? 'Listening...' : 'Voice Search'}
-      </span>
-      
-      {isListening && (
-        <motion.div
-          initial={{ scale: 0 }}
-          animate={{ scale: [1, 1.5, 1] }}
-          transition={{ repeat: Infinity, duration: 1 }}
-          className="absolute -right-1 -top-1 w-3 h-3 bg-red-400 rounded-full"
-        />
-      )}
-      
-      <motion.div
-        className="absolute inset-0 rounded-full"
-        animate={isListening ? {
-          boxShadow: [
-            '0 0 0 0 rgba(59, 130, 246, 0.7)',
-            '0 0 0 10px rgba(59, 130, 246, 0)',
-            '0 0 0 0 rgba(59, 130, 246, 0)'
-          ]
-        } : {}}
-        transition={{ repeat: Infinity, duration: 1.5 }}
-      />
-    </motion.button>
-  );
+const CATEGORY_THEME: Record<string, { base: string; hover: string; ring: string; active: string; dot: string }> = {
+  breaking: {
+    base: "bg-red-50 border-red-200 text-red-700",
+    hover: "hover:bg-red-100",
+    ring: "focus-visible:ring-2 focus-visible:ring-red-300/50",
+    active: "bg-red-100 ring-2 ring-red-300/50",
+    dot: "bg-red-500/80",
+  },
+  regional: {
+    base: "bg-emerald-50 border-emerald-200 text-emerald-700",
+    hover: "hover:bg-emerald-100",
+    ring: "focus-visible:ring-2 focus-visible:ring-emerald-300/50",
+    active: "bg-emerald-100 ring-2 ring-emerald-300/50",
+    dot: "bg-emerald-500/80",
+  },
+  national: {
+    base: "bg-amber-50 border-amber-200 text-amber-700",
+    hover: "hover:bg-amber-100",
+    ring: "focus-visible:ring-2 focus-visible:ring-amber-300/50",
+    active: "bg-amber-100 ring-2 ring-amber-300/50",
+    dot: "bg-amber-500/80",
+  },
+  international: {
+    base: "bg-blue-50 border-blue-200 text-blue-700",
+    hover: "hover:bg-blue-100",
+    ring: "focus-visible:ring-2 focus-visible:ring-blue-300/50",
+    active: "bg-blue-100 ring-2 ring-blue-300/50",
+    dot: "bg-blue-500/80",
+  },
+  business: {
+    base: "bg-indigo-50 border-indigo-200 text-indigo-700",
+    hover: "hover:bg-indigo-100",
+    ring: "focus-visible:ring-2 focus-visible:ring-indigo-300/50",
+    active: "bg-indigo-100 ring-2 ring-indigo-300/50",
+    dot: "bg-indigo-500/80",
+  },
+  science: {
+    base: "bg-violet-50 border-violet-200 text-violet-700",
+    hover: "hover:bg-violet-100",
+    ring: "focus-visible:ring-2 focus-visible:ring-violet-300/50",
+    active: "bg-violet-100 ring-2 ring-violet-300/50",
+    dot: "bg-violet-500/80",
+  },
+  sports: {
+    base: "bg-cyan-50 border-cyan-200 text-cyan-700",
+    hover: "hover:bg-cyan-100",
+    ring: "focus-visible:ring-2 focus-visible:ring-cyan-300/50",
+    active: "bg-cyan-100 ring-2 ring-cyan-300/50",
+    dot: "bg-cyan-500/80",
+  },
+  lifestyle: {
+    base: "bg-rose-50 border-rose-200 text-rose-700",
+    hover: "hover:bg-rose-100",
+    ring: "focus-visible:ring-2 focus-visible:ring-rose-300/50",
+    active: "bg-rose-100 ring-2 ring-rose-300/50",
+    dot: "bg-rose-500/80",
+  },
+  glamour: {
+    base: "bg-fuchsia-50 border-fuchsia-200 text-fuchsia-700",
+    hover: "hover:bg-fuchsia-100",
+    ring: "focus-visible:ring-2 focus-visible:ring-fuchsia-300/50",
+    active: "bg-fuchsia-100 ring-2 ring-fuchsia-300/50",
+    dot: "bg-fuchsia-500/80",
+  },
+  webstories: {
+    base: "bg-yellow-50 border-yellow-200 text-yellow-700",
+    hover: "hover:bg-yellow-100",
+    ring: "focus-visible:ring-2 focus-visible:ring-yellow-300/50",
+    active: "bg-yellow-100 ring-2 ring-yellow-300/50",
+    dot: "bg-yellow-500/80",
+  },
+  viral: {
+    base: "bg-lime-50 border-lime-200 text-lime-700",
+    hover: "hover:bg-lime-100",
+    ring: "focus-visible:ring-2 focus-visible:ring-lime-300/50",
+    active: "bg-lime-100 ring-2 ring-lime-300/50",
+    dot: "bg-lime-500/80",
+  },
+  editorial: {
+    base: "bg-slate-50 border-slate-200 text-slate-700",
+    hover: "hover:bg-slate-100",
+    ring: "focus-visible:ring-2 focus-visible:ring-slate-300/50",
+    active: "bg-slate-100 ring-2 ring-slate-300/50",
+    dot: "bg-slate-500/80",
+  },
+  youth: {
+    base: "bg-sky-50 border-sky-200 text-sky-700",
+    hover: "hover:bg-sky-100",
+    ring: "focus-visible:ring-2 focus-visible:ring-sky-300/50",
+    active: "bg-sky-100 ring-2 ring-sky-300/50",
+    dot: "bg-sky-500/80",
+  },
+  inspiration: {
+    base: "bg-teal-50 border-teal-200 text-teal-700",
+    hover: "hover:bg-teal-100",
+    ring: "focus-visible:ring-2 focus-visible:ring-teal-300/50",
+    active: "bg-teal-100 ring-2 ring-teal-300/50",
+    dot: "bg-teal-500/80",
+  },
+  community: {
+    base: "bg-orange-50 border-orange-200 text-orange-700",
+    hover: "hover:bg-orange-100",
+    ring: "focus-visible:ring-2 focus-visible:ring-orange-300/50",
+    active: "bg-orange-100 ring-2 ring-orange-300/50",
+    dot: "bg-orange-500/80",
+  },
+  __default: {
+    base: "bg-slate-50 border-slate-200 text-slate-700",
+    hover: "hover:bg-slate-100",
+    ring: "focus-visible:ring-2 focus-visible:ring-slate-300/50",
+    active: "bg-slate-100 ring-2 ring-slate-300/50",
+    dot: "bg-slate-500/80",
+  },
 };
 
-// Advanced Dark Mode Toggle
-const AdvancedDarkModeToggle = () => {
-  const { isDark, toggleTheme } = useTheme();
-
-  return (
-    <motion.button
-      whileHover={{ scale: 1.1 }}
-      whileTap={{ scale: 0.9 }}
-      onClick={toggleTheme}
-      className="relative p-3 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white hover:bg-white/20 transition-all duration-300 shadow-lg"
-      aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`}
-    >
-      <motion.div
-        animate={{ rotate: isDark ? 180 : 0 }}
-        transition={{ duration: 0.5, ease: "easeInOut" }}
-        className="text-2xl"
-      >
-        {isDark ? '☀️' : '🌙'}
-      </motion.div>
-      
-      <motion.div
-        className="absolute inset-0 rounded-full bg-gradient-to-r from-yellow-400 to-orange-500"
-        initial={{ scale: 0, opacity: 0 }}
-        animate={isDark ? { scale: 0, opacity: 0 } : { scale: 1.2, opacity: 0.2 }}
-        transition={{ duration: 0.3 }}
-      />
-    </motion.button>
-  );
-};
-
-// Advanced Search Component
-const AdvancedSearchBar = ({ onSearch, articles = [] }) => {
-  const [query, setQuery] = useState('');
-  const [isOpen, setIsOpen] = useState(false);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-
-  useEffect(() => {
-    if (query.length > 1) {
-      const mockSuggestions = [
-        'breaking news', 'technology updates', 'business news', 
-        'sports highlights', 'entertainment news'
-      ].filter(item => item.toLowerCase().includes(query.toLowerCase()));
-      setSuggestions(mockSuggestions.slice(0, 5));
-    } else {
-      setSuggestions([]);
-    }
-  }, [query]);
-
-  const handleSearch = (searchQuery = query) => {
-    if (searchQuery.trim()) {
-      onSearch && onSearch(searchQuery);
-      setIsOpen(false);
-      setQuery('');
-    }
-  };
-
-  return (
-    <div className="relative max-w-2xl mx-auto mb-12">
-      <div className="relative">
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onFocus={() => setIsOpen(true)}
-          onBlur={() => setTimeout(() => setIsOpen(false), 200)}
-          placeholder="Search news, topics, or keywords..."
-          className="w-full px-6 py-4 text-lg bg-white/90 dark:bg-dark-secondary/90 backdrop-blur-sm border-2 border-gray-200 dark:border-gray-600 rounded-2xl focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none shadow-lg transition-all duration-300 text-gray-900 dark:text-dark-text"
-        />
-        
-        <motion.button
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          onClick={() => handleSearch()}
-          className="absolute right-4 top-1/2 transform -translate-y-1/2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-        >
-          🔍
-        </motion.button>
-      </div>
-
-      {/* Search Suggestions */}
-      {isOpen && suggestions.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="absolute top-full mt-2 w-full bg-white dark:bg-dark-secondary rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-600 z-50 overflow-hidden"
-        >
-          <div className="p-3 border-b border-gray-100 dark:border-gray-600">
-            <h4 className="text-sm font-semibold text-gray-700 dark:text-dark-text">Suggestions</h4>
-          </div>
-          {suggestions.map((suggestion, index) => (
-            <motion.button
-              key={index}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.05 }}
-              onClick={() => handleSearch(suggestion)}
-              className="w-full px-4 py-3 text-left hover:bg-blue-50 dark:hover:bg-dark-accent transition-colors flex items-center space-x-3"
-            >
-              <span className="text-gray-400">🔍</span>
-              <span className="text-gray-700 dark:text-dark-text">{suggestion}</span>
-            </motion.button>
-          ))}
-        </motion.div>
-      )}
-    </div>
-  );
-};
-
-const categories = [
-  'Breaking',
-  'Regional',
-  'National',
-  'International',
-  'Business',
-  'Sci-Tech',
-  'Sports',
-  'Lifestyle',
-  'Glamour',
-  'Web Stories',
-  'Viral Videos',
-  'Editorial',
-  'Youth Pulse',
-  'Inspiration Hub',
-  'Community Reporter'
+// plug backend later
+const BREAKING_FROM_BACKEND: string[] = [];
+const BREAKING_DEMO: string[] = [
+  "City issues advisory as heavy rain expected in key districts",
+  "Markets steady; investors await next policy signals",
+  "Health department shares seasonal advisory for citizens",
+  "International summit opens with climate focus and pledges",
 ];
 
-export default function HomePage() {
-  const { language } = useLanguage();
-  const [isVoiceEnabled, setIsVoiceEnabled] = useState(false);
-  const router = useRouter();
-  
-  // Live news integration
-  const { news, loading, error, lastUpdated, refreshNews, loadCategoryNews } = useLiveNews();
-  const { searchResults, searchQuery, isSearching, performSearch, clearSearch } = useNewsSearch();
-  
-  // Analytics and bookmarks hooks
-  usePageAnalytics();
-  usePerformanceMonitoring();
-  const { bookmarkCount } = useBookmarks();
-  const { isDark, toggleTheme } = useTheme();
-  const { preloadImage, preloadFont } = useResourcePreloader();
-  const [mounted, setMounted] = useState(false);
+const LIVE_UPDATES: string[] = [
+  "Preview edition is live — thank you for testing",
+  "AI-Verified badges will appear on verified stories",
+  "New categories and story panels are rolling out",
+];
 
-  // Preload critical resources
-  useEffect(() => {
-    // Preload hero background images
-    preloadImage('https://images.unsplash.com/photo-1569163139394-de4e4f43e4e5?w=1200');
-    // Avoid preloading a non-existent local font in dev to prevent 404 noise
-    // preloadFont('/fonts/inter-var.woff2');
-    setMounted(true);
-  }, [preloadImage, preloadFont]);
-  
-  // Handle search with analytics
-  const handleSearch = async (query: string) => {
-    const results = await performSearch(query, news);
-    trackSearch(query, results.length);
-    trackFeatureUsage('search', 'query_executed', query);
+const TRENDING: string[] = [
+  "Breaking",
+  "Sports",
+  "Gold rates",
+  "Fuel Prices",
+  "Weather",
+  "Gujarat",
+  "Markets",
+  "Tech & AI",
+  "Education",
+];
+
+const FEATURED = [
+  {
+    id: "f1",
+    kicker: "Top Story",
+    title: "Rain alert issued across key districts",
+    desc: "What to expect in the next 24 hours — and what citizens should do.",
+    time: "11:12 AM",
+    source: "Regional Desk",
+  },
+];
+
+const FEED = [
+  {
+    id: "t1",
+    title: "Global summit highlights: what changed today",
+    desc: "Key lines from the announcements — explained in simple terms.",
+    time: "10:01 AM",
+    source: "World Desk",
+    category: "International",
+  },
+  {
+    id: "t2",
+    title: "New policy update could reshape local business",
+    desc: "Who benefits, what changes, and what to watch next.",
+    time: "9:38 AM",
+    source: "Business Desk",
+    category: "Business",
+  },
+  {
+    id: "t3",
+    title: "AI chips: why the next wave of devices will feel different",
+    desc: "On-device intelligence, privacy, and the new performance race.",
+    time: "9:10 AM",
+    source: "Tech Desk",
+    category: "Science & Technology",
+  },
+];
+
+const DEFAULT_PREFS = {
+  themeId: "aurora",
+  lang: "English",
+  catFlow: "ltr" as "ltr" | "rtl",
+
+  breakingMode: "auto" as "auto" | "on" | "off",
+  liveTickerOn: true,
+  liveTvOn: true,
+  liveTvEmbedUrl: "",
+  showPreviewNotice: true,
+  showBreakingWhenEmpty: true,
+  liveSpeedSec: 24,
+  breakingSpeedSec: 18,
+
+  // module toggles (UI only)
+  showCategoryStrip: true,
+  showTrendingStrip: true,
+  showExploreCategories: true,
+  showLiveTvCard: true,
+  showQuickTools: true,
+  showSnapshots: true,
+  showAppPromo: true,
+  showFooter: true,
+};
+
+function safeJsonParse(v: string) {
+  try {
+    return JSON.parse(v);
+  } catch {
+    return null;
+  }
+}
+
+function clampNum(n: any, min: number, max: number, fallback: number) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return fallback;
+  return Math.min(max, Math.max(min, v));
+}
+
+export const getStaticProps: GetStaticProps = async ({ locale }) => {
+  const { getMessages } = await import("../lib/getMessages");
+  return {
+    props: {
+      messages: await getMessages(locale as string),
+    },
   };
-  
-  // Handle theme toggle with analytics
-  const handleThemeToggle = () => {
-    trackFeatureUsage('dark_mode', 'toggle', isDark ? 'light' : 'dark');
-  };
+};
 
-  const toggleVoice = () => setIsVoiceEnabled(prev => !prev);
+function normalizePrefs(input: any) {
+  const p = { ...DEFAULT_PREFS, ...(input || {}) };
 
-  // Footer Quick Links with explicit hrefs (added Community Reporter)
-  const quickLinks: { label: string; href: string }[] = [
-    { label: 'About Us', href: '/about' },
-    { label: 'Editorial Policy', href: '/editorial' },
-    { label: 'Privacy Policy', href: '/privacy-policy' },
-    { label: 'Terms of Service', href: '/terms-of-service' },
-    { label: 'Contact', href: '/contact' },
-    { label: 'Careers', href: '/careers' },
-    { label: 'Community Reporter', href: '/community-reporter' },
-    { label: 'Journalist Desk', href: '/journalist-desk' }
-  ];
+  if (!THEMES.some((t) => t.id === p.themeId)) p.themeId = DEFAULT_PREFS.themeId;
+  if (!["English", "Hindi", "Gujarati"].includes(p.lang)) p.lang = DEFAULT_PREFS.lang;
+  if (!["ltr", "rtl"].includes(p.catFlow)) p.catFlow = DEFAULT_PREFS.catFlow;
+  if (!["auto", "on", "off"].includes(p.breakingMode)) p.breakingMode = DEFAULT_PREFS.breakingMode;
+
+  p.liveTickerOn = !!p.liveTickerOn;
+  p.liveTvOn = !!p.liveTvOn;
+  p.showPreviewNotice = !!p.showPreviewNotice;
+  p.showBreakingWhenEmpty = !!p.showBreakingWhenEmpty;
+  p.liveTvEmbedUrl = typeof p.liveTvEmbedUrl === "string" ? p.liveTvEmbedUrl : "";
+
+  p.liveSpeedSec = clampNum(p.liveSpeedSec, 10, 60, DEFAULT_PREFS.liveSpeedSec);
+  p.breakingSpeedSec = clampNum(p.breakingSpeedSec, 10, 60, DEFAULT_PREFS.breakingSpeedSec);
+
+  p.showCategoryStrip = !!p.showCategoryStrip;
+  p.showTrendingStrip = !!p.showTrendingStrip;
+  p.showExploreCategories = !!p.showExploreCategories;
+  p.showLiveTvCard = !!p.showLiveTvCard;
+  p.showQuickTools = !!p.showQuickTools;
+  p.showSnapshots = !!p.showSnapshots;
+  p.showAppPromo = !!p.showAppPromo;
+  p.showFooter = !!p.showFooter;
+
+  return p;
+}
+
+function getBreakingItems(prefs: any) {
+  if (prefs.breakingMode === "off") return [];
+  if (prefs.breakingMode === "on") return BREAKING_DEMO;
+  return BREAKING_FROM_BACKEND;
+}
+
+function getCatsByFlow(catFlow: "ltr" | "rtl") {
+  // Always keep core categories first, then extras, regardless of direction
+  return [...CATEGORIES];
+}
+
+function Surface({ theme, className, children }: any) {
+  return (
+    <div
+      className={cx("rounded-3xl border shadow-[0_18px_70px_-60px_rgba(0,0,0,0.40)]", className)}
+      style={{ background: theme.surface, borderColor: theme.border }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function Button({ theme, variant = "soft", onClick, className, children }: any) {
+  const style =
+    variant === "solid"
+      ? { background: theme.accent, color: "#fff", borderColor: "transparent" }
+      : variant === "ghost"
+        ? { background: "transparent", color: theme.text, borderColor: theme.border }
+        : { background: theme.surface2, color: theme.text, borderColor: theme.border };
 
   return (
-    <div className="min-h-screen bg-white dark:bg-dark-primary text-black dark:text-dark-text overflow-x-hidden transition-colors duration-300">
-      <Head>
-        <title>News Pulse</title>
-        <meta name="description" content="Top headlines & live breaking news from around the world – curated by News Pulse." />
-        <link rel="icon" href="/favicon.ico" />
-      </Head>
+    <button
+      type="button"
+      onClick={onClick}
+      className={cx(
+        "inline-flex items-center justify-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold border transition hover:opacity-[0.98]",
+        className
+      )}
+      style={style}
+    >
+      {children}
+    </button>
+  );
+}
 
-      {/* Mobile Navigation */}
-      <MobileNavigation isDark={isDark} onThemeToggle={toggleTheme} />
+function IconButton({ theme, onClick, label, children }: any) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border transition hover:opacity-[0.98]"
+      style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}
+    >
+      {children}
+    </button>
+  );
+}
 
-      {/* Breaking News Ticker */}
-      <div className="bg-black overflow-hidden whitespace-nowrap py-2">
+function Drawer({ open, onClose, theme, title, children, side = "right" }: any) {
+  const fromX = side === "right" ? 420 : -420;
+  return (
+    <AnimatePresence>
+      {open ? (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50"
+            onClick={onClose}
+            style={{ background: "rgba(0,0,0,0.35)" }}
+          />
+          <motion.div
+            initial={{ x: fromX, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: fromX, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 260, damping: 28 }}
+            className={cx(
+              "fixed top-0 z-[60] h-full w-[420px] max-w-[92vw]",
+              side === "right" ? "right-0" : "left-0"
+            )}
+          >
+            <div className="h-full p-3">
+              <Surface theme={theme} className="h-full overflow-hidden">
+                <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: theme.border }}>
+                  <div className="text-sm font-extrabold" style={{ color: theme.text }}>
+                    {title}
+                  </div>
+                  <IconButton theme={theme} onClick={onClose} label="Close">
+                    <X className="h-5 w-5" />
+                  </IconButton>
+                </div>
+                <div className="h-[calc(100%-60px)] overflow-auto p-4">{children}</div>
+              </Surface>
+            </div>
+          </motion.div>
+        </>
+      ) : null}
+    </AnimatePresence>
+  );
+}
+
+function Toast({ theme, message, onDone }: any) {
+  useEffect(() => {
+    if (!message) return;
+    const t = setTimeout(onDone, 2200);
+    return () => clearTimeout(t);
+  }, [message, onDone]);
+
+  return (
+    <AnimatePresence>
+      {message ? (
         <motion.div
-          className="text-white font-bold text-base inline-block"
-          initial={{ x: '100%' }}
-          animate={{ x: '-100%' }}
-          transition={{ duration: 30, repeat: Infinity, ease: 'linear' }}
+          initial={{ y: 18, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 18, opacity: 0 }}
+          className="fixed bottom-5 left-1/2 z-[90] -translate-x-1/2"
         >
-          You’re viewing the preview edition of News Pulse. Some sections and features are still being refined and new updates are rolling out step by step.
+          <div
+            className="rounded-2xl border px-4 py-2 text-sm font-semibold shadow-lg"
+            style={{ background: theme.surface, borderColor: theme.border, color: theme.text }}
+          >
+            {message}
+          </div>
         </motion.div>
+      ) : null}
+    </AnimatePresence>
+  );
+}
+
+function ToggleRow({ theme, title, sub, value, onToggle }: any) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-3xl border px-4 py-3" style={{ background: theme.surface, borderColor: theme.border }}>
+      <div className="min-w-0">
+        <div className="text-sm font-extrabold" style={{ color: theme.text }}>
+          {title}
+        </div>
+        {sub ? (
+          <div className="mt-0.5 text-xs" style={{ color: theme.sub }}>
+            {sub}
+          </div>
+        ) : null}
       </div>
 
-      {/* Advanced Hero Section with Premium Design */}
-      <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
-        {/* Animated Background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900">
-          <div className="absolute inset-0 bg-black/40"></div>
-          {/* Render animated particles only on client to avoid hydration mismatch */}
-          {mounted && (
-            <div className="absolute inset-0" suppressHydrationWarning>
-              {Array.from({ length: 20 }).map((_, i) => {
-                const left = Math.random() * 100;
-                const top = Math.random() * 100;
-                const duration = 3 + Math.random() * 2;
-                const delay = Math.random() * 2;
+      <button
+        type="button"
+        onClick={onToggle}
+        className="relative h-7 w-12 rounded-full border transition"
+        style={{ background: value ? theme.accent : theme.chip, borderColor: theme.border }}
+        aria-label={`Toggle ${title}`}
+      >
+        <span
+          className="absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full"
+          style={{
+            background: "rgba(255,255,255,0.92)",
+            left: value ? "calc(100% - 22px)" : "4px",
+            transition: "left 220ms ease",
+          }}
+        />
+      </button>
+    </div>
+  );
+}
+
+function ThemePicker({ theme, themeId, setThemeId }: any) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: any) => {
+      const el = wrapRef.current;
+      if (!el) return;
+      if (!el.contains(e.target)) setOpen(false);
+    };
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const current = getTheme(themeId);
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold border"
+        style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}
+      >
+        <span className="hidden md:inline">Style</span>
+        <span className="inline-flex items-center gap-2">
+          <span className="h-3.5 w-3.5 rounded-full border" style={{ background: current.accent, borderColor: theme.border }} />
+          <span className="font-extrabold">{current.name}</span>
+          <ChevronDown className="h-4 w-4" style={{ color: theme.muted }} />
+        </span>
+      </button>
+
+      <AnimatePresence>
+        {open ? (
+          <motion.div
+            initial={{ y: 8, opacity: 0, scale: 0.98 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 8, opacity: 0, scale: 0.98 }}
+            transition={{ type: "spring", stiffness: 320, damping: 26 }}
+            className="absolute right-0 mt-2 w-56 overflow-hidden rounded-3xl border shadow-xl z-[120]"
+            style={{ background: theme.surface, borderColor: theme.border }}
+          >
+            <div className="p-2">
+              {THEMES.map((t) => {
+                const active = t.id === themeId;
                 return (
-                  <motion.div
-                    key={i}
-                    className="absolute w-2 h-2 bg-white/20 rounded-full"
-                    style={{ left: `${left}%`, top: `${top}%` }}
-                    animate={{ y: [0, -100, 0], opacity: [0, 1, 0] }}
-                    transition={{ duration, repeat: Infinity, delay }}
-                  />
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => {
+                      setThemeId(t.id);
+                      setOpen(false);
+                    }}
+                    className="flex w-full items-center justify-between gap-3 rounded-2xl px-3 py-2 text-sm font-semibold border"
+                    style={{
+                      background: active ? theme.chipHover : theme.surface2,
+                      borderColor: active
+                        ? theme.mode === "dark"
+                          ? "rgba(56,189,248,0.35)"
+                          : "rgba(37,99,235,0.28)"
+                        : theme.border,
+                      color: theme.text,
+                    }}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span className="h-3.5 w-3.5 rounded-full border" style={{ background: getTheme(t.id).accent, borderColor: theme.border }} />
+                      {t.name}
+                    </span>
+                    {active ? <Check className="h-4 w-4" style={{ color: theme.accent }} /> : null}
+                  </button>
                 );
               })}
             </div>
-          )}
-        </div>
-
-        {/* Content */}
-        <div className="relative z-10 text-center text-white px-4 max-w-6xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 1 }}
-          >
-            <motion.h1 
-              className="text-6xl md:text-8xl font-black mb-6 bg-gradient-to-r from-white via-blue-100 to-cyan-200 bg-clip-text text-transparent"
-              animate={{ 
-                backgroundPosition: ['0%', '100%', '0%'] 
-              }}
-              transition={{ 
-                duration: 8, 
-                repeat: Infinity, 
-                ease: "linear" 
-              }}
-            >
-              News Pulse
-            </motion.h1>
-            
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5, duration: 1 }}
-              className="mb-8"
-            >
-              <p className="text-2xl md:text-3xl mb-4 font-light">
-                Your <span className="font-bold text-cyan-300">Pulse</span> on the World's Latest News
-              </p>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 1, duration: 0.8 }}
-              className="flex flex-col sm:flex-row gap-6 justify-center items-center mb-12"
-            >
-              <AdvancedVoiceButton />
-              <AdvancedLanguageToggle />
-              <AdvancedDarkModeToggle />
-              <BookmarkCounter />
-            </motion.div>
-
-            {/* Breaking News Ticker */}
-            <motion.div
-              initial={{ opacity: 0, x: -100 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 1.5, duration: 1 }}
-              className="bg-red-600/90 backdrop-blur-sm rounded-full px-6 py-3 inline-flex items-center space-x-3 shadow-2xl border border-red-400/30 min-w-0"
-            >
-              <motion.span
-                animate={{ scale: [1, 1.2, 1] }}
-                transition={{ duration: 1, repeat: Infinity }}
-                className="w-3 h-3 bg-white rounded-full"
-              />
-              <span className="text-sm font-semibold uppercase tracking-wider shrink-0">BREAKING NEWS</span>
-              <div className="relative flex-1 overflow-hidden min-w-0" aria-live="polite">
-                <motion.div
-                  className="text-sm whitespace-nowrap pr-6"
-                  animate={{ x: ['100%', '-100%'] }}
-                  transition={{ duration: 18, repeat: Infinity, ease: 'linear' }}
-                >
-                  News Pulse – Preview Edition is live. Thank you for testing with us.
-                </motion.div>
-              </div>
-            </motion.div>
           </motion.div>
-        </div>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  );
+}
 
-        {/* Scroll Indicator */}
-        <motion.div
-          animate={{ y: [0, 10, 0] }}
-          transition={{ duration: 2, repeat: Infinity }}
-          className="absolute bottom-8 left-1/2 transform -translate-x-1/2"
-        >
-          <div className="w-6 h-10 border-2 border-white/50 rounded-full flex justify-center">
-            <motion.div
-              animate={{ y: [0, 16, 0] }}
-              transition={{ duration: 2, repeat: Infinity }}
-              className="w-1 h-3 bg-white/70 rounded-full mt-2"
-            />
+function LanguagePicker({ theme, value, onChange }: any) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: any) => {
+      const el = wrapRef.current;
+      if (!el) return;
+      if (!el.contains(e.target)) setOpen(false);
+    };
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const options = ["English", "Hindi", "Gujarati"];
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold border"
+        style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}
+      >
+        <span className="hidden md:inline">Language</span>
+        <span className="font-extrabold">{value}</span>
+        <ChevronDown className="h-4 w-4" style={{ color: theme.muted }} />
+      </button>
+
+      <AnimatePresence>
+        {open ? (
+          <motion.div
+            initial={{ y: 8, opacity: 0, scale: 0.98 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 8, opacity: 0, scale: 0.98 }}
+            transition={{ type: "spring", stiffness: 320, damping: 26 }}
+            className="absolute right-0 mt-2 w-48 overflow-hidden rounded-3xl border shadow-xl z-[120]"
+            style={{ background: theme.surface, borderColor: theme.border }}
+          >
+            <div className="p-2">
+              {options.map((o) => {
+                const active = o === value;
+                return (
+                  <button
+                    key={o}
+                    type="button"
+                    onClick={() => {
+                      onChange(o);
+                      setOpen(false);
+                    }}
+                    className="flex w-full items-center justify-between gap-3 rounded-2xl px-3 py-2 text-sm font-semibold border"
+                    style={{
+                      background: active ? theme.chipHover : theme.surface2,
+                      borderColor: active
+                        ? theme.mode === "dark"
+                          ? "rgba(56,189,248,0.35)"
+                          : "rgba(37,99,235,0.28)"
+                        : theme.border,
+                      color: theme.text,
+                    }}
+                  >
+                    <span>{o}</span>
+                    {active ? <Check className="h-4 w-4" style={{ color: theme.accent }} /> : null}
+                  </button>
+                );
+              })}
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function TickerBar({ theme, kind, items, onViewAll, speedSec }: any) {
+  const label = kind === "breaking" ? "BREAKING NEWS" : "LIVE UPDATES";
+
+  const safeItems =
+    kind === "live"
+      ? items?.length
+        ? items
+        : ["No updates right now — stay tuned"]
+      : items?.length
+        ? items
+        : ["No breaking news right now — stay tuned"];
+
+  const text = (safeItems?.length ? safeItems : [""]).join("  •  ");
+
+  const bg =
+    kind === "breaking"
+      ? `linear-gradient(90deg, ${theme.breaking} 0%, ${theme.live} 55%, ${theme.breaking} 100%)`
+      : `linear-gradient(90deg, ${theme.accent} 0%, ${theme.accent2} 55%, ${theme.accent} 100%)`;
+
+  return (
+    <div className="np-marqueeWrap w-full min-w-0" aria-live="polite">
+      <div className="mx-auto max-w-7xl px-4">
+        <div className="w-full rounded-2xl overflow-hidden border" style={{ background: bg, borderColor: theme.border }}>
+          <div className="px-3 py-2">
+            <div className="flex items-center gap-3">
+              <span
+                className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-extrabold text-white border"
+                style={{ borderColor: "rgba(255,255,255,0.18)", background: "rgba(255,255,255,0.10)" }}
+              >
+                <Radio className="h-4 w-4" /> {label}
+              </span>
+
+              <div
+                className="relative min-w-0 flex-1 overflow-hidden pr-24"
+                style={{
+                  WebkitMaskImage: "linear-gradient(to right, black 0%, black 90%, transparent)",
+                  maskImage: "linear-gradient(to right, black 0%, black 90%, transparent)",
+                  WebkitMaskRepeat: "no-repeat",
+                  maskRepeat: "no-repeat",
+                  WebkitMaskSize: "100% 100%",
+                  maskSize: "100% 100%",
+                }}
+              >
+                <div className="np-tickerTrack" style={{ animationDuration: `${speedSec || 24}s` }}>
+                  <div className="np-tickerSeq whitespace-nowrap text-sm font-semibold text-white">
+                    <span className="pr-10">{text}</span>
+                  </div>
+                  <div className="np-tickerSeq whitespace-nowrap text-sm font-semibold text-white">
+                    <span className="pr-10">{text}</span>
+                  </div>
+                </div>
+              </div>
+
+              <button type="button" onClick={onViewAll} className="text-xs font-semibold text-white/95 hover:underline flex-none relative z-10">
+                View all
+              </button>
+            </div>
           </div>
-        </motion.div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TrendingStrip({ theme, onPick }: any) {
+  return (
+    <div className="mx-auto max-w-7xl px-4">
+      <div className="mt-3">
+        <Surface theme={theme} className="px-4 py-3">
+          <div className="flex items-center gap-2">
+            <span
+              className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-extrabold border"
+              style={{
+                background: theme.mode === "dark" ? "rgba(239,68,68,0.18)" : "rgba(239,68,68,0.10)",
+                borderColor: "rgba(239,68,68,0.35)",
+                color: theme.mode === "dark" ? "rgba(255,255,255,0.92)" : theme.text,
+              }}
+            >
+              <Flame className="h-4 w-4" style={{ color: theme.live }} /> Trending
+            </span>
+
+            <div className="np-no-scrollbar flex min-w-0 flex-1 items-center gap-2 overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
+              {TRENDING.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => onPick(t)}
+                  className="shrink-0 rounded-full px-3 py-1 text-xs font-semibold border"
+                  style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}
+                >
+                  {t}
+                </button>
+              ))}
+              <div className="w-2 shrink-0" />
+            </div>
+          </div>
+        </Surface>
+      </div>
+    </div>
+  );
+}
+
+function TopCategoriesStrip({ theme, catFlow, activeKey, onPick }: any) {
+  const isRTL = catFlow === "rtl";
+  const cats = useMemo(() => (isRTL ? [...CATEGORIES].reverse() : [...CATEGORIES]), [isRTL]);
+
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const dragState = useRef({ down: false, startX: 0, startLeft: 0, moved: false, blockUntil: 0 });
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.pointerType === "touch") return;
+      dragState.current.down = true;
+      dragState.current.moved = false;
+      dragState.current.startX = e.clientX;
+      dragState.current.startLeft = el.scrollLeft;
+      (el as any).style.cursor = "grabbing";
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (!dragState.current.down) return;
+      const dx = e.clientX - dragState.current.startX;
+      if (Math.abs(dx) > 6) dragState.current.moved = true;
+      el.scrollLeft = dragState.current.startLeft - dx;
+    };
+
+    const onPointerUp = () => {
+      if (!dragState.current.down) return;
+      dragState.current.down = false;
+      (el as any).style.cursor = "grab";
+      if (dragState.current.moved) dragState.current.blockUntil = Date.now() + 250;
+    };
+
+    el.addEventListener("pointerdown", onPointerDown);
+    el.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+
+    (el as any).style.cursor = "grab";
+
+    return () => {
+      el.removeEventListener("pointerdown", onPointerDown);
+      el.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+  }, []);
+
+  return (
+    <div className="w-full">
+      <div className="mx-auto max-w-7xl px-4">
+        <div className="rounded-2xl border border-black/10 shadow-sm ring-1 ring-black/5 bg-white/80 backdrop-blur-md">
+          <div className="px-3 py-2">
+            <div
+              ref={scrollerRef}
+              dir={isRTL ? "rtl" : "ltr"}
+              className="no-scrollbar scroll-smooth flex items-center gap-2.5 overflow-x-auto"
+              style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x", overscrollBehaviorX: "contain" as any }}
+              onWheel={(e: any) => {
+                if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) e.currentTarget.scrollLeft += e.deltaY;
+              }}
+            >
+              {cats.map((c: any) => {
+                const active = c.key === activeKey;
+                const t = CATEGORY_THEME[c.key] || CATEGORY_THEME.__default;
+                const href = CATEGORY_ROUTES[c.key as string];
+                const content = (
+                  <div
+                    className={cx(
+                      "inline-flex items-center gap-2 whitespace-nowrap h-9 rounded-full border shadow-[0_1px_0_rgba(0,0,0,0.04)] px-3 text-xs font-semibold transition-all duration-200 focus-visible:outline-none",
+                      t.base,
+                      t.hover,
+                      t.ring,
+                      active && t.active
+                    )}
+                  >
+                    <c.Icon className="h-4 w-4" />
+                    {c.label}
+                    {active ? <span className={cx("ml-1.5 inline-block h-1.5 w-1.5 rounded-full", t.dot)} aria-hidden="true" /> : null}
+                  </div>
+                );
+
+                if (href) {
+                  return (
+                    <Link
+                      key={c.key}
+                      href={href}
+                      onClick={(e) => {
+                        if (Date.now() < dragState.current.blockUntil) e.preventDefault();
+                      }}
+                    >
+                      {content}
+                    </Link>
+                  );
+                }
+
+                return (
+                  <button
+                    key={c.key}
+                    type="button"
+                    onClick={() => {
+                      if (Date.now() < dragState.current.blockUntil) return;
+                      onPick(c.key);
+                    }}
+                    style={{ background: "transparent", border: "none", padding: 0, margin: 0 }}
+                  >
+                    {content}
+                  </button>
+                );
+              })}
+              <div className="w-2 shrink-0" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick }: any) {
+  const cats = useMemo(() => getCatsByFlow(prefs.catFlow), [prefs.catFlow]);
+
+  return (
+    <Surface theme={theme} className="p-4">
+      <div className="text-sm font-extrabold" style={{ color: theme.text }}>
+        Explore Categories
+      </div>
+      <div className="mt-1 text-xs" style={{ color: theme.sub }}>
+        Tap to filter
       </div>
 
-      {/* Advanced Search Section */}
-      <section className="py-16 bg-gradient-to-r from-gray-50 to-blue-50 dark:from-dark-secondary dark:to-dark-accent">
-        <div className="max-w-7xl mx-auto px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-            className="text-center mb-8"
-          >
-            <h2 className="text-4xl font-black text-gray-900 dark:text-dark-text mb-4">
-              Find Your <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">Story</span>
-            </h2>
-            <p className="text-xl text-gray-600 dark:text-dark-text-secondary max-w-2xl mx-auto">
-              Search through thousands of articles to find exactly what you're looking for
-            </p>
-          </motion.div>
-          
-          <AdvancedSearchBar onSearch={handleSearch} />
-        </div>
-      </section>
-
-      {/* Breaking News & Live Updates */}
-      <section className="py-20 bg-white relative">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="grid lg:grid-cols-3 gap-8">
-            {/* Main Breaking News */}
-            <div className="lg:col-span-2">
-              <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8 }}
-                className="mb-8"
-                id="breaking"
+      <div className="mt-4 grid gap-3">
+        {cats.map((c: any) => {
+          const active = c.key === activeKey;
+          const href = CATEGORY_ROUTES[c.key as string];
+          const content = (
+            <div
+              className={cx(
+                "flex items-center gap-3 rounded-3xl border px-4 py-4 text-left transition hover:opacity-[0.98]"
+              )}
+              style={{
+                background: active ? theme.chipHover : theme.surface2,
+                borderColor: active
+                  ? theme.mode === "dark"
+                    ? "rgba(56,189,248,0.35)"
+                    : "rgba(37,99,235,0.28)"
+                  : theme.border,
+                color: theme.text,
+              }}
+            >
+              <span
+                className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border"
+                style={{ background: theme.chip, borderColor: theme.border }}
               >
-                <div className="flex items-center space-x-3 mb-6">
-                  <motion.div
-                    animate={{ scale: [1, 1.2, 1] }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                    className="w-4 h-4 bg-red-500 rounded-full"
-                  />
-                  <h2 className="text-4xl font-black text-gray-900">Breaking News</h2>
-                </div>
-                
-{loading ? (
-                  <div className="bg-gradient-to-br from-red-50 to-orange-50 rounded-3xl p-8 border border-red-100 shadow-lg">
-                    <div className="animate-pulse">
-                      <div className="h-6 bg-gray-300 rounded mb-4"></div>
-                      <div className="h-4 bg-gray-200 rounded mb-2"></div>
-                      <div className="h-4 bg-gray-200 rounded mb-2"></div>
-                      <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                    </div>
-                  </div>
-                ) : news.length > 0 ? (
-                  <div className="bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 rounded-3xl p-8 border border-red-100 dark:border-red-800 shadow-lg">
-                    <motion.h3 
-                      className="text-2xl font-bold text-gray-900 dark:text-dark-text mb-4 leading-tight"
-                      whileHover={{ scale: 1.02 }}
-                    >
-                      {news[0].title}
-                    </motion.h3>
-                    <p className="text-gray-700 dark:text-dark-text-secondary text-lg leading-relaxed mb-6">
-                      {news[0].excerpt}
-                    </p>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4 text-sm text-gray-600 dark:text-dark-text-secondary">
-                        <span>📍 {news[0].source}</span>
-                        <span>⏰ {new Date(news[0].publishedAt).toLocaleTimeString()}</span>
-                        <span>👤 {news[0].author}</span>
-                      </div>
-                      <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        className="bg-red-600 text-white px-6 py-2 rounded-full font-semibold hover:bg-red-700 transition-colors"
-                      >
-                        Read More
-                      </motion.button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="bg-gradient-to-br from-red-50 to-orange-50 rounded-3xl p-8 border border-red-100 shadow-lg">
-                    <p className="text-gray-700 text-center">No breaking news available at the moment.</p>
-                  </div>
-                )}
-              </motion.div>
+                <c.Icon className="h-5 w-5" />
+              </span>
 
-              {/* Live Admin Content Grid */}
-              <AdminContentLoader limit={8} showBreaking={true}>
-                {({ news, breakingNews, loading, isConnected }) => (
-                  <div className="space-y-8">
-                    {/* Breaking News Banner */}
-                    {breakingNews.length > 0 && (
-                      <motion.div
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        className="bg-gradient-to-r from-red-600 to-red-700 rounded-2xl p-6 text-white shadow-xl"
-                      >
-                        <div className="flex items-center space-x-3 mb-4">
-                          <div className="bg-white text-red-600 px-3 py-1 rounded-full text-sm font-bold animate-pulse">
-                            🔴 BREAKING
-                          </div>
-                          <div className="text-sm opacity-90">
-                            {new Date(breakingNews[0].publishedAt).toLocaleTimeString()}
-                          </div>
-                        </div>
-                        <h3 className="text-xl font-bold mb-2">{breakingNews[0].title}</h3>
-                        <p className="text-red-100">{breakingNews[0].excerpt || breakingNews[0].content?.substring(0, 150) + '...'}</p>
-                      </motion.div>
-                    )}
-
-                    {/* News Grid */}
-                    <div className="grid md:grid-cols-2 gap-6">
-                      {loading ? (
-                        // Loading skeleton
-                        Array.from({ length: 4 }).map((_, index) => (
-                          <div key={index} className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 animate-pulse">
-                            <div className="w-12 h-12 bg-gray-200 rounded-full mb-4"></div>
-                            <div className="flex space-x-2 mb-3">
-                              <div className="w-16 h-6 bg-gray-200 rounded-full"></div>
-                              <div className="w-20 h-6 bg-gray-200 rounded-full"></div>
-                            </div>
-                            <div className="w-full h-6 bg-gray-200 rounded mb-2"></div>
-                            <div className="w-3/4 h-4 bg-gray-200 rounded"></div>
-                          </div>
-                        ))
-                      ) : (
-                        news.map((article, index) => (
-                          <motion.div
-                            key={article._id || index}
-                            initial={{ opacity: 0, y: 30 }}
-                            whileInView={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.6, delay: index * 0.1 }}
-                            whileHover={{ y: -5, scale: 1.02 }}
-                            className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg border border-gray-100 dark:border-gray-700 cursor-pointer group relative"
-                            onClick={() => window.location.href = `/news/${article._id || article.slug}`}
-                          >
-                            {/* Article Image or Icon */}
-                            <div className="mb-4">
-                              {article.image && article.image !== '/fallback.jpg' ? (
-                                <img 
-                                  src={article.image} 
-                                  alt={article.title}
-                                  className="w-full h-32 object-cover rounded-lg"
-                                  loading="lazy"
-                                />
-                              ) : (
-                                <div className="text-4xl">
-                                  {article.category === 'Technology' ? '🚀' :
-                                   article.category === 'Sports' ? '⚽' :
-                                   article.category === 'Business' ? '💼' :
-                                   article.category === 'Health' ? '🏥' :
-                                   article.category === 'Environment' ? '🌍' :
-                                   article.category === 'Culture' ? '🎭' : '📰'}
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Article Meta */}
-                            <div className="flex items-center justify-between mb-3">
-                              <div className="flex items-center space-x-2">
-                                <span className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-3 py-1 rounded-full text-xs font-semibold">
-                                  {article.category}
-                                </span>
-                                <span className="text-gray-500 dark:text-gray-400 text-xs">
-                                  {new Date(article.publishedAt).toLocaleString()}
-                                </span>
-                              </div>
-                              
-                              {/* Connection Status Indicator */}
-                              <div className="flex items-center space-x-2">
-                                {isConnected ? (
-                                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Live from Admin Panel"></div>
-                                ) : (
-                                  <div className="w-2 h-2 bg-yellow-500 rounded-full" title="Cached Content"></div>
-                                )}
-                                
-                                {/* Bookmark Button */}
-                                <BookmarkButton 
-                                  article={article} 
-                                  className="opacity-0 group-hover:opacity-100 transition-opacity"
-                                />
-                              </div>
-                            </div>
-
-                            {/* Article Content */}
-                            <h4 className="font-bold text-gray-900 dark:text-white mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-2">
-                              {article.title}
-                            </h4>
-                            
-                            <p className="text-gray-600 dark:text-gray-300 text-sm line-clamp-3 leading-relaxed">
-                              {article.excerpt || article.content?.substring(0, 150) + '...'}
-                            </p>
-
-                            {/* Article Stats */}
-                            <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
-                              <div className="flex items-center space-x-4 text-xs text-gray-500 dark:text-gray-400">
-                                <span className="flex items-center space-x-1">
-                                  <span>👁️</span>
-                                  <span>{article.reads || 0}</span>
-                                </span>
-                                <span className="flex items-center space-x-1">
-                                  <span>💬</span>
-                                  <span>{article.engagement || 0}%</span>
-                                </span>
-                              </div>
-                              
-                              <div className="text-xs text-gray-400 dark:text-gray-500">
-                                {article.source === 'fallback' ? 'Cached' : 'Live'}
-                              </div>
-                            </div>
-                          </motion.div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                )}
-              </AdminContentLoader>
-            </div>
-
-            {/* Sidebar - Trending & Live Updates */}
-            <div className="space-y-8">
-              {/* Trending Stories */}
-              <motion.div
-                initial={{ opacity: 0, x: 30 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.8 }}
-                className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-3xl p-6 border border-purple-100"
-              >
-                <h3 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
-                  <span className="mr-3">🔥</span>
-                  Trending Now
-                </h3>
-                <div className="space-y-4">
-                  {[
-                    "Revolutionary Medical Breakthrough Announced",
-                    "Space Mission Reaches New Milestone",
-                    "Economic Indicators Show Positive Trends",
-                    "Cultural Exchange Program Expands Globally",
-                    "Innovation in Renewable Energy Sector"
-                  ].map((trend, index) => (
-                    <motion.div
-                      key={index}
-                      initial={{ opacity: 0, x: 20 }}
-                      whileInView={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.5, delay: index * 0.1 }}
-                      whileHover={{ x: 5 }}
-                      className="flex items-start space-x-3 cursor-pointer group"
-                    >
-                      <span className="text-purple-600 font-bold text-sm mt-1">
-                        {String(index + 1).padStart(2, '0')}
-                      </span>
-                      <p className="text-gray-700 text-sm group-hover:text-purple-700 transition-colors">
-                        {trend}
-                      </p>
-                    </motion.div>
-                  ))}
-                </div>
-              </motion.div>
-
-              {/* Live Updates */}
-              <motion.div
-                initial={{ opacity: 0, x: 30 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.8, delay: 0.2 }}
-                className="bg-gradient-to-br from-green-50 to-teal-50 rounded-3xl p-6 border border-green-100"
-              >
-                <h3 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
-                  <motion.span
-                    animate={{ scale: [1, 1.2, 1] }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                    className="mr-3 text-green-500"
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm font-extrabold truncate">{c.label}</span>
+                {c.badge ? (
+                  <span
+                    className="mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-extrabold border"
+                    style={{
+                      background: theme.mode === "dark" ? "rgba(56,189,248,0.12)" : "rgba(37,99,235,0.10)",
+                      borderColor: theme.mode === "dark" ? "rgba(56,189,248,0.30)" : "rgba(37,99,235,0.22)",
+                      color: theme.text,
+                    }}
                   >
-                    🔴
-                  </motion.span>
-                  Live Updates
-                </h3>
-                <div className="space-y-4">
-                  {[
-                    { time: "2 min", update: "Market closes with significant gains" },
-                    { time: "5 min", update: "Press conference concludes successfully" },
-                    { time: "12 min", update: "International summit begins in Geneva" },
-                    { time: "18 min", update: "New research findings published" },
-                    { time: "25 min", update: "Technology expo attracts record attendance" }
-                  ].map((item, index) => (
-                    <motion.div
-                      key={index}
-                      initial={{ opacity: 0, y: 10 }}
-                      whileInView={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.5, delay: index * 0.1 }}
-                      className="flex items-start space-x-3 pb-3 border-b border-green-100/50 last:border-b-0"
-                    >
-                      <span className="bg-green-500 text-white text-xs px-2 py-1 rounded-full font-semibold">
-                        {item.time}
-                      </span>
-                      <p className="text-gray-700 text-sm flex-1">
-                        {item.update}
-                      </p>
-                    </motion.div>
-                  ))}
-                </div>
-              </motion.div>
+                    {c.badge}
+                  </span>
+                ) : null}
+              </span>
+
+              <ArrowRight
+                className="h-4 w-4"
+                style={{
+                  color: theme.muted,
+                }}
+              />
+            </div>
+          );
+
+          return href ? (
+            <Link key={c.key} href={href}>{content}</Link>
+          ) : (
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => onPick(c.key)}
+              style={{ background: "transparent", border: "none", padding: 0, margin: 0, width: "100%" }}
+            >
+              {content}
+            </button>
+          );
+        })}
+      </div>
+    </Surface>
+  );
+}
+
+function TopBanner({ theme }: any) {
+  return (
+    <Surface theme={theme} className="overflow-hidden">
+      <div className="p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-extrabold" style={{ color: theme.text }}>
+              Spotlight
+            </div>
+            <div className="text-xs" style={{ color: theme.sub }}>
+              Space for a featured promo / sponsor banner (optional)
+            </div>
+          </div>
+          <span className="rounded-full px-3 py-1 text-xs font-semibold border" style={{ background: theme.chip, borderColor: theme.border, color: theme.text }}>
+            728×90
+          </span>
+        </div>
+
+        <div
+          className="mt-4 rounded-3xl border"
+          style={{
+            borderColor: theme.border,
+            background:
+              theme.mode === "dark"
+                ? "linear-gradient(135deg, rgba(56,189,248,0.15), rgba(167,139,250,0.10))"
+                : "linear-gradient(135deg, rgba(37,99,235,0.12), rgba(124,58,237,0.10))",
+          }}
+        >
+          <div className="flex h-[110px] items-center justify-center text-xs font-semibold" style={{ color: theme.sub }}>
+            Banner / Promo Slot (no e-paper)
+          </div>
+        </div>
+      </div>
+    </Surface>
+  );
+}
+
+function FeaturedCard({ theme, item, onToast }: any) {
+  return (
+    <Surface theme={theme} className="overflow-hidden">
+      <div className="p-5 sm:p-6">
+        <div className="flex items-start justify-between gap-3">
+          <span
+            className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-extrabold border"
+            style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}
+          >
+            <span className="inline-block h-2 w-2 rounded-full" style={{ background: theme.live }} />
+            {item.kicker}
+          </span>
+          <div className="hidden sm:flex items-center gap-2 text-xs" style={{ color: theme.sub }}>
+            <span className="rounded-full px-2.5 py-1 border" style={{ background: theme.chip, borderColor: theme.border }}>
+              {item.time}
+            </span>
+            <span style={{ opacity: 0.55 }}>•</span>
+            <span>{item.source}</span>
+          </div>
+        </div>
+
+        <div className="mt-3 text-xl sm:text-2xl font-black tracking-tight" style={{ color: theme.text }}>
+          {item.title}
+        </div>
+        <div className="mt-1 text-sm" style={{ color: theme.sub }}>
+          {item.desc}
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <Button theme={theme} variant="solid" onClick={() => onToast("Open featured story (planned)")}>
+            Read <ArrowRight className="h-4 w-4" />
+          </Button>
+          <Button theme={theme} variant="soft" onClick={() => onToast("Watch / Listen (planned)")}>
+            <Play className="h-4 w-4" /> Watch
+          </Button>
+        </div>
+      </div>
+    </Surface>
+  );
+}
+
+function FeedList({ theme, title, items, onOpen }: any) {
+  return (
+    <Surface theme={theme} className="p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-extrabold" style={{ color: theme.text }}>
+            {title}
+          </div>
+          <div className="text-xs" style={{ color: theme.sub }}>
+            Fresh updates
+          </div>
+        </div>
+        <Button theme={theme} variant="soft" onClick={() => onOpen("viewall")}>
+          View all
+        </Button>
+      </div>
+
+      <div className="mt-4 grid gap-3">
+        {items.map((f: any) => (
+          <button
+            key={f.id}
+            type="button"
+            onClick={() => onOpen(f.id)}
+            className="rounded-3xl border p-4 text-left transition hover:opacity-[0.98]"
+            style={{ background: theme.surface2, borderColor: theme.border }}
+          >
+            <div className="flex flex-wrap items-center gap-2 text-xs" style={{ color: theme.sub }}>
+              <span className="rounded-full px-2.5 py-1 border" style={{ background: theme.chip, borderColor: theme.border }}>
+                {f.time}
+              </span>
+              <span style={{ opacity: 0.55 }}>•</span>
+              <span>{f.source}</span>
+              {f.category ? (
+                <>
+                  <span style={{ opacity: 0.55 }}>•</span>
+                  <span className="rounded-full px-2.5 py-1 border" style={{ background: theme.chip, borderColor: theme.border }}>
+                    {f.category}
+                  </span>
+                </>
+              ) : null}
+            </div>
+            <div className="mt-2 text-base font-extrabold" style={{ color: theme.text }}>
+              {f.title}
+            </div>
+            <div className="mt-1 text-sm" style={{ color: theme.sub }}>
+              {f.desc}
+            </div>
+          </button>
+        ))}
+      </div>
+    </Surface>
+  );
+}
+
+function LiveTVWidget({ theme, prefs, setPrefs, onToast }: any) {
+  if (!prefs.liveTvOn) return null;
+
+  const hasUrl = !!prefs.liveTvEmbedUrl?.trim();
+
+  return (
+    <Surface theme={theme} className="p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-sm font-extrabold" style={{ color: theme.text }}>
+            Live TV
+          </div>
+          <div className="text-xs" style={{ color: theme.sub }}>
+            Partner channel (toggle from Admin later)
+          </div>
+        </div>
+        <span className="rounded-full px-2.5 py-1 text-xs font-extrabold border text-white" style={{ background: theme.live, borderColor: "rgba(255,255,255,0.18)" }}>
+          LIVE
+        </span>
+      </div>
+
+      <div className="mt-3 rounded-3xl border overflow-hidden" style={{ borderColor: theme.border, background: theme.surface2 }}>
+        <div className="relative w-full" style={{ paddingTop: "56.25%" }}>
+          {hasUrl ? (
+            <iframe
+              title="News Pulse Live TV"
+              src={prefs.liveTvEmbedUrl}
+              className="absolute inset-0 h-full w-full"
+              allow="autoplay; encrypted-media; picture-in-picture"
+              allowFullScreen
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold" style={{ color: theme.sub }}>
+              Add Live TV embed URL in Settings (demo)
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-3 grid gap-2">
+        <Button theme={theme} variant="soft" className="w-full justify-start" onClick={() => onToast("Live TV full page (planned)")}>
+          <Play className="h-4 w-4" /> Open Live TV
+        </Button>
+        <Button theme={theme} variant="ghost" className="w-full justify-start" onClick={() => setPrefs((p: any) => ({ ...p, liveTvOn: false }))}>
+          <X className="h-4 w-4" /> Turn OFF widget
+        </Button>
+      </div>
+    </Surface>
+  );
+}
+
+function QuickToolsCard({ theme, onToast }: any) {
+  return (
+    <Surface theme={theme} className="p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-sm font-extrabold" style={{ color: theme.text }}>
+            Quick tools
+          </div>
+          <div className="text-xs" style={{ color: theme.sub }}>
+            Useful features (growing)
+          </div>
+        </div>
+        <Bell className="h-5 w-5" style={{ color: theme.muted }} />
+      </div>
+
+      <div className="mt-3 grid gap-2">
+        <Button theme={theme} variant="soft" className="w-full justify-start" onClick={() => onToast("AI Explainer (planned)")}>
+          <Sparkles className="h-4 w-4" /> AI Explainer
+        </Button>
+        <Button theme={theme} variant="soft" className="w-full justify-start" onClick={() => onToast("Swipe-to-Listen (planned)")}>
+          <Play className="h-4 w-4" /> Swipe-to-Listen
+        </Button>
+        <Button theme={theme} variant="soft" className="w-full justify-start" onClick={() => onToast("Viral Videos (planned)")}>
+          <Video className="h-4 w-4" /> Viral Videos
+        </Button>
+      </div>
+    </Surface>
+  );
+}
+
+function SnapshotsCard({ theme }: any) {
+  return (
+    <Surface theme={theme} className="p-4">
+      <div className="text-sm font-extrabold" style={{ color: theme.text }}>
+        Snapshots
+      </div>
+      <div className="mt-1 text-xs" style={{ color: theme.sub }}>
+        Small trending utilities
+      </div>
+
+      <div className="mt-3 grid gap-2">
+        {[
+          { k: "Weather", v: "27°C • Cloudy" },
+          { k: "Markets", v: "Stable" },
+          { k: "Gold", v: "₹ — (api)" },
+        ].map((x) => (
+          <div key={x.k} className="rounded-2xl border px-3 py-2" style={{ background: theme.surface2, borderColor: theme.border }}>
+            <div className="text-xs" style={{ color: theme.muted }}>
+              {x.k}
+            </div>
+            <div className="text-sm font-extrabold" style={{ color: theme.text }}>
+              {x.v}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Surface>
+  );
+}
+
+function PreferencesDrawer({ theme, open, onClose, prefs, setPrefs, onToast }: any) {
+  return (
+    <Drawer open={open} onClose={onClose} theme={theme} title="Settings">
+      <div className="space-y-4">
+        <div className="rounded-3xl border p-4" style={{ background: theme.surface2, borderColor: theme.border }}>
+          <div className="text-sm font-extrabold" style={{ color: theme.text }}>
+            Category direction
+          </div>
+          <div className="mt-2 text-sm" style={{ color: theme.sub }}>
+            Applies to top strip AND Explore Categories list.
+          </div>
+          <div className="mt-3 flex gap-2">
+            <Button theme={theme} variant={prefs.catFlow === "ltr" ? "solid" : "soft"} onClick={() => setPrefs((p: any) => ({ ...p, catFlow: "ltr" }))}>
+              LTR
+            </Button>
+            <Button theme={theme} variant={prefs.catFlow === "rtl" ? "solid" : "soft"} onClick={() => setPrefs((p: any) => ({ ...p, catFlow: "rtl" }))}>
+              RTL
+            </Button>
+          </div>
+        </div>
+
+        <div className="rounded-3xl border p-4" style={{ background: theme.surface2, borderColor: theme.border }}>
+          <div className="text-sm font-extrabold" style={{ color: theme.text }}>
+            Home layout modules
+          </div>
+          <div className="mt-2 text-sm" style={{ color: theme.sub }}>
+            Turn sections ON/OFF (Founder-style control).
+          </div>
+
+          <div className="mt-3 grid gap-2">
+            <ToggleRow theme={theme} title="Category strip" sub="Top horizontal categories bar" value={prefs.showCategoryStrip} onToggle={() => setPrefs((p: any) => ({ ...p, showCategoryStrip: !p.showCategoryStrip }))} />
+            <ToggleRow theme={theme} title="Trending strip" sub="Trending chips row" value={prefs.showTrendingStrip} onToggle={() => setPrefs((p: any) => ({ ...p, showTrendingStrip: !p.showTrendingStrip }))} />
+            <ToggleRow theme={theme} title="Explore Categories" sub="Left sidebar category list" value={prefs.showExploreCategories} onToggle={() => setPrefs((p: any) => ({ ...p, showExploreCategories: !p.showExploreCategories }))} />
+            <ToggleRow theme={theme} title="Live TV card" sub="Left sidebar Live TV widget" value={prefs.showLiveTvCard} onToggle={() => setPrefs((p: any) => ({ ...p, showLiveTvCard: !p.showLiveTvCard }))} />
+            <ToggleRow theme={theme} title="Quick tools" sub="Left sidebar quick tools buttons" value={prefs.showQuickTools} onToggle={() => setPrefs((p: any) => ({ ...p, showQuickTools: !p.showQuickTools }))} />
+            <ToggleRow theme={theme} title="Snapshots" sub="Left sidebar snapshot cards" value={prefs.showSnapshots} onToggle={() => setPrefs((p: any) => ({ ...p, showSnapshots: !p.showSnapshots }))} />
+            <ToggleRow theme={theme} title="App promo section" sub="‘Take News Pulse Everywhere’ block" value={prefs.showAppPromo} onToggle={() => setPrefs((p: any) => ({ ...p, showAppPromo: !p.showAppPromo }))} />
+            <ToggleRow theme={theme} title="Footer" sub="Full footer with quick links" value={prefs.showFooter} onToggle={() => setPrefs((p: any) => ({ ...p, showFooter: !p.showFooter }))} />
+          </div>
+        </div>
+
+        <div className="rounded-3xl border p-4" style={{ background: theme.surface2, borderColor: theme.border }}>
+          <div className="text-sm font-extrabold" style={{ color: theme.text }}>
+            Live Updates ticker
+          </div>
+          <div className="mt-2 text-sm" style={{ color: theme.sub }}>
+            Keep the Live Updates ticker ON/OFF and control its speed.
+          </div>
+
+          <div className="mt-3 flex gap-2">
+            <Button theme={theme} variant={prefs.liveTickerOn ? "solid" : "soft"} onClick={() => setPrefs((p: any) => ({ ...p, liveTickerOn: true }))}>
+              ON
+            </Button>
+            <Button theme={theme} variant={!prefs.liveTickerOn ? "solid" : "soft"} onClick={() => setPrefs((p: any) => ({ ...p, liveTickerOn: false }))}>
+              OFF
+            </Button>
+          </div>
+
+          <div className="mt-4 rounded-2xl border px-3 py-3" style={{ background: theme.surface, borderColor: theme.border }}>
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-semibold" style={{ color: theme.muted }}>
+                Speed (seconds per loop)
+              </div>
+              <div className="text-xs font-extrabold" style={{ color: theme.text }}>
+                {prefs.liveSpeedSec}s
+              </div>
+            </div>
+            <input
+              type="range"
+              min={10}
+              max={60}
+              step={2}
+              value={prefs.liveSpeedSec}
+              onChange={(e) => setPrefs((p: any) => ({ ...p, liveSpeedSec: Number(e.target.value) }))}
+              className="mt-2 w-full"
+              aria-label="Live updates ticker speed"
+            />
+            <div className="mt-2 flex items-center justify-between text-[11px]" style={{ color: theme.sub }}>
+              <span>Faster</span>
+              <span>Slower</span>
             </div>
           </div>
         </div>
-      </section>
 
-      {/* Advanced Categories Section */}
-      <section className="py-20 bg-gradient-to-b from-gray-50 to-white relative overflow-hidden">
-        <div className="absolute inset-0 opacity-40">
-          <div className="w-full h-full" style={{
-            backgroundImage: `url("data:image/svg+xml,%3csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3e%3cg fill='none' fill-rule='evenodd'%3e%3cg fill='%239C92AC' fill-opacity='0.05'%3e%3ccircle cx='30' cy='30' r='2'/%3e%3c/g%3e%3c/g%3e%3c/svg%3e")`,
-          }} />
-        </div>
-        
-        <div className="relative z-10 max-w-7xl mx-auto px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-            className="text-center mb-16"
-          >
-            <h2 className="text-5xl font-black text-gray-900 mb-4">
-              Explore <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">Categories</span>
-            </h2>
-            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              Dive deep into the stories that matter to you
-            </p>
-          </motion.div>
+        <div className="rounded-3xl border p-4" style={{ background: theme.surface2, borderColor: theme.border }}>
+          <div className="text-sm font-extrabold" style={{ color: theme.text }}>
+            Breaking News ticker
+          </div>
+          <div className="mt-2 text-sm" style={{ color: theme.sub }}>
+            Auto uses backend. Force ON lets you test even if backend is empty.
+          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-            {categories.map((category, index) => {
-              const categoryIcons: Record<string, string> = {
-                'Breaking': '🛑',
-                'Regional': '🗺️',
-                'National': '🏛️',
-                'International': '🌍',
-                'Business': '💼',
-                'Sci-Tech': '�',
-                'Sports': '⚽',
-                'Lifestyle': '🧘',
-                'Glamour': '✨',
-                'Web Stories': '📚',
-                'Viral Videos': '🎥',
-                'Editorial': '🖋️',
-                'Youth Pulse': '🎓',
-                'Inspiration Hub': '🌄'
-                , 'Community Reporter': '📝'
-              };
-
-              const routeMap: Record<string, string | { type: 'anchor', target: string }> = {
-                'Breaking': { type: 'anchor', target: '#breaking' },
-                'Regional': '/regional',
-                'National': '/national',
-                'International': '/international',
-                'Business': '/business',
-                'Sci-Tech': '/science-technology',
-                'Sports': '/sports',
-                'Lifestyle': '/lifestyle',
-                'Glamour': '/glamour',
-                'Web Stories': '/web-stories',
-                'Viral Videos': '/viral-videos',
-                'Editorial': '/editorial',
-                'Youth Pulse': '/youth-pulse',
-                'Inspiration Hub': '/inspiration-hub'
-                , 'Community Reporter': '/community-reporter'
-              };
-
-              const handleCategoryClick = (cat: string) => {
-                const target = routeMap[cat];
-                if (!target) return;
-                if (typeof target === 'string') {
-                  router.push(target);
-                } else if (target.type === 'anchor') {
-                  // Smooth scroll to anchor
-                  const el = document.querySelector(target.target);
-                  if (el) {
-                    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                  } else {
-                    // Fallback: navigate to home with hash
-                    router.push('/' + target.target);
-                  }
-                }
-              };
-              
-              return (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, y: 50 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6, delay: index * 0.1 }}
-                  whileHover={{ 
-                    y: -10, 
-                    scale: 1.05,
-                    boxShadow: "0 20px 40px rgba(0,0,0,0.1)"
-                  }}
-                  className="group cursor-pointer"
-                  onClick={() => handleCategoryClick(category)}
-                >
-                  <div className="bg-white rounded-3xl p-8 text-center shadow-lg border border-gray-100 hover:border-blue-200 transition-all duration-300 h-full">
-                    <motion.div
-                      whileHover={{ scale: 1.2, rotate: 10 }}
-                      className="text-6xl mb-6"
-                    >
-                      {categoryIcons[category] || '📰'}
-                    </motion.div>
-                    
-                    <h3 className="text-2xl font-bold text-gray-800 mb-3 group-hover:text-blue-600 transition-colors">
-                      {category}
-                    </h3>
-                    
-                    <p className="text-gray-600 text-sm mb-6">
-                      {category === 'Community Reporter' ? 'Submit your local stories & tips' : 'Latest updates and breaking stories'}
-                    </p>
-                    
-                    <motion.div
-                      className="w-full h-1 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"
-                      initial={{ scaleX: 0 }}
-                      whileInView={{ scaleX: 1 }}
-                      transition={{ duration: 0.8, delay: index * 0.1 + 0.5 }}
-                    />
-                    
-                    <div className="mt-4 text-blue-600 font-semibold text-sm group-hover:text-purple-600 transition-colors">
-                      {category === 'Community Reporter' ? 'Contribute Now →' : 'Explore Now →'}
-                    </div>
+          <div className="mt-3 grid gap-2">
+            {[
+              { key: "auto", label: "Auto (backend)", sub: "Shows backend items" },
+              { key: "on", label: "Force ON (demo)", sub: "Use demo breaking items" },
+              { key: "off", label: "OFF", sub: "Hide Breaking ticker" },
+            ].map((o: any) => (
+              <button
+                key={o.key}
+                type="button"
+                onClick={() => setPrefs((p: any) => ({ ...p, breakingMode: o.key }))}
+                className="flex items-start justify-between gap-3 rounded-3xl border p-3 text-left"
+                style={{ background: theme.surface, borderColor: theme.border }}
+              >
+                <div>
+                  <div className="text-sm font-extrabold" style={{ color: theme.text }}>
+                    {o.label}
                   </div>
-                </motion.div>
-              );
-            })}
+                  <div className="mt-1 text-xs" style={{ color: theme.sub }}>
+                    {o.sub}
+                  </div>
+                </div>
+                {prefs.breakingMode === o.key ? <Check className="h-5 w-5" style={{ color: theme.accent }} /> : null}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-3 rounded-2xl border p-3" style={{ background: theme.surface, borderColor: theme.border }}>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-extrabold" style={{ color: theme.text }}>
+                  Show when empty
+                </div>
+                <div className="text-[11px]" style={{ color: theme.sub }}>
+                  Keep the red bar visible with a placeholder message.
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setPrefs((p: any) => ({ ...p, showBreakingWhenEmpty: !p.showBreakingWhenEmpty }))}
+                className="relative h-7 w-12 rounded-full border transition"
+                style={{ background: prefs.showBreakingWhenEmpty ? theme.accent : theme.chip, borderColor: theme.border }}
+                aria-label="Toggle show breaking ticker when empty"
+              >
+                <span
+                  className="absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full"
+                  style={{
+                    background: "rgba(255,255,255,0.92)",
+                    left: prefs.showBreakingWhenEmpty ? "calc(100% - 22px)" : "4px",
+                    transition: "left 220ms ease",
+                  }}
+                />
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-2xl border px-3 py-3" style={{ background: theme.surface, borderColor: theme.border }}>
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-semibold" style={{ color: theme.muted }}>
+                Speed (seconds per loop)
+              </div>
+              <div className="text-xs font-extrabold" style={{ color: theme.text }}>
+                {prefs.breakingSpeedSec}s
+              </div>
+            </div>
+            <input
+              type="range"
+              min={10}
+              max={60}
+              step={2}
+              value={prefs.breakingSpeedSec}
+              onChange={(e) => setPrefs((p: any) => ({ ...p, breakingSpeedSec: Number(e.target.value) }))}
+              className="mt-2 w-full"
+              aria-label="Breaking ticker speed"
+            />
+            <div className="mt-2 flex items-center justify-between text-[11px]" style={{ color: theme.sub }}>
+              <span>Faster</span>
+              <span>Slower</span>
+            </div>
           </div>
         </div>
-      </section>
 
-      {/* Premium Features Section */}
-      <section className="py-20 bg-gradient-to-r from-blue-900 via-purple-900 to-indigo-900 relative overflow-hidden">
-        <div className="absolute inset-0 bg-black/30"></div>
-        <div className="relative z-10 max-w-7xl mx-auto px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-            className="text-center text-white mb-16"
+        <div className="rounded-3xl border p-4" style={{ background: theme.surface2, borderColor: theme.border }}>
+          <div className="text-sm font-extrabold" style={{ color: theme.text }}>
+            Live TV widget
+          </div>
+          <div className="mt-2 text-sm" style={{ color: theme.sub }}>
+            Toggle widget and set embed URL (demo).
+          </div>
+
+          <div className="mt-3 flex gap-2">
+            <Button theme={theme} variant={prefs.liveTvOn ? "solid" : "soft"} onClick={() => setPrefs((p: any) => ({ ...p, liveTvOn: true }))}>
+              ON
+            </Button>
+            <Button theme={theme} variant={!prefs.liveTvOn ? "solid" : "soft"} onClick={() => setPrefs((p: any) => ({ ...p, liveTvOn: false }))}>
+              OFF
+            </Button>
+          </div>
+
+          <div className="mt-3 rounded-2xl border p-3" style={{ background: theme.surface, borderColor: theme.border }}>
+            <div className="text-xs font-semibold" style={{ color: theme.muted }}>
+              Embed URL
+            </div>
+            <input
+              value={prefs.liveTvEmbedUrl}
+              onChange={(e) => setPrefs((p: any) => ({ ...p, liveTvEmbedUrl: e.target.value }))}
+              placeholder="https://… (iframe src)"
+              className="mt-2 w-full rounded-2xl border px-3 py-2 text-sm outline-none"
+              style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-2">
+          <Button
+            theme={theme}
+            variant="ghost"
+            onClick={() => {
+              setPrefs(DEFAULT_PREFS);
+              onToast("Settings reset to default");
+            }}
           >
-            <h2 className="text-5xl font-black mb-4">
-              Why Choose <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400">News Pulse</span>?
-            </h2>
-            <p className="text-xl opacity-90 max-w-3xl mx-auto">
-              Experience journalism redefined with cutting-edge technology and unparalleled storytelling
-            </p>
-          </motion.div>
+            Reset
+          </Button>
+          <Button theme={theme} variant="solid" onClick={onClose}>
+            Done
+          </Button>
+        </div>
+      </div>
+    </Drawer>
+  );
+}
 
-          <div className="grid md:grid-cols-3 gap-8">
-            {[
-              {
-                icon: '🚀',
-                title: 'AI-Powered Insights',
-                description: 'Advanced algorithms deliver personalized news recommendations tailored to your interests'
-              },
-              {
-                icon: '⚡',
-                title: 'Real-time Updates',
-                description: 'Stay ahead with lightning-fast breaking news notifications and live coverage'
-              },
-              {
-                icon: '🎯',
-                title: 'Fact-Checked Content',
-                description: 'Trust in our rigorous verification process ensuring accuracy and reliability'
-              }
-            ].map((feature, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 50 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: index * 0.2 }}
-                className="text-center bg-white/10 backdrop-blur-md rounded-3xl p-8 border border-white/20"
-              >
-                <motion.div
-                  whileHover={{ scale: 1.2, rotate: 10 }}
-                  className="text-6xl mb-6"
+function AppPromoSection({ theme, onToast }: any) {
+  return (
+    <div className="mx-auto max-w-7xl px-4 pb-10 pt-2">
+      <Surface theme={theme} className="overflow-hidden">
+        <div className="p-6 sm:p-8">
+          <div className="grid gap-6 lg:grid-cols-12 lg:items-center">
+            <div className="lg:col-span-6">
+              <div className="text-4xl sm:text-5xl font-black leading-[1.05]" style={{ color: theme.text }}>
+                Take{" "}
+                <span
+                  className="px-2 py-1 rounded-2xl"
+                  style={{
+                    background:
+                      theme.mode === "dark"
+                        ? "linear-gradient(90deg, rgba(56,189,248,0.20), rgba(167,139,250,0.16))"
+                        : "linear-gradient(90deg, rgba(37,99,235,0.12), rgba(124,58,237,0.10))",
+                  }}
                 >
-                  {feature.icon}
-                </motion.div>
-                <h3 className="text-2xl font-bold mb-4 text-white">{feature.title}</h3>
-                <p className="text-white/80 leading-relaxed">{feature.description}</p>
-              </motion.div>
+                  <span style={{ color: theme.accent }}>News</span> <span style={{ color: theme.accent2 }}>Pulse</span>
+                </span>{" "}
+                Everywhere
+              </div>
+
+              <div className="mt-4 text-sm sm:text-base" style={{ color: theme.sub }}>
+                Download our mobile app and never miss a story. Available on all platforms with exclusive features.
+              </div>
+
+              <div className="mt-6 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => onToast("App Store link (planned)")}
+                  className="rounded-3xl px-5 py-4 text-sm font-extrabold border transition hover:opacity-[0.98] inline-flex items-center gap-2"
+                  style={{
+                    background: theme.mode === "dark" ? "rgba(0,0,0,0.55)" : "#0b1220",
+                    color: "#fff",
+                    borderColor: "rgba(255,255,255,0.12)",
+                  }}
+                >
+                  <BookOpen className="h-5 w-5" />
+                  App Store
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onToast("Google Play link (planned)")}
+                  className="rounded-3xl px-5 py-4 text-sm font-extrabold border transition hover:opacity-[0.98] inline-flex items-center gap-2"
+                  style={{
+                    background: `linear-gradient(90deg, rgba(16,185,129,0.95), ${theme.accent} 60%)`,
+                    color: "#fff",
+                    borderColor: "rgba(255,255,255,0.12)",
+                  }}
+                >
+                  <Play className="h-5 w-5" />
+                  Google Play
+                </button>
+              </div>
+
+              <div className="mt-6 flex flex-wrap items-center gap-6 text-sm" style={{ color: theme.sub }}>
+                <span className="inline-flex items-center gap-2">
+                  <Sparkles className="h-4 w-4" style={{ color: theme.accent2 }} /> 4.8 Rating
+                </span>
+                <span className="inline-flex items-center gap-2">
+                  <Users className="h-4 w-4" style={{ color: theme.accent }} /> 1M+ Downloads
+                </span>
+                <span className="inline-flex items-center gap-2">
+                  <Globe className="h-4 w-4" style={{ color: theme.accent }} /> Available in 3 languages
+                </span>
+              </div>
+            </div>
+
+            <div className="lg:col-span-6">
+              <div
+                className="rounded-[28px] border shadow-[0_40px_120px_-80px_rgba(0,0,0,0.60)] overflow-hidden"
+                style={{
+                  borderColor: theme.border,
+                  background: `linear-gradient(135deg, ${theme.accent} 0%, ${theme.accent2} 100%)`,
+                }}
+              >
+                <div className="p-8 sm:p-10 text-white">
+                  <div
+                    className="mx-auto mb-6 h-14 w-14 rounded-2xl border flex items-center justify-center"
+                    style={{ background: "rgba(255,255,255,0.12)", borderColor: "rgba(255,255,255,0.22)" }}
+                  >
+                    <span className="text-2xl">📱</span>
+                  </div>
+
+                  <div className="text-center text-2xl sm:text-3xl font-black">Mobile App Preview</div>
+                  <div className="mt-2 text-center text-sm text-white/90 font-semibold">Experience News Pulse on the go</div>
+
+                  <div className="mt-6 flex flex-wrap items-center justify-center gap-8 text-sm font-semibold text-white/95">
+                    <span className="inline-flex items-center gap-2">
+                      <Sparkles className="h-4 w-4" /> Analytics
+                    </span>
+                    <span className="inline-flex items-center gap-2">
+                      <Bell className="h-4 w-4" /> Notifications
+                    </span>
+                    <span className="inline-flex items-center gap-2">
+                      <BookOpen className="h-4 w-4" /> Offline Reading
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-3 text-center text-xs" style={{ color: theme.sub }}>
+                (UI preview only — app links will be connected after launch)
+              </div>
+            </div>
+          </div>
+        </div>
+      </Surface>
+    </div>
+  );
+}
+
+function SiteFooter({ theme, onToast }: any) {
+  const footerBg =
+    theme.mode === "dark"
+      ? "linear-gradient(180deg, rgba(10,14,35,0.95) 0%, rgba(7,10,24,0.98) 100%)"
+      : "linear-gradient(180deg, rgba(10,14,35,0.92) 0%, rgba(7,10,24,0.98) 100%)";
+
+  return (
+    <div className="mt-6" style={{ background: footerBg }}>
+      <div className="mx-auto max-w-7xl px-4 py-10">
+        <div className="grid gap-10 md:grid-cols-12">
+          <div className="md:col-span-5">
+            <div className="text-3xl font-black text-white">
+              News <span style={{ color: theme.accent2 }}>Pulse</span>
+            </div>
+            <div className="mt-3 text-sm text-white/80 leading-relaxed">
+              Your trusted source for breaking news, in-depth analysis, and stories that matter. Delivering truth with integrity since our inception.
+            </div>
+
+            <div className="mt-6 flex items-center gap-3">
+              {[
+                { label: "Community", icon: Users },
+                { label: "Videos", icon: Video },
+                { label: "Live", icon: Radio },
+                { label: "World", icon: Globe },
+              ].map((x) => (
+                <button
+                  key={x.label}
+                  type="button"
+                  onClick={() => onToast(`${x.label} (planned)`)}
+                  className="h-12 w-12 rounded-2xl border flex items-center justify-center transition hover:opacity-[0.98]"
+                  style={{ background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.12)", color: "white" }}
+                  aria-label={x.label}
+                  title={x.label}
+                >
+                  <x.icon className="h-5 w-5" />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="md:col-span-4">
+            <div className="text-lg font-extrabold" style={{ color: theme.accent }}>
+              Quick Links
+            </div>
+            <div className="mt-4 grid gap-3 text-sm text-white/85">
+              {["About Us", "Editorial Policy", "Privacy Policy", "Terms of Service", "Contact", "Careers", "Community Reporter", "Journalist Desk"].map((t) => (
+                <button key={t} type="button" onClick={() => onToast(`${t} (planned)`)} className="text-left hover:underline">
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="md:col-span-3">
+            <div className="text-lg font-extrabold" style={{ color: theme.accent2 }}>
+              Business
+            </div>
+            <div className="mt-4 grid gap-3 text-sm text-white/85">
+              {["Advertise With Us", "Media Kit", "Partnerships", "RSS Feeds", "API Access", "Licensing"].map((t) => (
+                <button key={t} type="button" onClick={() => onToast(`${t} (planned)`)} className="text-left hover:underline">
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-10 border-t pt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: "rgba(255,255,255,0.12)" }}>
+          <div className="text-xs text-white/70">© 2025 News Pulse. All rights reserved. | Powered by Innovation</div>
+
+          <div className="flex flex-wrap items-center gap-4 text-xs text-white/80">
+            <span className="inline-flex items-center gap-2">
+              <Globe className="h-4 w-4" /> Available in 3 languages
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <Video className="h-4 w-4" /> Mobile & Web
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <Check className="h-4 w-4" /> Secure & Private
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function UiPreviewV145() {
+  const [prefs, setPrefs] = useState<any>(DEFAULT_PREFS);
+  const theme = useMemo(() => getTheme(prefs.themeId), [prefs.themeId]);
+
+  const [activeCatKey, setActiveCatKey] = useState<string>("breaking");
+  const [toast, setToast] = useState<string>("");
+
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [mobileLeftOpen, setMobileLeftOpen] = useState(false);
+  const [viewAllOpen, setViewAllOpen] = useState(false);
+  const [viewAllKind, setViewAllKind] = useState<"live" | "breaking">("live");
+
+  // Real data hooks
+  const regional = useRegionalPulse("gujarat");
+  const youth = useYouthPulse();
+
+  // load local prefs
+  useEffect(() => {
+    const raw = typeof window !== "undefined" ? window.localStorage.getItem(PREF_KEY) : null;
+    if (!raw) return;
+    const parsed = safeJsonParse(raw);
+    if (!parsed) return;
+    setPrefs(normalizePrefs(parsed));
+  }, []);
+
+  // ✅ (optional) load global settings from backend (admin-controlled)
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const base = (process as any)?.env?.NEXT_PUBLIC_API_URL || "";
+        const url = base ? `${String(base).replace(/\/$/, "")}/api/site-settings/public` : "/api/site-settings/public";
+
+        const res = await fetch(url, { credentials: "include" });
+        const data = await res.json().catch(() => null);
+
+        if (cancelled) return;
+        if (!res.ok || !data?.ok || !data?.settings) return;
+
+        const s = data.settings || {};
+
+        // admin settings override global modules; keep user theme/lang
+        setPrefs((prev: any) => {
+          const merged = normalizePrefs({ ...prev, ...s });
+          merged.themeId = prev.themeId;
+          merged.lang = prev.lang;
+          return merged;
+        });
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // save local prefs
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(PREF_KEY, JSON.stringify(normalizePrefs(prefs)));
+  }, [prefs]);
+
+  const breakingItems = getBreakingItems(prefs);
+  const showBreaking = prefs.breakingMode !== "off" && (breakingItems.length > 0 || prefs.showBreakingWhenEmpty);
+  const onToast = (m: string) => setToast(m);
+
+  return (
+    <div style={{ minHeight: "100vh", background: theme.bg }}>
+      <style jsx global>{`
+        html, body { height: 100%; }
+        body { overflow-x: hidden; scrollbar-gutter: stable; }
+        .np-no-scrollbar::-webkit-scrollbar { display: none; }
+        .np-no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        @keyframes np-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+        .np-tickerTrack { display: flex; width: max-content; will-change: transform; animation-name: np-marquee; animation-timing-function: linear; animation-iteration-count: infinite; }
+        .np-tickerSeq { flex-shrink: 0; }
+        .np-marqueeWrap:hover .np-tickerTrack { animation-play-state: paused; }
+        @media (prefers-reduced-motion: reduce) {
+          .np-tickerTrack { animation: none !important; transform: none !important; }
+        }
+      `}</style>
+
+      {/* TOP HEADER */}
+      <div className="mx-auto max-w-7xl px-4 pt-4">
+        <Surface theme={theme} className="p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <IconButton theme={theme} onClick={() => setMobileLeftOpen(true)} label="Menu">
+                <Menu className="h-5 w-5" />
+              </IconButton>
+
+              <div className="min-w-0">
+                <div className="text-sm font-black tracking-tight" style={{ color: theme.text }}>
+                  News <span style={{ color: theme.accent }}>Pulse</span>
+                </div>
+                <div className="text-[11px] font-semibold" style={{ color: theme.sub }}>
+                  Your Pulse on the World's Latest News
+                </div>
+              </div>
+            </div>
+
+            <div className="hidden md:flex items-center gap-2">
+              <Button theme={theme} variant="soft" onClick={() => onToast("Home (planned)")}>
+                <Home className="h-4 w-4" /> Home
+              </Button>
+              <Button theme={theme} variant="soft" onClick={() => onToast("Viral Videos (planned)")}>
+                <Video className="h-4 w-4" /> Videos
+              </Button>
+              <Button theme={theme} variant="soft" onClick={() => onToast("Search (planned)")}>
+                <Search className="h-4 w-4" /> Search
+              </Button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <LanguagePicker theme={theme} value={prefs.lang} onChange={(v: string) => setPrefs((p: any) => ({ ...p, lang: v }))} />
+              <ThemePicker theme={theme} themeId={prefs.themeId} setThemeId={(id: string) => setPrefs((p: any) => ({ ...p, themeId: id }))} />
+
+              <IconButton theme={theme} onClick={() => setSettingsOpen(true)} label="Settings">
+                <Settings className="h-5 w-5" />
+              </IconButton>
+
+              <Button theme={theme} variant="solid" onClick={() => onToast("Login (planned)")}>
+                <LogIn className="h-4 w-4" /> Login
+              </Button>
+            </div>
+          </div>
+
+          {prefs.showPreviewNotice ? (
+            <div className="mt-3 rounded-2xl border px-3 py-2 text-xs font-semibold" style={{ background: theme.surface2, borderColor: theme.border, color: theme.sub }}>
+              Preview UI only (no backend wiring here). Design is safe to integrate into real home page next.
+            </div>
+          ) : null}
+        </Surface>
+      </div>
+
+      {/* CATEGORY STRIP */}
+      {prefs.showCategoryStrip ? (
+        <div className="sticky top-0 z-40 mt-4">
+          <TopCategoriesStrip
+            theme={theme}
+            catFlow={prefs.catFlow}
+            activeKey={activeCatKey}
+            onPick={(k: string) => {
+              setActiveCatKey(k);
+              onToast(`Category: ${k}`);
+            }}
+          />
+        </div>
+      ) : null}
+
+      {/* TICKERS: Combined premium module wrapper with BREAKING above LIVE */}
+      <div className="mt-0 w-full max-w-full">
+        <div className="mx-auto max-w-7xl px-4 w-full">
+          <div className="rounded-2xl border border-black/10 bg-white/80 backdrop-blur-md shadow-sm ring-1 ring-black/5 overflow-hidden p-2 flex flex-col gap-2">
+          {showBreaking ? (
+            <div className="w-full min-w-0">
+              <TickerBar
+                theme={theme}
+                kind="breaking"
+                items={breakingItems}
+                speedSec={prefs.breakingSpeedSec}
+                onViewAll={() => {
+                  setViewAllKind("breaking");
+                  setViewAllOpen(true);
+                }}
+              />
+            </div>
+          ) : null}
+
+          {prefs.liveTickerOn ? (
+            <div className="w-full min-w-0">
+              <TickerBar
+                theme={theme}
+                kind="live"
+                items={LIVE_UPDATES}
+                speedSec={prefs.liveSpeedSec}
+                onViewAll={() => {
+                  setViewAllKind("live");
+                  setViewAllOpen(true);
+                }}
+              />
+            </div>
+          ) : null}
+          </div>
+        </div>
+      </div>
+
+      {/* TRENDING */}
+      {prefs.showTrendingStrip ? <TrendingStrip theme={theme} onPick={(t: string) => onToast(`Trending: ${t}`)} /> : null}
+
+      {/* MAIN GRID */}
+      <div className="mx-auto max-w-7xl px-4 pb-10 pt-4">
+        <div className="grid gap-4 lg:grid-cols-12">
+          {/* LEFT */}
+          <div className="lg:col-span-3 grid gap-4">
+            {prefs.showExploreCategories ? (
+              <ExploreCategoriesPanel
+                theme={theme}
+                prefs={prefs}
+                activeKey={activeCatKey}
+                onPick={(k: string) => {
+                  setActiveCatKey(k);
+                  onToast(`Category: ${k}`);
+                }}
+              />
+            ) : null}
+
+            {prefs.showLiveTvCard ? <LiveTVWidget theme={theme} prefs={prefs} setPrefs={setPrefs} onToast={onToast} /> : null}
+            {prefs.showQuickTools ? <QuickToolsCard theme={theme} onToast={onToast} /> : null}
+            {prefs.showSnapshots ? <SnapshotsCard theme={theme} /> : null}
+          </div>
+
+          {/* CENTER */}
+          <div className="lg:col-span-6 grid gap-4">
+            <TopBanner theme={theme} />
+            <FeaturedCard theme={theme} item={FEATURED[0]} onToast={onToast} />
+          </div>
+
+          {/* RIGHT */}
+          <div className="lg:col-span-3 grid gap-4">
+            <FeedList theme={theme} title="Latest" items={FEED} onOpen={(id: string) => onToast(id === "viewall" ? "View all latest (planned)" : `Open story: ${id}`)} />
+
+            {/* Regional preview */}
+            <div className="rounded-2xl border overflow-hidden" style={{ background: theme.surface2, borderColor: theme.border }}>
+              <div className="flex items-center justify-between px-3 py-2 border-b" style={{ borderColor: theme.border }}>
+                <div className="text-sm font-extrabold" style={{ color: theme.text }}>Regional preview</div>
+                <a href="/regional" className="text-xs font-semibold" style={{ color: theme.accent }}>View all →</a>
+              </div>
+              <div className="p-3 grid gap-2">
+                {(regional.news.slice(0, 3)).map((a: any, idx: number) => (
+                  <a key={String(a.id || idx)} href={'#'} className="rounded-xl border px-3 py-2 text-sm hover:opacity-95" style={{ background: theme.surface, borderColor: theme.border, color: theme.text }}>
+                    {a.title}
+                  </a>
+                ))}
+                {regional.loading && !regional.news.length ? (
+                  <div className="rounded-xl border px-3 py-7 animate-pulse" style={{ background: theme.surface, borderColor: theme.border }} />
+                ) : null}
+              </div>
+            </div>
+
+            {/* Youth Pulse trending */}
+            <div className="rounded-2xl border overflow-hidden" style={{ background: theme.surface2, borderColor: theme.border }}>
+              <div className="flex items-center justify-between px-3 py-2 border-b" style={{ borderColor: theme.border }}>
+                <div className="text-sm font-extrabold" style={{ color: theme.text }}>Youth Pulse trending</div>
+                <a href="/youth-pulse" className="text-xs font-semibold" style={{ color: theme.accent2 }}>View all →</a>
+              </div>
+              <div className="p-3 grid gap-2">
+                {(youth.trending.slice(0, 6)).map((y: any) => (
+                  <a key={String(y.id)} href={`/youth-pulse`} className="rounded-xl border px-3 py-2 text-sm hover:opacity-95" style={{ background: theme.surface, borderColor: theme.border, color: theme.text }}>
+                    {y.title}
+                  </a>
+                ))}
+                {youth.loading && !youth.trending.length ? (
+                  <div className="rounded-xl border px-3 py-7 animate-pulse" style={{ background: theme.surface, borderColor: theme.border }} />
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* APP PROMO + FOOTER */}
+      {prefs.showAppPromo ? <AppPromoSection theme={theme} onToast={onToast} /> : null}
+      {prefs.showFooter ? <SiteFooter theme={theme} onToast={onToast} /> : null}
+
+      {/* DRAWERS */}
+      <PreferencesDrawer theme={theme} open={settingsOpen} onClose={() => setSettingsOpen(false)} prefs={prefs} setPrefs={setPrefs} onToast={onToast} />
+
+      <Drawer open={mobileLeftOpen} onClose={() => setMobileLeftOpen(false)} theme={theme} title="Menu" side="left">
+        <div className="grid gap-3">
+          <Button theme={theme} variant="soft" className="w-full justify-start" onClick={() => onToast("Home (planned)")}>
+            <Home className="h-4 w-4" /> Home
+          </Button>
+          <Button theme={theme} variant="soft" className="w-full justify-start" onClick={() => onToast("Viral Videos (planned)")}>
+            <Video className="h-4 w-4" /> Videos
+          </Button>
+          <Button theme={theme} variant="soft" className="w-full justify-start" onClick={() => onToast("Search (planned)")}>
+            <Search className="h-4 w-4" /> Search
+          </Button>
+
+          <div className="h-px" style={{ background: theme.border }} />
+
+          <div className="text-xs font-extrabold" style={{ color: theme.sub }}>
+            Categories
+          </div>
+
+          <div className="grid gap-1">
+            {getCatsByFlow(prefs.catFlow).map((c: any) => (
+              <button
+                key={c.key}
+                type="button"
+                onClick={() => {
+                  setActiveCatKey(c.key);
+                  setMobileLeftOpen(false);
+                  onToast(`Category: ${c.label}`);
+                }}
+                className="flex items-center gap-3 rounded-2xl px-3 py-2 text-sm font-semibold border"
+                style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}
+              >
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border" style={{ background: theme.chip, borderColor: theme.border }}>
+                  <c.Icon className="h-4 w-4" />
+                </span>
+                <span className="truncate">{c.label}</span>
+              </button>
             ))}
           </div>
         </div>
-      </section>
+      </Drawer>
 
-      {/* Premium App Download Section */}
-      <section className="py-20 bg-white relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-purple-50"></div>
-        <div className="relative z-10 max-w-7xl mx-auto px-4">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <motion.div
-              initial={{ opacity: 0, x: -50 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.8 }}
-            >
-              <h2 className="text-5xl font-black text-gray-900 mb-6">
-                Take <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">News Pulse</span> Everywhere
-              </h2>
-              <p className="text-xl text-gray-600 mb-8 leading-relaxed">
-                Download our award-winning mobile app and never miss a story. Available on all platforms with exclusive features.
-              </p>
-              
-              <div className="flex flex-col sm:flex-row gap-4 mb-8">
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="flex items-center space-x-3 bg-black text-white px-6 py-4 rounded-2xl cursor-pointer shadow-lg"
-                >
-                  <span className="text-2xl">📱</span>
-                  <div>
-                    <div className="text-sm opacity-80">Download on the</div>
-                    <div className="font-bold">App Store</div>
-                  </div>
-                </motion.div>
-                
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="flex items-center space-x-3 bg-gradient-to-r from-green-500 to-blue-600 text-white px-6 py-4 rounded-2xl cursor-pointer shadow-lg"
-                >
-                  <span className="text-2xl">🤖</span>
-                  <div>
-                    <div className="text-sm opacity-80">Get it on</div>
-                    <div className="font-bold">Google Play</div>
-                  </div>
-                </motion.div>
+      <Drawer open={viewAllOpen} onClose={() => setViewAllOpen(false)} theme={theme} title={viewAllKind === "live" ? "Live Updates" : "Breaking News"}>
+        <div className="grid gap-2">
+          {(viewAllKind === "live" ? LIVE_UPDATES : showBreaking ? (breakingItems.length ? breakingItems : ["No breaking news right now — stay tuned"]) : []).map(
+            (x: string, idx: number) => (
+              <div key={idx} className="rounded-2xl border px-3 py-3 text-sm" style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}>
+                {x}
               </div>
-
-              <div className="flex items-center space-x-8 text-sm text-gray-600">
-                <div className="flex items-center space-x-2">
-                  <span className="text-yellow-500">⭐⭐⭐⭐⭐</span>
-                  <span>4.8 Rating</span>
-                </div>
-                <div>1M+ Downloads</div>
-                <div>Available in 12 Languages</div>
-              </div>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, x: 50 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.8 }}
-              className="relative"
-            >
-              <div className="bg-gradient-to-br from-blue-600 to-purple-600 rounded-3xl p-8 text-white text-center shadow-2xl">
-                <div className="text-8xl mb-4">📱</div>
-                <h3 className="text-2xl font-bold mb-2">Mobile App Preview</h3>
-                <p className="opacity-90">Experience News Pulse on the go</p>
-                <div className="mt-6 grid grid-cols-3 gap-4 text-sm">
-                  <div>📊 Analytics</div>
-                  <div>🔔 Notifications</div>
-                  <div>📖 Offline Reading</div>
-                </div>
-              </div>
-            </motion.div>
-          </div>
+            )
+          )}
         </div>
-      </section>
+      </Drawer>
 
-      {/* Premium Footer */}
-      <footer className="bg-gray-900 text-white relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-900/20 to-purple-900/20"></div>
-        <div className="relative z-10">
-          {/* Main Footer Content */}
-          <div className="py-16 px-4 max-w-7xl mx-auto">
-            <div className="grid lg:grid-cols-4 md:grid-cols-2 gap-8">
-              {/* Brand Section */}
-              <div className="lg:col-span-2">
-                <motion.h3 
-                  className="text-4xl font-black mb-4 bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent"
-                  whileHover={{ scale: 1.05 }}
-                >
-                  News Pulse
-                </motion.h3>
-                <p className="text-gray-300 text-lg leading-relaxed mb-6 max-w-md">
-                  Your trusted source for breaking news, in-depth analysis, and stories that matter. 
-                  Delivering truth with integrity since our inception.
-                </p>
-                <div className="flex space-x-4">
-                  {[
-                    { name: 'Facebook', icon: '📘' },
-                    { name: 'Twitter', icon: '🐦' },
-                    { name: 'YouTube', icon: '📺' },
-                    { name: 'LinkedIn', icon: '💼' },
-                    { name: 'Instagram', icon: '📷' }
-                  ].map((social, index) => (
-                    <motion.a
-                      key={index}
-                      href="#"
-                      whileHover={{ scale: 1.2, y: -2 }}
-                      className="w-12 h-12 bg-white/10 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-white/20 transition-all duration-300"
-                    >
-                      <span className="text-xl">{social.icon}</span>
-                    </motion.a>
-                  ))}
-                </div>
-              </div>
-
-              {/* Quick Links */}
-              <div>
-                <h4 className="text-xl font-bold mb-6 text-blue-400">Quick Links</h4>
-                <ul className="space-y-3">
-                  {quickLinks.map((item) => (
-                    <li key={item.label}>
-                      <motion.a
-                        href={item.href}
-                        whileHover={{ x: 5 }}
-                        className="text-gray-300 hover:text-white transition-colors duration-200"
-                      >
-                        {item.label}
-                      </motion.a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Business */}
-              <div>
-                <h4 className="text-xl font-bold mb-6 text-purple-400">Business</h4>
-                <ul className="space-y-3">
-                  {['Advertise With Us', 'Media Kit', 'Partnerships', 'RSS Feeds', 'API Access', 'Licensing'].map((link, index) => (
-                    <li key={index}>
-                      <motion.a
-                        href="#"
-                        whileHover={{ x: 5 }}
-                        className="text-gray-300 hover:text-white transition-colors duration-200"
-                      >
-                        {link}
-                      </motion.a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          {/* Footer Bottom */}
-          <div className="border-t border-gray-800 py-8 px-4">
-            <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center">
-              <div className="text-gray-400 text-sm mb-4 md:mb-0">
-                © {new Date().getFullYear()} News Pulse. All rights reserved. | Powered by Innovation
-              </div>
-              <div className="flex items-center space-x-6 text-sm text-gray-400">
-                <span>🌍 Available in 12 languages</span>
-                <span>📱 Mobile & Web</span>
-                <span>🔒 Secure & Private</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </footer>
-
-      {/* AdminDashboard widget removed */}
+      <Toast theme={theme} message={toast} onDone={() => setToast("")} />
     </div>
   );
 }
