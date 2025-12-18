@@ -1,33 +1,35 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 
-// Backend origin as per requirements
-const API_BASE_URL =
+// Resolve backend origin strictly from env (no localhost default)
+const RAW_API_BASE_URL =
   process.env.NEWS_PULSE_BACKEND_URL ||
   process.env.API_BASE_URL ||
-  'http://localhost:5000'
+  ''
 
 // Server-side proxy: /api/community-reporter/submit  →  backend
 export default async function submitHandler(
   req: NextApiRequest,
   res: NextApiResponse,
 ) {
+  // Allow only POST
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST')
-    return res
-      .status(405)
-      .json({ ok: false, message: 'METHOD_NOT_ALLOWED' })
+    return res.status(405).json({ error: 'Method Not Allowed' })
   }
 
-  const base = (API_BASE_URL || '').toString().trim()
+  // Validate required env vars used by this route
+  const base = (RAW_API_BASE_URL || '').toString().trim()
   if (!base) {
-    console.error('[community-reporter/submit] BACKEND_URL_MISSING')
-    return res.status(500).json({ ok: false, message: 'BACKEND_URL_MISSING' })
+    console.error('[community-reporter/submit]', new Error('Missing env var: API_BASE_URL'))
+    return res.status(500).json({ error: 'Missing env var: API_BASE_URL' })
   }
-  const targetUrl = `${base.replace(/\/+$/,'')}/api/community-reporter/submit`
+
+  const targetUrl = `${base.replace(/\/+$/, '')}/api/community-reporter/submit`
 
   try {
-    const body = req.body && typeof req.body === 'object' ? (req.body as Record<string, any>) : {}
-    const upstreamPayload = body
+    // Pages Router: body is available on req.body when Content-Type: application/json
+    const body =
+      req.body && typeof req.body === 'object' ? (req.body as Record<string, any>) : {}
 
     const upstream = await fetch(targetUrl, {
       method: 'POST',
@@ -35,32 +37,36 @@ export default async function submitHandler(
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
-      body: JSON.stringify(upstreamPayload),
+      body: JSON.stringify(body),
     })
 
     const text = await upstream.text().catch(() => '')
 
+    // If backend fails, propagate status and include response text safely as JSON
     if (!upstream.ok) {
-      let json: any = null
-      try {
-        json = text ? JSON.parse(text) : null
-      } catch {
-        // ignore JSON parse error
-      }
+      console.error('[community-reporter/submit]', new Error(`Upstream error ${upstream.status}: ${text}`))
 
-      console.error('[community-reporter/submit] upstream error', upstream.status, text)
-      return res.status(upstream.status || 500).json({ ok: false, message: 'UPSTREAM_ERROR', status: upstream.status })
+      // Try to forward backend JSON as-is when possible
+      try {
+        const asJson = text ? JSON.parse(text) : { error: 'Upstream Error' }
+        return res.status(upstream.status || 500).json(asJson)
+      } catch {
+        return res
+          .status(upstream.status || 500)
+          .json({ error: text || 'Upstream Error' })
+      }
     }
 
-    // Success – try to parse, fall back to { success: true }
+    // Success – attempt JSON parse, fallback to { ok: true }
     try {
       const json = text ? JSON.parse(text) : { ok: true }
       return res.status(upstream.status || 200).json(json)
-    } catch {
-      return res.status(upstream.status || 200).json({ ok: true })
+    } catch (err) {
+      console.error('[community-reporter/submit]', err)
+      return res.status(200).json({ ok: true })
     }
-  } catch (err: any) {
-    console.error('[community-reporter/submit] exception', err)
-    return res.status(500).json({ ok: false, message: 'EXCEPTION' })
+  } catch (err) {
+    console.error('[community-reporter/submit]', err)
+    return res.status(500).json({ error: 'Internal Server Error' })
   }
 }
