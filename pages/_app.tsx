@@ -64,7 +64,9 @@ function MyApp({ Component, pageProps }) {
       <ThemeProvider>
         <LanguageProvider>
           <SafeIntlProvider messages={finalMessages} locale={locale} onError={() => {}}>
-            <Component {...pageProps} />
+            <div className="relative overflow-x-hidden">
+              <Component {...pageProps} />
+            </div>
           </SafeIntlProvider>
         </LanguageProvider>
       </ThemeProvider>

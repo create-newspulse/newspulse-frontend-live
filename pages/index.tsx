@@ -303,7 +303,6 @@ const FEED = [
 const DEFAULT_PREFS = {
   themeId: "aurora",
   lang: "English",
-  catFlow: "ltr" as "ltr" | "rtl",
 
   breakingMode: "auto" as "auto" | "on" | "off",
   liveTickerOn: true,
@@ -353,7 +352,6 @@ function normalizePrefs(input: any) {
 
   if (!THEMES.some((t) => t.id === p.themeId)) p.themeId = DEFAULT_PREFS.themeId;
   if (!["English", "Hindi", "Gujarati"].includes(p.lang)) p.lang = DEFAULT_PREFS.lang;
-  if (!["ltr", "rtl"].includes(p.catFlow)) p.catFlow = DEFAULT_PREFS.catFlow;
   if (!["auto", "on", "off"].includes(p.breakingMode)) p.breakingMode = DEFAULT_PREFS.breakingMode;
 
   p.liveTickerOn = !!p.liveTickerOn;
@@ -374,6 +372,9 @@ function normalizePrefs(input: any) {
   p.showAppPromo = !!p.showAppPromo;
   p.showFooter = !!p.showFooter;
 
+  // Remove deprecated category direction from persisted prefs
+  if ((p as any).catFlow !== undefined) delete (p as any).catFlow;
+
   return p;
 }
 
@@ -383,8 +384,8 @@ function getBreakingItems(prefs: any) {
   return BREAKING_FROM_BACKEND;
 }
 
-function getCatsByFlow(catFlow: "ltr" | "rtl") {
-  // Always keep core categories first, then extras, regardless of direction
+// Categories are always LTR by default
+function getCats() {
   return [...CATEGORIES];
 }
 
@@ -720,7 +721,7 @@ function TickerBar({ theme, kind, items, onViewAll, speedSec }: any) {
 
   return (
     <div className="np-marqueeWrap w-full min-w-0" aria-live="polite">
-      <div className="mx-auto max-w-7xl px-4">
+      <div className="w-full">
         <div className="w-full rounded-2xl overflow-hidden border" style={{ background: bg, borderColor: theme.border }}>
           <div className="px-3 py-2">
             <div className="flex items-center gap-3">
@@ -765,7 +766,7 @@ function TickerBar({ theme, kind, items, onViewAll, speedSec }: any) {
 
 function TrendingStrip({ theme, onPick }: any) {
   return (
-    <div className="mx-auto max-w-7xl px-4">
+    <div className="mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-8">
       <div className="mt-3">
         <Surface theme={theme} className="px-4 py-3">
           <div className="flex items-center gap-2">
@@ -780,19 +781,21 @@ function TrendingStrip({ theme, onPick }: any) {
               <Flame className="h-4 w-4" style={{ color: theme.live }} /> Trending
             </span>
 
-            <div className="np-no-scrollbar flex min-w-0 flex-1 items-center gap-2 overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
-              {TRENDING.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => onPick(t)}
-                  className="shrink-0 rounded-full px-3 py-1 text-xs font-semibold border"
-                  style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}
-                >
-                  {t}
-                </button>
-              ))}
-              <div className="w-2 shrink-0" />
+            <div className="np-no-scrollbar w-full overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
+              <div className="inline-flex items-center gap-2 pr-4">
+                {TRENDING.map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => onPick(t)}
+                    className="shrink-0 rounded-full px-3 py-1 text-xs font-semibold border"
+                    style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}
+                  >
+                    {t}
+                  </button>
+                ))}
+                <div className="w-2 shrink-0" />
+              </div>
             </div>
           </div>
         </Surface>
@@ -801,9 +804,8 @@ function TrendingStrip({ theme, onPick }: any) {
   );
 }
 
-function TopCategoriesStrip({ theme, catFlow, activeKey, onPick }: any) {
-  const isRTL = catFlow === "rtl";
-  const cats = useMemo(() => (isRTL ? [...CATEGORIES].reverse() : [...CATEGORIES]), [isRTL]);
+function TopCategoriesStrip({ theme, activeKey, onPick }: any) {
+  const cats = useMemo(() => [...CATEGORIES], []);
 
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const dragState = useRef({ down: false, startX: 0, startLeft: 0, moved: false, blockUntil: 0 });
@@ -850,18 +852,18 @@ function TopCategoriesStrip({ theme, catFlow, activeKey, onPick }: any) {
 
   return (
     <div className="w-full">
-      <div className="mx-auto max-w-7xl px-4">
+      <div className="mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-8">
         <div className="rounded-2xl border border-black/10 shadow-sm ring-1 ring-black/5 bg-white/80 backdrop-blur-md">
           <div className="px-3 py-2">
-            <div
-              ref={scrollerRef}
-              dir={isRTL ? "rtl" : "ltr"}
-              className="no-scrollbar scroll-smooth flex items-center gap-2.5 overflow-x-auto"
-              style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-x", overscrollBehaviorX: "contain" as any }}
-              onWheel={(e: any) => {
-                if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) e.currentTarget.scrollLeft += e.deltaY;
-              }}
-            >
+            <div className="no-scrollbar w-full overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
+              <div
+                ref={scrollerRef}
+                className="scroll-smooth inline-flex items-center gap-2.5"
+                style={{ touchAction: "pan-x", overscrollBehaviorX: "contain" as any }}
+                onWheel={(e: any) => {
+                  if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) (e.currentTarget.parentElement as HTMLElement)?.scrollBy?.({ left: e.deltaY, behavior: "auto" });
+                }}
+              >
               {cats.map((c: any) => {
                 const active = c.key === activeKey;
                 const t = CATEGORY_THEME[c.key] || CATEGORY_THEME.__default;
@@ -910,7 +912,8 @@ function TopCategoriesStrip({ theme, catFlow, activeKey, onPick }: any) {
                   </button>
                 );
               })}
-              <div className="w-2 shrink-0" />
+                <div className="w-2 shrink-0" />
+              </div>
             </div>
           </div>
         </div>
@@ -920,7 +923,7 @@ function TopCategoriesStrip({ theme, catFlow, activeKey, onPick }: any) {
 }
 
 function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick }: any) {
-  const cats = useMemo(() => getCatsByFlow(prefs.catFlow), [prefs.catFlow]);
+  const cats = useMemo(() => getCats(), []);
 
   return (
     <Surface theme={theme} className="p-4">
@@ -1247,22 +1250,7 @@ function PreferencesDrawer({ theme, open, onClose, prefs, setPrefs, onToast }: a
   return (
     <Drawer open={open} onClose={onClose} theme={theme} title="Settings">
       <div className="space-y-4">
-        <div className="rounded-3xl border p-4" style={{ background: theme.surface2, borderColor: theme.border }}>
-          <div className="text-sm font-extrabold" style={{ color: theme.text }}>
-            Category direction
-          </div>
-          <div className="mt-2 text-sm" style={{ color: theme.sub }}>
-            Applies to top strip AND Explore Categories list.
-          </div>
-          <div className="mt-3 flex gap-2">
-            <Button theme={theme} variant={prefs.catFlow === "ltr" ? "solid" : "soft"} onClick={() => setPrefs((p: any) => ({ ...p, catFlow: "ltr" }))}>
-              LTR
-            </Button>
-            <Button theme={theme} variant={prefs.catFlow === "rtl" ? "solid" : "soft"} onClick={() => setPrefs((p: any) => ({ ...p, catFlow: "rtl" }))}>
-              RTL
-            </Button>
-          </div>
-        </div>
+        
 
         <div className="rounded-3xl border p-4" style={{ background: theme.surface2, borderColor: theme.border }}>
           <div className="text-sm font-extrabold" style={{ color: theme.text }}>
@@ -1470,7 +1458,7 @@ function PreferencesDrawer({ theme, open, onClose, prefs, setPrefs, onToast }: a
 
 function AppPromoSection({ theme, onToast }: any) {
   return (
-    <div className="mx-auto max-w-7xl px-4 pb-10 pt-2">
+    <div className="mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-8 pb-10 pt-2">
       <Surface theme={theme} className="overflow-hidden">
         <div className="p-6 sm:p-8">
           <div className="grid gap-6 lg:grid-cols-12 lg:items-center">
@@ -1590,7 +1578,7 @@ function SiteFooter({ theme, onToast }: any) {
 
   return (
     <div className="mt-6" style={{ background: footerBg }}>
-      <div className="mx-auto max-w-7xl px-4 py-10">
+      <div className="mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-8 py-10">
         <div className="grid gap-10 md:grid-cols-12">
           <div className="md:col-span-5">
             <div className="text-3xl font-black text-white">
@@ -1739,7 +1727,7 @@ export default function UiPreviewV145() {
   const onToast = (m: string) => setToast(m);
 
   return (
-    <div style={{ minHeight: "100vh", background: theme.bg }}>
+    <div className="relative w-full overflow-x-hidden overflow-hidden" style={{ minHeight: "100vh", background: theme.bg }}>
       <style jsx global>{`
         html, body { height: 100%; }
         body { overflow-x: hidden; scrollbar-gutter: stable; }
@@ -1755,7 +1743,7 @@ export default function UiPreviewV145() {
       `}</style>
 
       {/* TOP HEADER */}
-      <div className="mx-auto max-w-7xl px-4 pt-4">
+      <div className="mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-8 pt-4">
         <Surface theme={theme} className="p-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
@@ -1812,7 +1800,6 @@ export default function UiPreviewV145() {
         <div className="sticky top-0 z-40 mt-4">
           <TopCategoriesStrip
             theme={theme}
-            catFlow={prefs.catFlow}
             activeKey={activeCatKey}
             onPick={(k: string) => {
               setActiveCatKey(k);
@@ -1824,7 +1811,7 @@ export default function UiPreviewV145() {
 
       {/* TICKERS: Combined premium module wrapper with BREAKING above LIVE */}
       <div className="mt-0 w-full max-w-full">
-        <div className="mx-auto max-w-7xl px-4 w-full">
+        <div className="mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-8">
           <div className="rounded-2xl border border-black/10 bg-white/80 backdrop-blur-md shadow-sm ring-1 ring-black/5 overflow-hidden p-2 flex flex-col gap-2">
           {showBreaking ? (
             <div className="w-full min-w-0">
@@ -1863,10 +1850,10 @@ export default function UiPreviewV145() {
       {prefs.showTrendingStrip ? <TrendingStrip theme={theme} onPick={(t: string) => onToast(`Trending: ${t}`)} /> : null}
 
       {/* MAIN GRID */}
-      <div className="mx-auto max-w-7xl px-4 pb-10 pt-4">
-        <div className="grid gap-4 lg:grid-cols-12">
+      <div className="mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-8 pb-10 pt-4">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[360px_1fr_360px] 2xl:grid-cols-[380px_1fr_380px]">
           {/* LEFT */}
-          <div className="lg:col-span-3 grid gap-4">
+          <div className="grid gap-4">
             {prefs.showExploreCategories ? (
               <ExploreCategoriesPanel
                 theme={theme}
@@ -1885,13 +1872,13 @@ export default function UiPreviewV145() {
           </div>
 
           {/* CENTER */}
-          <div className="lg:col-span-6 grid gap-4">
+          <div className="grid gap-4">
             <TopBanner theme={theme} />
             <FeaturedCard theme={theme} item={FEATURED[0]} onToast={onToast} />
           </div>
 
           {/* RIGHT */}
-          <div className="lg:col-span-3 grid gap-4">
+          <div className="grid gap-4">
             <FeedList theme={theme} title="Latest" items={FEED} onOpen={(id: string) => onToast(id === "viewall" ? "View all latest (planned)" : `Open story: ${id}`)} />
 
             {/* Regional preview */}
@@ -1959,7 +1946,7 @@ export default function UiPreviewV145() {
           </div>
 
           <div className="grid gap-1">
-            {getCatsByFlow(prefs.catFlow).map((c: any) => (
+            {getCats().map((c: any) => (
               <button
                 key={c.key}
                 type="button"
