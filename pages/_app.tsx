@@ -4,6 +4,7 @@ import Script from 'next/script';
 import * as gtag from '../lib/gtag';
 import { LanguageProvider } from '../utils/LanguageContext';
 import { ThemeProvider } from '../utils/ThemeContext';
+import { FeatureFlagProvider } from '../utils/FeatureFlagProvider';
 import '../styles/globals.css';
 import SafeIntlProvider from '../lib/SafeIntlProvider';
 
@@ -62,13 +63,15 @@ function MyApp({ Component, pageProps }) {
       />
 
       <ThemeProvider>
-        <LanguageProvider>
-          <SafeIntlProvider messages={finalMessages} locale={locale} onError={() => {}}>
-            <div className="relative overflow-x-hidden">
-              <Component {...pageProps} />
-            </div>
-          </SafeIntlProvider>
-        </LanguageProvider>
+        <FeatureFlagProvider initialFlags={pageProps?.featureFlags}>
+          <LanguageProvider>
+            <SafeIntlProvider messages={finalMessages} locale={locale} onError={() => {}}>
+              <div className="relative overflow-x-hidden">
+                <Component {...pageProps} />
+              </div>
+            </SafeIntlProvider>
+          </LanguageProvider>
+        </FeatureFlagProvider>
       </ThemeProvider>
     </>
   );

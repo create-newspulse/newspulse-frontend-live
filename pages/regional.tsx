@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLanguage } from "../utils/LanguageContext";
 import { useRegionalPulse } from "../src/features/regional/useRegionalPulse";
+import AIAnchor from "../components/AIAnchor";
+import { useFeatureFlags } from "../utils/FeatureFlagProvider";
 
 /**
  * Regional – Gujarat (News Pulse)
@@ -291,6 +293,7 @@ function ClientTime({ iso }: { iso?: string }) {
 
 export default function RegionalGujaratPage() {
   const { language, setLanguage } = useLanguage();
+  const { isEnabled } = useFeatureFlags();
   const {
     FILTERS: R_FILTERS,
     filter,
@@ -305,6 +308,11 @@ export default function RegionalGujaratPage() {
     highlightsText,
   } = useRegionalPulse("gujarat");
   const voice = useVoiceReader();
+
+  const askAnchorHeadlines = useMemo(() => {
+    const list = (news || []).slice(0, 6);
+    return list.map((n) => ({ text: n.title }));
+  }, [news]);
 
 
   
@@ -329,19 +337,27 @@ export default function RegionalGujaratPage() {
               <option value="gujarati">ગુજરાતી</option>
               <option value="hindi">हिन्दी</option>
             </select>
-            <button
-              onClick={() => voice.toggle(`Here are top regional highlights. ${highlightsText}`)}
-              className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
-              title={voice.speaking ? "Mute" : "Listen to local highlights"}
-              aria-pressed={voice.speaking}
-            >
-              <span role="img" aria-label={voice.speaking ? "muted" : "speaker"}>
-                {voice.speaking ? "🔇" : "🔊"}
-              </span>
-              {voice.speaking ? "Mute" : "Listen"}
-            </button>
+            {isEnabled('voice.enabled', true) && (
+              <button
+                onClick={() => voice.toggle(`Here are top regional highlights. ${highlightsText}`)}
+                className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
+                title={voice.speaking ? "Mute" : "Listen to local highlights"}
+                aria-pressed={voice.speaking}
+              >
+                <span role="img" aria-label={voice.speaking ? "muted" : "speaker"}>
+                  {voice.speaking ? "🔇" : "🔊"}
+                </span>
+                {voice.speaking ? "Mute" : "Listen"}
+              </button>
+            )}
           </div>
         </div>
+
+        {isEnabled('askAnchor.enabled', true) && askAnchorHeadlines.length > 0 && (
+          <div className="mt-4">
+            <AIAnchor language={language} headlines={askAnchorHeadlines} />
+          </div>
+        )}
 
         {/* Controls */}
         <div className="mt-5 flex flex-col md:flex-row gap-3 md:items-center md:justify-between">

@@ -1,0 +1,11 @@
+{
+  "comments": {
+    "enabled": true
+  },
+  "voice": {
+    "enabled": true
+  },
+  "askAnchor": {
+    "enabled": true
+  }
+}
