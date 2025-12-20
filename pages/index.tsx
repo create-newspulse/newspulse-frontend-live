@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRegionalPulse } from "../src/features/regional/useRegionalPulse";
 import { useYouthPulse } from "../features/youthPulse/useYouthPulse";
+import { usePublicMode } from "../utils/PublicModeProvider";
 import type { GetStaticProps } from "next";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -1660,6 +1661,7 @@ function SiteFooter({ theme, onToast }: any) {
 export default function UiPreviewV145() {
   const [prefs, setPrefs] = useState<any>(DEFAULT_PREFS);
   const theme = useMemo(() => getTheme(prefs.themeId), [prefs.themeId]);
+  const { externalFetch } = usePublicMode();
 
   const [activeCatKey, setActiveCatKey] = useState<string>("breaking");
   const [toast, setToast] = useState<string>("");
@@ -1847,7 +1849,7 @@ export default function UiPreviewV145() {
       </div>
 
       {/* TRENDING */}
-      {prefs.showTrendingStrip ? <TrendingStrip theme={theme} onPick={(t: string) => onToast(`Trending: ${t}`)} /> : null}
+      {(prefs.showTrendingStrip && externalFetch) ? <TrendingStrip theme={theme} onPick={(t: string) => onToast(`Trending: ${t}`)} /> : null}
 
       {/* MAIN GRID */}
       <div className="mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-8 pb-10 pt-4">

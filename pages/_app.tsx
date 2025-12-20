@@ -5,6 +5,7 @@ import * as gtag from '../lib/gtag';
 import { LanguageProvider } from '../utils/LanguageContext';
 import { ThemeProvider } from '../utils/ThemeContext';
 import { FeatureFlagProvider } from '../utils/FeatureFlagProvider';
+import { PublicModeProvider } from '../utils/PublicModeProvider';
 import '../styles/globals.css';
 import SafeIntlProvider from '../lib/SafeIntlProvider';
 
@@ -63,15 +64,17 @@ function MyApp({ Component, pageProps }) {
       />
 
       <ThemeProvider>
-        <FeatureFlagProvider initialFlags={pageProps?.featureFlags}>
-          <LanguageProvider>
-            <SafeIntlProvider messages={finalMessages} locale={locale} onError={() => {}}>
-              <div className="relative overflow-x-hidden">
-                <Component {...pageProps} />
-              </div>
-            </SafeIntlProvider>
-          </LanguageProvider>
-        </FeatureFlagProvider>
+        <PublicModeProvider initialMode={pageProps?.publicMode}>
+          <FeatureFlagProvider initialFlags={pageProps?.featureFlags}>
+            <LanguageProvider>
+              <SafeIntlProvider messages={finalMessages} locale={locale} onError={() => {}}>
+                <div className="relative overflow-x-hidden">
+                  <Component {...pageProps} />
+                </div>
+              </SafeIntlProvider>
+            </LanguageProvider>
+          </FeatureFlagProvider>
+        </PublicModeProvider>
       </ThemeProvider>
     </>
   );

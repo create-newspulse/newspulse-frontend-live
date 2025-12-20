@@ -5,6 +5,7 @@ import { useRouter } from 'next/router';
 import type { GetServerSideProps } from 'next';
 import { submitCommunityStory, SubmitCommunityStoryResult } from '../src/lib/communityReporterApi';
 import { useCommunityReporterConfig } from '../src/hooks/useCommunityReporterConfig';
+import { usePublicMode } from '../utils/PublicModeProvider';
 
 // Phase 1 Community Reporter Submission Page
 // Route: /community-reporter
@@ -98,6 +99,7 @@ type FeatureToggleProps = {
 
 const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporterClosed, reporterPortalClosed }) => {
   const router = useRouter();
+  const { readOnly } = usePublicMode();
   const [step, setStep] = useState<1 | 2>(1);
   const [reporterType, setReporterType] = useState<ReporterType>('community');
   const [signUpData, setSignUpData] = useState<ReporterSignUpState>(initialSignUp);
@@ -154,6 +156,9 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
   const myStoriesEnabled = settings ? Boolean(settings.allowMyStoriesPortal) : myStoriesEnabledLegacy;
   const readonlyMode = settings ? (settings.communityReporterEnabled === true && settings.allowNewSubmissions === false) : false;
   const journalistApplicationsOpen = settings ? Boolean(settings.allowJournalistApplications) : true;
+
+  // Global readOnly from PublicModeProvider overrides local readonlyMode
+  const effectiveReadOnly = readOnly || readonlyMode;
 
   const validateStep1 = () => {
     const e: Record<string, string> = {};
@@ -324,6 +329,56 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
     );
   }
 
+  // Global readOnly or feature-level readonlyMode: show read-only notice
+  if (effectiveReadOnly && submitStatus !== 'success') {
+    return (
+    <div className="min-h-screen bg-white dark:bg-dark-primary text-black dark:text-dark-text">
+      <Head>
+        <title>Community Reporter – Submit Your Story | News Pulse</title>
+        <meta name="description" content="Submit your story to News Pulse. For community reporters and professional journalists: Step 1 for reporter details with ethics/charter, Step 2 for your story." />
+      </Head>
+
+      {/* Hero / Intro */}
+      <section className="relative py-16 px-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-900">
+        <div className="max-w-4xl mx-auto">
+          <h1 className="text-4xl md:text-5xl font-black mb-6 bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600">
+            News Pulse Community Reporter
+          </h1>
+          <p className="text-lg md:text-xl leading-relaxed mb-6 text-gray-700 dark:text-gray-300">
+            Share impactful local stories, emerging issues, campus updates, and verified tips. Every submission is manually reviewed by our editorial team before publishing.
+          </p>
+          <div className="mb-4">
+            {(!reporterPortalClosed && myStoriesEnabled) ? (
+              <Link
+                href={`/community-reporter/my-stories${signUpData.email ? `?email=${encodeURIComponent(signUpData.email.trim().toLowerCase())}` : ''}`}
+                className="text-sm text-blue-700 hover:underline"
+              >
+                Already submitted stories? View My Community Stories
+              </Link>
+            ) : null}
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 p-6 mb-4">
+            <h2 className="text-xl font-semibold mb-3">📖 Read-Only Mode</h2>
+            <p className="text-gray-700 dark:text-gray-300">
+              Submissions are temporarily paused due to maintenance or policy updates. You can browse existing stories in the meantime.
+            </p>
+            {myStoriesEnabled && (
+              <div className="mt-4">
+                <Link
+                  href="/community-reporter-my-stories"
+                  className="inline-block px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  View My Stories
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+    </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-white dark:bg-dark-primary text-black dark:text-dark-text">
       <Head>
@@ -376,16 +431,11 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
         <div className="max-w-3xl mx-auto">
           <form onSubmit={step === 1 ? undefined : handleSubmitStep2} className="space-y-6 bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700">
             <h2 className="text-2xl font-bold mb-2">{step === 1 ? 'Reporter Details' : 'Submit Your Story'}</h2>
-            {readonlyMode && (
-              <div className="mb-4 rounded-md border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-900">
-                Submissions are temporarily paused. You can still read about the program below.
+            {effectiveReadOnly && (
+              <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                Submissions are temporarily paused (read-only mode). You can browse the program details below.
               </div>
             )}
-                    {step === 1 && (
-                      <p className="text-xs text-gray-600 dark:text-gray-300 -mt-1 mb-2">
-                        Working journalist? Select 'Professional Journalist' above to share your press details for verification.
-                      </p>
-                    )}
                     {step === 1 && (
                       <div className="space-y-6 border-b border-gray-200 dark:border-gray-700 pb-6">
                         {/* Identity */}
