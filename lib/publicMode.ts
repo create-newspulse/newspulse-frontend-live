@@ -32,7 +32,11 @@ export async function fetchPublicMode(): Promise<PublicModeResponse> {
   }
 
   try {
-    const res = await fetch(`${BACKEND_URL}/api/system/public-mode`, {
+    const url = typeof window !== 'undefined'
+      ? '/api/public/mode'
+      : `${BACKEND_URL}/api/system/public-mode`;
+
+    const res = await fetch(url, {
       method: 'GET',
       headers: { Accept: 'application/json' },
       // No credentials for public endpoint
@@ -59,8 +63,7 @@ export async function fetchPublicMode(): Promise<PublicModeResponse> {
 
     cachedResponse = { fetchedAt: now, data: parsed };
     return parsed;
-  } catch (err) {
-    console.error('[publicMode] Fetch error:', err);
+  } catch {
     return DEFAULT_MODE;
   }
 }

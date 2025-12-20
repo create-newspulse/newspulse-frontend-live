@@ -37,9 +37,9 @@ export function PublicModeProvider({
     setIsLoading(true);
     try {
       const data = await fetchPublicMode();
-      if (mounted.current) {
-        setState(data);
-      }
+      if (mounted.current) setState(data);
+    } catch {
+      // Never allow mode fetch to crash the app.
     } finally {
       if (mounted.current) {
         setIsLoading(false);
