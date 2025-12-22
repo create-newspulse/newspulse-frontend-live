@@ -44,6 +44,17 @@ module.exports = {
     '10.145.86.143',
   ],
 
+  async redirects() {
+    return [
+      {
+        source: '/:path*',
+        has: [{ type: 'host', value: 'newspulse.co.in' }],
+        destination: 'https://www.newspulse.co.in/:path*',
+        permanent: true,
+      },
+    ];
+  },
+
     async headers() {
       // Add a strict Content Security Policy and include GTM image beacon domain
       const csp = [
