@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLanguage } from "../utils/LanguageContext";
 import { useRegionalPulse } from "../src/features/regional/useRegionalPulse";
-import AIAnchor from "../components/AIAnchor";
 import { useFeatureFlags } from "../utils/FeatureFlagProvider";
 
 /**
@@ -249,7 +248,15 @@ function useVoiceReader() {
 
 // ---------- Chips & small UI
 
-function Chip({ children, tone = "default" as "default" | "success" | "info" | "warning" }) {
+type ChipTone = "default" | "success" | "info" | "warning";
+
+function Chip({
+  children,
+  tone = "default",
+}: {
+  children: React.ReactNode;
+  tone?: ChipTone;
+}) {
   const toneMap: Record<string, string> = {
     default: "bg-slate-100 text-slate-700",
     success: "bg-emerald-100 text-emerald-700",
@@ -309,14 +316,6 @@ export default function RegionalGujaratPage() {
   } = useRegionalPulse("gujarat");
   const voice = useVoiceReader();
 
-  const askAnchorHeadlines = useMemo(() => {
-    const list = (news || []).slice(0, 6);
-    return list.map((n) => ({ text: n.title }));
-  }, [news]);
-
-
-  
-
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
@@ -352,12 +351,6 @@ export default function RegionalGujaratPage() {
             )}
           </div>
         </div>
-
-        {isEnabled('askAnchor.enabled', true) && askAnchorHeadlines.length > 0 && (
-          <div className="mt-4">
-            <AIAnchor language={language} headlines={askAnchorHeadlines} />
-          </div>
-        )}
 
         {/* Controls */}
         <div className="mt-5 flex flex-col md:flex-row gap-3 md:items-center md:justify-between">

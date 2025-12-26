@@ -1,13 +1,13 @@
 // next.config.js
 
-module.exports = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   reactStrictMode: true,
 
   // Fix for Vercel deployment and workspace detection
   outputFileTracingRoot: __dirname,
 
   images: {
-    // Migrate from deprecated `images.domains` to `remotePatterns`
     remotePatterns: [
       { protocol: 'https', hostname: 'cdn.newsapi.org', pathname: '/**' },
       { protocol: 'https', hostname: 'images.unsplash.com', pathname: '/**' },
@@ -18,31 +18,15 @@ module.exports = {
     ],
   },
 
-  env: {
-    NEWSAPI_KEY: process.env.NEWSAPI_KEY,
-    NEWSDATA_API_KEY: process.env.NEWSDATA_API_KEY,
-    THENEWSAPI_TOKEN: process.env.THENEWSAPI_TOKEN,
-    MEDIASTACK_API_KEY: process.env.MEDIASTACK_API_KEY,
-    GNEWS_API_KEY: process.env.GNEWS_API_KEY,
-  },
-
   // Internationalization (Pages Router)
   i18n: {
     locales: ['en', 'hi', 'gu'],
     defaultLocale: 'en',
-    // Next 16 only allows disabling detection here; routing handles locale
     localeDetection: false,
   },
 
-  // Allow cross-origin dev requests to Next.js internal /_next/* from LAN/IP origins
-  // This suppresses the warning: "Cross origin request detected ... configure allowedDevOrigins"
-  // Only used in development and ignored in production
-  allowedDevOrigins: [
-    'localhost',
-    '127.0.0.1',
-    // Add your LAN IP(s) used to access the dev server
-    '10.145.86.143',
-  ],
+  // Dev-only (suppresses allowedDevOrigins warning for LAN testing)
+  allowedDevOrigins: ['localhost', '127.0.0.1', '10.145.86.143'],
 
   async redirects() {
     return [
@@ -55,38 +39,55 @@ module.exports = {
     ];
   },
 
-    async headers() {
-      // Add a strict Content Security Policy and include GTM image beacon domain
-      const csp = [
-        "default-src 'self'",
-        // Scripts: allow self and GTM/GA if used
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com",
-        // Styles: allow self and inline for frameworks like Tailwind
-        "style-src 'self' 'unsafe-inline'",
-        // Images: include self, data, blobs, and existing domains plus googletagmanager
-        "img-src 'self' data: blob: https://*.googleusercontent.com https://*.gstatic.com https://tpc.googlesyndication.com https://pagead2.googlesyndication.com https://images.unsplash.com https://media.licdn.com https://static.toiimg.com https://gnews.io https://cdn.gulte.com https://www.googletagmanager.com",
-        // Fonts
-        "font-src 'self' data: https://*.gstatic.com",
-        // Connections: allow self, GTM/GA, and websockets for HMR
-        "connect-src 'self' https://www.googletagmanager.com https://www.google-analytics.com ws:",
-        // Frames: allow self only
-        "frame-src 'self'",
-        // Workers
-        "worker-src 'self'",
-        // Manifests
-        "manifest-src 'self'",
-      ].join('; ');
+  async headers() {
+    const isDev = process.env.NODE_ENV !== 'production';
+    const backend = 'https://newspulse-backend-real.onrender.com';
 
-      return [
-        {
-          source: '/:path*',
-          headers: [
-            {
-              key: 'Content-Security-Policy',
-              value: csp,
-            },
-          ],
-        },
-      ];
+    // Content Security Policy
+    const csp = [
+      "default-src 'self'",
+      "base-uri 'self'",
+      "object-src 'none'",
+
+      // Next.js + GTM/GA
+      `script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com${
+        isDev ? " 'unsafe-eval'" : ''
+      }`,
+
+      // Tailwind/inline styles
+      "style-src 'self' 'unsafe-inline'",
+
+      // Images (ads + analytics + your image sources)
+      "img-src 'self' data: blob: https://*.googleusercontent.com https://*.gstatic.com https://tpc.googlesyndication.com https://pagead2.googlesyndication.com https://images.unsplash.com https://media.licdn.com https://static.toiimg.com https://gnews.io https://cdn.gulte.com https://www.googletagmanager.com https://www.google-analytics.com",
+
+      // Fonts
+      "font-src 'self' data: https://*.gstatic.com",
+
+      // ✅ IMPORTANT: allow backend API requests (this fixes your blocked fetch)
+      `connect-src 'self' ${backend} https://www.googletagmanager.com https://www.google-analytics.com ws: wss:`,
+
+      // Frames (keep strict; add domains only if you embed content like YouTube)
+      "frame-src 'self'",
+
+      // Workers (Next sometimes needs blob:)
+      "worker-src 'self' blob:",
+
+      "manifest-src 'self'",
+      'upgrade-insecure-requests',
+    ].join('; ');
+
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'Content-Security-Policy', value: csp },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+        ],
+      },
+    ];
   },
 };
+
+module.exports = nextConfig;

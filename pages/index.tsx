@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRegionalPulse } from "../src/features/regional/useRegionalPulse";
 import { useYouthPulse } from "../features/youthPulse/useYouthPulse";
 import { usePublicMode } from "../utils/PublicModeProvider";
+import AdSlot from "../components/ads/AdSlot";
 import type { GetStaticProps } from "next";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -926,9 +927,150 @@ function TopCategoriesStrip({ theme, activeKey, onPick }: any) {
 function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick }: any) {
   const cats = useMemo(() => getCats(), []);
 
+  type ExploreTone = {
+    wrap: string;
+    iconWrap: string;
+    text: string;
+    arrow: string;
+    activeRing: string;
+    leftBar: string;
+  };
+
+  const TONE: Record<string, ExploreTone> = {
+    breaking: {
+      wrap: "bg-red-50 border-red-200 hover:bg-red-50/80",
+      iconWrap: "bg-red-100 border-red-200 text-red-700",
+      text: "text-red-800",
+      arrow: "text-red-500",
+      activeRing: "ring-red-200",
+      leftBar: "bg-red-500",
+    },
+    regional: {
+      wrap: "bg-emerald-50 border-emerald-200 hover:bg-emerald-50/80",
+      iconWrap: "bg-emerald-100 border-emerald-200 text-emerald-700",
+      text: "text-emerald-800",
+      arrow: "text-emerald-500",
+      activeRing: "ring-emerald-200",
+      leftBar: "bg-emerald-500",
+    },
+    national: {
+      wrap: "bg-amber-50 border-amber-200 hover:bg-amber-50/80",
+      iconWrap: "bg-amber-100 border-amber-200 text-amber-800",
+      text: "text-amber-900",
+      arrow: "text-amber-600",
+      activeRing: "ring-amber-200",
+      leftBar: "bg-amber-500",
+    },
+    international: {
+      wrap: "bg-blue-50 border-blue-200 hover:bg-blue-50/80",
+      iconWrap: "bg-blue-100 border-blue-200 text-blue-700",
+      text: "text-blue-800",
+      arrow: "text-blue-500",
+      activeRing: "ring-blue-200",
+      leftBar: "bg-blue-500",
+    },
+    business: {
+      wrap: "bg-violet-50 border-violet-200 hover:bg-violet-50/80",
+      iconWrap: "bg-violet-100 border-violet-200 text-violet-700",
+      text: "text-violet-800",
+      arrow: "text-violet-500",
+      activeRing: "ring-violet-200",
+      leftBar: "bg-violet-500",
+    },
+    science: {
+      wrap: "bg-cyan-50 border-cyan-200 hover:bg-cyan-50/80",
+      iconWrap: "bg-cyan-100 border-cyan-200 text-cyan-700",
+      text: "text-cyan-800",
+      arrow: "text-cyan-500",
+      activeRing: "ring-cyan-200",
+      leftBar: "bg-cyan-500",
+    },
+    sports: {
+      wrap: "bg-sky-50 border-sky-200 hover:bg-sky-50/80",
+      iconWrap: "bg-sky-100 border-sky-200 text-sky-700",
+      text: "text-sky-800",
+      arrow: "text-sky-500",
+      activeRing: "ring-sky-200",
+      leftBar: "bg-sky-500",
+    },
+    lifestyle: {
+      wrap: "bg-rose-50 border-rose-200 hover:bg-rose-50/80",
+      iconWrap: "bg-rose-100 border-rose-200 text-rose-700",
+      text: "text-rose-800",
+      arrow: "text-rose-500",
+      activeRing: "ring-rose-200",
+      leftBar: "bg-rose-500",
+    },
+    glamour: {
+      wrap: "bg-fuchsia-50 border-fuchsia-200 hover:bg-fuchsia-50/80",
+      iconWrap: "bg-fuchsia-100 border-fuchsia-200 text-fuchsia-700",
+      text: "text-fuchsia-800",
+      arrow: "text-fuchsia-500",
+      activeRing: "ring-fuchsia-200",
+      leftBar: "bg-fuchsia-500",
+    },
+    webstories: {
+      wrap: "bg-yellow-50 border-yellow-200 hover:bg-yellow-50/80",
+      iconWrap: "bg-yellow-100 border-yellow-200 text-yellow-800",
+      text: "text-yellow-900",
+      arrow: "text-yellow-700",
+      activeRing: "ring-yellow-200",
+      leftBar: "bg-yellow-500",
+    },
+    viral: {
+      wrap: "bg-lime-50 border-lime-200 hover:bg-lime-50/80",
+      iconWrap: "bg-lime-100 border-lime-200 text-lime-800",
+      text: "text-lime-900",
+      arrow: "text-lime-700",
+      activeRing: "ring-lime-200",
+      leftBar: "bg-lime-500",
+    },
+    editorial: {
+      wrap: "bg-slate-50 border-slate-200 hover:bg-slate-50/80",
+      iconWrap: "bg-slate-100 border-slate-200 text-slate-700",
+      text: "text-slate-800",
+      arrow: "text-slate-500",
+      activeRing: "ring-slate-200",
+      leftBar: "bg-slate-500",
+    },
+    youth: {
+      wrap: "bg-indigo-50 border-indigo-200 hover:bg-indigo-50/80",
+      iconWrap: "bg-indigo-100 border-indigo-200 text-indigo-700",
+      text: "text-indigo-800",
+      arrow: "text-indigo-500",
+      activeRing: "ring-indigo-200",
+      leftBar: "bg-indigo-500",
+    },
+    inspiration: {
+      wrap: "bg-teal-50 border-teal-200 hover:bg-teal-50/80",
+      iconWrap: "bg-teal-100 border-teal-200 text-teal-700",
+      text: "text-teal-800",
+      arrow: "text-teal-500",
+      activeRing: "ring-teal-200",
+      leftBar: "bg-teal-500",
+    },
+    community: {
+      wrap: "bg-orange-50 border-orange-200 hover:bg-orange-50/80",
+      iconWrap: "bg-orange-100 border-orange-200 text-orange-700",
+      text: "text-orange-800",
+      arrow: "text-orange-500",
+      activeRing: "ring-orange-200",
+      leftBar: "bg-orange-500",
+    },
+  };
+
+  const DEFAULT_TONE: ExploreTone = {
+    wrap: "bg-neutral-50 border-neutral-200 hover:bg-neutral-50/80",
+    iconWrap: "bg-neutral-100 border-neutral-200 text-neutral-700",
+    text: "text-neutral-800",
+    arrow: "text-neutral-500",
+    activeRing: "ring-neutral-200",
+    leftBar: "bg-neutral-400",
+  };
+
   return (
     <Surface theme={theme} className="p-4">
-      <div className="text-sm font-extrabold" style={{ color: theme.text }}>
+      <div className="text-base font-extrabold" style={{ color: theme.text }}>
         Explore Categories
       </div>
       <div className="mt-1 text-xs" style={{ color: theme.sub }}>
@@ -939,50 +1081,40 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick }: any) {
         {cats.map((c: any) => {
           const active = c.key === activeKey;
           const href = CATEGORY_ROUTES[c.key as string];
+          const t = TONE[c.key as string] ?? DEFAULT_TONE;
           const content = (
             <div
-              className={cx(
-                "flex items-center gap-3 rounded-3xl border px-4 py-4 text-left transition hover:opacity-[0.98]"
-              )}
-              style={{
-                background: active ? theme.chipHover : theme.surface2,
-                borderColor: active
-                  ? theme.mode === "dark"
-                    ? "rgba(56,189,248,0.35)"
-                    : "rgba(37,99,235,0.28)"
-                  : theme.border,
-                color: theme.text,
-              }}
+              className={[
+                "relative flex items-center gap-3 rounded-3xl border transition",
+                "h-14 px-4",
+                t.wrap,
+                active ? `ring-2 ${t.activeRing}` : "",
+              ].join(" ")}
             >
-              <span
-                className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border"
-                style={{ background: theme.chip, borderColor: theme.border }}
-              >
-                <c.Icon className="h-5 w-5" />
+              <span className={["absolute left-0 top-3 bottom-3 w-1 rounded-full", t.leftBar].join(" ")} />
+
+              <span className={["grid place-items-center w-10 h-10 rounded-2xl border", t.iconWrap].join(" ")}>
+                <c.Icon className="w-5 h-5" />
               </span>
 
               <span className="flex-1 min-w-0">
-                <span className="block text-sm font-extrabold truncate">{c.label}</span>
-                {c.badge ? (
-                  <span
-                    className="mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-extrabold border"
-                    style={{
-                      background: theme.mode === "dark" ? "rgba(56,189,248,0.12)" : "rgba(37,99,235,0.10)",
-                      borderColor: theme.mode === "dark" ? "rgba(56,189,248,0.30)" : "rgba(37,99,235,0.22)",
-                      color: theme.text,
-                    }}
-                  >
-                    {c.badge}
-                  </span>
-                ) : null}
+                <span className="flex items-center gap-2 min-w-0">
+                  <span className={["block text-[15px] font-bold truncate", t.text].join(" ")}>{c.label}</span>
+                  {c.badge ? (
+                    <span
+                      className={[
+                        "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-extrabold",
+                        "bg-white/60 border-black/10",
+                        t.text,
+                      ].join(" ")}
+                    >
+                      {c.badge}
+                    </span>
+                  ) : null}
+                </span>
               </span>
 
-              <ArrowRight
-                className="h-4 w-4"
-                style={{
-                  color: theme.muted,
-                }}
-              />
+              <ArrowRight className={["ml-auto w-5 h-5", t.arrow].join(" ")} />
             </div>
           );
 
@@ -999,43 +1131,6 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick }: any) {
             </button>
           );
         })}
-      </div>
-    </Surface>
-  );
-}
-
-function TopBanner({ theme }: any) {
-  return (
-    <Surface theme={theme} className="overflow-hidden">
-      <div className="p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="text-sm font-extrabold" style={{ color: theme.text }}>
-              Spotlight
-            </div>
-            <div className="text-xs" style={{ color: theme.sub }}>
-              Space for a featured promo / sponsor banner (optional)
-            </div>
-          </div>
-          <span className="rounded-full px-3 py-1 text-xs font-semibold border" style={{ background: theme.chip, borderColor: theme.border, color: theme.text }}>
-            728×90
-          </span>
-        </div>
-
-        <div
-          className="mt-4 rounded-3xl border"
-          style={{
-            borderColor: theme.border,
-            background:
-              theme.mode === "dark"
-                ? "linear-gradient(135deg, rgba(56,189,248,0.15), rgba(167,139,250,0.10))"
-                : "linear-gradient(135deg, rgba(37,99,235,0.12), rgba(124,58,237,0.10))",
-          }}
-        >
-          <div className="flex h-[110px] items-center justify-center text-xs font-semibold" style={{ color: theme.sub }}>
-            Banner / Promo Slot (no e-paper)
-          </div>
-        </div>
       </div>
     </Surface>
   );
@@ -1848,6 +1943,11 @@ export default function UiPreviewV145() {
         </div>
       </div>
 
+      <AdSlot
+        slot="HOME_728x90"
+        className="mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-8 my-2"
+      />
+
       {/* TRENDING */}
       {(prefs.showTrendingStrip && externalFetch) ? <TrendingStrip theme={theme} onPick={(t: string) => onToast(`Trending: ${t}`)} /> : null}
 
@@ -1875,12 +1975,12 @@ export default function UiPreviewV145() {
 
           {/* CENTER */}
           <div className="grid gap-4">
-            <TopBanner theme={theme} />
             <FeaturedCard theme={theme} item={FEATURED[0]} onToast={onToast} />
           </div>
 
           {/* RIGHT */}
           <div className="grid gap-4">
+            <AdSlot slot="HOME_RIGHT_300x250" />
             <FeedList theme={theme} title="Latest" items={FEED} onOpen={(id: string) => onToast(id === "viewall" ? "View all latest (planned)" : `Open story: ${id}`)} />
 
             {/* Regional preview */}
