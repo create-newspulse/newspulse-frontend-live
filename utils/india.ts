@@ -22,7 +22,7 @@ const STATE_ORDER_WITH_CAPITALS: Array<[string, string]> = [
   ['Tamil Nadu', 'Chennai'],
   ['West Bengal', 'Kolkata'],
   ['Telangana', 'Hyderabad'],
-  ['Gujarat', 'Ahmedabad'],
+  ['Gujarat', 'Gandhinagar'],
   ['Rajasthan', 'Jaipur'],
   ['Uttar Pradesh', 'Lucknow'],
   ['Madhya Pradesh', 'Bhopal'],
