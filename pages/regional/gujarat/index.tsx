@@ -14,7 +14,7 @@ import RegionalFeedCards from '../../../components/regional/RegionalFeedCards';
 import { fetchPublicStories, getStoryCategoryLabel } from '../../../lib/publicStories';
 import { GUJARAT_DISTRICTS } from '../../../utils/regions';
 import { useLanguage } from '../../../utils/LanguageContext';
-import { getGujaratDistrictName, getStateName, tHeading } from '../../../utils/localizedNames';
+import { getStateName, tHeading } from '../../../utils/localizedNames';
 
 const CATEGORIES = [
   'All',
@@ -86,8 +86,10 @@ function isGujaratTagged(story: AnyStory): boolean {
   const tags = tagList(story?.tags);
   if (tags.includes('state:gujarat') || tags.includes('gujarat') || tags.includes('state-gujarat')) return true;
 
+  // Treat district/city tagged items as Gujarat-relevant for this page.
   if (tags.some((t) => t.startsWith('district:') || t.startsWith('city:'))) return true;
 
+  // Also match against known Gujarat districts by slug/name.
   const districtTokens = new Set(
     GUJARAT_DISTRICTS.flatMap((d) => [String(d.slug || '').toLowerCase(), String(d.name || '').toLowerCase()]).filter(Boolean)
   );
@@ -99,13 +101,9 @@ function isGujaratTagged(story: AnyStory): boolean {
   return false;
 }
 
-export default function GujaratDistrictPage() {
+export default function GujaratIndexPage() {
   const router = useRouter();
   const { language } = useLanguage();
-  const { district } = router.query as { district?: string };
-
-  const districtSlug = typeof district === 'string' ? district : undefined;
-  const entry = useMemo(() => GUJARAT_DISTRICTS.find((d) => d.slug === districtSlug), [districtSlug]);
 
   const [tab, setTab] = useState<RegionalTabKey>('Feed');
   const [selectedCategory, setSelectedCategory] = useState<(typeof CATEGORIES)[number]>('All');
@@ -140,24 +138,12 @@ export default function GujaratDistrictPage() {
     };
   }, []);
 
-  const districtName = entry?.name || 'All Gujarat';
-  const displayDistrictName = entry
-    ? getGujaratDistrictName(language as any, entry.slug, entry.name)
-    : tHeading(language as any, 'district');
-  const stateName = getStateName(language as any, 'gujarat', 'Gujarat');
-
   const districtFilteringEnabled = useMemo(() => stories.some((s) => !!extractDistrict(s)), [stories]);
 
   const effectiveCategory = useMemo(() => (tab === 'Civic' ? 'Civic' : selectedCategory), [tab, selectedCategory]);
 
   const filteredStories = useMemo(() => {
     let list = stories;
-
-    // District filter only if the data includes district tags.
-    if (entry && districtFilteringEnabled) {
-      const wanted = normalize(entry.name);
-      list = list.filter((s) => normalize(extractDistrict(s)) === wanted);
-    }
 
     // Category filter
     if (effectiveCategory !== 'All') {
@@ -175,7 +161,7 @@ export default function GujaratDistrictPage() {
     }
 
     return list;
-  }, [stories, entry, districtFilteringEnabled, effectiveCategory, searchQuery]);
+  }, [stories, effectiveCategory, searchQuery]);
 
   const tickerItems = useMemo(() => {
     const breakingItems = (stories || []).filter((s) => isPublished(s) && isBreakingStory(s));
@@ -184,13 +170,15 @@ export default function GujaratDistrictPage() {
     return chosen.slice(0, 12);
   }, [stories]);
 
+  const stateName = getStateName(language as any, 'gujarat', 'Gujarat');
+
   const onSelectCategory = (c: (typeof CATEGORIES)[number]) => {
     setSelectedCategory(c);
     if (c === 'Civic') setTab('Civic');
     else setTab('Feed');
   };
 
-  const onPickDistrict = (slug: string) => {
+  const onSelectDistrict = (slug: string) => {
     setPickerOpen(false);
     setTab('Feed');
     router.push(`/regional/gujarat/${slug}`);
@@ -204,8 +192,8 @@ export default function GujaratDistrictPage() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <Head>
-        <title>{`${displayDistrictName} – Gujarat | News Pulse`}</title>
-        <meta name="description" content={`Regional Pulse for ${displayDistrictName}, ${stateName}.`} />
+        <title>{`Regional Pulse – Gujarat | News Pulse`}</title>
+        <meta name="description" content={`Regional Pulse feed for Gujarat.`} />
       </Head>
 
       <div className="sticky top-0 z-40">
@@ -222,9 +210,7 @@ export default function GujaratDistrictPage() {
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
                 <div className="text-3xl font-black tracking-tight">Regional Pulse – {stateName}</div>
-                <div className="text-sm text-slate-600">
-                  {tHeading(language as any, 'regional')} • {entry ? displayDistrictName : 'All Gujarat'}
-                </div>
+                <div className="text-sm text-slate-600">{tHeading(language as any, 'regional')} feed • Gujarat</div>
               </div>
 
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -244,7 +230,7 @@ export default function GujaratDistrictPage() {
                   className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium hover:bg-slate-50"
                   title="Pick a district"
                 >
-                  {districtName}
+                  All Gujarat
                 </button>
 
                 <div className="sm:pl-1">
@@ -256,9 +242,9 @@ export default function GujaratDistrictPage() {
             <DistrictChipBar
               className="mt-3"
               districts={GUJARAT_DISTRICTS}
-              selectedDistrictSlug={entry?.slug || null}
+              selectedDistrictSlug={null}
               onSelectAll={() => router.push('/regional/gujarat')}
-              onSelectDistrict={onPickDistrict}
+              onSelectDistrict={onSelectDistrict}
               onMore={() => setPickerOpen(true)}
             />
 
@@ -303,7 +289,7 @@ export default function GujaratDistrictPage() {
                 <button
                   key={d.slug}
                   type="button"
-                  onClick={() => onPickDistrict(d.slug)}
+                  onClick={() => onSelectDistrict(d.slug)}
                   className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:bg-slate-50"
                 >
                   <div className="text-base font-semibold">{d.name}</div>
@@ -326,7 +312,7 @@ export default function GujaratDistrictPage() {
           <>
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <div className="text-2xl font-bold">{entry ? `Latest from ${displayDistrictName}` : 'Latest from Gujarat'}</div>
+                <div className="text-2xl font-bold">Latest from Gujarat</div>
                 <div className="text-sm text-slate-600">
                   {effectiveCategory === 'All' ? 'All local categories' : `Category: ${effectiveCategory}`}
                 </div>
@@ -361,13 +347,11 @@ export default function GujaratDistrictPage() {
         districts={GUJARAT_DISTRICTS}
         onClose={() => setPickerOpen(false)}
         onPickAll={() => router.push('/regional/gujarat')}
-        onPickDistrict={onPickDistrict}
+        onPickDistrict={onSelectDistrict}
       />
 
       <footer className="border-t border-slate-200 bg-white">
-        <div className="mx-auto max-w-6xl px-4 py-6 text-sm text-slate-600">
-          Regional Pulse – Gujarat
-        </div>
+        <div className="mx-auto max-w-6xl px-4 py-6 text-sm text-slate-600">Regional Pulse – Gujarat</div>
       </footer>
     </div>
   );
@@ -381,10 +365,3 @@ export const getStaticProps: GetStaticProps = async ({ locale }) => {
     },
   };
 };
-
-export async function getStaticPaths() {
-  return {
-    paths: [],
-    fallback: 'blocking',
-  };
-}

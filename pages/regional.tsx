@@ -1,3 +1,4 @@
+import type { GetServerSideProps } from 'next';
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLanguage } from "../utils/LanguageContext";
 import { useRegionalPulse } from "../src/features/regional/useRegionalPulse";
@@ -298,7 +299,7 @@ function ClientTime({ iso }: { iso?: string }) {
 
 // ---------- Main Page Component
 
-export default function RegionalGujaratPage() {
+function RegionalGujaratPage() {
   const { language, setLanguage } = useLanguage();
   const { isEnabled } = useFeatureFlags();
   const {
@@ -313,223 +314,400 @@ export default function RegionalGujaratPage() {
     youth,
     metrics,
     highlightsText,
+    loading,
   } = useRegionalPulse("gujarat");
   const voice = useVoiceReader();
 
+  type TabKey = "feed" | "districts" | "cities" | "civic" | "map";
+  const [tab, setTab] = useState<TabKey>("feed");
+  const [selectedDistrict, setSelectedDistrict] = useState<string>("");
+  const [selectedCity, setSelectedCity] = useState<string>("");
+
+  const cityOptions = useMemo(() => {
+    const names = filteredCities.map((c) => c.name).filter(Boolean);
+    return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b));
+  }, [filteredCities]);
+
+  const activePlace = (selectedCity || selectedDistrict).trim();
+
+  const visibleNews = useMemo(() => {
+    const base = news || [];
+    if (!activePlace) return base;
+    return base.filter((n) => (n.district || "") === activePlace);
+  }, [news, activePlace]);
+
+  const visibleYouth = useMemo(() => {
+    const base = youth || [];
+    if (!activePlace) return base;
+    return base.filter((n) => (n.district || "") === activePlace);
+  }, [youth, activePlace]);
+
+  const districtStats = useMemo(() => {
+    const all = [...(news || []), ...(youth || [])];
+    const score = (iso?: string) => {
+      if (!iso) return 0;
+      const t = Date.parse(iso);
+      return Number.isFinite(t) ? t : 0;
+    };
+
+    return districts.map((d) => {
+      const items = all
+        .filter((n) => (n.district || "") === d.name)
+        .sort((a, b) => score(b.publishedAt) - score(a.publishedAt));
+
+      return {
+        district: d,
+        count: items.length,
+        topHeadline: items[0]?.title || "",
+      };
+    });
+  }, [districts, news, youth]);
+
+  const CATEGORY_CHIPS: Array<{ key: FilterKey; label: string }> = [
+    { key: "smart", label: "Smart City" },
+    { key: "industrial", label: "Industrial" },
+    { key: "coastal", label: "Coastal" },
+    { key: "tribal", label: "Tribal" },
+  ];
+
   return (
     <div className="min-h-screen bg-white">
-      {/* Header */}
+      {/* Header row: Title/subtitle (left) + Search/Language/Listen (right) */}
       <div className="max-w-7xl mx-auto px-4 md:px-6 pt-6 pb-4">
-        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
           <div>
             <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Regional Pulse – Gujarat</h1>
             <p className="text-slate-600 mt-1">Your real-time civic, district, and city news pulse of Gujarat.</p>
           </div>
-          <div className="flex items-center gap-2">
-            {/* Language Switcher (wired to LanguageContext) */}
-            <select
-              className="border rounded-lg px-3 py-2 text-sm"
-              value={language}
-              onChange={(e) => setLanguage(e.target.value)}
-            >
-              <option value="english">English</option>
-              <option value="gujarati">ગુજરાતી</option>
-              <option value="hindi">हिन्दी</option>
-            </select>
-            {isEnabled('voice.enabled', true) && (
-              <button
-                onClick={() => voice.toggle(`Here are top regional highlights. ${highlightsText}`)}
-                className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
-                title={voice.speaking ? "Mute" : "Listen to local highlights"}
-                aria-pressed={voice.speaking}
-              >
-                <span role="img" aria-label={voice.speaking ? "muted" : "speaker"}>
-                  {voice.speaking ? "🔇" : "🔊"}
-                </span>
-                {voice.speaking ? "Mute" : "Listen"}
-              </button>
-            )}
-          </div>
-        </div>
 
-        {/* Controls */}
-        <div className="mt-5 flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
-          <div className="flex flex-wrap gap-2">
-            {R_FILTERS.map((f) => (
-              <button
-                key={f.key}
-                onClick={() => setFilter(f.key)}
-                className={classNames(
-                  "px-3 py-1.5 rounded-full text-sm border",
-                  filter === f.key ? "bg-black text-white border-black" : "hover:bg-slate-50"
-                )}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full lg:w-auto">
+            <div className="relative w-full sm:w-80">
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search district or city..."
+                className="w-full border rounded-xl px-3 py-2 text-sm"
+              />
+              <span className="absolute right-3 top-2.5">🔎</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {/* Language Switcher (wired to LanguageContext) */}
+              <select
+                className="border rounded-lg px-3 py-2 text-sm"
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
               >
-                {f.label}
-              </button>
-            ))}
-          </div>
-          <div className="relative w-full md:w-80">
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search district or city..."
-              className="w-full border rounded-xl px-3 py-2 text-sm"
-            />
-            <span className="absolute right-3 top-2.5">🔎</span>
+                <option value="english">English</option>
+                <option value="gujarati">ગુજરાતી</option>
+                <option value="hindi">हिन्दी</option>
+              </select>
+
+              {isEnabled("voice.enabled", true) && (
+                <button
+                  onClick={() => voice.toggle(`Here are top regional highlights. ${highlightsText}`)}
+                  className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
+                  title={voice.speaking ? "Mute" : "Listen to local highlights"}
+                  aria-pressed={voice.speaking}
+                >
+                  <span role="img" aria-label={voice.speaking ? "muted" : "speaker"}>
+                    {voice.speaking ? "🔇" : "🔊"}
+                  </span>
+                  {voice.speaking ? "Mute" : "Listen"}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Top Cities (Mahanagarpalika) */}
-      <section className="max-w-7xl mx-auto px-4 md:px-6 mt-2">
-  <SectionTitle title="Top Cities (Mahanagarpalika)" subtitle="Current + Newly Approved" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredCities.map((city) => (
-            <div key={city.id} className="rounded-2xl border p-4 hover:shadow-sm transition">
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">🏛️</span>
-                  <div>
-                    <h3 className="font-semibold text-lg">{city.name}</h3>
-                    <p className="text-xs text-slate-500">{city.type} · Gujarat</p>
-                  </div>
-                </div>
-                {city.label && (
-                  <Chip tone={city.label === "Current" ? "success" : city.label === "New" ? "warning" : "info"}>
-                    {city.label}
-                  </Chip>
-                )}
-              </div>
-              {city.badges && (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {city.badges.map((b, i) => (
-                    <Chip key={i}>{b}</Chip>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </section>
+      {/* Sticky filter bar: District + City + Category chips */}
+      <div className="sticky top-0 z-20 bg-white border-y">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 flex flex-col md:flex-row md:items-center gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:flex md:items-center">
+            <label className="flex items-center gap-2">
+              <span className="text-xs text-slate-500 whitespace-nowrap">District</span>
+              <select
+                className="border rounded-lg px-3 py-2 text-sm w-full"
+                value={selectedDistrict}
+                onChange={(e) => {
+                  setSelectedDistrict(e.target.value);
+                  setSelectedCity("");
+                }}
+              >
+                <option value="">All districts</option>
+                {districts.map((d) => (
+                  <option key={d.id} value={d.name}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-      {/* Districts (quick index) */}
-      <section className="max-w-7xl mx-auto px-4 md:px-6 mt-10">
-        <SectionTitle title={`Gujarat — ${districts.length} Districts`} />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {districts.map((d) => (
-            <button key={d.id} className="rounded-2xl border p-4 text-left hover:shadow-sm">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">🗺️</span>
-                <div>
-                  <div className="font-semibold text-lg">{d.name}</div>
-                  <div className="text-xs text-slate-500">District · Gujarat</div>
-                </div>
-              </div>
+            <label className="flex items-center gap-2">
+              <span className="text-xs text-slate-500 whitespace-nowrap">City</span>
+              <select
+                className="border rounded-lg px-3 py-2 text-sm w-full"
+                value={selectedCity}
+                onChange={(e) => setSelectedCity(e.target.value)}
+              >
+                <option value="">Optional</option>
+                {cityOptions.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="flex flex-wrap gap-2 md:justify-end md:flex-1">
+            {CATEGORY_CHIPS.map((c) => (
+              <button
+                key={c.key}
+                onClick={() => setFilter(filter === c.key ? "all" : c.key)}
+                className={classNames(
+                  "px-3 py-1.5 rounded-full text-sm border",
+                  filter === c.key ? "bg-black text-white border-black" : "hover:bg-slate-50"
+                )}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Main content: Tabs */}
+      <main className="max-w-7xl mx-auto px-4 md:px-6 pt-6 pb-16">
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b">
+          {(
+            [
+              { key: "feed", label: "Feed" },
+              { key: "districts", label: "Districts" },
+              { key: "cities", label: "Cities" },
+              { key: "civic", label: "Civic" },
+              { key: "map", label: "Map" },
+            ] as const
+          ).map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={classNames(
+                "shrink-0 px-3 py-2 rounded-xl text-sm border",
+                tab === t.key ? "bg-black text-white border-black" : "hover:bg-slate-50"
+              )}
+              aria-current={tab === t.key ? "page" : undefined}
+            >
+              {t.label}
             </button>
           ))}
         </div>
-      </section>
 
-      {/* Civic Tracker */}
-      <section className="max-w-7xl mx-auto px-4 md:px-6 mt-10">
-  <SectionTitle title="Civic Tracker" subtitle="Live status across districts" />
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <MetricCard label="Rainfall Alerts" value={metrics?.rainfallAlertDistricts ?? "—"} hint="districts" />
-          <MetricCard label="Water Supply OK" value={metrics?.waterSupplyOK ?? "—"} hint="districts" />
-          <MetricCard label="Projects Tracked" value={metrics?.projectsTracked ?? "—"} hint="active" />
-          <MetricCard label="Election Notices" value={metrics?.electionNotices ?? "—"} hint="this week" />
-        </div>
-      </section>
+        {/* Tab panels */}
+        <div className="mt-6">
+          {/* Tab 1: Feed */}
+          {tab === "feed" && (
+            <section>
+              <SectionTitle
+                title={activePlace ? `Feed — ${activePlace}` : "Feed"}
+                subtitle="Latest regional stories"
+              />
 
-      {/* District News Feed */}
-      <section className="max-w-7xl mx-auto px-4 md:px-6 mt-10">
-  <SectionTitle title="District News Feed" subtitle="Auto-summarized highlights from verified sources" />
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {news.map((item) => (
-            <article key={item.id} className="rounded-2xl border p-4 hover:shadow-sm">
-              <div className="flex items-center justify-between">
-                <Chip>{item.category}</Chip>
-                <ClientTime iso={item.publishedAt} />
+              {loading ? (
+                <div className="text-sm text-slate-500">Loading…</div>
+              ) : visibleNews.length === 0 ? (
+                <div className="text-sm text-slate-500">No stories found for the current filters.</div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {visibleNews.map((item) => (
+                    <article key={item.id} className="rounded-2xl border p-4 hover:shadow-sm">
+                      <div className="flex items-center justify-between">
+                        <Chip>{item.category}</Chip>
+                        <ClientTime iso={item.publishedAt} />
+                      </div>
+                      <h3 className="mt-2 font-semibold leading-snug">{item.title}</h3>
+                      {item.summary && <p className="text-sm text-slate-600 mt-1">{item.summary}</p>}
+                      <div className="mt-3 flex items-center justify-between text-sm">
+                        <div className="text-slate-500">{item.district}</div>
+                        <a href={item.url || "#"} className="text-blue-600 hover:underline" target="_blank" rel="noreferrer">
+                          Read more →
+                        </a>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* Tab 2: Districts */}
+          {tab === "districts" && (
+            <section>
+              <SectionTitle title={`Gujarat — ${districts.length} Districts`} subtitle="Top headline + total updates" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {districtStats.map((d) => (
+                  <div key={d.district.id} className="rounded-2xl border p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-semibold text-lg">{d.district.name}</div>
+                        <div className="text-xs text-slate-500">District · Gujarat</div>
+                      </div>
+                      <Chip>{d.count} updates</Chip>
+                    </div>
+                    <div className="mt-3 text-sm text-slate-700">
+                      {d.topHeadline ? d.topHeadline : <span className="text-slate-500">No headline yet.</span>}
+                    </div>
+                  </div>
+                ))}
               </div>
-              <h3 className="mt-2 font-semibold leading-snug">{item.title}</h3>
-              {item.summary && <p className="text-sm text-slate-600 mt-1">{item.summary}</p>}
-              <div className="mt-3 flex items-center justify-between text-sm">
-                <div className="text-slate-500">{item.district}</div>
-                <a href={item.url || "#"} className="text-blue-600 hover:underline" target="_blank" rel="noreferrer">
-                  Read more →
-                </a>
+            </section>
+          )}
+
+          {/* Tab 3: Cities */}
+          {tab === "cities" && (
+            <section>
+              <SectionTitle title="Cities" subtitle="Top cities carousel + city feed" />
+
+              <div className="-mx-4 md:-mx-6 px-4 md:px-6 overflow-x-auto pb-2">
+                <div className="flex gap-4 min-w-max">
+                  {filteredCities.map((city) => (
+                    <div key={city.id} className="w-72 shrink-0 rounded-2xl border p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          <span className="text-2xl">🏛️</span>
+                          <div>
+                            <h3 className="font-semibold text-lg">{city.name}</h3>
+                            <p className="text-xs text-slate-500">{city.type} · Gujarat</p>
+                          </div>
+                        </div>
+                        {city.label && (
+                          <Chip tone={city.label === "Current" ? "success" : city.label === "New" ? "warning" : "info"}>
+                            {city.label}
+                          </Chip>
+                        )}
+                      </div>
+                      {city.badges && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {city.badges.map((b, i) => (
+                            <Chip key={i}>{b}</Chip>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
-            </article>
-          ))}
-        </div>
-      </section>
 
-      {/* Youth Voices */}
-      <section className="max-w-7xl mx-auto px-4 md:px-6 mt-10">
-  <SectionTitle title="Voices from Your City" subtitle="Youth Pulse – opinions, campus, careers" />
-        {youth.length === 0 ? (
-          <div className="text-sm text-slate-500">No youth stories right now. (Hook to /api/news/youth)</div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {youth.map((y) => (
-              <article key={y.id} className="rounded-2xl border p-4 hover:shadow-sm">
-                <Chip tone="info">Youth Pulse</Chip>
-                <h3 className="mt-2 font-semibold leading-snug">{y.title}</h3>
-                {y.summary && <p className="text-sm text-slate-600 mt-1">{y.summary}</p>}
-                <div className="mt-3 text-sm text-slate-500">{y.district}</div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Development Projects */}
-      <section className="max-w-7xl mx-auto px-4 md:px-6 mt-10">
-        <SectionTitle title="Development Projects in Focus" subtitle="Tracked by KiranOS – status & milestones" />
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {["Ahmedabad Metro Phase-2", "Dholera SIR Solar Park", "Narmada Canal Modernization"].map((p, i) => (
-            <div key={i} className="rounded-2xl border p-4">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold">{p}</h3>
-                <Chip tone={i === 0 ? "success" : i === 1 ? "info" : "warning"}>
-                  {i === 0 ? "On Track" : i === 1 ? "Planned" : "Delayed"}
-                </Chip>
-              </div>
-              <p className="text-sm text-slate-600 mt-1">
-                Auto-updated notes and milestones will appear here. Connect to /api/projects/regional.
-              </p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* City in Motion (Videos) */}
-      <section className="max-w-7xl mx-auto px-4 md:px-6 mt-10">
-        <SectionTitle title="City in Motion" subtitle="Local clips & explainers" />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {["https://www.youtube.com/embed/dQw4w9WgXcQ", "https://www.youtube.com/embed/oHg5SJYRHA0"].map(
-            (src, i) => (
-              <div key={i} className="aspect-video rounded-2xl overflow-hidden border">
-                <iframe
-                  className="w-full h-full"
-                  src={src}
-                  title={`video-${i}`}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
+              <div className="mt-10">
+                <SectionTitle
+                  title={activePlace ? `City Feed — ${activePlace}` : "City Feed"}
+                  subtitle="Latest updates + local voices"
                 />
+
+                {visibleNews.length === 0 ? (
+                  <div className="text-sm text-slate-500">No stories found for the current selection.</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {visibleNews.slice(0, 6).map((item) => (
+                      <article key={item.id} className="rounded-2xl border p-4 hover:shadow-sm">
+                        <div className="flex items-center justify-between">
+                          <Chip>{item.category}</Chip>
+                          <ClientTime iso={item.publishedAt} />
+                        </div>
+                        <h3 className="mt-2 font-semibold leading-snug">{item.title}</h3>
+                        {item.summary && <p className="text-sm text-slate-600 mt-1">{item.summary}</p>}
+                        <div className="mt-3 text-sm text-slate-500">{item.district}</div>
+                      </article>
+                    ))}
+                  </div>
+                )}
               </div>
-            )
+
+              <div className="mt-10">
+                <SectionTitle title="Voices from Your City" subtitle="Youth Pulse – opinions, campus, careers" />
+                {visibleYouth.length === 0 ? (
+                  <div className="text-sm text-slate-500">No youth stories right now. (Hook to /api/news/youth)</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {visibleYouth.map((y) => (
+                      <article key={y.id} className="rounded-2xl border p-4 hover:shadow-sm">
+                        <Chip tone="info">Youth Pulse</Chip>
+                        <h3 className="mt-2 font-semibold leading-snug">{y.title}</h3>
+                        {y.summary && <p className="text-sm text-slate-600 mt-1">{y.summary}</p>}
+                        <div className="mt-3 text-sm text-slate-500">{y.district}</div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-10">
+                <SectionTitle title="City in Motion" subtitle="Local clips & explainers" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[
+                    "https://www.youtube.com/embed/dQw4w9WgXcQ",
+                    "https://www.youtube.com/embed/oHg5SJYRHA0",
+                  ].map((src, i) => (
+                    <div key={i} className="aspect-video rounded-2xl overflow-hidden border">
+                      <iframe
+                        className="w-full h-full"
+                        src={src}
+                        title={`video-${i}`}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* Tab 4: Civic */}
+          {tab === "civic" && (
+            <section>
+              <SectionTitle title="Civic" subtitle="Civic tracker + development projects" />
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <MetricCard label="Rainfall Alerts" value={metrics?.rainfallAlertDistricts ?? "—"} hint="districts" />
+                <MetricCard label="Water Supply OK" value={metrics?.waterSupplyOK ?? "—"} hint="districts" />
+                <MetricCard label="Projects Tracked" value={metrics?.projectsTracked ?? "—"} hint="active" />
+                <MetricCard label="Election Notices" value={metrics?.electionNotices ?? "—"} hint="this week" />
+              </div>
+
+              <div className="mt-10">
+                <SectionTitle title="Development Projects in Focus" subtitle="Tracked by KiranOS – status & milestones" />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {["Ahmedabad Metro Phase-2", "Dholera SIR Solar Park", "Narmada Canal Modernization"].map((p, i) => (
+                    <div key={i} className="rounded-2xl border p-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-semibold">{p}</h3>
+                        <Chip tone={i === 0 ? "success" : i === 1 ? "info" : "warning"}>
+                          {i === 0 ? "On Track" : i === 1 ? "Planned" : "Delayed"}
+                        </Chip>
+                      </div>
+                      <p className="text-sm text-slate-600 mt-1">
+                        Auto-updated notes and milestones will appear here. Connect to /api/projects/regional.
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* Tab 5: Map */}
+          {tab === "map" && (
+            <section>
+              <SectionTitle title="Explore on Map" subtitle="Interactive Gujarat map – click a district to filter news" />
+              <div className="rounded-2xl border p-6 h-72 flex items-center justify-center text-slate-500">
+                Leaflet/Mapbox map goes here. Hook into district filter when implemented.
+              </div>
+            </section>
           )}
         </div>
-      </section>
-
-      {/* Map Placeholder */}
-      <section className="max-w-7xl mx-auto px-4 md:px-6 mt-10 mb-16">
-  <SectionTitle title="Explore on Map" subtitle="Interactive Gujarat map – click a district to filter news" />
-        <div className="rounded-2xl border p-6 h-72 flex items-center justify-center text-slate-500">
-          Leaflet/Mapbox map goes here. Hook into district filter when implemented.
-        </div>
-      </section>
+      </main>
     </div>
   );
 }
@@ -542,5 +720,18 @@ function MetricCard({ label, value, hint }: { label: string; value: number | str
       {hint && <div className="text-xs text-slate-400 mt-1">{hint}</div>}
     </div>
   );
+}
+
+export const getServerSideProps: GetServerSideProps = async () => {
+  return {
+    redirect: {
+      destination: '/regional/gujarat',
+      permanent: false,
+    },
+  };
+};
+
+export default function RegionalPage() {
+  return null;
 }
  
