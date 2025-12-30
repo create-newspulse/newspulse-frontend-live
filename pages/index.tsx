@@ -2,9 +2,12 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { useRegionalPulse } from "../src/features/regional/useRegionalPulse";
 import { useYouthPulse } from "../features/youthPulse/useYouthPulse";
 import { usePublicMode } from "../utils/PublicModeProvider";
+import { DEFAULT_TRENDING_TOPICS, type TrendingTopic } from "../src/config/trendingTopics";
+import { getTrendingTopics } from "../lib/getTrendingTopics";
 import AdSlot from "../components/ads/AdSlot";
 import type { GetStaticProps } from "next";
 import { AnimatePresence, motion } from "framer-motion";
@@ -99,12 +102,12 @@ const CATEGORIES = [
   { key: "national", label: "National", Icon: Flag },
   { key: "international", label: "International", Icon: Globe },
   { key: "business", label: "Business", Icon: Briefcase },
-  { key: "science", label: "Science & Technology", Icon: Cpu },
+  { key: "science-technology", label: "Science & Technology", Icon: Cpu },
   { key: "sports", label: "Sports", Icon: Trophy },
   { key: "lifestyle", label: "Lifestyle", Icon: Leaf },
   { key: "glamour", label: "Glamour", Icon: Sparkles },
-  { key: "webstories", label: "Web Stories", Icon: BookOpen },
-  { key: "viral", label: "Viral Videos", Icon: Video },
+  { key: "web-stories", label: "Web Stories", Icon: BookOpen },
+  { key: "viral-videos", label: "Viral Videos", Icon: Video },
   { key: "editorial", label: "Editorial", Icon: PenLine },
   { key: "youth", label: "Youth Pulse", Icon: GraduationCap, badge: "NEW" },
   { key: "inspiration", label: "Inspiration Hub", Icon: Sparkles },
@@ -116,9 +119,17 @@ const CATEGORY_ROUTES: Record<string, string> = {
   breaking: "/breaking",
   regional: "/regional",
   national: "/national",
+  international: "/international",
+  business: "/business",
+  "science-technology": "/science-technology",
+  sports: "/sports",
+  lifestyle: "/lifestyle",
+  glamour: "/glamour",
+  "web-stories": "/web-stories",
+  "viral-videos": "/viral-videos",
+  editorial: "/editorial",
   youth: "/youth-pulse",
   community: "/community-reporter",
-  editorial: "/editorial",
   inspiration: "/inspiration-hub",
 };
 
@@ -158,7 +169,7 @@ const CATEGORY_THEME: Record<string, { base: string; hover: string; ring: string
     active: "bg-indigo-100 ring-2 ring-indigo-300/50",
     dot: "bg-indigo-500/80",
   },
-  science: {
+  "science-technology": {
     base: "bg-violet-50 border-violet-200 text-violet-700",
     hover: "hover:bg-violet-100",
     ring: "focus-visible:ring-2 focus-visible:ring-violet-300/50",
@@ -186,14 +197,14 @@ const CATEGORY_THEME: Record<string, { base: string; hover: string; ring: string
     active: "bg-fuchsia-100 ring-2 ring-fuchsia-300/50",
     dot: "bg-fuchsia-500/80",
   },
-  webstories: {
+  "web-stories": {
     base: "bg-yellow-50 border-yellow-200 text-yellow-700",
     hover: "hover:bg-yellow-100",
     ring: "focus-visible:ring-2 focus-visible:ring-yellow-300/50",
     active: "bg-yellow-100 ring-2 ring-yellow-300/50",
     dot: "bg-yellow-500/80",
   },
-  viral: {
+  "viral-videos": {
     base: "bg-lime-50 border-lime-200 text-lime-700",
     hover: "hover:bg-lime-100",
     ring: "focus-visible:ring-2 focus-visible:ring-lime-300/50",
@@ -252,17 +263,77 @@ const LIVE_UPDATES: string[] = [
   "New categories and story panels are rolling out",
 ];
 
-const TRENDING: string[] = [
-  "Breaking",
-  "Sports",
-  "Gold rates",
-  "Fuel Prices",
-  "Weather",
-  "Gujarat",
-  "Markets",
-  "Tech & AI",
-  "Education",
-];
+const TRENDING_CHIP_THEME: Record<
+  TrendingTopic["colorKey"],
+  { base: string; hover: string; ring: string; active: string }
+> = {
+  trending: {
+    base: "bg-gradient-to-r from-red-50 to-pink-50 border-red-200 text-red-700",
+    hover: "hover:from-red-100 hover:to-pink-100 hover:border-red-300",
+    ring: "focus-visible:ring-2 focus-visible:ring-red-300/50",
+    active: "from-red-100 to-pink-100 border-red-400",
+  },
+  breaking: {
+    base: "bg-gradient-to-r from-rose-50 to-orange-50 border-rose-200 text-rose-700",
+    hover: "hover:from-rose-100 hover:to-orange-100 hover:border-rose-300",
+    ring: "focus-visible:ring-2 focus-visible:ring-rose-300/50",
+    active: "from-rose-100 to-orange-100 border-rose-400",
+  },
+  sports: {
+    base: "bg-gradient-to-r from-cyan-50 to-blue-50 border-cyan-200 text-cyan-700",
+    hover: "hover:from-cyan-100 hover:to-blue-100 hover:border-cyan-300",
+    ring: "focus-visible:ring-2 focus-visible:ring-cyan-300/50",
+    active: "from-cyan-100 to-blue-100 border-cyan-400",
+  },
+  gold: {
+    base: "bg-gradient-to-r from-amber-50 to-yellow-50 border-amber-200 text-amber-800",
+    hover: "hover:from-amber-100 hover:to-yellow-100 hover:border-amber-300",
+    ring: "focus-visible:ring-2 focus-visible:ring-amber-300/50",
+    active: "from-amber-100 to-yellow-100 border-amber-400",
+  },
+  fuel: {
+    base: "bg-gradient-to-r from-emerald-50 to-lime-50 border-emerald-200 text-emerald-700",
+    hover: "hover:from-emerald-100 hover:to-lime-100 hover:border-emerald-300",
+    ring: "focus-visible:ring-2 focus-visible:ring-emerald-300/50",
+    active: "from-emerald-100 to-lime-100 border-emerald-400",
+  },
+  weather: {
+    base: "bg-gradient-to-r from-sky-50 to-indigo-50 border-sky-200 text-sky-700",
+    hover: "hover:from-sky-100 hover:to-indigo-100 hover:border-sky-300",
+    ring: "focus-visible:ring-2 focus-visible:ring-sky-300/50",
+    active: "from-sky-100 to-indigo-100 border-sky-400",
+  },
+  gujarat: {
+    base: "bg-gradient-to-r from-emerald-50 to-teal-50 border-teal-200 text-teal-700",
+    hover: "hover:from-emerald-100 hover:to-teal-100 hover:border-teal-300",
+    ring: "focus-visible:ring-2 focus-visible:ring-teal-300/50",
+    active: "from-emerald-100 to-teal-100 border-teal-400",
+  },
+  markets: {
+    base: "bg-gradient-to-r from-indigo-50 to-fuchsia-50 border-indigo-200 text-indigo-700",
+    hover: "hover:from-indigo-100 hover:to-fuchsia-100 hover:border-indigo-300",
+    ring: "focus-visible:ring-2 focus-visible:ring-indigo-300/50",
+    active: "from-indigo-100 to-fuchsia-100 border-indigo-400",
+  },
+  tech: {
+    base: "bg-gradient-to-r from-violet-50 to-sky-50 border-violet-200 text-violet-700",
+    hover: "hover:from-violet-100 hover:to-sky-100 hover:border-violet-300",
+    ring: "focus-visible:ring-2 focus-visible:ring-violet-300/50",
+    active: "from-violet-100 to-sky-100 border-violet-400",
+  },
+  education: {
+    base: "bg-gradient-to-r from-rose-50 to-amber-50 border-rose-200 text-rose-700",
+    hover: "hover:from-rose-100 hover:to-amber-100 hover:border-rose-300",
+    ring: "focus-visible:ring-2 focus-visible:ring-rose-300/50",
+    active: "from-rose-100 to-amber-100 border-rose-400",
+  },
+  __default: {
+    base: "bg-gradient-to-r from-slate-50 to-slate-100 border-slate-200 text-slate-700",
+    hover: "hover:from-slate-100 hover:to-slate-200 hover:border-slate-300",
+    ring: "focus-visible:ring-2 focus-visible:ring-slate-300/50",
+    active: "from-slate-100 to-slate-200 border-slate-400",
+  },
+};
 
 const FEATURED = [
   {
@@ -767,6 +838,30 @@ function TickerBar({ theme, kind, items, onViewAll, speedSec }: any) {
 }
 
 function TrendingStrip({ theme, onPick }: any) {
+  const router = useRouter();
+  const [topics, setTopics] = useState<TrendingTopic[]>(DEFAULT_TRENDING_TOPICS);
+  const [path, setPath] = useState<string>("");
+  const tapState = useRef({
+    down: false,
+    startX: 0,
+    startY: 0,
+    moved: false,
+    touchNavigatedAt: 0,
+  });
+
+  useEffect(() => {
+    setPath(window.location.pathname);
+
+    let cancelled = false;
+    getTrendingTopics().then((next) => {
+      if (cancelled) return;
+      setTopics(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-8">
       <div className="mt-3">
@@ -785,17 +880,70 @@ function TrendingStrip({ theme, onPick }: any) {
 
             <div className="np-no-scrollbar w-full overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
               <div className="inline-flex items-center gap-2 pr-4">
-                {TRENDING.map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => onPick(t)}
-                    className="shrink-0 rounded-full px-3 py-1 text-xs font-semibold border"
-                    style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}
-                  >
-                    {t}
-                  </button>
-                ))}
+                {topics.map((topic) => {
+                  const active = !!path && path === topic.href;
+                  const chipTheme = TRENDING_CHIP_THEME[topic.colorKey] || TRENDING_CHIP_THEME.__default;
+
+                  const navigate = () => {
+                    onPick?.(topic.label);
+                    router.push(topic.href);
+                  };
+
+                  return (
+                    <Link
+                      key={topic.key}
+                      href={topic.href}
+                      aria-current={active ? "page" : undefined}
+                      onPointerDown={(e) => {
+                        tapState.current.down = true;
+                        tapState.current.moved = false;
+                        tapState.current.startX = e.clientX;
+                        tapState.current.startY = e.clientY;
+                      }}
+                      onPointerMove={(e) => {
+                        if (!tapState.current.down || tapState.current.moved) return;
+                        const dx = e.clientX - tapState.current.startX;
+                        const dy = e.clientY - tapState.current.startY;
+                        if (Math.abs(dx) > 8 || Math.abs(dy) > 8) tapState.current.moved = true;
+                      }}
+                      onPointerUp={(e) => {
+                        tapState.current.down = false;
+
+                        // On touch inside horizontal scrollers, `click` may never fire.
+                        // Route on a true tap (no significant movement).
+                        if (e.pointerType === "touch" && !tapState.current.moved) {
+                          e.preventDefault();
+                          tapState.current.touchNavigatedAt = Date.now();
+                          navigate();
+                        }
+                      }}
+                      onClick={(e) => {
+                        // Avoid double-navigation when touch `pointerup` already routed.
+                        if (Date.now() - tapState.current.touchNavigatedAt < 800) {
+                          e.preventDefault();
+                          return;
+                        }
+
+                        // For mouse/keyboard, treat like a normal click.
+                        e.preventDefault();
+                        navigate();
+                      }}
+                      className={cx(
+                        "shrink-0 rounded-full px-3 py-1 text-xs font-semibold border cursor-pointer pointer-events-auto relative z-10",
+                        "transition-all duration-150 ease-out",
+                        "hover:-translate-y-[1px] hover:shadow-sm",
+                        "active:translate-y-0",
+                        "focus-visible:outline-none",
+                        chipTheme.base,
+                        chipTheme.hover,
+                        chipTheme.ring,
+                        active ? cx("shadow-sm", chipTheme.active) : null
+                      )}
+                    >
+                      {topic.label}
+                    </Link>
+                  );
+                })}
                 <div className="w-2 shrink-0" />
               </div>
             </div>
@@ -977,7 +1125,7 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick }: any) {
       activeRing: "ring-violet-200",
       leftBar: "bg-violet-500",
     },
-    science: {
+    "science-technology": {
       wrap: "bg-cyan-50 border-cyan-200 hover:bg-cyan-50/80",
       iconWrap: "bg-cyan-100 border-cyan-200 text-cyan-700",
       text: "text-cyan-800",
@@ -1009,7 +1157,7 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick }: any) {
       activeRing: "ring-fuchsia-200",
       leftBar: "bg-fuchsia-500",
     },
-    webstories: {
+    "web-stories": {
       wrap: "bg-yellow-50 border-yellow-200 hover:bg-yellow-50/80",
       iconWrap: "bg-yellow-100 border-yellow-200 text-yellow-800",
       text: "text-yellow-900",
@@ -1017,7 +1165,7 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick }: any) {
       activeRing: "ring-yellow-200",
       leftBar: "bg-yellow-500",
     },
-    viral: {
+    "viral-videos": {
       wrap: "bg-lime-50 border-lime-200 hover:bg-lime-50/80",
       iconWrap: "bg-lime-100 border-lime-200 text-lime-800",
       text: "text-lime-900",
