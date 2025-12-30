@@ -43,35 +43,109 @@ export const useAdminData = (options: UseAdminDataOptions = {}) => {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  // Fetch news data from admin panel
-  const fetchNews = useCallback(async (params = {}) => {
+  const getApiOrigin = useCallback(() => {
+    const origin =
+      process.env.NEXT_PUBLIC_API_ORIGIN ||
+      process.env.NEXT_PUBLIC_API_BASE_URL ||
+      process.env.NEXT_PUBLIC_API_URL ||
+      'https://newspulse-backend-real.onrender.com';
+
+    return origin.replace(/\/+$/, '');
+  }, []);
+
+  const normalizeNewsResponse = useCallback((payload: any) => {
+    const items = Array.isArray(payload?.items)
+      ? payload.items
+      : Array.isArray(payload?.news)
+        ? payload.news
+        : Array.isArray(payload)
+          ? payload
+          : [];
+
+    const total =
+      typeof payload?.total === 'number'
+        ? payload.total
+        : typeof payload?.count === 'number'
+          ? payload.count
+          : items.length;
+
+    return { items, total };
+  }, []);
+
+  const fetchPublicNews = useCallback(
+    async (params: Record<string, string | number | boolean | undefined>) => {
+      const apiOrigin = getApiOrigin();
+      const searchParams = new URLSearchParams();
+
+      for (const [key, value] of Object.entries(params)) {
+        if (value === undefined) continue;
+        searchParams.set(key, String(value));
+      }
+
+      const url = `${apiOrigin}/api/public/news?${searchParams.toString()}`;
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Public news fetch failed (${response.status})`);
+      }
+
+      const payload = await response.json();
+      return normalizeNewsResponse(payload);
+    },
+    [getApiOrigin, normalizeNewsResponse]
+  );
+
+  // Fetch news data from public API (no auth)
+  const fetchNews = useCallback(async (params: Record<string, unknown> = {}) => {
     try {
       setLoading(true);
       setError(null);
 
-      const [newsResponse, breakingResponse, trendingResponse] = await Promise.all([
-        newsApi.getPublishedNews(params),
-        newsApi.getBreakingNews(),
-        newsApi.getTrendingNews(5)
-      ]);
+      const limit =
+        typeof (params as any)?.limit === 'number'
+          ? (params as any).limit
+          : 50;
 
-      setNews(newsResponse.items || []);
-      setBreakingNews(breakingResponse.items || []);
-      setTrendingNews(trendingResponse.items || []);
+      const newsResponse = await fetchPublicNews({ limit });
+      const allItems = newsResponse.items || [];
+
+      setNews(allItems);
+      setBreakingNews(
+        allItems.filter(
+          (item: any) =>
+            item?.isBreaking === true ||
+            String(item?.category || '').toLowerCase() === 'breaking'
+        )
+      );
+      setTrendingNews(
+        allItems
+          .filter((item: any) => item?.isTrending === true)
+          .slice(0, 5)
+      );
       setLastUpdated(new Date());
 
       // Track analytics if enabled
       if (trackAnalytics) {
-        analyticsApi.trackPageView({
-          page: 'homepage',
-          newsCount: newsResponse.total || 0,
-          breakingCount: breakingResponse.items?.length || 0
-        });
+        try {
+          analyticsApi.trackPageView({
+            page: 'homepage',
+            newsCount: newsResponse.total || 0,
+            breakingCount: allItems.filter((item: any) => item?.isBreaking === true)
+              .length,
+          });
+        } catch (err) {
+          console.warn('Analytics tracking failed:', err);
+        }
       }
 
     } catch (err) {
-      console.warn('Admin data fetch failed, using fallback:', err);
-      setError('Unable to connect to admin panel');
+      console.warn('Public news fetch failed, using fallback:', err);
+      setError('Unable to load news');
       
       // Fallback data when admin panel is unavailable
       setNews([
@@ -113,13 +187,13 @@ export const useAdminData = (options: UseAdminDataOptions = {}) => {
   // Get news by category
   const getNewsByCategory = useCallback(async (category: string, limit = 10) => {
     try {
-      const response = await newsApi.getNewsByCategory(category, limit);
+      const response = await fetchPublicNews({ category, limit });
       return response;
     } catch (err) {
       console.warn(`Failed to fetch ${category} news:`, err);
       return { items: [] };
     }
-  }, []);
+  }, [fetchPublicNews]);
 
   // Track article view
   const trackArticleView = useCallback(async (articleId: string, articleTitle: string) => {
