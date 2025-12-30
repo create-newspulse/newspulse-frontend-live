@@ -47,7 +47,6 @@ const nextConfig = {
   async headers() {
     const isDev = process.env.NODE_ENV !== 'production';
     const backend =
-      process.env.NEXT_PUBLIC_API_ORIGIN ||
       process.env.NEXT_PUBLIC_API_BASE_URL ||
       process.env.NEXT_PUBLIC_API_URL ||
       'https://newspulse-backend-real.onrender.com';
