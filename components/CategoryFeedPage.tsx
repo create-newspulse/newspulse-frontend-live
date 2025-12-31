@@ -1,13 +1,12 @@
 import Head from 'next/head';
 import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 import type { Article } from '../lib/publicNewsApi';
 
 export type CategoryFeedPageProps = {
-  categoryKey: string;
   title: string;
-  items: Article[];
-  emptyMessage: string;
-  error?: string | null;
+  categoryKey: string;
+  extraQuery?: Record<string, string>;
 };
 
 function formatWhenLabel(iso?: string) {
@@ -25,7 +24,64 @@ function formatWhenLabel(iso?: string) {
   }
 }
 
-export default function CategoryFeedPage({ title, items, emptyMessage, error }: CategoryFeedPageProps) {
+export default function CategoryFeedPage({ title, categoryKey, extraQuery }: CategoryFeedPageProps) {
+  const [items, setItems] = useState<Article[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const queryKey = useMemo(() => JSON.stringify(extraQuery || {}), [extraQuery]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoaded(false);
+    setError(null);
+
+    const origin = process.env.NEXT_PUBLIC_API_ORIGIN || 'http://localhost:5000';
+    const params = new URLSearchParams({
+      category: String(categoryKey || ''),
+      limit: '30',
+      ...(extraQuery || {}),
+    });
+    const url = `${origin.replace(/\/$/, '')}/api/public/news?${params.toString()}`;
+
+    const run = async () => {
+      try {
+        const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' } });
+        if (!res.ok) {
+          if (!cancelled) {
+            setError(`Request failed (${res.status})`);
+            setItems([]);
+            setLoaded(true);
+          }
+          return;
+        }
+
+        const data = await res.json().catch(() => null);
+        const list: unknown =
+          (data && (data.items || data.articles || data.news || data.data)) ??
+          (Array.isArray(data) ? data : []);
+
+        const nextItems = Array.isArray(list) ? (list as Article[]) : [];
+
+        if (!cancelled) {
+          setItems(nextItems);
+          setLoaded(true);
+        }
+      } catch {
+        // Spec: only show error when res.ok is false.
+        if (!cancelled) {
+          setItems([]);
+          setLoaded(true);
+        }
+      }
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [categoryKey, queryKey]);
+
   const isUnauthorized = typeof error === 'string' && /\b401\b/.test(error);
   return (
     <>
@@ -46,7 +102,7 @@ export default function CategoryFeedPage({ title, items, emptyMessage, error }: 
               <div className="mt-3 text-sm text-slate-600">
                 {isUnauthorized ? (
                   <>
-                    Public feed endpoint is protected. Backend must allow GET /api/news without auth OR remove protected query params.
+                    Public feed endpoint is protected. Backend must allow GET /api/public/news without auth.
                   </>
                 ) : (
                   <>
@@ -56,16 +112,18 @@ export default function CategoryFeedPage({ title, items, emptyMessage, error }: 
                 )}
               </div>
             </div>
-          ) : items.length === 0 ? (
+          ) : loaded && items.length === 0 ? (
             <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6">
-              <div className="text-lg font-semibold text-slate-900">No news yet</div>
-              <div className="mt-1 text-sm text-slate-600">{emptyMessage}</div>
+              <div className="text-lg font-semibold text-slate-900">No stories yet.</div>
             </div>
           ) : (
             <section className="mt-8">
               <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 {items.map((a) => {
-                  const href = `/news/${encodeURIComponent(a.slug || a._id)}`;
+                  // Prefer stable backend identifier; some backends don't support slug lookup
+                  // (or may not support non-Latin slugs reliably).
+                  const slugOrId = a._id || a.slug;
+                  const href = `/news/${encodeURIComponent(String(slugOrId))}`;
                   const when = formatWhenLabel(a.publishedAt || a.createdAt);
                   const summary = a.summary || a.excerpt || '';
                   const image = a.imageUrl || a.image || '';

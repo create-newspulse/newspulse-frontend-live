@@ -5,22 +5,31 @@ import type { YouthStory } from '../../utils/youthData';
 
 type Props = {
   stories: YouthStory[];
+  error?: string | null;
 };
 
-export default function FeaturedStories({ stories }: Props) {
+export default function FeaturedStories({ stories, error }: Props) {
   return (
-    <section className="mt-12">
+    <section id="trending" className="mt-12">
       <div className="flex items-end justify-between gap-4">
         <div>
           <h2 className="text-2xl sm:text-3xl font-bold">🔥 Trending in Youth Pulse</h2>
-          <p className="mt-1 text-gray-600 dark:text-gray-300">Fresh picks for curious minds.</p>
+          <p className="mt-1 text-gray-600 dark:text-gray-300">
+            {error ? error : 'Fresh picks for curious minds.'}
+          </p>
         </div>
-        <Link href="/news" className="text-sm font-medium text-indigo-600 hover:text-indigo-700">
+        <Link href="/youth-pulse?view=all#trending" className="text-sm font-medium text-indigo-600 hover:text-indigo-700">
           View all →
         </Link>
       </div>
 
       <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {stories.length === 0 ? (
+          <div className="overflow-hidden rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm p-5 text-sm text-gray-600 dark:text-gray-300">
+            No Youth Pulse stories yet.
+          </div>
+        ) : null}
+
         {stories.map((s) => (
           <article
             key={s.id}

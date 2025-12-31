@@ -121,9 +121,8 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
 
   try {
     const { article, error, status } = await fetchArticleBySlugOrId({ slugOrId: slug });
-    if (status === 404) return { notFound: true };
     if (!article?._id) {
-      return { props: { error: error || 'Article not found', messages, locale } };
+      return { props: { error: error || (status === 404 ? 'Article not found' : 'Unable to load article'), messages, locale } };
     }
 
     const html =

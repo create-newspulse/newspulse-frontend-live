@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getYouthTopics, getYouthTrending, getYouthByCategory } from "./api";
 import type { YouthCategory, YouthStory } from "./types";
 
-export function useYouthPulse() {
+export function useYouthPulse(trendingLimit: number = 12) {
   const [topics, setTopics] = useState<YouthCategory[]>([]);
   const [trending, setTrending] = useState<YouthStory[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -12,7 +12,7 @@ export function useYouthPulse() {
     setLoading(true);
     setError(null);
     try {
-      const [t, tr] = await Promise.all([getYouthTopics(), getYouthTrending(6)]);
+      const [t, tr] = await Promise.all([getYouthTopics(), getYouthTrending(trendingLimit)]);
       setTopics(t);
       setTrending(tr);
     } catch (e: any) {
@@ -20,7 +20,7 @@ export function useYouthPulse() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [trendingLimit]);
 
   useEffect(() => {
     fetchAll();

@@ -1,14 +1,8 @@
 import type { GetServerSideProps } from 'next';
 
 import CategoryFeedPage from '../../components/CategoryFeedPage';
-import type { Article } from '../../lib/publicNewsApi';
-import { fetchCategoryNews } from '../../lib/fetchCategoryNews';
 
 type Props = {
-  categoryKey: string;
-  title: string;
-  articles: Article[];
-  error?: string | null;
   messages: any;
   locale: string;
 };
@@ -18,28 +12,14 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   const { getMessages } = await import('../../lib/getMessages');
   const messages = await getMessages(locale);
 
-  const { items, error } = await fetchCategoryNews({ categoryKey: 'business', limit: 30 });
-
   return {
     props: {
-      categoryKey: 'business',
-      title: 'Business',
-      articles: items,
-      error: error ?? null,
       messages,
       locale,
     },
   };
 };
 
-export default function BusinessPage({ categoryKey, title, articles, error }: Props) {
-  return (
-    <CategoryFeedPage
-      categoryKey={categoryKey}
-      title={title}
-      items={articles}
-      emptyMessage={`No ${title.toLowerCase()} news published yet.`}
-      error={error}
-    />
-  );
+export default function BusinessPage() {
+  return <CategoryFeedPage title="Business" categoryKey="business" />;
 }

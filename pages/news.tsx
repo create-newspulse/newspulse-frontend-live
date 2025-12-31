@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import Head from 'next/head';
 import type { GetStaticProps } from 'next';
+import { getApiOrigin } from '../lib/publicNewsApi';
 
 type NewsApiArticle = {
   title: string;
@@ -16,11 +17,45 @@ export default function News() {
 
   useEffect(() => {
     const fetchNews = async () => {
-      const res = await fetch(
-        `https://newsapi.org/v2/top-headlines?country=in&pageSize=5&apiKey=d6cda5432c664498a61b9716f315f772`
-      );
-      const data = await res.json();
-      setArticles((data.articles || []) as NewsApiArticle[]);
+      try {
+        const origin = getApiOrigin();
+        const params = new URLSearchParams({ category: 'national', limit: '5' });
+        const url = `${origin}/api/public/news?${params.toString()}`;
+
+        const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' } });
+        if (!res.ok) {
+          setArticles([]);
+          return;
+        }
+
+        const data = await res.json().catch(() => null);
+        const list: unknown =
+          (data && (data.items || data.articles || data.news || data.data)) ??
+          (Array.isArray(data) ? data : []);
+
+        const items = Array.isArray(list) ? (list as any[]) : [];
+        const mapped: NewsApiArticle[] = items
+          .map((raw) => {
+            const title = String(raw?.title || '').trim();
+            if (!title) return null;
+
+            const slugOrId = raw?._id || raw?.id || raw?.slug;
+            const href = slugOrId ? `/news/${encodeURIComponent(String(slugOrId))}` : undefined;
+
+            return {
+              title,
+              description: String(raw?.summary || raw?.excerpt || '').trim() || undefined,
+              url: href,
+              publishedAt: String(raw?.publishedAt || raw?.createdAt || '').trim() || undefined,
+              source: { name: String(raw?.source?.name || raw?.source || '').trim() || undefined },
+            } as NewsApiArticle;
+          })
+          .filter(Boolean) as NewsApiArticle[];
+
+        setArticles(mapped);
+      } catch {
+        setArticles([]);
+      }
     };
 
     fetchNews();

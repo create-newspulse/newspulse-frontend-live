@@ -80,6 +80,8 @@ export async function fetchArticleBySlugOrId(options: {
   const slug = options.slugOrId;
 
   const endpoints = [
+    // Current backend: article detail is served under /api/articles/:id
+    `${origin}/api/articles/${encodeURIComponent(slug)}`,
     `${origin}/api/news/${encodeURIComponent(slug)}`,
     `${origin}/api/news/by-slug/${encodeURIComponent(slug)}`,
   ];

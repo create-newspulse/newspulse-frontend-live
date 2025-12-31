@@ -1,4 +1,4 @@
 @echo off
-cd /d "C:\Users\Kiran\Downloads\newspulse-frontend-live-main\newspulse-frontend-live-main"
+cd /d "%~dp0"
 npm run dev
 pause
