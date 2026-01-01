@@ -15,6 +15,8 @@ export type DistrictChipBarProps = {
   onSelectAll: () => void;
   onSelectDistrict: (slug: string) => void;
   onMore: () => void;
+  allLabel?: string;
+  moreLabel?: string;
   className?: string;
 };
 
@@ -39,6 +41,8 @@ export default function DistrictChipBar({
   onSelectAll,
   onSelectDistrict,
   onMore,
+  allLabel = 'All Gujarat',
+  moreLabel = 'More',
   className,
 }: DistrictChipBarProps) {
   const preview = districts.slice(0, 9);
@@ -46,14 +50,14 @@ export default function DistrictChipBar({
   return (
     <div className={classNames('flex items-center gap-2 overflow-x-auto pb-1', className)}>
       <Chip active={!selectedDistrictSlug} onClick={onSelectAll}>
-        All Gujarat
+        {allLabel}
       </Chip>
       {preview.map((d) => (
         <Chip key={d.slug} active={selectedDistrictSlug === d.slug} onClick={() => onSelectDistrict(d.slug)}>
           {d.name}
         </Chip>
       ))}
-      <Chip onClick={onMore}>More</Chip>
+      <Chip onClick={onMore}>{moreLabel}</Chip>
     </div>
   );
 }

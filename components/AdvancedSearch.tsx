@@ -56,9 +56,11 @@ export const AdvancedSearchBar: React.FC<{
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => setIsOpen(true)}
-          placeholder="Search news, topics, or keywords..."
+          placeholder="Search news..."
           className="w-full px-6 py-4 text-lg bg-white/90 backdrop-blur-sm border-2 border-gray-200 rounded-2xl focus:border-blue-500 focus:outline-none shadow-lg transition-all duration-300"
         />
+
+        <div className="mt-2 px-1 text-xs text-gray-500">Try: budget, cricket, Delhi</div>
         
         <div className="absolute right-4 top-1/2 transform -translate-y-1/2 flex items-center space-x-2">
           <select

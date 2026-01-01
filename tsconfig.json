@@ -38,6 +38,8 @@
     "utils/**/*.tsx",
     "hooks/**/*.ts",
     "hooks/**/*.tsx",
+    "src/**/*.ts",
+    "src/**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
@@ -46,6 +48,11 @@
     "**/AppData/**",
     "**/Microsoft/**",
     "**/Office/**",
-    "components/_backup/**"
+    "components/_backup/**",
+
+    "**/*.stories.ts",
+    "**/*.stories.tsx",
+    "**/*.stories.js",
+    "**/*.stories.jsx"
   ]
 }

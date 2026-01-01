@@ -1,10 +1,9 @@
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import AdminContentLoader from '../../components/AdminContentLoader';
-import LanguageToggle from '../../components/LanguageToggle';
 import { ALL_REGIONS } from '../../utils/india';
 import { useLanguage } from '../../utils/LanguageContext';
-import { getRegionName, tHeading } from '../../utils/localizedNames';
+import { getRegionName, tHeading, toLanguageKey } from '../../utils/localizedNames';
 import type { GetStaticProps } from 'next';
 
 function normalize(s: string) {
@@ -22,24 +21,22 @@ export default function RegionPage() {
   const router = useRouter();
   const { region } = router.query as { region?: string };
   const { language } = useLanguage();
+  const langKey = toLanguageKey(language);
 
   const entry = ALL_REGIONS.find((r) => r.slug === region);
-  const displayName = entry ? getRegionName(language as any, entry.type, entry.slug, entry.name) : 'Region';
+  const displayName = entry ? getRegionName(langKey, entry.type, entry.slug, entry.name) : 'Region';
 
   return (
     <div className="min-h-screen bg-white dark:bg-dark-primary text-black dark:text-dark-text">
       <Head>
-        <title>{`${displayName} News — ${tHeading(language as any, 'national')} | News Pulse`}</title>
-        <meta name="description" content={`Latest ${tHeading(language as any, 'national')} news related to ${displayName}.`} />
+        <title>{`${displayName} News — ${tHeading(langKey, 'national')} | News Pulse`}</title>
+        <meta name="description" content={`Latest ${tHeading(langKey, 'national')} news related to ${displayName}.`} />
       </Head>
 
       <div className="max-w-6xl mx-auto px-4 py-8">
-        <div className="mb-4">
-          <LanguageToggle />
-        </div>
         <div className="mb-6">
           <h1 className="text-3xl font-extrabold">🏛️ {displayName}</h1>
-          <p className="text-gray-600">Stories filtered from {tHeading(language as any, 'national')}/{tHeading(language as any, 'regional')} feeds that reference this {entry?.type === 'state' ? tHeading(language as any, 'state').toLowerCase() : tHeading(language as any, 'union-territory').toLowerCase()}.</p>
+          <p className="text-gray-600">Stories filtered from {tHeading(langKey, 'national')}/{tHeading(langKey, 'regional')} feeds that reference this {entry?.type === 'state' ? tHeading(langKey, 'state').toLowerCase() : tHeading(langKey, 'union-territory').toLowerCase()}.</p>
         </div>
 
         <AdminContentLoader category="National" limit={80}>

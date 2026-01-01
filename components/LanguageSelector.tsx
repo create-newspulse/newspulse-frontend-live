@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo } from 'react';
-import { useRouter } from 'next/router';
+import { useLanguage } from '../utils/LanguageContext';
+import { useI18n } from '../src/i18n/LanguageProvider';
 
 const LANGS = [
   { code: 'en', label: 'English', flag: '🇺🇸' },
@@ -8,19 +9,23 @@ const LANGS = [
 ];
 
 export const LanguageSelector: React.FC<{ compact?: boolean }> = ({ compact = false }) => {
-  const router = useRouter();
-  const currentLocale = (router.locale as string) || 'en';
-
-  const asPath = useMemo(() => router.asPath, [router.asPath]);
+  const { language, setLanguage } = useLanguage();
+  const { t } = useI18n();
+  const currentLocale = language || 'en';
 
   const change = useCallback(async (lng: string) => {
+    // Global feed language (hard requirement)
     try {
-      // Persist language selection for Next/next-intl
-      document.cookie = `NEXT_LOCALE=${lng}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
-      try { localStorage.setItem('lang', lng); } catch {}
+      if (lng === 'en' || lng === 'hi' || lng === 'gu') {
+        setLanguage(lng);
+      }
     } catch {}
-    await router.push(asPath, asPath, { locale: lng, scroll: false, shallow: false });
-  }, [router, asPath]);
+    try {
+      try {
+        localStorage.setItem('np_lang', lng);
+      } catch {}
+    } catch {}
+  }, [setLanguage]);
 
   if (compact) {
     return (
@@ -39,6 +44,7 @@ export const LanguageSelector: React.FC<{ compact?: boolean }> = ({ compact = fa
 
   return (
     <div className="flex items-center space-x-2">
+      <span className="text-sm font-semibold text-gray-700 dark:text-dark-text">{t('common.language')}</span>
       {LANGS.map(l => (
         <button
           key={l.code}

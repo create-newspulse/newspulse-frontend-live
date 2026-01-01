@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React from 'react';
 
 function classNames(...s: Array<string | false | null | undefined>) {
   return s.filter(Boolean).join(' ');
@@ -12,6 +12,11 @@ export type DistrictPickerItem = {
 export type DistrictPickerProps = {
   open: boolean;
   title?: string;
+  closeLabel?: string;
+  closeAriaLabel?: string;
+  searchPlaceholder?: string;
+  allLabel?: string;
+  noResultsLabel?: string;
   districts: DistrictPickerItem[];
   onClose: () => void;
   onPickAll: () => void;
@@ -21,14 +26,19 @@ export type DistrictPickerProps = {
 export default function DistrictPicker({
   open,
   title = 'Choose a District',
+  closeLabel = 'Close',
+  closeAriaLabel = 'Close',
+  searchPlaceholder = 'Type to search…',
+  allLabel = 'All Gujarat',
+  noResultsLabel = 'No districts found.',
   districts,
   onClose,
   onPickAll,
   onPickDistrict,
 }: DistrictPickerProps) {
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = React.useState('');
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (!open) return;
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -46,11 +56,11 @@ export default function DistrictPicker({
     };
   }, [open, onClose]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (open) setQuery('');
   }, [open]);
 
-  const filtered = useMemo(() => {
+  const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return districts;
     return districts.filter((d) => d.name.toLowerCase().includes(q) || d.slug.toLowerCase().includes(q));
@@ -62,7 +72,7 @@ export default function DistrictPicker({
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={title}>
       <button
         type="button"
-        aria-label="Close"
+        aria-label={closeAriaLabel}
         className="absolute inset-0 cursor-default bg-black/40"
         onClick={onClose}
       />
@@ -75,7 +85,7 @@ export default function DistrictPicker({
             onClick={onClose}
             className="rounded-full border border-slate-200 px-3 py-1 text-sm hover:bg-slate-50"
           >
-            Close
+            {closeLabel}
           </button>
         </div>
 
@@ -83,7 +93,7 @@ export default function DistrictPicker({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Type to search…"
+            placeholder={searchPlaceholder}
             className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-slate-200"
           />
 
@@ -96,7 +106,7 @@ export default function DistrictPicker({
                 onClose();
               }}
             >
-              All Gujarat
+              {allLabel}
             </button>
 
             {filtered.map((d) => (
@@ -114,7 +124,7 @@ export default function DistrictPicker({
             ))}
 
             {!filtered.length && (
-              <div className="px-4 py-6 text-sm text-slate-500">No districts found.</div>
+              <div className="px-4 py-6 text-sm text-slate-500">{noResultsLabel}</div>
             )}
           </div>
         </div>

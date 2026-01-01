@@ -44,9 +44,13 @@ function formatDateLabel(iso?: string): string {
   }
 }
 
-async function fetchYouthPulseArticles(limit: number): Promise<any[]> {
+async function fetchYouthPulseArticles(limit: number, language?: string): Promise<any[]> {
   const origin = getApiOrigin();
   const params = new URLSearchParams({ category: 'youth-pulse', limit: String(limit) });
+  if (language) {
+    params.set('lang', String(language));
+    params.set('language', String(language));
+  }
   const url = `${origin}/api/public/news?${params.toString()}`;
 
   const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' } });
@@ -102,19 +106,27 @@ export async function getYouthTrending(limit = 12): Promise<YouthStory[]> {
   return list.slice(0, limit);
 }
 
-export async function getYouthByCategory(slug: string): Promise<YouthStory[]> {
+export async function getYouthTrendingByLanguage(limit = 12, language?: string): Promise<YouthStory[]> {
+  const items = await fetchYouthPulseArticles(limit, language);
+  if (items.length) return items.map((raw) => toYouthStory(raw));
+
+  const list = youthStories.filter((s) => String(s.category || '').toLowerCase() !== 'inspiration hub');
+  return list.slice(0, limit);
+}
+
+export async function getYouthByCategory(slug: string, language?: string): Promise<YouthStory[]> {
   // Best-effort client-side filtering on fetched youth-pulse feed.
   const display = humanizeSlug(slug);
   const needles = [normalizeText(slug), normalizeText(display)].filter(Boolean);
 
   // If asking for the main category, just return the latest youth-pulse feed.
   if (normalizeText(slug) === 'youth pulse' || normalizeText(slug) === 'youth-pulse') {
-    const items = await fetchYouthPulseArticles(30);
+    const items = await fetchYouthPulseArticles(30, language);
     if (items.length) return items.map((raw) => toYouthStory(raw, 'Youth Pulse'));
     return youthStories.filter((s) => String(s.category || '').toLowerCase() !== 'inspiration hub');
   }
 
-  const items = await fetchYouthPulseArticles(30);
+  const items = await fetchYouthPulseArticles(30, language);
   const filtered = items.filter((raw) => {
     const tags = extractTags(raw);
     const cat = normalizeText(raw?.category);

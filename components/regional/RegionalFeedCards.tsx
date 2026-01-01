@@ -12,6 +12,11 @@ export type RegionalFeedCardsProps = {
   loading?: boolean;
   emptyTitle?: string;
   emptyHint?: string;
+  districtFilterHint?: string;
+  readMoreLabel?: string;
+  videoPreviewHiddenLabel?: string;
+  untitledLabel?: string;
+  fallbackCategoryLabel?: string;
   districtFilteringEnabled?: boolean;
   showDistrictBadges?: boolean;
   getDistrictLabel?: (story: AnyStory) => string;
@@ -26,20 +31,28 @@ function StoryCard({
   story,
   showDistrictBadges,
   getDistrictLabel,
+  readMoreLabel,
+  videoPreviewHiddenLabel,
+  untitledLabel,
+  fallbackCategoryLabel,
 }: {
   story: AnyStory;
   showDistrictBadges?: boolean;
   getDistrictLabel?: (story: AnyStory) => string;
+  readMoreLabel: string;
+  videoPreviewHiddenLabel: string;
+  untitledLabel: string;
+  fallbackCategoryLabel: string;
 }) {
   const href = story?._id ? `/story/${story._id}` : story?.slug ? `/story/${story.slug}` : '#';
-  const categoryLabel = getStoryCategoryLabel(story?.category) || story?.category || 'Regional';
+  const categoryLabel = getStoryCategoryLabel(story?.category) || story?.category || fallbackCategoryLabel;
   const dateIso = getStoryDateIso(story);
   const dateText = dateIso ? new Date(dateIso).toLocaleString() : '';
 
   const districtLabel = showDistrictBadges && getDistrictLabel ? getDistrictLabel(story) : '';
 
   // Never render embeds/videos in cards; keep it clean.
-  const title = story?.title || 'Untitled';
+  const title = story?.title || untitledLabel;
   const excerpt = story?.summary || story?.excerpt || (story?.content ? String(story.content).slice(0, 160) + '…' : '');
 
   return (
@@ -50,7 +63,7 @@ function StoryCard({
       <div className="flex items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
-            {categoryLabel || 'Regional'}
+            {categoryLabel || fallbackCategoryLabel}
           </span>
           {!!districtLabel && (
             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
@@ -71,13 +84,13 @@ function StoryCard({
 
       <div className="mt-3 flex items-center justify-between">
         <span className="text-sm text-slate-500">{story?.location || ''}</span>
-        <span className="text-sm font-medium text-blue-600 hover:underline">Read more →</span>
+        <span className="text-sm font-medium text-blue-600 hover:underline">{readMoreLabel}</span>
       </div>
 
       {/* Placeholder area for media (no embeds). */}
       {!!story?.videoUrl && (
         <div className="mt-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-slate-500">
-          Video preview hidden (embed disabled).
+          {videoPreviewHiddenLabel}
         </div>
       )}
     </a>
@@ -89,6 +102,11 @@ export default function RegionalFeedCards({
   loading,
   emptyTitle = 'No stories match your filters.',
   emptyHint = 'Try another category or clear search.',
+  districtFilterHint = 'District-wise filtering activates when stories include district tags.',
+  readMoreLabel = 'Read more →',
+  videoPreviewHiddenLabel = 'Video preview hidden (embed disabled).',
+  untitledLabel = 'Untitled',
+  fallbackCategoryLabel = 'Regional',
   districtFilteringEnabled,
   showDistrictBadges,
   getDistrictLabel,
@@ -112,7 +130,7 @@ export default function RegionalFeedCards({
           <div className="mt-2 text-sm text-slate-600">{emptyHint}</div>
           {districtFilteringEnabled === false && (
             <div className="mt-3 text-sm text-slate-500">
-              District-wise filtering activates when stories include district tags.
+              {districtFilterHint}
             </div>
           )}
         </div>
@@ -128,6 +146,10 @@ export default function RegionalFeedCards({
           story={story}
           showDistrictBadges={showDistrictBadges}
           getDistrictLabel={getDistrictLabel}
+          readMoreLabel={readMoreLabel}
+          videoPreviewHiddenLabel={videoPreviewHiddenLabel}
+          untitledLabel={untitledLabel}
+          fallbackCategoryLabel={fallbackCategoryLabel}
         />
       ))}
     </div>

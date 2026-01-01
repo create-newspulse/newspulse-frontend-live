@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import SpotlightFallback728 from "./SpotlightFallback728";
 import { useAdSettings } from "../../hooks/useAdSettings";
+import { useLanguage } from "../../src/i18n/language";
 
 export type AdSlotName = "HOME_728x90" | "HOME_RIGHT_300x250";
 
@@ -60,6 +61,8 @@ function slotSizing(slot: AdSlotName) {
 }
 
 function DefaultFallback({ slot }: { slot: AdSlotName }) {
+  const { t } = useLanguage();
+
   if (slot === "HOME_728x90") return <SpotlightFallback728 />;
 
   return (
@@ -70,7 +73,7 @@ function DefaultFallback({ slot }: { slot: AdSlotName }) {
         </span>
 
         <Link href="/advertise" className="text-xs font-semibold underline text-slate-700 dark:text-slate-200">
-          Advertise Here
+          {t('common.advertiseHere')}
         </Link>
       </div>
 

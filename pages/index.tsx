@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useRegionalPulse } from "../src/features/regional/useRegionalPulse";
@@ -11,6 +11,7 @@ import { getTrendingTopics } from "../lib/getTrendingTopics";
 import AdSlot from "../components/ads/AdSlot";
 import type { GetStaticProps } from "next";
 import { AnimatePresence, motion } from "framer-motion";
+import { useI18n } from "../src/i18n/LanguageProvider";
 import {
   ArrowRight,
   Bell,
@@ -133,9 +134,10 @@ const CATEGORY_ROUTES: Record<string, string> = {
   inspiration: "/inspiration-hub",
 };
 
-const CATEGORY_THEME: Record<string, { base: string; hover: string; ring: string; active: string; dot: string }> = {
+const CATEGORY_THEME: Record<string, { base: string; icon: string; hover: string; ring: string; active: string; dot: string }> = {
   breaking: {
     base: "bg-red-50 border-red-200 text-red-700",
+    icon: "bg-red-100 border-red-200 text-red-700",
     hover: "hover:bg-red-100",
     ring: "focus-visible:ring-2 focus-visible:ring-red-300/50",
     active: "bg-red-100 ring-2 ring-red-300/50",
@@ -143,6 +145,7 @@ const CATEGORY_THEME: Record<string, { base: string; hover: string; ring: string
   },
   regional: {
     base: "bg-emerald-50 border-emerald-200 text-emerald-700",
+    icon: "bg-emerald-100 border-emerald-200 text-emerald-700",
     hover: "hover:bg-emerald-100",
     ring: "focus-visible:ring-2 focus-visible:ring-emerald-300/50",
     active: "bg-emerald-100 ring-2 ring-emerald-300/50",
@@ -150,6 +153,7 @@ const CATEGORY_THEME: Record<string, { base: string; hover: string; ring: string
   },
   national: {
     base: "bg-amber-50 border-amber-200 text-amber-700",
+    icon: "bg-amber-100 border-amber-200 text-amber-700",
     hover: "hover:bg-amber-100",
     ring: "focus-visible:ring-2 focus-visible:ring-amber-300/50",
     active: "bg-amber-100 ring-2 ring-amber-300/50",
@@ -157,6 +161,7 @@ const CATEGORY_THEME: Record<string, { base: string; hover: string; ring: string
   },
   international: {
     base: "bg-blue-50 border-blue-200 text-blue-700",
+    icon: "bg-blue-100 border-blue-200 text-blue-700",
     hover: "hover:bg-blue-100",
     ring: "focus-visible:ring-2 focus-visible:ring-blue-300/50",
     active: "bg-blue-100 ring-2 ring-blue-300/50",
@@ -164,6 +169,7 @@ const CATEGORY_THEME: Record<string, { base: string; hover: string; ring: string
   },
   business: {
     base: "bg-indigo-50 border-indigo-200 text-indigo-700",
+    icon: "bg-indigo-100 border-indigo-200 text-indigo-700",
     hover: "hover:bg-indigo-100",
     ring: "focus-visible:ring-2 focus-visible:ring-indigo-300/50",
     active: "bg-indigo-100 ring-2 ring-indigo-300/50",
@@ -171,6 +177,7 @@ const CATEGORY_THEME: Record<string, { base: string; hover: string; ring: string
   },
   "science-technology": {
     base: "bg-violet-50 border-violet-200 text-violet-700",
+    icon: "bg-violet-100 border-violet-200 text-violet-700",
     hover: "hover:bg-violet-100",
     ring: "focus-visible:ring-2 focus-visible:ring-violet-300/50",
     active: "bg-violet-100 ring-2 ring-violet-300/50",
@@ -178,6 +185,7 @@ const CATEGORY_THEME: Record<string, { base: string; hover: string; ring: string
   },
   sports: {
     base: "bg-cyan-50 border-cyan-200 text-cyan-700",
+    icon: "bg-cyan-100 border-cyan-200 text-cyan-700",
     hover: "hover:bg-cyan-100",
     ring: "focus-visible:ring-2 focus-visible:ring-cyan-300/50",
     active: "bg-cyan-100 ring-2 ring-cyan-300/50",
@@ -185,6 +193,7 @@ const CATEGORY_THEME: Record<string, { base: string; hover: string; ring: string
   },
   lifestyle: {
     base: "bg-rose-50 border-rose-200 text-rose-700",
+    icon: "bg-rose-100 border-rose-200 text-rose-700",
     hover: "hover:bg-rose-100",
     ring: "focus-visible:ring-2 focus-visible:ring-rose-300/50",
     active: "bg-rose-100 ring-2 ring-rose-300/50",
@@ -192,6 +201,7 @@ const CATEGORY_THEME: Record<string, { base: string; hover: string; ring: string
   },
   glamour: {
     base: "bg-fuchsia-50 border-fuchsia-200 text-fuchsia-700",
+    icon: "bg-fuchsia-100 border-fuchsia-200 text-fuchsia-700",
     hover: "hover:bg-fuchsia-100",
     ring: "focus-visible:ring-2 focus-visible:ring-fuchsia-300/50",
     active: "bg-fuchsia-100 ring-2 ring-fuchsia-300/50",
@@ -199,6 +209,7 @@ const CATEGORY_THEME: Record<string, { base: string; hover: string; ring: string
   },
   "web-stories": {
     base: "bg-yellow-50 border-yellow-200 text-yellow-700",
+    icon: "bg-yellow-100 border-yellow-200 text-yellow-700",
     hover: "hover:bg-yellow-100",
     ring: "focus-visible:ring-2 focus-visible:ring-yellow-300/50",
     active: "bg-yellow-100 ring-2 ring-yellow-300/50",
@@ -206,6 +217,7 @@ const CATEGORY_THEME: Record<string, { base: string; hover: string; ring: string
   },
   "viral-videos": {
     base: "bg-lime-50 border-lime-200 text-lime-700",
+    icon: "bg-lime-100 border-lime-200 text-lime-700",
     hover: "hover:bg-lime-100",
     ring: "focus-visible:ring-2 focus-visible:ring-lime-300/50",
     active: "bg-lime-100 ring-2 ring-lime-300/50",
@@ -213,6 +225,7 @@ const CATEGORY_THEME: Record<string, { base: string; hover: string; ring: string
   },
   editorial: {
     base: "bg-slate-50 border-slate-200 text-slate-700",
+    icon: "bg-slate-100 border-slate-200 text-slate-700",
     hover: "hover:bg-slate-100",
     ring: "focus-visible:ring-2 focus-visible:ring-slate-300/50",
     active: "bg-slate-100 ring-2 ring-slate-300/50",
@@ -220,6 +233,7 @@ const CATEGORY_THEME: Record<string, { base: string; hover: string; ring: string
   },
   youth: {
     base: "bg-sky-50 border-sky-200 text-sky-700",
+    icon: "bg-sky-100 border-sky-200 text-sky-700",
     hover: "hover:bg-sky-100",
     ring: "focus-visible:ring-2 focus-visible:ring-sky-300/50",
     active: "bg-sky-100 ring-2 ring-sky-300/50",
@@ -227,6 +241,7 @@ const CATEGORY_THEME: Record<string, { base: string; hover: string; ring: string
   },
   inspiration: {
     base: "bg-teal-50 border-teal-200 text-teal-700",
+    icon: "bg-teal-100 border-teal-200 text-teal-700",
     hover: "hover:bg-teal-100",
     ring: "focus-visible:ring-2 focus-visible:ring-teal-300/50",
     active: "bg-teal-100 ring-2 ring-teal-300/50",
@@ -234,6 +249,7 @@ const CATEGORY_THEME: Record<string, { base: string; hover: string; ring: string
   },
   community: {
     base: "bg-orange-50 border-orange-200 text-orange-700",
+    icon: "bg-orange-100 border-orange-200 text-orange-700",
     hover: "hover:bg-orange-100",
     ring: "focus-visible:ring-2 focus-visible:ring-orange-300/50",
     active: "bg-orange-100 ring-2 ring-orange-300/50",
@@ -241,6 +257,7 @@ const CATEGORY_THEME: Record<string, { base: string; hover: string; ring: string
   },
   __default: {
     base: "bg-slate-50 border-slate-200 text-slate-700",
+    icon: "bg-slate-100 border-slate-200 text-slate-700",
     hover: "hover:bg-slate-100",
     ring: "focus-visible:ring-2 focus-visible:ring-slate-300/50",
     active: "bg-slate-100 ring-2 ring-slate-300/50",
@@ -255,12 +272,6 @@ const BREAKING_DEMO: string[] = [
   "Markets steady; investors await next policy signals",
   "Health department shares seasonal advisory for citizens",
   "International summit opens with climate focus and pledges",
-];
-
-const LIVE_UPDATES: string[] = [
-  "Preview edition is live — thank you for testing",
-  "AI-Verified badges will appear on verified stories",
-  "New categories and story panels are rolling out",
 ];
 
 const TRENDING_CHIP_THEME: Record<
@@ -335,6 +346,24 @@ const TRENDING_CHIP_THEME: Record<
   },
 };
 
+const MENU_QUICK_THEME: Record<"home" | "videos" | "search", { base: string; hover: string; ring: string }> = {
+  home: {
+    base: "bg-gradient-to-r from-sky-50 to-indigo-50 border-sky-200 text-sky-700",
+    hover: "hover:from-sky-100 hover:to-indigo-100 hover:border-sky-300",
+    ring: "focus-visible:ring-2 focus-visible:ring-sky-300/50",
+  },
+  videos: {
+    base: "bg-gradient-to-r from-emerald-50 to-lime-50 border-emerald-200 text-emerald-700",
+    hover: "hover:from-emerald-100 hover:to-lime-100 hover:border-emerald-300",
+    ring: "focus-visible:ring-2 focus-visible:ring-emerald-300/50",
+  },
+  search: {
+    base: "bg-gradient-to-r from-amber-50 to-yellow-50 border-amber-200 text-amber-800",
+    hover: "hover:from-amber-100 hover:to-yellow-100 hover:border-amber-300",
+    ring: "focus-visible:ring-2 focus-visible:ring-amber-300/50",
+  },
+};
+
 const FEATURED = [
   {
     id: "f1",
@@ -397,6 +426,21 @@ const DEFAULT_PREFS = {
   showFooter: true,
 };
 
+type UiLangCode = 'en' | 'hi' | 'gu';
+
+const UI_LANG_LABEL: Record<UiLangCode, string> = {
+  en: 'English',
+  hi: 'Hindi',
+  gu: 'Gujarati',
+};
+
+function toUiLangCode(value: unknown): UiLangCode {
+  const v = String(value || '').trim().toLowerCase();
+  if (v === 'hi' || v === 'hindi') return 'hi';
+  if (v === 'gu' || v === 'gujarati') return 'gu';
+  return 'en';
+}
+
 function safeJsonParse(v: string) {
   try {
     return JSON.parse(v);
@@ -455,6 +499,29 @@ function getBreakingItems(prefs: any) {
   if (prefs.breakingMode === "off") return [];
   if (prefs.breakingMode === "on") return BREAKING_DEMO;
   return BREAKING_FROM_BACKEND;
+}
+
+function labelKeyForCategory(key: string): string {
+  if (key === 'science-technology') return 'categories.scienceTechnology';
+  if (key === 'web-stories') return 'categories.webStories';
+  if (key === 'viral-videos') return 'categories.viralVideos';
+  if (key === 'youth') return 'categories.youthPulse';
+  if (key === 'inspiration') return 'categories.inspirationHub';
+  if (key === 'community') return 'categories.communityReporter';
+  return `categories.${key}`;
+}
+
+function labelKeyForTrendingTopic(key: string): string | null {
+  if (key === 'breaking') return 'trending.breaking';
+  if (key === 'sports') return 'trending.sports';
+  if (key === 'gold-rates') return 'trending.goldRates';
+  if (key === 'fuel-prices') return 'trending.fuelPrices';
+  if (key === 'weather') return 'trending.weather';
+  if (key === 'gujarat') return 'trending.gujarat';
+  if (key === 'markets') return 'trending.markets';
+  if (key === 'tech-ai') return 'trending.techAI';
+  if (key === 'education') return 'trending.education';
+  return null;
 }
 
 // Categories are always LTR by default
@@ -556,7 +623,7 @@ function Drawer({ open, onClose, theme, title, children, side = "right" }: any) 
 }
 
 function Toast({ theme, message, onDone }: any) {
-  useEffect(() => {
+  React.useEffect(() => {
     if (!message) return;
     const t = setTimeout(onDone, 2200);
     return () => clearTimeout(t);
@@ -618,10 +685,11 @@ function ToggleRow({ theme, title, sub, value, onToggle }: any) {
 }
 
 function ThemePicker({ theme, themeId, setThemeId }: any) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (!open) return;
     const onDown = (e: any) => {
       const el = wrapRef.current;
@@ -642,7 +710,7 @@ function ThemePicker({ theme, themeId, setThemeId }: any) {
         className="inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold border"
         style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}
       >
-        <span className="hidden md:inline">Style</span>
+        <span className="hidden md:inline">{t('common.style')}</span>
         <span className="inline-flex items-center gap-2">
           <span className="h-3.5 w-3.5 rounded-full border" style={{ background: current.accent, borderColor: theme.border }} />
           <span className="font-extrabold">{current.name}</span>
@@ -698,11 +766,12 @@ function ThemePicker({ theme, themeId, setThemeId }: any) {
   );
 }
 
-function LanguagePicker({ theme, value, onChange }: any) {
+function LanguagePicker({ theme, value, onChange }: { theme: any; value: UiLangCode; onChange: (next: UiLangCode) => void }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (!open) return;
     const onDown = (e: any) => {
       const el = wrapRef.current;
@@ -713,7 +782,11 @@ function LanguagePicker({ theme, value, onChange }: any) {
     return () => window.removeEventListener("mousedown", onDown);
   }, [open]);
 
-  const options = ["English", "Hindi", "Gujarati"];
+  const options: Array<{ code: UiLangCode; label: string }> = [
+    { code: 'en', label: UI_LANG_LABEL.en },
+    { code: 'hi', label: UI_LANG_LABEL.hi },
+    { code: 'gu', label: UI_LANG_LABEL.gu },
+  ];
 
   return (
     <div ref={wrapRef} className="relative">
@@ -723,8 +796,8 @@ function LanguagePicker({ theme, value, onChange }: any) {
         className="inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold border"
         style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}
       >
-        <span className="hidden md:inline">Language</span>
-        <span className="font-extrabold">{value}</span>
+        <span className="hidden md:inline">{t('common.language')}</span>
+        <span className="font-extrabold">{UI_LANG_LABEL[value] ?? UI_LANG_LABEL.en}</span>
         <ChevronDown className="h-4 w-4" style={{ color: theme.muted }} />
       </button>
 
@@ -740,13 +813,13 @@ function LanguagePicker({ theme, value, onChange }: any) {
           >
             <div className="p-2">
               {options.map((o) => {
-                const active = o === value;
+                const active = o.code === value;
                 return (
                   <button
-                    key={o}
+                    key={o.code}
                     type="button"
                     onClick={() => {
-                      onChange(o);
+                      onChange(o.code);
                       setOpen(false);
                     }}
                     className="flex w-full items-center justify-between gap-3 rounded-2xl px-3 py-2 text-sm font-semibold border"
@@ -760,7 +833,7 @@ function LanguagePicker({ theme, value, onChange }: any) {
                       color: theme.text,
                     }}
                   >
-                    <span>{o}</span>
+                    <span>{o.label}</span>
                     {active ? <Check className="h-4 w-4" style={{ color: theme.accent }} /> : null}
                   </button>
                 );
@@ -774,16 +847,17 @@ function LanguagePicker({ theme, value, onChange }: any) {
 }
 
 function TickerBar({ theme, kind, items, onViewAll, speedSec }: any) {
-  const label = kind === "breaking" ? "BREAKING NEWS" : "LIVE UPDATES";
+  const { t } = useI18n();
+  const label = kind === "breaking" ? t('home.breakingNews') : t('home.liveUpdates');
 
   const safeItems =
     kind === "live"
       ? items?.length
         ? items
-        : ["No updates right now — stay tuned"]
+        : [t('home.noUpdates')]
       : items?.length
         ? items
-        : ["No breaking news right now — stay tuned"];
+        : [t('home.noBreaking')];
 
   const text = (safeItems?.length ? safeItems : [""]).join("  •  ");
 
@@ -827,7 +901,7 @@ function TickerBar({ theme, kind, items, onViewAll, speedSec }: any) {
               </div>
 
               <button type="button" onClick={onViewAll} className="text-xs font-semibold text-white/95 hover:underline flex-none relative z-10">
-                View all
+                {t('common.viewAll')}
               </button>
             </div>
           </div>
@@ -839,6 +913,7 @@ function TickerBar({ theme, kind, items, onViewAll, speedSec }: any) {
 
 function TrendingStrip({ theme, onPick }: any) {
   const router = useRouter();
+  const { t } = useI18n();
   const [topics, setTopics] = useState<TrendingTopic[]>(DEFAULT_TRENDING_TOPICS);
   const [path, setPath] = useState<string>("");
   const tapState = useRef({
@@ -849,7 +924,7 @@ function TrendingStrip({ theme, onPick }: any) {
     touchNavigatedAt: 0,
   });
 
-  useEffect(() => {
+  React.useEffect(() => {
     setPath(window.location.pathname);
 
     let cancelled = false;
@@ -863,7 +938,7 @@ function TrendingStrip({ theme, onPick }: any) {
   }, []);
 
   return (
-    <div className="mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-8">
+    <div className="mx-auto w-full max-w-[1440px] px-4 md:px-8">
       <div className="mt-3">
         <Surface theme={theme} className="px-4 py-3">
           <div className="flex items-center gap-2">
@@ -875,7 +950,7 @@ function TrendingStrip({ theme, onPick }: any) {
                 color: theme.mode === "dark" ? "rgba(255,255,255,0.92)" : theme.text,
               }}
             >
-              <Flame className="h-4 w-4" style={{ color: theme.live }} /> Trending
+              <Flame className="h-4 w-4" style={{ color: theme.live }} /> {t('common.trending')}
             </span>
 
             <div className="np-no-scrollbar w-full overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
@@ -883,9 +958,11 @@ function TrendingStrip({ theme, onPick }: any) {
                 {topics.map((topic) => {
                   const active = !!path && path === topic.href;
                   const chipTheme = TRENDING_CHIP_THEME[topic.colorKey] || TRENDING_CHIP_THEME.__default;
+                  const k = labelKeyForTrendingTopic(String(topic.key));
+                  const label = k ? t(k) : topic.label;
 
                   const navigate = () => {
-                    onPick?.(topic.label);
+                    onPick?.(label);
                     router.push(topic.href);
                   };
 
@@ -940,7 +1017,7 @@ function TrendingStrip({ theme, onPick }: any) {
                         active ? cx("shadow-sm", chipTheme.active) : null
                       )}
                     >
-                      {topic.label}
+                      {label}
                     </Link>
                   );
                 })}
@@ -955,12 +1032,13 @@ function TrendingStrip({ theme, onPick }: any) {
 }
 
 function TopCategoriesStrip({ theme, activeKey, onPick }: any) {
+  const { t } = useI18n();
   const cats = useMemo(() => [...CATEGORIES], []);
 
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const dragState = useRef({ down: false, startX: 0, startLeft: 0, moved: false, blockUntil: 0 });
 
-  useEffect(() => {
+  React.useEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
 
@@ -1000,9 +1078,19 @@ function TopCategoriesStrip({ theme, activeKey, onPick }: any) {
     };
   }, []);
 
+  const labelKeyForCategory = (key: string): string => {
+    if (key === 'science-technology') return 'categories.scienceTechnology';
+    if (key === 'web-stories') return 'categories.webStories';
+    if (key === 'viral-videos') return 'categories.viralVideos';
+    if (key === 'youth') return 'categories.youthPulse';
+    if (key === 'inspiration') return 'categories.inspirationHub';
+    if (key === 'community') return 'categories.communityReporter';
+    return `categories.${key}`;
+  };
+
   return (
     <div className="w-full">
-      <div className="mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto w-full max-w-[1440px] px-4 md:px-8">
         <div className="rounded-2xl border border-black/10 shadow-sm ring-1 ring-black/5 bg-white/80 backdrop-blur-md">
           <div className="px-3 py-2">
             <div className="no-scrollbar w-full overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
@@ -1016,21 +1104,21 @@ function TopCategoriesStrip({ theme, activeKey, onPick }: any) {
               >
               {cats.map((c: any) => {
                 const active = c.key === activeKey;
-                const t = CATEGORY_THEME[c.key] || CATEGORY_THEME.__default;
+                const chipTheme = CATEGORY_THEME[c.key] || CATEGORY_THEME.__default;
                 const href = CATEGORY_ROUTES[c.key as string];
                 const content = (
                   <div
                     className={cx(
                       "inline-flex items-center gap-2 whitespace-nowrap h-9 rounded-full border shadow-[0_1px_0_rgba(0,0,0,0.04)] px-3 text-xs font-semibold transition-all duration-200 focus-visible:outline-none",
-                      t.base,
-                      t.hover,
-                      t.ring,
-                      active && t.active
+                      chipTheme.base,
+                      chipTheme.hover,
+                      chipTheme.ring,
+                      active && chipTheme.active
                     )}
                   >
                     <c.Icon className="h-4 w-4" />
-                    {c.label}
-                    {active ? <span className={cx("ml-1.5 inline-block h-1.5 w-1.5 rounded-full", t.dot)} aria-hidden="true" /> : null}
+                    {t(labelKeyForCategory(c.key))}
+                    {active ? <span className={cx("ml-1.5 inline-block h-1.5 w-1.5 rounded-full", chipTheme.dot)} aria-hidden="true" /> : null}
                   </div>
                 );
 
@@ -1073,7 +1161,18 @@ function TopCategoriesStrip({ theme, activeKey, onPick }: any) {
 }
 
 function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick }: any) {
+  const { t } = useI18n();
   const cats = useMemo(() => getCats(), []);
+
+  const labelKeyForCategory = (key: string): string => {
+    if (key === 'science-technology') return 'categories.scienceTechnology';
+    if (key === 'web-stories') return 'categories.webStories';
+    if (key === 'viral-videos') return 'categories.viralVideos';
+    if (key === 'youth') return 'categories.youthPulse';
+    if (key === 'inspiration') return 'categories.inspirationHub';
+    if (key === 'community') return 'categories.communityReporter';
+    return `categories.${key}`;
+  };
 
   type ExploreTone = {
     wrap: string;
@@ -1219,50 +1318,50 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick }: any) {
   return (
     <Surface theme={theme} className="p-4">
       <div className="text-base font-extrabold" style={{ color: theme.text }}>
-        Explore Categories
+        {t('home.exploreCategories')}
       </div>
       <div className="mt-1 text-xs" style={{ color: theme.sub }}>
-        Tap to filter
+        {t('home.tapToFilter')}
       </div>
 
       <div className="mt-4 grid gap-3">
         {cats.map((c: any) => {
           const active = c.key === activeKey;
           const href = CATEGORY_ROUTES[c.key as string];
-          const t = TONE[c.key as string] ?? DEFAULT_TONE;
+          const tone = TONE[c.key as string] ?? DEFAULT_TONE;
           const content = (
             <div
               className={[
                 "relative flex items-center gap-3 rounded-3xl border transition",
                 "h-14 px-4",
-                t.wrap,
-                active ? `ring-2 ${t.activeRing}` : "",
+                tone.wrap,
+                active ? `ring-2 ${tone.activeRing}` : "",
               ].join(" ")}
             >
-              <span className={["absolute left-0 top-3 bottom-3 w-1 rounded-full", t.leftBar].join(" ")} />
+              <span className={["absolute left-0 top-3 bottom-3 w-1 rounded-full", tone.leftBar].join(" ")} />
 
-              <span className={["grid place-items-center w-10 h-10 rounded-2xl border", t.iconWrap].join(" ")}>
+              <span className={["grid place-items-center w-10 h-10 rounded-2xl border", tone.iconWrap].join(" ")}>
                 <c.Icon className="w-5 h-5" />
               </span>
 
               <span className="flex-1 min-w-0">
                 <span className="flex items-center gap-2 min-w-0">
-                  <span className={["block text-[15px] font-bold truncate", t.text].join(" ")}>{c.label}</span>
+                  <span className={["block text-[15px] font-bold truncate", tone.text].join(" ")}>{t(labelKeyForCategory(c.key))}</span>
                   {c.badge ? (
                     <span
                       className={[
                         "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-extrabold",
                         "bg-white/60 border-black/10",
-                        t.text,
+                        tone.text,
                       ].join(" ")}
                     >
-                      {c.badge}
+                      {t('common.new')}
                     </span>
                   ) : null}
                 </span>
               </span>
 
-              <ArrowRight className={["ml-auto w-5 h-5", t.arrow].join(" ")} />
+              <ArrowRight className={["ml-auto w-5 h-5", tone.arrow].join(" ")} />
             </div>
           );
 
@@ -1285,6 +1384,7 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick }: any) {
 }
 
 function FeaturedCard({ theme, item, onToast }: any) {
+  const { t } = useI18n();
   return (
     <Surface theme={theme} className="overflow-hidden">
       <div className="p-5 sm:p-6">
@@ -1314,10 +1414,10 @@ function FeaturedCard({ theme, item, onToast }: any) {
 
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <Button theme={theme} variant="solid" onClick={() => onToast("Open featured story (planned)")}>
-            Read <ArrowRight className="h-4 w-4" />
+            {t('common.read')} <ArrowRight className="h-4 w-4" />
           </Button>
           <Button theme={theme} variant="soft" onClick={() => onToast("Watch / Listen (planned)")}>
-            <Play className="h-4 w-4" /> Watch
+            <Play className="h-4 w-4" /> {t('common.watch')}
           </Button>
         </div>
       </div>
@@ -1326,6 +1426,7 @@ function FeaturedCard({ theme, item, onToast }: any) {
 }
 
 function FeedList({ theme, title, items, onOpen }: any) {
+  const { t } = useI18n();
   return (
     <Surface theme={theme} className="p-4">
       <div className="flex items-center justify-between gap-3">
@@ -1334,11 +1435,11 @@ function FeedList({ theme, title, items, onOpen }: any) {
             {title}
           </div>
           <div className="text-xs" style={{ color: theme.sub }}>
-            Fresh updates
+            {t('home.freshUpdates')}
           </div>
         </div>
         <Button theme={theme} variant="soft" onClick={() => onOpen("viewall")}>
-          View all
+          {t('common.viewAll')}
         </Button>
       </div>
 
@@ -1380,6 +1481,7 @@ function FeedList({ theme, title, items, onOpen }: any) {
 }
 
 function LiveTVWidget({ theme, prefs, setPrefs, onToast }: any) {
+  const { t } = useI18n();
   if (!prefs.liveTvOn) return null;
 
   const hasUrl = !!prefs.liveTvEmbedUrl?.trim();
@@ -1389,14 +1491,14 @@ function LiveTVWidget({ theme, prefs, setPrefs, onToast }: any) {
       <div className="flex items-center justify-between">
         <div>
           <div className="text-sm font-extrabold" style={{ color: theme.text }}>
-            Live TV
+            {t('common.liveTv')}
           </div>
           <div className="text-xs" style={{ color: theme.sub }}>
-            Partner channel (toggle from Admin later)
+            {t('home.liveTvPartnerChannel')}
           </div>
         </div>
         <span className="rounded-full px-2.5 py-1 text-xs font-extrabold border text-white" style={{ background: theme.live, borderColor: "rgba(255,255,255,0.18)" }}>
-          LIVE
+          {t('common.live')}
         </span>
       </div>
 
@@ -1412,7 +1514,7 @@ function LiveTVWidget({ theme, prefs, setPrefs, onToast }: any) {
             />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold" style={{ color: theme.sub }}>
-              Add Live TV embed URL in Settings (demo)
+              {t('home.liveTvAddEmbedUrl')}
             </div>
           )}
         </div>
@@ -1420,10 +1522,10 @@ function LiveTVWidget({ theme, prefs, setPrefs, onToast }: any) {
 
       <div className="mt-3 grid gap-2">
         <Button theme={theme} variant="soft" className="w-full justify-start" onClick={() => onToast("Live TV full page (planned)")}>
-          <Play className="h-4 w-4" /> Open Live TV
+          <Play className="h-4 w-4" /> {t('common.openLiveTv')}
         </Button>
         <Button theme={theme} variant="ghost" className="w-full justify-start" onClick={() => setPrefs((p: any) => ({ ...p, liveTvOn: false }))}>
-          <X className="h-4 w-4" /> Turn OFF widget
+          <X className="h-4 w-4" /> {t('home.turnOffWidget')}
         </Button>
       </div>
     </Surface>
@@ -1431,15 +1533,16 @@ function LiveTVWidget({ theme, prefs, setPrefs, onToast }: any) {
 }
 
 function QuickToolsCard({ theme, onToast }: any) {
+  const { t } = useI18n();
   return (
     <Surface theme={theme} className="p-4">
       <div className="flex items-center justify-between">
         <div>
           <div className="text-sm font-extrabold" style={{ color: theme.text }}>
-            Quick tools
+            {t('home.quickToolsTitle')}
           </div>
           <div className="text-xs" style={{ color: theme.sub }}>
-            Useful features (growing)
+            {t('home.quickToolsSubtitle')}
           </div>
         </div>
         <Bell className="h-5 w-5" style={{ color: theme.muted }} />
@@ -1447,13 +1550,13 @@ function QuickToolsCard({ theme, onToast }: any) {
 
       <div className="mt-3 grid gap-2">
         <Button theme={theme} variant="soft" className="w-full justify-start" onClick={() => onToast("AI Explainer (planned)")}>
-          <Sparkles className="h-4 w-4" /> AI Explainer
+          <Sparkles className="h-4 w-4" /> {t('home.aiExplainer')}
         </Button>
         <Button theme={theme} variant="soft" className="w-full justify-start" onClick={() => onToast("Swipe-to-Listen (planned)")}>
-          <Play className="h-4 w-4" /> Swipe-to-Listen
+          <Play className="h-4 w-4" /> {t('home.swipeToListen')}
         </Button>
         <Button theme={theme} variant="soft" className="w-full justify-start" onClick={() => onToast("Viral Videos (planned)")}>
-          <Video className="h-4 w-4" /> Viral Videos
+          <Video className="h-4 w-4" /> {t('categories.viralVideos')}
         </Button>
       </div>
     </Surface>
@@ -1461,20 +1564,21 @@ function QuickToolsCard({ theme, onToast }: any) {
 }
 
 function SnapshotsCard({ theme }: any) {
+  const { t } = useI18n();
   return (
     <Surface theme={theme} className="p-4">
       <div className="text-sm font-extrabold" style={{ color: theme.text }}>
-        Snapshots
+        {t('home.snapshotsTitle')}
       </div>
       <div className="mt-1 text-xs" style={{ color: theme.sub }}>
-        Small trending utilities
+        {t('home.snapshotsSubtitle')}
       </div>
 
       <div className="mt-3 grid gap-2">
         {[
-          { k: "Weather", v: "27°C • Cloudy" },
-          { k: "Markets", v: "Stable" },
-          { k: "Gold", v: "₹ — (api)" },
+          { k: t('home.snapshotWeather'), v: "27°C • Cloudy" },
+          { k: t('home.snapshotMarkets'), v: "Stable" },
+          { k: t('home.snapshotGold'), v: "₹ — (api)" },
         ].map((x) => (
           <div key={x.k} className="rounded-2xl border px-3 py-2" style={{ background: theme.surface2, borderColor: theme.border }}>
             <div className="text-xs" style={{ color: theme.muted }}>
@@ -1701,14 +1805,16 @@ function PreferencesDrawer({ theme, open, onClose, prefs, setPrefs, onToast }: a
 }
 
 function AppPromoSection({ theme, onToast }: any) {
+  const { t } = useI18n();
+
   return (
-    <div className="mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-8 pb-10 pt-2">
+    <div className="mx-auto w-full max-w-[1440px] px-4 md:px-8 pb-10 pt-2">
       <Surface theme={theme} className="overflow-hidden">
         <div className="p-6 sm:p-8">
           <div className="grid gap-6 lg:grid-cols-12 lg:items-center">
             <div className="lg:col-span-6">
               <div className="text-4xl sm:text-5xl font-black leading-[1.05]" style={{ color: theme.text }}>
-                Take{" "}
+                {t('home.appPromoTitlePrefix')}{" "}
                 <span
                   className="px-2 py-1 rounded-2xl"
                   style={{
@@ -1720,17 +1826,17 @@ function AppPromoSection({ theme, onToast }: any) {
                 >
                   <span style={{ color: theme.accent }}>News</span> <span style={{ color: theme.accent2 }}>Pulse</span>
                 </span>{" "}
-                Everywhere
+                {t('home.appPromoTitleSuffix')}
               </div>
 
               <div className="mt-4 text-sm sm:text-base" style={{ color: theme.sub }}>
-                Download our mobile app and never miss a story. Available on all platforms with exclusive features.
+                {t('home.appPromoSubtitle')}
               </div>
 
               <div className="mt-6 flex flex-wrap gap-3">
                 <button
                   type="button"
-                  onClick={() => onToast("App Store link (planned)")}
+                  onClick={() => onToast(`${t('common.appStore')} (planned)`) }
                   className="rounded-3xl px-5 py-4 text-sm font-extrabold border transition hover:opacity-[0.98] inline-flex items-center gap-2"
                   style={{
                     background: theme.mode === "dark" ? "rgba(0,0,0,0.55)" : "#0b1220",
@@ -1739,12 +1845,12 @@ function AppPromoSection({ theme, onToast }: any) {
                   }}
                 >
                   <BookOpen className="h-5 w-5" />
-                  App Store
+                  {t('common.appStore')}
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => onToast("Google Play link (planned)")}
+                  onClick={() => onToast(`${t('common.googlePlay')} (planned)`) }
                   className="rounded-3xl px-5 py-4 text-sm font-extrabold border transition hover:opacity-[0.98] inline-flex items-center gap-2"
                   style={{
                     background: `linear-gradient(90deg, rgba(16,185,129,0.95), ${theme.accent} 60%)`,
@@ -1753,19 +1859,19 @@ function AppPromoSection({ theme, onToast }: any) {
                   }}
                 >
                   <Play className="h-5 w-5" />
-                  Google Play
+                  {t('common.googlePlay')}
                 </button>
               </div>
 
               <div className="mt-6 flex flex-wrap items-center gap-6 text-sm" style={{ color: theme.sub }}>
                 <span className="inline-flex items-center gap-2">
-                  <Sparkles className="h-4 w-4" style={{ color: theme.accent2 }} /> 4.8 Rating
+                  <Sparkles className="h-4 w-4" style={{ color: theme.accent2 }} /> {t('home.appPromoRating')}
                 </span>
                 <span className="inline-flex items-center gap-2">
-                  <Users className="h-4 w-4" style={{ color: theme.accent }} /> 1M+ Downloads
+                  <Users className="h-4 w-4" style={{ color: theme.accent }} /> {t('home.appPromoDownloads')}
                 </span>
                 <span className="inline-flex items-center gap-2">
-                  <Globe className="h-4 w-4" style={{ color: theme.accent }} /> Available in 3 languages
+                  <Globe className="h-4 w-4" style={{ color: theme.accent }} /> {t('common.availableIn3Languages')}
                 </span>
               </div>
             </div>
@@ -1786,25 +1892,25 @@ function AppPromoSection({ theme, onToast }: any) {
                     <span className="text-2xl">📱</span>
                   </div>
 
-                  <div className="text-center text-2xl sm:text-3xl font-black">Mobile App Preview</div>
-                  <div className="mt-2 text-center text-sm text-white/90 font-semibold">Experience News Pulse on the go</div>
+                  <div className="text-center text-2xl sm:text-3xl font-black">{t('home.appPromoPreviewTitle')}</div>
+                  <div className="mt-2 text-center text-sm text-white/90 font-semibold">{t('home.appPromoPreviewSubtitle')}</div>
 
                   <div className="mt-6 flex flex-wrap items-center justify-center gap-8 text-sm font-semibold text-white/95">
                     <span className="inline-flex items-center gap-2">
-                      <Sparkles className="h-4 w-4" /> Analytics
+                      <Sparkles className="h-4 w-4" /> {t('home.appPromoFeatureAnalytics')}
                     </span>
                     <span className="inline-flex items-center gap-2">
-                      <Bell className="h-4 w-4" /> Notifications
+                      <Bell className="h-4 w-4" /> {t('home.appPromoFeatureNotifications')}
                     </span>
                     <span className="inline-flex items-center gap-2">
-                      <BookOpen className="h-4 w-4" /> Offline Reading
+                      <BookOpen className="h-4 w-4" /> {t('home.appPromoFeatureOfflineReading')}
                     </span>
                   </div>
                 </div>
               </div>
 
               <div className="mt-3 text-center text-xs" style={{ color: theme.sub }}>
-                (UI preview only — app links will be connected after launch)
+                {t('home.appPromoNote')}
               </div>
             </div>
           </div>
@@ -1815,6 +1921,8 @@ function AppPromoSection({ theme, onToast }: any) {
 }
 
 function SiteFooter({ theme, onToast }: any) {
+  const { t } = useI18n();
+
   const footerBg =
     theme.mode === "dark"
       ? "linear-gradient(180deg, rgba(10,14,35,0.95) 0%, rgba(7,10,24,0.98) 100%)"
@@ -1822,22 +1930,22 @@ function SiteFooter({ theme, onToast }: any) {
 
   return (
     <div className="mt-6" style={{ background: footerBg }}>
-      <div className="mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-8 py-10">
+      <div className="mx-auto w-full max-w-[1440px] px-4 md:px-8 py-10">
         <div className="grid gap-10 md:grid-cols-12">
           <div className="md:col-span-5">
             <div className="text-3xl font-black text-white">
               News <span style={{ color: theme.accent2 }}>Pulse</span>
             </div>
             <div className="mt-3 text-sm text-white/80 leading-relaxed">
-              Your trusted source for breaking news, in-depth analysis, and stories that matter. Delivering truth with integrity since our inception.
+              {t('footer.description')}
             </div>
 
             <div className="mt-6 flex items-center gap-3">
               {[
-                { label: "Community", icon: Users },
-                { label: "Videos", icon: Video },
-                { label: "Live", icon: Radio },
-                { label: "World", icon: Globe },
+                { label: t('footer.iconCommunity'), icon: Users },
+                { label: t('common.videos'), icon: Video },
+                { label: t('common.live'), icon: Radio },
+                { label: t('footer.iconWorld'), icon: Globe },
               ].map((x) => (
                 <button
                   key={x.label}
@@ -1856,12 +1964,12 @@ function SiteFooter({ theme, onToast }: any) {
 
           <div className="md:col-span-4">
             <div className="text-lg font-extrabold" style={{ color: theme.accent }}>
-              Quick Links
+              {t('footer.quickLinksTitle')}
             </div>
             <div className="mt-4 grid gap-3 text-sm text-white/85">
-              {["About Us", "Editorial Policy", "Privacy Policy", "Terms of Service", "Contact", "Careers", "Community Reporter", "Journalist Desk"].map((t) => (
-                <button key={t} type="button" onClick={() => onToast(`${t} (planned)`)} className="text-left hover:underline">
-                  {t}
+              {[t('footer.aboutUs'), t('footer.editorialPolicy'), t('footer.privacyPolicy'), t('footer.termsOfService'), t('common.contact'), t('footer.careers'), t('common.communityReporter'), t('footer.journalistDesk')].map((label) => (
+                <button key={label} type="button" onClick={() => onToast(`${label} (planned)`) } className="text-left hover:underline">
+                  {label}
                 </button>
               ))}
             </div>
@@ -1869,12 +1977,12 @@ function SiteFooter({ theme, onToast }: any) {
 
           <div className="md:col-span-3">
             <div className="text-lg font-extrabold" style={{ color: theme.accent2 }}>
-              Business
+              {t('footer.businessTitle')}
             </div>
             <div className="mt-4 grid gap-3 text-sm text-white/85">
-              {["Advertise With Us", "Media Kit", "Partnerships", "RSS Feeds", "API Access", "Licensing"].map((t) => (
-                <button key={t} type="button" onClick={() => onToast(`${t} (planned)`)} className="text-left hover:underline">
-                  {t}
+              {[t('footer.advertiseWithUs'), t('footer.mediaKit'), t('footer.partnerships'), t('footer.rssFeeds'), t('footer.apiAccess'), t('footer.licensing')].map((label) => (
+                <button key={label} type="button" onClick={() => onToast(`${label} (planned)`) } className="text-left hover:underline">
+                  {label}
                 </button>
               ))}
             </div>
@@ -1882,17 +1990,17 @@ function SiteFooter({ theme, onToast }: any) {
         </div>
 
         <div className="mt-10 border-t pt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: "rgba(255,255,255,0.12)" }}>
-          <div className="text-xs text-white/70">© 2025 News Pulse. All rights reserved. | Powered by Innovation</div>
+          <div className="text-xs text-white/70">{t('footer.copyright')}</div>
 
           <div className="flex flex-wrap items-center gap-4 text-xs text-white/80">
             <span className="inline-flex items-center gap-2">
-              <Globe className="h-4 w-4" /> Available in 3 languages
+              <Globe className="h-4 w-4" /> {t('common.availableIn3Languages')}
             </span>
             <span className="inline-flex items-center gap-2">
-              <Video className="h-4 w-4" /> Mobile & Web
+              <Video className="h-4 w-4" /> {t('common.mobileAndWeb')}
             </span>
             <span className="inline-flex items-center gap-2">
-              <Check className="h-4 w-4" /> Secure & Private
+              <Check className="h-4 w-4" /> {t('common.secureAndPrivate')}
             </span>
           </div>
         </div>
@@ -1902,9 +2010,19 @@ function SiteFooter({ theme, onToast }: any) {
 }
 
 export default function UiPreviewV145() {
+  const { t, lang, setLang } = useI18n();
   const [prefs, setPrefs] = useState<any>(DEFAULT_PREFS);
   const theme = useMemo(() => getTheme(prefs.themeId), [prefs.themeId]);
   const { externalFetch } = usePublicMode();
+
+  const liveUpdates = useMemo(
+    () => [
+      t('home.liveUpdatesItems.previewEdition'),
+      t('home.liveUpdatesItems.aiVerifiedBadges'),
+      t('home.liveUpdatesItems.newCategoriesRollingOut'),
+    ],
+    [t]
+  );
 
   const [activeCatKey, setActiveCatKey] = useState<string>("breaking");
   const [toast, setToast] = useState<string>("");
@@ -1919,7 +2037,7 @@ export default function UiPreviewV145() {
   const youth = useYouthPulse();
 
   // load local prefs
-  useEffect(() => {
+  React.useEffect(() => {
     const raw = typeof window !== "undefined" ? window.localStorage.getItem(PREF_KEY) : null;
     if (!raw) return;
     const parsed = safeJsonParse(raw);
@@ -1927,8 +2045,14 @@ export default function UiPreviewV145() {
     setPrefs(normalizePrefs(parsed));
   }, []);
 
+  // Keep preview prefs in sync with global language (source of truth for UI i18n)
+  React.useEffect(() => {
+    const code = toUiLangCode(lang);
+    setPrefs((p: any) => ({ ...p, lang: UI_LANG_LABEL[code] }));
+  }, [lang]);
+
   // ✅ (optional) load global settings from backend (admin-controlled)
-  useEffect(() => {
+  React.useEffect(() => {
     let cancelled = false;
 
     (async () => {
@@ -1962,7 +2086,7 @@ export default function UiPreviewV145() {
   }, []);
 
   // save local prefs
-  useEffect(() => {
+  React.useEffect(() => {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(PREF_KEY, JSON.stringify(normalizePrefs(prefs)));
   }, [prefs]);
@@ -1972,7 +2096,7 @@ export default function UiPreviewV145() {
   const onToast = (m: string) => setToast(m);
 
   return (
-    <div className="relative w-full overflow-x-hidden overflow-hidden" style={{ minHeight: "100vh", background: theme.bg }}>
+    <div className="relative min-h-screen w-full overflow-x-hidden overflow-hidden bg-gray-50/30" style={{ background: theme.bg }}>
       <style jsx global>{`
         html, body { height: 100%; }
         body { overflow-x: hidden; scrollbar-gutter: stable; }
@@ -1988,53 +2112,48 @@ export default function UiPreviewV145() {
       `}</style>
 
       {/* TOP HEADER */}
-      <div className="mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-8 pt-4">
+      <div className="mx-auto w-full max-w-[1440px] px-4 md:px-8 pt-4">
         <Surface theme={theme} className="p-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
-              <IconButton theme={theme} onClick={() => setMobileLeftOpen(true)} label="Menu">
+              <IconButton theme={theme} onClick={() => setMobileLeftOpen(true)} label={t('common.menu')}>
                 <Menu className="h-5 w-5" />
               </IconButton>
 
               <div className="min-w-0">
-                <div className="text-sm font-black tracking-tight" style={{ color: theme.text }}>
+                <div className="text-base font-black tracking-tight" style={{ color: theme.text }}>
                   News <span style={{ color: theme.accent }}>Pulse</span>
                 </div>
-                <div className="text-[11px] font-semibold" style={{ color: theme.sub }}>
-                  Your Pulse on the World's Latest News
+                <div className="text-xs font-semibold" style={{ color: theme.sub }}>
+                  {t('brand.tagline')}
                 </div>
               </div>
             </div>
 
-            <div className="hidden md:flex items-center gap-2">
-              <Button theme={theme} variant="soft" onClick={() => onToast("Home (planned)")}>
-                <Home className="h-4 w-4" /> Home
-              </Button>
-              <Button theme={theme} variant="soft" onClick={() => onToast("Viral Videos (planned)")}>
-                <Video className="h-4 w-4" /> Videos
-              </Button>
-              <Button theme={theme} variant="soft" onClick={() => onToast("Search (planned)")}>
-                <Search className="h-4 w-4" /> Search
-              </Button>
-            </div>
-
             <div className="flex items-center gap-2">
-              <LanguagePicker theme={theme} value={prefs.lang} onChange={(v: string) => setPrefs((p: any) => ({ ...p, lang: v }))} />
+              <LanguagePicker
+                theme={theme}
+                value={toUiLangCode(lang)}
+                onChange={(nextCode: UiLangCode) => {
+                  setLang(nextCode as any);
+                  setPrefs((p: any) => ({ ...p, lang: UI_LANG_LABEL[nextCode] }));
+                }}
+              />
               <ThemePicker theme={theme} themeId={prefs.themeId} setThemeId={(id: string) => setPrefs((p: any) => ({ ...p, themeId: id }))} />
 
-              <IconButton theme={theme} onClick={() => setSettingsOpen(true)} label="Settings">
+              <IconButton theme={theme} onClick={() => setSettingsOpen(true)} label={t('common.settings')}>
                 <Settings className="h-5 w-5" />
               </IconButton>
 
-              <Button theme={theme} variant="solid" onClick={() => onToast("Login (planned)")}>
-                <LogIn className="h-4 w-4" /> Login
+              <Button theme={theme} variant="solid" onClick={() => onToast(`${t('common.login')} (planned)`) }>
+                <LogIn className="h-4 w-4" /> {t('common.login')}
               </Button>
             </div>
           </div>
 
           {prefs.showPreviewNotice ? (
             <div className="mt-3 rounded-2xl border px-3 py-2 text-xs font-semibold" style={{ background: theme.surface2, borderColor: theme.border, color: theme.sub }}>
-              Preview UI only (no backend wiring here). Design is safe to integrate into real home page next.
+              {t('home.previewNotice')}
             </div>
           ) : null}
         </Surface>
@@ -2056,7 +2175,7 @@ export default function UiPreviewV145() {
 
       {/* TICKERS: Combined premium module wrapper with BREAKING above LIVE */}
       <div className="mt-0 w-full max-w-full">
-        <div className="mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto w-full max-w-[1440px] px-4 md:px-8">
           <div className="rounded-2xl border border-black/10 bg-white/80 backdrop-blur-md shadow-sm ring-1 ring-black/5 overflow-hidden p-2 flex flex-col gap-2">
           {showBreaking ? (
             <div className="w-full min-w-0">
@@ -2078,7 +2197,7 @@ export default function UiPreviewV145() {
               <TickerBar
                 theme={theme}
                 kind="live"
-                items={LIVE_UPDATES}
+                items={liveUpdates}
                 speedSec={prefs.liveSpeedSec}
                 onViewAll={() => {
                   setViewAllKind("live");
@@ -2093,80 +2212,101 @@ export default function UiPreviewV145() {
 
       <AdSlot
         slot="HOME_728x90"
-        className="mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-8 my-2"
+        className="mx-auto w-full max-w-[1440px] px-4 md:px-8 my-2"
       />
 
       {/* TRENDING */}
       {(prefs.showTrendingStrip && externalFetch) ? <TrendingStrip theme={theme} onPick={(t: string) => onToast(`Trending: ${t}`)} /> : null}
 
       {/* MAIN GRID */}
-      <div className="mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-8 pb-10 pt-4">
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[360px_1fr_360px] 2xl:grid-cols-[380px_1fr_380px]">
-          {/* LEFT */}
-          <div className="grid gap-4">
-            {prefs.showExploreCategories ? (
-              <ExploreCategoriesPanel
-                theme={theme}
-                prefs={prefs}
-                activeKey={activeCatKey}
-                onPick={(k: string) => {
-                  setActiveCatKey(k);
-                  onToast(`Category: ${k}`);
-                }}
-              />
-            ) : null}
+      <div className="mx-auto w-full max-w-[1440px] px-4 md:px-8 pb-10 pt-4">
+        <div className="grid grid-cols-12 gap-6 lg:gap-8">
+          {/* LEFT (Navigation) */}
+          <aside className="col-span-12 lg:col-span-3">
+            <div className="sticky top-4 grid gap-4">
+              {prefs.showExploreCategories ? (
+                <ExploreCategoriesPanel
+                  theme={theme}
+                  prefs={prefs}
+                  activeKey={activeCatKey}
+                  onPick={(k: string) => {
+                    setActiveCatKey(k);
+                    onToast(`Category: ${k}`);
+                  }}
+                />
+              ) : null}
 
-            {prefs.showLiveTvCard ? <LiveTVWidget theme={theme} prefs={prefs} setPrefs={setPrefs} onToast={onToast} /> : null}
-            {prefs.showQuickTools ? <QuickToolsCard theme={theme} onToast={onToast} /> : null}
-            {prefs.showSnapshots ? <SnapshotsCard theme={theme} /> : null}
-          </div>
+              {prefs.showLiveTvCard ? <LiveTVWidget theme={theme} prefs={prefs} setPrefs={setPrefs} onToast={onToast} /> : null}
+              {prefs.showQuickTools ? <QuickToolsCard theme={theme} onToast={onToast} /> : null}
+              {prefs.showSnapshots ? <SnapshotsCard theme={theme} /> : null}
+            </div>
+          </aside>
 
-          {/* CENTER */}
-          <div className="grid gap-4">
-            <FeaturedCard theme={theme} item={FEATURED[0]} onToast={onToast} />
-          </div>
+          {/* MIDDLE (News Content) */}
+          <main className="col-span-12 lg:col-span-6">
+            <div className="grid gap-4">
+              <FeaturedCard theme={theme} item={FEATURED[0]} onToast={onToast} />
+            </div>
+          </main>
 
-          {/* RIGHT */}
-          <div className="grid gap-4">
-            <AdSlot slot="HOME_RIGHT_300x250" />
-            <FeedList theme={theme} title="Latest" items={FEED} onOpen={(id: string) => onToast(id === "viewall" ? "View all latest (planned)" : `Open story: ${id}`)} />
-
-            {/* Regional preview */}
-            <div className="rounded-2xl border overflow-hidden" style={{ background: theme.surface2, borderColor: theme.border }}>
-              <div className="flex items-center justify-between px-3 py-2 border-b" style={{ borderColor: theme.border }}>
-                <div className="text-sm font-extrabold" style={{ color: theme.text }}>Regional preview</div>
-                <a href="/regional" className="text-xs font-semibold" style={{ color: theme.accent }}>View all →</a>
+          {/* RIGHT (Advertisements) */}
+          <aside className="col-span-12 lg:col-span-3">
+            <div className="sticky top-4 grid gap-4">
+              <div className="border rounded-xl p-4 bg-white">
+                <div className="flex justify-between text-xs mb-4">
+                  <span className="border px-1 rounded">AD</span>
+                  <a href="/advertise" className="underline" aria-label={t('common.openAdvertisingInquiryForm')}>{t('common.advertiseHere')}</a>
+                </div>
+                <div className="aspect-[300/250] bg-gray-100 flex items-center justify-center border-dashed border-2">
+                  300 × 250
+                </div>
               </div>
-              <div className="p-3 grid gap-2">
-                {(regional.news.slice(0, 3)).map((a: any, idx: number) => (
-                  <a key={String(a.id || idx)} href={'#'} className="rounded-xl border px-3 py-2 text-sm hover:opacity-95" style={{ background: theme.surface, borderColor: theme.border, color: theme.text }}>
-                    {a.title}
-                  </a>
-                ))}
-                {regional.loading && !regional.news.length ? (
-                  <div className="rounded-xl border px-3 py-7 animate-pulse" style={{ background: theme.surface, borderColor: theme.border }} />
-                ) : null}
+
+              <FeedList theme={theme} title={t('home.latest')} items={FEED} onOpen={(id: string) => onToast(id === "viewall" ? "View all latest (planned)" : `Open story: ${id}`)} />
+
+              {/* Regional preview */}
+              <div className="rounded-2xl border overflow-hidden" style={{ background: theme.surface2, borderColor: theme.border }}>
+                <div className="flex items-center justify-between px-3 py-2 border-b" style={{ borderColor: theme.border }}>
+                  <div className="text-sm font-extrabold" style={{ color: theme.text }}>{t('home.regionalPreview')}</div>
+                  <a href="/regional" className="text-xs font-semibold" style={{ color: theme.accent }}>{t('common.viewAll')} →</a>
+                </div>
+                <div className="p-3 grid gap-2">
+                  {(regional.news.slice(0, 3)).map((a: any, idx: number) => (
+                    <button
+                      key={String(a.id || idx)}
+                      type="button"
+                      onClick={() => onToast("Open regional story (planned)")}
+                      className="rounded-xl border px-3 py-2 text-sm hover:opacity-95 text-left w-full"
+                      style={{ background: theme.surface, borderColor: theme.border, color: theme.text }}
+                    >
+                      {a.title}
+                    </button>
+                  ))}
+                  {regional.loading && !regional.news.length ? (
+                    <div className="rounded-xl border px-3 py-7 animate-pulse" style={{ background: theme.surface, borderColor: theme.border }} />
+                  ) : null}
+                </div>
+              </div>
+
+              {/* Youth Pulse trending */}
+              <div className="rounded-2xl border overflow-hidden" style={{ background: theme.surface2, borderColor: theme.border }}>
+                <div className="flex items-center justify-between px-3 py-2 border-b" style={{ borderColor: theme.border }}>
+                  <div className="text-sm font-extrabold" style={{ color: theme.text }}>{t('home.youthPulseTrending')}</div>
+                  <a href="/youth-pulse" className="text-xs font-semibold" style={{ color: theme.accent2 }}>{t('common.viewAll')} →</a>
+                </div>
+                <div className="p-3 grid gap-2">
+                  {(youth.trending.slice(0, 6)).map((y: any) => (
+                    <a key={String(y.id)} href={`/youth-pulse`} className="rounded-xl border px-3 py-2 text-sm hover:opacity-95" style={{ background: theme.surface, borderColor: theme.border, color: theme.text }}>
+                      {y.title}
+                    </a>
+                  ))}
+                  {youth.loading && !youth.trending.length ? (
+                    <div className="rounded-xl border px-3 py-7 animate-pulse" style={{ background: theme.surface, borderColor: theme.border }} />
+                  ) : null}
+                </div>
               </div>
             </div>
-
-            {/* Youth Pulse trending */}
-            <div className="rounded-2xl border overflow-hidden" style={{ background: theme.surface2, borderColor: theme.border }}>
-              <div className="flex items-center justify-between px-3 py-2 border-b" style={{ borderColor: theme.border }}>
-                <div className="text-sm font-extrabold" style={{ color: theme.text }}>Youth Pulse trending</div>
-                <a href="/youth-pulse" className="text-xs font-semibold" style={{ color: theme.accent2 }}>View all →</a>
-              </div>
-              <div className="p-3 grid gap-2">
-                {(youth.trending.slice(0, 6)).map((y: any) => (
-                  <a key={String(y.id)} href={`/youth-pulse`} className="rounded-xl border px-3 py-2 text-sm hover:opacity-95" style={{ background: theme.surface, borderColor: theme.border, color: theme.text }}>
-                    {y.title}
-                  </a>
-                ))}
-                {youth.loading && !youth.trending.length ? (
-                  <div className="rounded-xl border px-3 py-7 animate-pulse" style={{ background: theme.surface, borderColor: theme.border }} />
-                ) : null}
-              </div>
-            </div>
-          </div>
+          </aside>
         </div>
       </div>
 
@@ -2177,50 +2317,123 @@ export default function UiPreviewV145() {
       {/* DRAWERS */}
       <PreferencesDrawer theme={theme} open={settingsOpen} onClose={() => setSettingsOpen(false)} prefs={prefs} setPrefs={setPrefs} onToast={onToast} />
 
-      <Drawer open={mobileLeftOpen} onClose={() => setMobileLeftOpen(false)} theme={theme} title="Menu" side="left">
+      <Drawer open={mobileLeftOpen} onClose={() => setMobileLeftOpen(false)} theme={theme} title={t('common.menu')} side="left">
         <div className="grid gap-3">
-          <Button theme={theme} variant="soft" className="w-full justify-start" onClick={() => onToast("Home (planned)")}>
-            <Home className="h-4 w-4" /> Home
-          </Button>
-          <Button theme={theme} variant="soft" className="w-full justify-start" onClick={() => onToast("Viral Videos (planned)")}>
-            <Video className="h-4 w-4" /> Videos
-          </Button>
-          <Button theme={theme} variant="soft" className="w-full justify-start" onClick={() => onToast("Search (planned)")}>
-            <Search className="h-4 w-4" /> Search
-          </Button>
+          <Link
+            href="/"
+            onClick={() => setMobileLeftOpen(false)}
+            className={cx(
+              "w-full justify-start inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold border transition-all duration-200 focus-visible:outline-none",
+              MENU_QUICK_THEME.home.base,
+              MENU_QUICK_THEME.home.hover,
+              MENU_QUICK_THEME.home.ring
+            )}
+          >
+            <Home className="h-4 w-4" /> {t('common.home')}
+          </Link>
+          <Link
+            href="/viral-videos"
+            onClick={() => setMobileLeftOpen(false)}
+            className={cx(
+              "w-full justify-start inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold border transition-all duration-200 focus-visible:outline-none",
+              MENU_QUICK_THEME.videos.base,
+              MENU_QUICK_THEME.videos.hover,
+              MENU_QUICK_THEME.videos.ring
+            )}
+          >
+            <Video className="h-4 w-4" /> {t('common.videos')}
+          </Link>
+          <Link
+            href="/search"
+            onClick={() => setMobileLeftOpen(false)}
+            className={cx(
+              "w-full justify-start inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold border transition-all duration-200 focus-visible:outline-none",
+              MENU_QUICK_THEME.search.base,
+              MENU_QUICK_THEME.search.hover,
+              MENU_QUICK_THEME.search.ring
+            )}
+          >
+            <Search className="h-4 w-4" /> {t('common.search')}
+          </Link>
 
           <div className="h-px" style={{ background: theme.border }} />
 
           <div className="text-xs font-extrabold" style={{ color: theme.sub }}>
-            Categories
+            {t('common.categories')}
           </div>
 
           <div className="grid gap-1">
-            {getCats().map((c: any) => (
-              <button
-                key={c.key}
-                type="button"
-                onClick={() => {
-                  setActiveCatKey(c.key);
-                  setMobileLeftOpen(false);
-                  onToast(`Category: ${c.label}`);
-                }}
-                className="flex items-center gap-3 rounded-2xl px-3 py-2 text-sm font-semibold border"
-                style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}
-              >
-                <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl border" style={{ background: theme.chip, borderColor: theme.border }}>
-                  <c.Icon className="h-4 w-4" />
-                </span>
-                <span className="truncate">{c.label}</span>
-              </button>
-            ))}
+            {getCats().map((c: any) => {
+              const tone = CATEGORY_THEME[c.key] || CATEGORY_THEME.__default;
+              const active = activeCatKey === c.key;
+              const href = CATEGORY_ROUTES[c.key as string];
+              const label = t(labelKeyForCategory(String(c.key)));
+
+              const content = (
+                <div
+                  className={cx(
+                    "flex items-center gap-3 rounded-2xl px-3 py-2 text-sm font-semibold border transition-all duration-200 focus-visible:outline-none",
+                    tone.base,
+                    tone.hover,
+                    tone.ring,
+                    active && tone.active
+                  )}
+                >
+                  <span className={cx("inline-flex h-9 w-9 items-center justify-center rounded-2xl border", tone.icon)}>
+                    <c.Icon className="h-4 w-4" />
+                  </span>
+                  <span className="truncate">{label}</span>
+                </div>
+              );
+
+              if (href) {
+                return (
+                  <Link
+                    key={c.key}
+                    href={href}
+                    onClick={() => {
+                      setActiveCatKey(c.key);
+                      setMobileLeftOpen(false);
+                    }}
+                  >
+                    {content}
+                  </Link>
+                );
+              }
+
+              return (
+                <button
+                  key={c.key}
+                  type="button"
+                  onClick={() => {
+                    setActiveCatKey(c.key);
+                    setMobileLeftOpen(false);
+                    onToast(`Category: ${label}`);
+                  }}
+                  className="text-left"
+                  style={{ background: "transparent", border: "none", padding: 0, margin: 0 }}
+                >
+                  {content}
+                </button>
+              );
+            })}
           </div>
         </div>
       </Drawer>
 
-      <Drawer open={viewAllOpen} onClose={() => setViewAllOpen(false)} theme={theme} title={viewAllKind === "live" ? "Live Updates" : "Breaking News"}>
+      <Drawer
+        open={viewAllOpen}
+        onClose={() => setViewAllOpen(false)}
+        theme={theme}
+        title={viewAllKind === 'live' ? t('home.liveUpdates') : t('home.breakingNews')}
+      >
         <div className="grid gap-2">
-          {(viewAllKind === "live" ? LIVE_UPDATES : showBreaking ? (breakingItems.length ? breakingItems : ["No breaking news right now — stay tuned"]) : []).map(
+          {(viewAllKind === 'live'
+            ? liveUpdates
+            : showBreaking
+              ? (breakingItems.length ? breakingItems : [t('home.noBreaking')])
+              : []
+          ).map(
             (x: string, idx: number) => (
               <div key={idx} className="rounded-2xl border px-3 py-3 text-sm" style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}>
                 {x}

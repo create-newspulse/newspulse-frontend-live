@@ -4,9 +4,7 @@ import { FILTERS } from "./types";
 import { FALLBACK_TOP_CITIES, FALLBACK_DISTRICTS } from "./fallback";
 import { fetchCivicMetrics, fetchRegionalNews, fetchYouthVoices } from "./api";
 
-const classNames = (...s: (string | false | null | undefined)[]) => s.filter(Boolean).join(" ");
-
-export function useRegionalPulse(stateSlug: string) {
+export function useRegionalPulse(stateSlug: string, language?: string) {
   const [filter, setFilter] = useState<FilterKey>("all");
   const [query, setQuery] = useState("");
   const [cities] = useState<City[]>(FALLBACK_TOP_CITIES);
@@ -22,8 +20,8 @@ export function useRegionalPulse(stateSlug: string) {
     setLoading(true);
     (async () => {
       const [n, y, m] = await Promise.all([
-        fetchRegionalNews(stateSlug),
-        fetchYouthVoices(stateSlug),
+        fetchRegionalNews(stateSlug, language),
+        fetchYouthVoices(stateSlug, language),
         fetchCivicMetrics(stateSlug),
       ]);
       if (cancelled) return;
@@ -33,7 +31,7 @@ export function useRegionalPulse(stateSlug: string) {
       setLoading(false);
     })();
     return () => { cancelled = true; };
-  }, [stateSlug]);
+  }, [stateSlug, language]);
 
   const filteredCities = useMemo(() => {
     const q = query.toLowerCase();

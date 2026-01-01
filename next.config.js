@@ -23,12 +23,7 @@ const nextConfig = {
     ],
   },
 
-  // Internationalization (Pages Router)
-  i18n: {
-    locales: ['en', 'hi', 'gu'],
-    defaultLocale: 'en',
-    localeDetection: false,
-  },
+  // UI language is handled by the in-app LanguageProvider (no locale routes).
 
   // Dev-only (suppresses allowedDevOrigins warning for LAN testing)
   allowedDevOrigins: ['localhost', '127.0.0.1', '10.145.86.143'],

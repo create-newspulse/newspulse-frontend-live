@@ -2,7 +2,6 @@ import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { useRegionalPulse } from '../../../../features/regional/useRegionalPulse';
 import { matchesCity } from '../../../../features/regional/api';
-import LanguageToggle from '../../../../components/LanguageToggle';
 import { useLanguage } from '../../../../utils/LanguageContext';
 import { getGujaratCityName, getStateName, tHeading } from '../../../../utils/localizedNames';
 import type { GetStaticProps } from 'next';
@@ -36,9 +35,6 @@ export default function GujaratCityPage() {
       </Head>
 
       <div className="max-w-6xl mx-auto px-4 py-8">
-        <div className="mb-4">
-          <LanguageToggle />
-        </div>
         <div className="mb-6">
           <h1 className="text-3xl font-extrabold">🏙️ {displayName} — {stateName}</h1>
           <p className="text-gray-600">Local updates mentioning this {tHeading(language as any, 'city').toLowerCase()} filtered from {tHeading(language as any, 'regional')} feed.</p>

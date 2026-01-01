@@ -1,18 +1,30 @@
-import { useEffect } from 'react';
+import React from 'react';
 import { useRouter } from 'next/router';
 import Script from 'next/script';
 import * as gtag from '../lib/gtag';
-import { LanguageProvider } from '../utils/LanguageContext';
+import { LanguageProvider, getMessagesForLang, useI18n } from '../src/i18n/LanguageProvider';
 import { ThemeProvider } from '../utils/ThemeContext';
 import { FeatureFlagProvider } from '../utils/FeatureFlagProvider';
 import { PublicModeProvider } from '../utils/PublicModeProvider';
 import '../styles/globals.css';
 import SafeIntlProvider from '../lib/SafeIntlProvider';
 
+function I18nBridge({ Component, pageProps }: { Component: any; pageProps: any }) {
+  const { lang } = useI18n();
+  const messages = getMessagesForLang(lang);
+  return (
+    <SafeIntlProvider messages={messages} locale={lang} onError={() => {}}>
+      <div className="relative overflow-x-hidden">
+        <Component {...pageProps} />
+      </div>
+    </SafeIntlProvider>
+  );
+}
+
 function MyApp({ Component, pageProps }) {
   const router = useRouter();
 
-  useEffect(() => {
+  React.useEffect(() => {
     const handleRouteChange = (url: string) => {
       gtag.pageview(url);
     };
@@ -36,16 +48,6 @@ function MyApp({ Component, pageProps }) {
     };
   }, [router.events]);
 
-  const messagesFromPage = pageProps?.messages;
-  const locale = pageProps?.locale || router.locale || 'en';
-
-  if (process.env.NODE_ENV !== 'production' && !messagesFromPage) {
-    console.warn('[i18n] Missing pageProps.messages. Ensure getStaticProps/getServerSideProps returns messages.');
-  }
-
-  const enMessages = require('../messages/en.json');
-  const finalMessages = (messagesFromPage as any)?.default ?? messagesFromPage ?? enMessages.default ?? enMessages;
-
   return (
     <>
       {/* Google Analytics */}
@@ -67,11 +69,7 @@ function MyApp({ Component, pageProps }) {
         <PublicModeProvider initialMode={pageProps?.publicMode}>
           <FeatureFlagProvider initialFlags={pageProps?.featureFlags}>
             <LanguageProvider>
-              <SafeIntlProvider messages={finalMessages} locale={locale} onError={() => {}}>
-                <div className="relative overflow-x-hidden">
-                  <Component {...pageProps} />
-                </div>
-              </SafeIntlProvider>
+              <I18nBridge Component={Component} pageProps={pageProps} />
             </LanguageProvider>
           </FeatureFlagProvider>
         </PublicModeProvider>

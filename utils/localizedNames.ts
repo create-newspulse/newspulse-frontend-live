@@ -1,5 +1,12 @@
 export type LanguageKey = 'english' | 'hindi' | 'gujarati';
 
+export function toLanguageKey(value: unknown): LanguageKey {
+  const v = String(value || '').toLowerCase().trim();
+  if (v === 'hi' || v === 'hindi') return 'hindi';
+  if (v === 'gu' || v === 'gujarati') return 'gujarati';
+  return 'english';
+}
+
 // Helper: pick label by language with fallback to English
 function byLang(labels: { english: string; hindi?: string; gujarati?: string }, lang: LanguageKey) {
   if (lang === 'hindi' && labels.hindi) return labels.hindi;

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import Head from 'next/head';
 import type { GetStaticProps } from 'next';
 import { getApiOrigin } from '../lib/publicNewsApi';
+import { useLanguage } from '../utils/LanguageContext';
 
 type NewsApiArticle = {
   title: string;
@@ -13,6 +14,7 @@ type NewsApiArticle = {
 };
 
 export default function News() {
+  const { language } = useLanguage();
   const [articles, setArticles] = useState<NewsApiArticle[]>([]);
 
   useEffect(() => {
@@ -20,6 +22,8 @@ export default function News() {
       try {
         const origin = getApiOrigin();
         const params = new URLSearchParams({ category: 'national', limit: '5' });
+        params.set('lang', String(language));
+        params.set('language', String(language));
         const url = `${origin}/api/public/news?${params.toString()}`;
 
         const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' } });
@@ -59,7 +63,7 @@ export default function News() {
     };
 
     fetchNews();
-  }, []);
+  }, [language]);
 
   return (
     <>

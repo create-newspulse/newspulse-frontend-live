@@ -47,6 +47,90 @@ export function unwrapArticle(payload: any): Article | null {
   return null;
 }
 
+export type PublicNewsMeta = {
+  total?: number;
+  page?: number;
+  totalPages?: number;
+  limit?: number;
+};
+
+export async function fetchPublicNews(options: {
+  category?: string;
+  language?: string;
+  q?: string;
+  page?: number;
+  limit?: number;
+  extraQuery?: Record<string, string | number | undefined>;
+  signal?: AbortSignal;
+}): Promise<{
+  items: Article[];
+  meta: PublicNewsMeta;
+  endpoint: string;
+  error?: string;
+  status?: number;
+}> {
+  const origin = getApiOrigin();
+  const params = new URLSearchParams();
+
+  if (options.category) params.set('category', String(options.category));
+  if (options.language) {
+    // Backend compatibility: some deployments use `lang`, others use `language`.
+    // Send both so every page stays language-filtered.
+    params.set('lang', String(options.language));
+    params.set('language', String(options.language));
+  }
+  if (options.q) params.set('q', String(options.q));
+  if (typeof options.page === 'number') params.set('page', String(options.page));
+  if (typeof options.limit === 'number') params.set('limit', String(options.limit));
+
+  if (options.extraQuery) {
+    for (const [k, v] of Object.entries(options.extraQuery)) {
+      if (v === undefined || v === null) continue;
+      const sv = String(v);
+      if (!sv) continue;
+      params.set(k, sv);
+    }
+  }
+
+  const endpoint = `${origin}/api/public/news?${params.toString()}`;
+
+  try {
+    const res = await fetch(endpoint, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: options.signal,
+    });
+
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok) {
+      const msg =
+        (data && typeof data === 'object' && (data.message || data.error || data.code))
+          ? String(data.message || data.error || data.code)
+          : '';
+      return {
+        items: [],
+        meta: { limit: options.limit },
+        endpoint,
+        status: res.status,
+        error: msg ? `API ${res.status} (${msg})` : `API ${res.status}`,
+      };
+    }
+
+    const items = unwrapArticles(data);
+    const meta: PublicNewsMeta = {
+      total: data && typeof data === 'object' ? (data.total as number | undefined) : undefined,
+      page: data && typeof data === 'object' ? (data.page as number | undefined) : undefined,
+      totalPages: data && typeof data === 'object' ? (data.totalPages as number | undefined) : undefined,
+      limit: data && typeof data === 'object' ? (data.limit as number | undefined) : options.limit,
+    };
+
+    return { items, meta, endpoint };
+  } catch {
+    return { items: [], meta: { limit: options.limit }, endpoint, error: 'Fetch failed' };
+  }
+}
+
 export async function fetchPublishedCategoryArticles(options: {
   categoryKey: string;
   limit?: number;

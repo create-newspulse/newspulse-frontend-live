@@ -1,5 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React from "react";
 import { useLanguage } from "../utils/LanguageContext";
+import { fetchPublicNews, type Article } from "../lib/publicNewsApi";
+import LanguageToggle from "../components/LanguageToggle";
+import { useI18n } from "../src/i18n/LanguageProvider";
 
 type BreakingItem = {
   id: string;
@@ -48,25 +51,21 @@ const FALLBACK_LIVE: LiveUpdate[] = [
 ];
 
 // ---- replace these later with your real endpoints
-async function fetchBreakingHero(): Promise<BreakingItem> {
-  try {
-    // const res = await fetch("/api/news/breaking/hero");
-    // return await res.json();
-    await new Promise((r) => setTimeout(r, 250));
-    return FALLBACK_HERO;
-  } catch {
-    return FALLBACK_HERO;
-  }
-}
-async function fetchTrending(): Promise<BreakingItem[]> {
-  try {
-    // const res = await fetch("/api/news/trending");
-    // return await res.json();
-    await new Promise((r) => setTimeout(r, 250));
-    return FALLBACK_TRENDING;
-  } catch {
-    return FALLBACK_TRENDING;
-  }
+function articleToBreakingItem(raw: Article): BreakingItem | null {
+  const title = String((raw as any)?.title || '').trim();
+  if (!title) return null;
+
+  const slugOrId = (raw as any)?._id || (raw as any)?.id || (raw as any)?.slug;
+  const id = String(slugOrId || '').trim();
+  if (!id) return null;
+
+  const summary = String((raw as any)?.summary || (raw as any)?.excerpt || '').trim() || undefined;
+  const publishedAt = String((raw as any)?.publishedAt || (raw as any)?.createdAt || '').trim() || undefined;
+  const source = String((raw as any)?.source?.name || (raw as any)?.source || '').trim() || undefined;
+  const desk = String((raw as any)?.desk || '').trim() || undefined;
+  const url = `/news/${encodeURIComponent(id)}`;
+
+  return { id, title, summary, source, desk, publishedAt, url };
 }
 async function fetchLiveUpdates(): Promise<LiveUpdate[]> {
   try {
@@ -81,17 +80,20 @@ async function fetchLiveUpdates(): Promise<LiveUpdate[]> {
 
 // ---- voice (same idea as regional)
 function useVoiceReader() {
-  const synthRef = useRef<SpeechSynthesis | null>(null);
-  const [speaking, setSpeaking] = useState(false);
+  const synthRef = React.useRef<SpeechSynthesis | null>(null);
+  const [speaking, setSpeaking] = React.useState(false);
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       synthRef.current = window.speechSynthesis;
     }
   }, []);
 
-  const speak = (text: string) => {
-    if (!synthRef.current) return alert("Voice not supported on this device.");
+  const speak = (text: string, onUnsupported?: () => void) => {
+    if (!synthRef.current) {
+      if (typeof onUnsupported === "function") onUnsupported();
+      return;
+    }
     try {
       synthRef.current.cancel();
       const u = new SpeechSynthesisUtterance(text);
@@ -111,14 +113,14 @@ function useVoiceReader() {
     }
   };
 
-  const toggle = (text: string) => (speaking ? stop() : speak(text));
+  const toggle = (text: string, onUnsupported?: () => void) => (speaking ? stop() : speak(text, onUnsupported));
 
   return { toggle, speaking };
 }
 
 function ClientTime({ iso }: { iso?: string }) {
-  const [text, setText] = useState("");
-  useEffect(() => {
+  const [text, setText] = React.useState("");
+  React.useEffect(() => {
     if (!iso) return;
     try {
       const d = new Date(iso);
@@ -133,20 +135,45 @@ function ClientTime({ iso }: { iso?: string }) {
 }
 
 export default function BreakingPage() {
-  const { language, setLanguage } = useLanguage();
+  const { language } = useLanguage();
+  const { t } = useI18n();
   const voice = useVoiceReader();
 
-  const [hero, setHero] = useState<BreakingItem>(FALLBACK_HERO);
-  const [trending, setTrending] = useState<BreakingItem[]>(FALLBACK_TRENDING);
-  const [live, setLive] = useState<LiveUpdate[]>(FALLBACK_LIVE);
+  const [hero, setHero] = React.useState<BreakingItem>(FALLBACK_HERO);
+  const [trending, setTrending] = React.useState<BreakingItem[]>(FALLBACK_TRENDING);
+  const [live, setLive] = React.useState<LiveUpdate[]>(FALLBACK_LIVE);
 
-  useEffect(() => {
-    fetchBreakingHero().then(setHero);
-    fetchTrending().then(setTrending);
-    fetchLiveUpdates().then(setLive);
-  }, []);
+  React.useEffect(() => {
+    const controller = new AbortController();
+    (async () => {
+      // Breaking feed (language-filtered)
+      const resp = await fetchPublicNews({ category: 'breaking', language, limit: 12, signal: controller.signal });
+      if (controller.signal.aborted) return;
 
-  const voiceText = useMemo(() => {
+      const mapped = (resp.items || []).map(articleToBreakingItem).filter(Boolean) as BreakingItem[];
+      if (mapped.length) {
+        setHero(mapped[0] || FALLBACK_HERO);
+        setTrending(mapped.slice(1, 6).length ? mapped.slice(1, 6) : FALLBACK_TRENDING);
+      } else {
+        setHero(FALLBACK_HERO);
+        setTrending(FALLBACK_TRENDING);
+      }
+
+      // Live updates remain fallback for now.
+      const liveItems = await fetchLiveUpdates();
+      if (controller.signal.aborted) return;
+      setLive(liveItems);
+    })().catch(() => {
+      if (controller.signal.aborted) return;
+      setHero(FALLBACK_HERO);
+      setTrending(FALLBACK_TRENDING);
+      fetchLiveUpdates().then(setLive);
+    });
+
+    return () => controller.abort();
+  }, [language]);
+
+  const voiceText = React.useMemo(() => {
     const top = [hero.title, hero.summary].filter(Boolean).join(". ");
     const t = trending.slice(0, 5).map((x) => x.title).join(". ");
     return `Breaking News. ${top}. Trending now: ${t}.`;
@@ -160,33 +187,29 @@ export default function BreakingPage() {
             <div className="flex items-center gap-3">
               <span className="inline-flex h-3 w-3 rounded-full bg-red-500" />
               <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
-                Breaking News
+                {t('breakingPage.title')}
               </h1>
             </div>
             <p className="text-slate-600 mt-1">
-              Live headlines, verified updates, and what matters most — fast.
+              {t('breakingPage.subtitle')}
             </p>
           </div>
 
           <div className="flex items-center gap-2">
-            <select
-              className="border rounded-lg px-3 py-2 text-sm"
-              value={language}
-              onChange={(e) => setLanguage(e.target.value)}
-            >
-              <option value="english">English</option>
-              <option value="gujarati">ગુજરાતી</option>
-              <option value="hindi">हिन्दी</option>
-            </select>
+            <LanguageToggle />
 
             <button
-              onClick={() => voice.toggle(voiceText)}
+              onClick={() =>
+                voice.toggle(voiceText, () => {
+                  alert(t('common.voiceNotSupported'));
+                })
+              }
               className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
               aria-pressed={voice.speaking}
-              title={voice.speaking ? "Mute" : "Listen"}
+              title={voice.speaking ? t('common.mute') : t('common.listen')}
             >
               <span>{voice.speaking ? "🔇" : "🔊"}</span>
-              {voice.speaking ? "Mute" : "Listen"}
+              {voice.speaking ? t('common.mute') : t('common.listen')}
             </button>
           </div>
         </div>
@@ -206,13 +229,13 @@ export default function BreakingPage() {
 
             <div className="mt-5 flex flex-wrap items-center gap-4 text-sm text-slate-600">
               <span className="inline-flex items-center gap-2">
-                📍 <span>{hero.source || "News Pulse"}</span>
+                📍 <span>{hero.source || t('brand.name')}</span>
               </span>
               <span className="inline-flex items-center gap-2">
                 ⏰ <ClientTime iso={hero.publishedAt} />
               </span>
               <span className="inline-flex items-center gap-2">
-                👤 <span>{hero.desk || "World Desk"}</span>
+                👤 <span>{hero.desk || t('breakingPage.defaultDesk')}</span>
               </span>
             </div>
 
@@ -221,7 +244,7 @@ export default function BreakingPage() {
                 href={hero.url || "#"}
                 className="inline-flex items-center justify-center rounded-full bg-red-700 px-7 py-3 text-white font-semibold hover:bg-red-800"
               >
-                Read More
+                {t('breakingPage.readMore')}
               </a>
             </div>
           </div>
@@ -232,7 +255,7 @@ export default function BreakingPage() {
             <div className="rounded-3xl border bg-violet-50/60 p-6">
               <div className="flex items-center gap-3 mb-4">
                 <span className="text-xl">🔥</span>
-                <h3 className="text-xl font-extrabold">Trending Now</h3>
+                <h3 className="text-xl font-extrabold">{t('breakingPage.trendingNow')}</h3>
               </div>
               <ol className="space-y-3">
                 {trending.slice(0, 5).map((t, idx) => (
@@ -250,13 +273,13 @@ export default function BreakingPage() {
             <div className="rounded-3xl border bg-emerald-50/60 p-6">
               <div className="flex items-center gap-3 mb-4">
                 <span className="text-xl">🟢</span>
-                <h3 className="text-xl font-extrabold">Live Updates</h3>
+                <h3 className="text-xl font-extrabold">{t('breakingPage.liveUpdates')}</h3>
               </div>
               <div className="space-y-3">
                 {live.map((u) => (
                   <div key={u.id} className="flex items-start gap-3">
                     <span className="mt-0.5 inline-flex items-center rounded-full bg-emerald-600 px-2 py-1 text-xs font-semibold text-white">
-                      {u.minutesAgo} min
+                      {u.minutesAgo} {t('common.minutesShort')}
                     </span>
                     <p className="text-slate-800">{u.text}</p>
                   </div>

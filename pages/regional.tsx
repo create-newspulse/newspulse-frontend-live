@@ -315,7 +315,7 @@ function RegionalGujaratPage() {
     metrics,
     highlightsText,
     loading,
-  } = useRegionalPulse("gujarat");
+  } = useRegionalPulse("gujarat", language);
   const voice = useVoiceReader();
 
   type TabKey = "feed" | "districts" | "cities" | "civic" | "map";
@@ -392,17 +392,6 @@ function RegionalGujaratPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              {/* Language Switcher (wired to LanguageContext) */}
-              <select
-                className="border rounded-lg px-3 py-2 text-sm"
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-              >
-                <option value="english">English</option>
-                <option value="gujarati">ગુજરાતી</option>
-                <option value="hindi">हिन्दी</option>
-              </select>
-
               {isEnabled("voice.enabled", true) && (
                 <button
                   onClick={() => voice.toggle(`Here are top regional highlights. ${highlightsText}`)}

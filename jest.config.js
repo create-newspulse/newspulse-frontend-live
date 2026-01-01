@@ -5,8 +5,8 @@ module.exports = {
   setupFiles: ['whatwg-fetch'],
   testMatch: ['**/__tests__/**/*.(test|spec).(ts|tsx|js|jsx)'],
   transform: {
-    '^.+\\.(ts|tsx)$': 'ts-jest',
-    '^.+\\.(js|jsx)$': 'ts-jest',
+    '^.+\\.(ts|tsx)$': ['ts-jest', { tsconfig: { jsx: 'react-jsx' } }],
+    '^.+\\.(js|jsx)$': ['ts-jest', { tsconfig: { jsx: 'react-jsx' } }],
   },
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
 };

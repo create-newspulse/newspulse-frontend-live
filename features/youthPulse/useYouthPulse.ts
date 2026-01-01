@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { getYouthTopics, getYouthTrending, getYouthByCategory } from "./api";
+import { getYouthTopics, getYouthTrendingByLanguage, getYouthByCategory } from "./api";
 import type { YouthCategory, YouthStory } from "./types";
+import { useLanguage } from "../../utils/LanguageContext";
 
 export function useYouthPulse(trendingLimit: number = 12) {
+  const { language } = useLanguage();
   const [topics, setTopics] = useState<YouthCategory[]>([]);
   const [trending, setTrending] = useState<YouthStory[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -12,7 +14,10 @@ export function useYouthPulse(trendingLimit: number = 12) {
     setLoading(true);
     setError(null);
     try {
-      const [t, tr] = await Promise.all([getYouthTopics(), getYouthTrending(trendingLimit)]);
+      const [t, tr] = await Promise.all([
+        getYouthTopics(),
+        getYouthTrendingByLanguage(trendingLimit, language),
+      ]);
       setTopics(t);
       setTrending(tr);
     } catch (e: any) {
@@ -20,7 +25,7 @@ export function useYouthPulse(trendingLimit: number = 12) {
     } finally {
       setLoading(false);
     }
-  }, [trendingLimit]);
+  }, [language, trendingLimit]);
 
   useEffect(() => {
     fetchAll();
@@ -32,7 +37,7 @@ export function useYouthPulse(trendingLimit: number = 12) {
     loading,
     error,
     refresh: fetchAll,
-    getByCategory: getYouthByCategory,
+    getByCategory: (slug: string) => getYouthByCategory(slug, language),
   } as const;
 }
 
