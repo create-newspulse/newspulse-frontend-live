@@ -12,6 +12,8 @@ import AdSlot from "../components/ads/AdSlot";
 import type { GetStaticProps } from "next";
 import { AnimatePresence, motion } from "framer-motion";
 import { useI18n } from "../src/i18n/LanguageProvider";
+import { fetchPublicBroadcast, toTickerStrings } from "../lib/publicBroadcastClient";
+import { fetchPublicNews } from "../lib/publicNewsApi";
 import {
   ArrowRight,
   Bell,
@@ -2015,14 +2017,54 @@ export default function UiPreviewV145() {
   const theme = useMemo(() => getTheme(prefs.themeId), [prefs.themeId]);
   const { externalFetch } = usePublicMode();
 
-  const liveUpdates = useMemo(
-    () => [
-      t('home.liveUpdatesItems.previewEdition'),
-      t('home.liveUpdatesItems.aiVerifiedBadges'),
-      t('home.liveUpdatesItems.newCategoriesRollingOut'),
-    ],
-    [t]
-  );
+  const [broadcast, setBroadcast] = useState<any>(null);
+  const [broadcastBreakingFallback, setBroadcastBreakingFallback] = useState<string[]>([]);
+
+  React.useEffect(() => {
+    const controller = new AbortController();
+    let cancelled = false;
+
+    const load = async () => {
+      const payload = await fetchPublicBroadcast({ signal: controller.signal });
+      if (cancelled || controller.signal.aborted) return;
+      setBroadcast(payload);
+
+      // Optional fallback: in auto mode, if manual list is empty, use recent published stories.
+      const mode = payload?.settings?.breaking?.mode;
+      const enabled = !!payload?.settings?.breaking?.enabled;
+      const maxItems = Number(payload?.settings?.breaking?.maxItems) || 8;
+      const breakingItems = toTickerStrings(payload?.breaking?.items || [], maxItems);
+
+      if (enabled && mode === 'auto' && breakingItems.length === 0) {
+        const news = await fetchPublicNews({ category: 'breaking', limit: maxItems, signal: controller.signal });
+        if (cancelled || controller.signal.aborted) return;
+        const fallback = (news.items || [])
+          .map((a: any) => String(a?.title || '').trim())
+          .filter(Boolean)
+          .slice(0, maxItems);
+        setBroadcastBreakingFallback(fallback);
+      } else {
+        setBroadcastBreakingFallback([]);
+      }
+    };
+
+    load().catch(() => {
+      if (cancelled || controller.signal.aborted) return;
+      setBroadcast(null);
+      setBroadcastBreakingFallback([]);
+    });
+
+    // Keep broadcast tickers reasonably fresh.
+    const id = setInterval(() => {
+      load().catch(() => {});
+    }, 30000);
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      clearInterval(id);
+    };
+  }, []);
 
   const [activeCatKey, setActiveCatKey] = useState<string>("breaking");
   const [toast, setToast] = useState<string>("");
@@ -2091,8 +2133,32 @@ export default function UiPreviewV145() {
     window.localStorage.setItem(PREF_KEY, JSON.stringify(normalizePrefs(prefs)));
   }, [prefs]);
 
-  const breakingItems = getBreakingItems(prefs);
-  const showBreaking = prefs.breakingMode !== "off" && (breakingItems.length > 0 || prefs.showBreakingWhenEmpty);
+  const broadcastSettings = broadcast?.settings || {};
+  const breakingSettings = broadcastSettings?.breaking || {};
+  const liveSettings = broadcastSettings?.live || {};
+
+  const breakingMode = String(breakingSettings.mode || 'off');
+  const breakingShowWhenEmpty = !!breakingSettings.showWhenEmpty;
+  const breakingMaxItems = Number(breakingSettings.maxItems) || 8;
+
+  const broadcastBreaking = toTickerStrings(broadcast?.breaking?.items || [], breakingMaxItems);
+  const autoBreakingItems = broadcastBreaking.length ? broadcastBreaking : broadcastBreakingFallback;
+
+  // Force ON semantics:
+  // - show bar even when the manual list is empty
+  // - show placeholder only when showWhenEmpty=true
+  const breakingItems =
+    breakingMode === 'force_on' && broadcastBreaking.length === 0
+      ? (breakingShowWhenEmpty ? [] : [''])
+      : autoBreakingItems;
+
+  const showBreaking =
+    !!breakingSettings.enabled &&
+    breakingMode !== 'off' &&
+    (breakingMode === 'force_on' || breakingItems.length > 0);
+
+  const liveUpdates = toTickerStrings(broadcast?.live?.items || [], Number(liveSettings.maxItems) || 12);
+  const showLive = !!liveSettings.enabled && !!liveSettings.showOn?.home;
   const onToast = (m: string) => setToast(m);
 
   return (
@@ -2183,7 +2249,7 @@ export default function UiPreviewV145() {
                 theme={theme}
                 kind="breaking"
                 items={breakingItems}
-                speedSec={prefs.breakingSpeedSec}
+                speedSec={Number(breakingSettings.speedSec) || 18}
                 onViewAll={() => {
                   setViewAllKind("breaking");
                   setViewAllOpen(true);
@@ -2192,13 +2258,13 @@ export default function UiPreviewV145() {
             </div>
           ) : null}
 
-          {prefs.liveTickerOn ? (
+          {showLive ? (
             <div className="w-full min-w-0">
               <TickerBar
                 theme={theme}
                 kind="live"
                 items={liveUpdates}
-                speedSec={prefs.liveSpeedSec}
+                speedSec={Number(liveSettings.speedSec) || 24}
                 onViewAll={() => {
                   setViewAllKind("live");
                   setViewAllOpen(true);
