@@ -1,5 +1,6 @@
 // pages/api/analytics/[event].ts - Friendly shim to proxy analytics events
 import type { NextApiRequest, NextApiResponse } from 'next'
+import { getApiOrigin } from '../../../lib/publicNewsApi'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Basic CORS headers; mirror admin analytics route
@@ -31,20 +32,37 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    // Prefer proxying through our existing admin proxy route to keep behavior consistent
-    const proto = (req.headers['x-forwarded-proto'] as string) || 'http'
-    const host = req.headers.host
-    const baseUrl = `${proto}://${host}`
+    // Public site must not depend on admin-only proxy routes.
+    // Forward to a public backend analytics endpoint if available; otherwise no-op (200).
+    const origin = getApiOrigin()
+    const safeType = typeof type === 'string' ? type : String(type || 'event')
+    const candidates = [
+      `${origin}/api/analytics/${encodeURIComponent(safeType)}`,
+      `${origin}/api/public/analytics/${encodeURIComponent(safeType)}`,
+      `${origin}/api/analytics`,
+      `${origin}/api/public/analytics`,
+    ]
 
-    const resp = await fetch(`${baseUrl}/api/admin/analytics`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, data: payload })
-    })
+    let lastStatus: number | undefined
+    for (const url of candidates) {
+      try {
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ type: safeType, data: payload }),
+        })
+        lastStatus = resp.status
+        if (!resp.ok) continue
 
-    // Bubble up the admin proxy response but never fail hard
-    const json = await resp.json().catch(() => ({ success: true, tracked: false }))
-    res.status(200).json(json)
+        const json = await resp.json().catch(() => ({ success: true, tracked: true }))
+        res.status(200).json(json)
+        return
+      } catch {
+        continue
+      }
+    }
+
+    res.status(200).json({ success: true, tracked: false, status: lastStatus })
   } catch (err: any) {
     console.warn('Analytics event proxy failed:', err?.message || err)
     // Always succeed to avoid noisy console errors in the UI

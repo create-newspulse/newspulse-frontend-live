@@ -1,7 +1,8 @@
 // components/AdminContentLoader.tsx - Live Content from Admin Panel
 import React, { useEffect, useState } from 'react';
-import { useAdminData } from '../hooks/useAdminData';
 import { motion, AnimatePresence } from 'framer-motion';
+import { fetchCategoryNews } from '../lib/fetchCategoryNews';
+import { fetchPublicNews } from '../lib/publicNewsApi';
 
 interface AdminContentLoaderProps {
   category?: string;
@@ -26,41 +27,59 @@ const AdminContentLoader: React.FC<AdminContentLoaderProps> = ({
   showBreaking = true,
   children
 }) => {
-  const {
-    news,
-    breakingNews,
-    loading,
-    error,
-    isConnected,
-    lastUpdated,
-    getNewsByCategory
-  } = useAdminData({
-    refreshInterval: 300000, // 5 minutes
-    enableRealtime: true,
-    trackAnalytics: true
-  });
+  const refreshInterval = 300000; // 5 minutes
+  const [news, setNews] = useState<any[]>([]);
+  const [breakingNews, setBreakingNews] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isConnected, setIsConnected] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  const [categoryNews, setCategoryNews] = useState([]);
-  const [loadingCategory, setLoadingCategory] = useState(false);
+  const load = async (signal?: AbortSignal) => {
+    setLoading(true);
 
-  // Load category-specific news if specified
-  useEffect(() => {
-    if (category) {
-      setLoadingCategory(true);
-      getNewsByCategory(category, limit)
-        .then(response => {
-          setCategoryNews(response.items || []);
-        })
-        .finally(() => {
-          setLoadingCategory(false);
-        });
+    try {
+      if (category) {
+        const res = await fetchCategoryNews({ categoryKey: category, limit });
+        if (signal?.aborted) return;
+        setNews(res.items || []);
+      } else {
+        const res = await fetchPublicNews({ limit, signal });
+        if (signal?.aborted) return;
+        setNews(res.items || []);
+      }
+
+      // We intentionally do not fetch breaking news via admin endpoints.
+      // Breaking ticker (if enabled) can be wired to a public endpoint elsewhere.
+      setBreakingNews([]);
+      setIsConnected(true);
+      setLastUpdated(new Date());
+    } catch (err) {
+      if (signal?.aborted) return;
+      setIsConnected(false);
+      setBreakingNews([]);
+    } finally {
+      if (!signal?.aborted) setLoading(false);
     }
-  }, [category, limit, getNewsByCategory]);
+  };
+
+  useEffect(() => {
+    const controller = new AbortController();
+    load(controller.signal);
+
+    const id = setInterval(() => {
+      load();
+    }, refreshInterval);
+
+    return () => {
+      controller.abort();
+      clearInterval(id);
+    };
+  }, [category, limit]);
 
   // Determine which news to display
-  const displayNews = category ? categoryNews : news.slice(0, limit);
+  const displayNews = news.slice(0, limit);
   const displayBreaking = showBreaking ? breakingNews : [];
-  const isLoading = category ? loadingCategory : loading;
+  const isLoading = loading;
 
   return (
     <>

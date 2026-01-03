@@ -1,10 +1,10 @@
-import { newsApi } from "../../lib/adminApi";
+import { fetchCategoryNews } from "../../lib/fetchCategoryNews";
 import { GUJARAT_DISTRICTS } from "../../utils/regions";
 import type { RegionalArticle, City, District } from "./types";
 
 export async function getRegionalFeed(limit = 30): Promise<RegionalArticle[]> {
   try {
-    const res = await newsApi.getNewsByCategory("Regional", limit);
+    const res = await fetchCategoryNews({ categoryKey: "Regional", limit });
     return (res.items || []) as RegionalArticle[];
   } catch {
     return [];
