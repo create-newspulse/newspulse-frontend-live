@@ -13,7 +13,6 @@ import type { GetStaticProps } from "next";
 import { AnimatePresence, motion } from "framer-motion";
 import { useI18n } from "../src/i18n/LanguageProvider";
 import { fetchPublicBroadcast, toTickerStrings } from "../lib/publicBroadcastClient";
-import { fetchPublicNews } from "../lib/publicNewsApi";
 import {
   ArrowRight,
   Bell,
@@ -2018,7 +2017,6 @@ export default function UiPreviewV145() {
   const { externalFetch } = usePublicMode();
 
   const [broadcast, setBroadcast] = useState<any>(null);
-  const [broadcastBreakingFallback, setBroadcastBreakingFallback] = useState<string[]>([]);
 
   React.useEffect(() => {
     const controller = new AbortController();
@@ -2028,30 +2026,11 @@ export default function UiPreviewV145() {
       const payload = await fetchPublicBroadcast({ signal: controller.signal });
       if (cancelled || controller.signal.aborted) return;
       setBroadcast(payload);
-
-      // Optional fallback: in auto mode, if manual list is empty, use recent published stories.
-      const mode = payload?.settings?.breaking?.mode;
-      const enabled = !!payload?.settings?.breaking?.enabled;
-      const maxItems = Number(payload?.settings?.breaking?.maxItems) || 8;
-      const breakingItems = toTickerStrings(payload?.breaking?.items || [], maxItems);
-
-      if (enabled && mode === 'auto' && breakingItems.length === 0) {
-        const news = await fetchPublicNews({ category: 'breaking', limit: maxItems, signal: controller.signal });
-        if (cancelled || controller.signal.aborted) return;
-        const fallback = (news.items || [])
-          .map((a: any) => String(a?.title || '').trim())
-          .filter(Boolean)
-          .slice(0, maxItems);
-        setBroadcastBreakingFallback(fallback);
-      } else {
-        setBroadcastBreakingFallback([]);
-      }
     };
 
     load().catch(() => {
       if (cancelled || controller.signal.aborted) return;
       setBroadcast(null);
-      setBroadcastBreakingFallback([]);
     });
 
     // Keep broadcast tickers reasonably fresh.
@@ -2142,15 +2121,24 @@ export default function UiPreviewV145() {
   const breakingMaxItems = Number(breakingSettings.maxItems) || 8;
 
   const broadcastBreaking = toTickerStrings(broadcast?.breaking?.items || [], breakingMaxItems);
-  const autoBreakingItems = broadcastBreaking.length ? broadcastBreaking : broadcastBreakingFallback;
+  const hasBreakingItems = broadcastBreaking.length > 0;
 
-  // Force ON semantics:
-  // - show bar even when the manual list is empty
-  // - show placeholder only when showWhenEmpty=true
-  const breakingItems =
-    breakingMode === 'force_on' && broadcastBreaking.length === 0
-      ? (breakingShowWhenEmpty ? [] : [''])
-      : autoBreakingItems;
+  // Behavior:
+  // - off: hide
+  // - auto: show backend items; if empty and showWhenEmpty -> placeholder text
+  // - force_on: if backend empty -> show demo items; if still empty and showWhenEmpty -> placeholder
+  const breakingItems = (() => {
+    if (breakingMode === 'off') return [];
+
+    if (breakingMode === 'force_on' && !hasBreakingItems) {
+      const demo = (BREAKING_DEMO || []).slice(0, breakingMaxItems);
+      if (demo.length) return demo;
+      return breakingShowWhenEmpty ? [t('home.breakingNews')] : [];
+    }
+
+    if (hasBreakingItems) return broadcastBreaking;
+    return breakingShowWhenEmpty ? [t('home.breakingNews')] : [];
+  })();
 
   const showBreaking =
     !!breakingSettings.enabled &&

@@ -40,6 +40,10 @@ export type PublicBroadcastPayload = {
   live: { items: BroadcastItem[] };
 };
 
+export type PublicBroadcastSettingsPayload = {
+  settings: BroadcastSettings;
+};
+
 const DEFAULT_SETTINGS: BroadcastSettings = {
   breaking: {
     enabled: false,
@@ -159,9 +163,14 @@ export function normalizePublicBroadcastPayload(raw: unknown): PublicBroadcastPa
   };
 }
 
-export async function fetchPublicBroadcast(opts?: { signal?: AbortSignal }): Promise<PublicBroadcastPayload> {
+export function normalizePublicBroadcastSettingsPayload(raw: unknown): PublicBroadcastSettingsPayload {
+  const normalized = normalizePublicBroadcastPayload(raw);
+  return { settings: normalized.settings };
+}
+
+export async function fetchPublicBroadcastSettings(opts?: { signal?: AbortSignal }): Promise<PublicBroadcastSettingsPayload> {
   const origin = getApiOrigin();
-  const endpoint = `${origin}/api/public/broadcast`;
+  const endpoint = `${origin}/api/public/broadcast/settings`;
 
   try {
     const res = await fetch(endpoint, {
@@ -171,8 +180,37 @@ export async function fetchPublicBroadcast(opts?: { signal?: AbortSignal }): Pro
     });
 
     const data = await res.json().catch(() => null);
-    // Normalize even if backend returns non-200.
-    return normalizePublicBroadcastPayload(data);
+    return normalizePublicBroadcastSettingsPayload(data);
+  } catch (err: any) {
+    if (err?.name === 'AbortError') throw err;
+    return { settings: DEFAULT_SETTINGS };
+  }
+}
+
+export async function fetchPublicBroadcast(opts?: { signal?: AbortSignal }): Promise<PublicBroadcastPayload> {
+  try {
+    // First, fetch settings from the dedicated settings endpoint.
+    const settings = await fetchPublicBroadcastSettings(opts);
+
+    // Then, fetch items from the broadcast endpoint (if available).
+    // Some backends may also include items in /settings; normalize handles both.
+    const origin = getApiOrigin();
+    const endpoint = `${origin}/api/public/broadcast`;
+
+    const res = await fetch(endpoint, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: opts?.signal,
+    });
+
+    const data = await res.json().catch(() => null);
+    const normalized = normalizePublicBroadcastPayload(data);
+
+    return {
+      settings: settings.settings,
+      breaking: normalized.breaking,
+      live: normalized.live,
+    };
   } catch (err: any) {
     if (err?.name === 'AbortError') throw err;
     return {
