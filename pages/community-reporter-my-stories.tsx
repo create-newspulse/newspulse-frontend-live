@@ -392,7 +392,7 @@ const MyCommunityStoriesPage: React.FC<FeatureToggleProps> = ({ communityReporte
 export default MyCommunityStoriesPage;
 
 export const getServerSideProps: GetServerSideProps<FeatureToggleProps> = async ({ locale }) => {
-  const base = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000').replace(/\/+$/, '');
+  const base = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/+$/, '');
   let communityReporterClosed = false;
   let reporterPortalClosed = false;
   try {

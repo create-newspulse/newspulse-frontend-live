@@ -14,7 +14,7 @@ type PublicAd = {
 
 type PublicAdResponse = { ok: boolean; ad: PublicAd | null };
 
-const BACKEND_URL = (process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'https://newspulse-backend-real.onrender.com').replace(/\/+$/, '');
+const BACKEND_URL = (process.env.NEXT_PUBLIC_API_URL || '').trim().replace(/\/+$/, '');
 
 function pickAd(payload: any): PublicAd | null {
   if (!payload) return null;
@@ -36,6 +36,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
 
   const slot = String(req.query.slot || '').trim() as SlotName;
   if (!slot) return res.status(400).json({ ok: false, ad: null });
+
+  if (!BACKEND_URL) {
+    return res.status(200).json({ ok: false, ad: null });
+  }
 
   try {
     // Preferred upstream path

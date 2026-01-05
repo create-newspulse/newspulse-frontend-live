@@ -7,7 +7,7 @@ export type PublicAdSettingsResponse = {
   slotEnabled: Record<SlotName, boolean>;
 };
 
-const BACKEND_URL = (process.env.NEXT_PUBLIC_API_URL || 'https://newspulse-backend-real.onrender.com').replace(/\/+$/, '');
+const BACKEND_URL = (process.env.NEXT_PUBLIC_API_URL || '').trim().replace(/\/+$/, '');
 const TTL_MS = 60_000;
 
 const DEFAULT_SETTINGS: PublicAdSettingsResponse = {
@@ -43,6 +43,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (cached && now - cached.fetchedAt < TTL_MS) {
     res.setHeader('Cache-Control', 'public, max-age=60');
     return res.status(200).json(cached.data);
+  }
+
+  if (!BACKEND_URL) {
+    res.setHeader('Cache-Control', 'public, max-age=60');
+    return res.status(200).json(DEFAULT_SETTINGS);
   }
 
   try {

@@ -19,7 +19,7 @@ let cached: PublicAdSettingsResponse | null = null;
 let inFlight: Promise<PublicAdSettingsResponse> | null = null;
 
 function getApiBase(): string {
-  const raw = (process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || '').toString().trim();
+  const raw = (process.env.NEXT_PUBLIC_API_URL || '').toString().trim();
   return raw.replace(/\/+$/, '');
 }
 
@@ -37,7 +37,8 @@ export async function fetchPublicAdSettingsOnce(): Promise<PublicAdSettingsRespo
   inFlight = (async () => {
     try {
       const base = getApiBase();
-      const url = base ? `${base}/api/public/ad-settings` : '/api/public/ad-settings';
+      if (!base) return DEFAULT;
+      const url = `${base}/api/public/ad-settings`;
 
       const res = await fetch(url, {
         method: 'GET',

@@ -41,10 +41,7 @@ const nextConfig = {
 
   async headers() {
     const isDev = process.env.NODE_ENV !== 'production';
-    const backend =
-      process.env.NEXT_PUBLIC_API_BASE_URL ||
-      process.env.NEXT_PUBLIC_API_URL ||
-      'https://newspulse-backend-real.onrender.com';
+    const backend = (process.env.NEXT_PUBLIC_API_URL || '').trim().replace(/\/+$/, '');
 
     // Content Security Policy
     const csp = [
@@ -67,7 +64,7 @@ const nextConfig = {
       "font-src 'self' data: https://*.gstatic.com",
 
       // ✅ IMPORTANT: allow backend API requests (this fixes your blocked fetch)
-      `connect-src 'self' ${backend} https://www.googletagmanager.com https://www.google-analytics.com ws: wss:`,
+      `connect-src 'self'${backend ? ` ${backend}` : ''} https://www.googletagmanager.com https://www.google-analytics.com ws: wss:`,
 
       // Frames (keep strict; add domains only if you embed content like YouTube)
       "frame-src 'self'",

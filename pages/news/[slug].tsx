@@ -31,13 +31,8 @@ type Props = {
 };
 
 function getApiOrigin() {
-  const origin =
-    process.env.NEXT_PUBLIC_API_ORIGIN ||
-    process.env.NEXT_PUBLIC_API_BASE_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    'http://localhost:5000';
-
-  return String(origin).replace(/\/+$/, '');
+  const origin = process.env.NEXT_PUBLIC_API_URL || '';
+  return String(origin).trim().replace(/\/+$/, '');
 }
 
 function unwrapArticle(payload: any): Article | null {
@@ -164,7 +159,7 @@ export default function NewsDetailPage({ article, safeHtml, error }: Props) {
               <div className="font-semibold">Unable to load article</div>
               <div className="mt-1">{error}</div>
               <div className="mt-2 text-sm text-slate-600">
-                Ensure the backend is running and NEXT_PUBLIC_API_ORIGIN points to it.
+                Ensure the backend is running and NEXT_PUBLIC_API_URL points to it.
               </div>
             </div>
           ) : null}

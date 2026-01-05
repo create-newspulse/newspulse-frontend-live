@@ -16,7 +16,7 @@ let cachedSlotEnabled: Record<AdSlotName, boolean> | null = null;
 let inFlight: Promise<Record<AdSlotName, boolean>> | null = null;
 
 function getApiBase(): string {
-  const raw = (process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || '').toString().trim();
+  const raw = (process.env.NEXT_PUBLIC_API_URL || '').toString().trim();
   return raw.replace(/\/+$/, '');
 }
 
@@ -28,7 +28,8 @@ async function fetchSlotEnabledOnce(): Promise<Record<AdSlotName, boolean>> {
   inFlight = (async () => {
     try {
       const base = getApiBase();
-      const url = base ? `${base}/api/public/ad-settings` : '/api/public/ad-settings';
+      if (!base) return DEFAULT_SLOT_ENABLED;
+      const url = `${base}/api/public/ad-settings`;
       const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' } });
       const json = (await res.json().catch(() => null)) as AdSettingsResponse | null;
 

@@ -28,9 +28,7 @@ interface ReporterSignUpState {
   positionTitle?: string;
   beatsProfessional?: string[];
   yearsExperience?: string;
-  websiteOrPortfolio?: string;
-  linkedin?: string;
-  twitter?: string;
+  professionalJournalistId?: string;
   journalistCharterAccepted: boolean;
   generalEthicsAccepted: boolean;
 }
@@ -62,9 +60,7 @@ const initialSignUp: ReporterSignUpState = {
   positionTitle: '',
   beatsProfessional: [],
   yearsExperience: '',
-  websiteOrPortfolio: '',
-  linkedin: '',
-  twitter: '',
+  professionalJournalistId: '',
   journalistCharterAccepted: false,
   generalEthicsAccepted: false,
 };
@@ -103,6 +99,8 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
   const [step, setStep] = useState<1 | 2>(1);
   const [reporterType, setReporterType] = useState<ReporterType>('community');
   const [signUpData, setSignUpData] = useState<ReporterSignUpState>(initialSignUp);
+  const [journalistIdFile, setJournalistIdFile] = useState<File | null>(null);
+  const [journalistIdUpload, setJournalistIdUpload] = useState<{ status: 'idle' | 'uploading' | 'success' | 'error'; fileId?: string; message?: string }>({ status: 'idle' });
   const [story, setStory] = useState<StoryFormState>(initialStory);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitStatus, setSubmitStatus] = useState<'idle'|'submitting'|'success'|'error'>('idle');
@@ -199,6 +197,27 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
     if (!validateStep2()) return;
     setSubmitStatus('submitting');
     try {
+      let uploadedIdFileId: string | undefined = undefined;
+
+      // Optional: upload journalist ID proof before submitting story
+      if (reporterType === 'journalist' && journalistIdFile) {
+        setJournalistIdUpload({ status: 'uploading' });
+        const fd = new FormData();
+        fd.append('file', journalistIdFile);
+        if (signUpData.email?.trim()) fd.append('email', signUpData.email.trim());
+        if (signUpData.professionalJournalistId?.trim()) fd.append('note', signUpData.professionalJournalistId.trim());
+        const up = await fetch('/api/community-reporter/upload-id', { method: 'POST', body: fd });
+        const upData: any = await up.json().catch(() => ({}));
+        if (!up.ok || upData?.ok !== true) {
+          const msg = upData?.message || upData?.error || 'Could not upload ID proof.';
+          setJournalistIdUpload({ status: 'error', message: msg });
+          // Do not block story submission if upload fails (keeps UX forgiving)
+        } else {
+          uploadedIdFileId = upData?.fileId || upData?.id || undefined;
+          setJournalistIdUpload({ status: 'success', fileId: uploadedIdFileId });
+        }
+      }
+
       const payload = {
         reporter: {
           fullName: signUpData.fullName.trim(),
@@ -230,7 +249,8 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
         organisation: (signUpData.organisationName || '').trim(),
         roleOrTitle: (signUpData.positionTitle || '').trim(),
         yearsExperience: (signUpData.yearsExperience || '').trim(),
-        portfolioLinks: (signUpData.websiteOrPortfolio || '').trim(),
+        professionalJournalistId: signUpData.professionalJournalistId?.trim() || undefined,
+        idProofFileId: uploadedIdFileId,
         agreedToJournalistCharter: signUpData.journalistCharterAccepted === true,
       };
       const res = await fetch('/api/community-reporter/submit', {
@@ -562,20 +582,35 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
                                   <option value="10+">10+</option>
                                 </select>
                               </div>
-                              <div>
-                                <label htmlFor="websiteOrPortfolio" className="block font-medium mb-1">Portfolio / clips link(s)</label>
-                                <input id="websiteOrPortfolio" type="url" value={signUpData.websiteOrPortfolio || ''} onChange={e => setSignUpData(s => ({ ...s, websiteOrPortfolio: e.target.value }))} disabled={readonlyMode || !journalistApplicationsOpen} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
-                              </div>
                             </div>
-                            <div className="grid md:grid-cols-2 gap-4">
-                              <div>
-                                <label htmlFor="linkedin" className="block font-medium mb-1">LinkedIn</label>
-                                <input id="linkedin" type="url" value={signUpData.linkedin || ''} onChange={e => setSignUpData(s => ({ ...s, linkedin: e.target.value }))} disabled={readonlyMode || !journalistApplicationsOpen} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
-                              </div>
-                              <div>
-                                <label htmlFor="twitter" className="block font-medium mb-1">Twitter / X</label>
-                                <input id="twitter" type="url" value={signUpData.twitter || ''} onChange={e => setSignUpData(s => ({ ...s, twitter: e.target.value }))} disabled={readonlyMode || !journalistApplicationsOpen} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
-                              </div>
+                            <div>
+                              <label htmlFor="professionalJournalistId" className="block font-medium mb-1">Professional ID (Press / Accreditation / Employee ID)</label>
+                              <input id="professionalJournalistId" type="text" value={signUpData.professionalJournalistId || ''} onChange={e => setSignUpData(s => ({ ...s, professionalJournalistId: e.target.value }))} disabled={readonlyMode || !journalistApplicationsOpen} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                            </div>
+
+                            <div>
+                              <label htmlFor="journalistIdFile" className="block font-medium mb-1">Upload ID proof (PDF/JPG/PNG)</label>
+                              <input
+                                id="journalistIdFile"
+                                type="file"
+                                accept="application/pdf,image/png,image/jpeg"
+                                disabled={readonlyMode || !journalistApplicationsOpen}
+                                onChange={(e) => {
+                                  const f = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+                                  setJournalistIdFile(f);
+                                  setJournalistIdUpload({ status: 'idle' });
+                                }}
+                                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2"
+                              />
+                              {journalistIdUpload.status === 'uploading' && (
+                                <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">Uploading…</p>
+                              )}
+                              {journalistIdUpload.status === 'success' && (
+                                <p className="text-xs text-green-700 mt-1">Uploaded.</p>
+                              )}
+                              {journalistIdUpload.status === 'error' && (
+                                <p className="text-xs text-red-600 mt-1">{journalistIdUpload.message || 'Upload failed.'}</p>
+                              )}
                             </div>
                           </div>
                         )}
@@ -790,7 +825,7 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
 export default CommunityReporterPage;
 
 export const getServerSideProps: GetServerSideProps<FeatureToggleProps> = async ({ locale }) => {
-  const base = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000').replace(/\/+$/, '');
+  const base = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/+$/, '');
   let communityReporterClosed = false;
   let reporterPortalClosed = false;
   try {

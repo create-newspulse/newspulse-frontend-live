@@ -15,16 +15,10 @@ export type Article = {
   language?: string;
 };
 
-const FALLBACK_API_ORIGIN = 'https://newspulse-backend-real.onrender.com';
-
 export function getApiOrigin() {
-  const origin =
-    process.env.NEXT_PUBLIC_API_ORIGIN ||
-    process.env.NEXT_PUBLIC_API_BASE_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    FALLBACK_API_ORIGIN;
-
-  return String(origin).replace(/\/+$/, '');
+  // Per project convention: ONLY NEXT_PUBLIC_API_URL is allowed.
+  const origin = process.env.NEXT_PUBLIC_API_URL || '';
+  return String(origin).trim().replace(/\/+$/, '');
 }
 
 export function unwrapArticles(payload: any): Article[] {
@@ -70,6 +64,14 @@ export async function fetchPublicNews(options: {
   status?: number;
 }> {
   const origin = getApiOrigin();
+  if (!origin) {
+    return {
+      items: [],
+      meta: { limit: options.limit },
+      endpoint: '',
+      error: 'NEXT_PUBLIC_API_URL not set',
+    };
+  }
   const params = new URLSearchParams();
 
   if (options.category) params.set('category', String(options.category));
@@ -136,6 +138,9 @@ export async function fetchPublishedCategoryArticles(options: {
   limit?: number;
 }): Promise<{ articles: Article[]; error?: string; endpoint: string }> {
   const origin = getApiOrigin();
+  if (!origin) {
+    return { articles: [], error: 'NEXT_PUBLIC_API_URL not set', endpoint: '' };
+  }
   const limit = options.limit ?? 30;
   const endpoint = `${origin}/api/news?category=${encodeURIComponent(options.categoryKey)}&limit=${encodeURIComponent(String(limit))}`;
 
@@ -161,6 +166,9 @@ export async function fetchArticleBySlugOrId(options: {
   slugOrId: string;
 }): Promise<{ article: Article | null; error?: string; status?: number; endpointTried: string[] }> {
   const origin = getApiOrigin();
+  if (!origin) {
+    return { article: null, error: 'NEXT_PUBLIC_API_URL not set', endpointTried: [] };
+  }
   const slug = options.slugOrId;
 
   const endpoints = [

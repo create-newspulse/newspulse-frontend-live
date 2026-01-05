@@ -8,11 +8,12 @@ import { useYouthPulse } from "../features/youthPulse/useYouthPulse";
 import { usePublicMode } from "../utils/PublicModeProvider";
 import { DEFAULT_TRENDING_TOPICS, type TrendingTopic } from "../src/config/trendingTopics";
 import { getTrendingTopics } from "../lib/getTrendingTopics";
+import { fetchPublicNews, type Article } from "../lib/publicNewsApi";
+import { fetchPublicSiteSettings, type PublicSiteSettings } from "../lib/publicSiteSettings";
 import AdSlot from "../components/ads/AdSlot";
 import type { GetStaticProps } from "next";
 import { AnimatePresence, motion } from "framer-motion";
 import { useI18n } from "../src/i18n/LanguageProvider";
-import { fetchPublicBroadcast, toTickerStrings } from "../lib/publicBroadcastClient";
 import {
   ArrowRight,
   Bell,
@@ -496,10 +497,47 @@ function normalizePrefs(input: any) {
   return p;
 }
 
-function getBreakingItems(prefs: any) {
+function getBreakingItems(prefs: any, backendItems: string[]) {
   if (prefs.breakingMode === "off") return [];
   if (prefs.breakingMode === "on") return BREAKING_DEMO;
-  return BREAKING_FROM_BACKEND;
+  return backendItems;
+}
+
+function safeTitle(raw: unknown): string {
+  return String(raw || '').trim();
+}
+
+function articleToTickerText(a: Article): string | null {
+  const title = safeTitle((a as any)?.title);
+  return title ? title : null;
+}
+
+function articleToFeedItem(a: Article) {
+  const id = safeTitle((a as any)?._id || (a as any)?.id || (a as any)?.slug) || undefined;
+  const title = safeTitle((a as any)?.title) || 'Untitled';
+  const desc = safeTitle((a as any)?.summary || (a as any)?.excerpt) || '';
+
+  const iso = safeTitle((a as any)?.publishedAt || (a as any)?.createdAt) || '';
+  let time = '';
+  if (iso) {
+    try {
+      time = new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      time = '';
+    }
+  }
+
+  const source = safeTitle((a as any)?.source?.name || (a as any)?.source) || 'News Pulse';
+  const category = safeTitle((a as any)?.category) || '';
+
+  return {
+    id: id || title,
+    title,
+    desc,
+    time: time || '—',
+    source,
+    category,
+  };
 }
 
 function labelKeyForCategory(key: string): string {
@@ -2016,34 +2054,10 @@ export default function UiPreviewV145() {
   const theme = useMemo(() => getTheme(prefs.themeId), [prefs.themeId]);
   const { externalFetch } = usePublicMode();
 
-  const [broadcast, setBroadcast] = useState<any>(null);
-
-  React.useEffect(() => {
-    const controller = new AbortController();
-    let cancelled = false;
-
-    const load = async () => {
-      const payload = await fetchPublicBroadcast({ signal: controller.signal });
-      if (cancelled || controller.signal.aborted) return;
-      setBroadcast(payload);
-    };
-
-    load().catch(() => {
-      if (cancelled || controller.signal.aborted) return;
-      setBroadcast(null);
-    });
-
-    // Keep broadcast tickers reasonably fresh.
-    const id = setInterval(() => {
-      load().catch(() => {});
-    }, 30000);
-
-    return () => {
-      cancelled = true;
-      controller.abort();
-      clearInterval(id);
-    };
-  }, []);
+  const [publicSettings, setPublicSettings] = useState<PublicSiteSettings | null>(null);
+  const [breakingFromBackend, setBreakingFromBackend] = useState<string[]>([]);
+  const [liveFromBackend, setLiveFromBackend] = useState<string[]>([]);
+  const [latestFromBackend, setLatestFromBackend] = useState<any[]>([]);
 
   const [activeCatKey, setActiveCatKey] = useState<string>("breaking");
   const [toast, setToast] = useState<string>("");
@@ -2074,37 +2088,62 @@ export default function UiPreviewV145() {
 
   // ✅ (optional) load global settings from backend (admin-controlled)
   React.useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
 
     (async () => {
-      try {
-        const base = (process as any)?.env?.NEXT_PUBLIC_API_URL || "";
-        const url = base ? `${String(base).replace(/\/$/, "")}/api/site-settings/public` : "/api/site-settings/public";
+      const resp = await fetchPublicSiteSettings({ signal: controller.signal });
+      if (controller.signal.aborted) return;
+      if (!resp.settings) return;
 
-        const res = await fetch(url, { credentials: "include" });
-        const data = await res.json().catch(() => null);
+      setPublicSettings(resp.settings);
 
-        if (cancelled) return;
-        if (!res.ok || !data?.ok || !data?.settings) return;
+      // Keep prefs in sync so Settings UI reflects backend state,
+      // but ticker visibility is still gated below (backend must say ON).
+      setPrefs((prev: any) => {
+        const merged = normalizePrefs({ ...prev, ...resp.settings });
+        merged.themeId = prev.themeId;
+        merged.lang = prev.lang;
+        return merged;
+      });
+    })().catch(() => {
+      // ignore
+    });
 
-        const s = data.settings || {};
-
-        // admin settings override global modules; keep user theme/lang
-        setPrefs((prev: any) => {
-          const merged = normalizePrefs({ ...prev, ...s });
-          merged.themeId = prev.themeId;
-          merged.lang = prev.lang;
-          return merged;
-        });
-      } catch {
-        // ignore
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, []);
+
+  // Fetch homepage data (latest + breaking + live ticker items) from backend.
+  React.useEffect(() => {
+    const controller = new AbortController();
+
+    (async () => {
+      const code = toUiLangCode(lang);
+      const apiLang = code === 'en' ? 'en' : code === 'hi' ? 'hi' : 'gu';
+
+      // Latest news list (homepage)
+      const latestResp = await fetchPublicNews({ language: apiLang, limit: 12, signal: controller.signal });
+      if (controller.signal.aborted) return;
+      const latestArticles = latestResp.items || [];
+      setLatestFromBackend(latestArticles.map(articleToFeedItem));
+
+      // Live updates ticker: latest titles (separate rendering surface)
+      const liveItems = latestArticles.map(articleToTickerText).filter(Boolean) as string[];
+      setLiveFromBackend(liveItems);
+
+      // Breaking ticker: breaking category titles
+      const breakingResp = await fetchPublicNews({ category: 'breaking', language: apiLang, limit: 10, signal: controller.signal });
+      if (controller.signal.aborted) return;
+      const breakingItems = (breakingResp.items || []).map(articleToTickerText).filter(Boolean) as string[];
+      setBreakingFromBackend(breakingItems);
+    })().catch(() => {
+      if (controller.signal.aborted) return;
+      setLatestFromBackend([]);
+      setLiveFromBackend([]);
+      setBreakingFromBackend([]);
+    });
+
+    return () => controller.abort();
+  }, [lang]);
 
   // save local prefs
   React.useEffect(() => {
@@ -2112,41 +2151,15 @@ export default function UiPreviewV145() {
     window.localStorage.setItem(PREF_KEY, JSON.stringify(normalizePrefs(prefs)));
   }, [prefs]);
 
-  const broadcastSettings = broadcast?.settings || {};
-  const breakingSettings = broadcastSettings?.breaking || {};
-  const liveSettings = broadcastSettings?.live || {};
+  const effectiveBreakingMode = publicSettings?.breakingMode;
+  const effectiveLiveTickerOn = publicSettings?.liveTickerOn === true;
 
-  const breakingMode = String(breakingSettings.mode || 'off');
-  const breakingShowWhenEmpty = !!breakingSettings.showWhenEmpty;
-  const breakingMaxItems = Number(breakingSettings.maxItems) || 8;
-
-  const broadcastBreaking = toTickerStrings(broadcast?.breaking?.items || [], breakingMaxItems);
-  const hasBreakingItems = broadcastBreaking.length > 0;
-
-  // Behavior:
-  // - off: hide
-  // - auto: show backend items; if empty and showWhenEmpty -> placeholder text
-  // - force_on: if backend empty -> show demo items; if still empty and showWhenEmpty -> placeholder
-  const breakingItems = (() => {
-    if (breakingMode === 'off') return [];
-
-    if (breakingMode === 'force_on' && !hasBreakingItems) {
-      const demo = (BREAKING_DEMO || []).slice(0, breakingMaxItems);
-      if (demo.length) return demo;
-      return breakingShowWhenEmpty ? [t('home.breakingNews')] : [];
-    }
-
-    if (hasBreakingItems) return broadcastBreaking;
-    return breakingShowWhenEmpty ? [t('home.breakingNews')] : [];
-  })();
-
-  const showBreaking =
-    !!breakingSettings.enabled &&
-    breakingMode !== 'off' &&
-    (breakingMode === 'force_on' || breakingItems.length > 0);
-
-  const liveUpdates = toTickerStrings(broadcast?.live?.items || [], Number(liveSettings.maxItems) || 12);
-  const showLive = !!liveSettings.enabled && !!liveSettings.showOn?.home;
+  const breakingItems = getBreakingItems(prefs, breakingFromBackend);
+  const showBreaking = (effectiveBreakingMode === 'on' || effectiveBreakingMode === 'auto') && breakingItems.length > 0;
+  const breakingItemsToShow = showBreaking ? breakingItems : [t('home.noBreaking')];
+  const liveItemsToShow = (effectiveLiveTickerOn && liveFromBackend.length > 0)
+    ? liveFromBackend
+    : [t('home.noLiveUpdates')];
   const onToast = (m: string) => setToast(m);
 
   return (
@@ -2231,35 +2244,31 @@ export default function UiPreviewV145() {
       <div className="mt-0 w-full max-w-full">
         <div className="mx-auto w-full max-w-[1440px] px-4 md:px-8">
           <div className="rounded-2xl border border-black/10 bg-white/80 backdrop-blur-md shadow-sm ring-1 ring-black/5 overflow-hidden p-2 flex flex-col gap-2">
-          {showBreaking ? (
             <div className="w-full min-w-0">
               <TickerBar
                 theme={theme}
                 kind="breaking"
-                items={breakingItems}
-                speedSec={Number(breakingSettings.speedSec) || 18}
+                items={breakingItemsToShow}
+                speedSec={publicSettings?.breakingSpeedSec ?? prefs.breakingSpeedSec}
                 onViewAll={() => {
                   setViewAllKind("breaking");
                   setViewAllOpen(true);
                 }}
               />
             </div>
-          ) : null}
 
-          {showLive ? (
             <div className="w-full min-w-0">
               <TickerBar
                 theme={theme}
                 kind="live"
-                items={liveUpdates}
-                speedSec={Number(liveSettings.speedSec) || 24}
+                items={liveItemsToShow}
+                speedSec={publicSettings?.liveSpeedSec ?? prefs.liveSpeedSec}
                 onViewAll={() => {
                   setViewAllKind("live");
                   setViewAllOpen(true);
                 }}
               />
             </div>
-          ) : null}
           </div>
         </div>
       </div>
@@ -2306,17 +2315,9 @@ export default function UiPreviewV145() {
           {/* RIGHT (Advertisements) */}
           <aside className="col-span-12 lg:col-span-3">
             <div className="sticky top-4 grid gap-4">
-              <div className="border rounded-xl p-4 bg-white">
-                <div className="flex justify-between text-xs mb-4">
-                  <span className="border px-1 rounded">AD</span>
-                  <a href="/advertise" className="underline" aria-label={t('common.openAdvertisingInquiryForm')}>{t('common.advertiseHere')}</a>
-                </div>
-                <div className="aspect-[300/250] bg-gray-100 flex items-center justify-center border-dashed border-2">
-                  300 × 250
-                </div>
-              </div>
+              <AdSlot slot="HOME_RIGHT_300x250" />
 
-              <FeedList theme={theme} title={t('home.latest')} items={FEED} onOpen={(id: string) => onToast(id === "viewall" ? "View all latest (planned)" : `Open story: ${id}`)} />
+              <FeedList theme={theme} title={t('home.latest')} items={latestFromBackend} onOpen={(id: string) => onToast(id === "viewall" ? "View all latest (planned)" : `Open story: ${id}`)} />
 
               {/* Regional preview */}
               <div className="rounded-2xl border overflow-hidden" style={{ background: theme.surface2, borderColor: theme.border }}>
@@ -2483,10 +2484,8 @@ export default function UiPreviewV145() {
       >
         <div className="grid gap-2">
           {(viewAllKind === 'live'
-            ? liveUpdates
-            : showBreaking
-              ? (breakingItems.length ? breakingItems : [t('home.noBreaking')])
-              : []
+            ? liveItemsToShow
+            : breakingItemsToShow
           ).map(
             (x: string, idx: number) => (
               <div key={idx} className="rounded-2xl border px-3 py-3 text-sm" style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}>

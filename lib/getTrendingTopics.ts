@@ -5,7 +5,7 @@ function trimTrailingSlashes(value: string): string {
 }
 
 function getApiOrigin(): string {
-  return trimTrailingSlashes(process.env.NEXT_PUBLIC_API_ORIGIN || 'http://localhost:5000');
+  return trimTrailingSlashes(process.env.NEXT_PUBLIC_API_URL || '');
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

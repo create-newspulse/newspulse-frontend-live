@@ -11,15 +11,10 @@ export type PublicStory = {
   content?: string;
 };
 
-const FALLBACK_BASE_URL = 'https://newspulse-backend-real.onrender.com';
-
 export function getApiBaseUrl(): string {
-  const base =
-    process.env.NEXT_PUBLIC_API_BASE_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    FALLBACK_BASE_URL;
-
-  return String(base).replace(/\/+$/, '');
+  // Per project convention: ONLY NEXT_PUBLIC_API_URL is allowed.
+  const base = process.env.NEXT_PUBLIC_API_URL || '';
+  return String(base).trim().replace(/\/+$/, '');
 }
 
 function unwrapStories(payload: any): PublicStory[] {

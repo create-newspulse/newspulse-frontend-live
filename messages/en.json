@@ -19,6 +19,7 @@
     "liveUpdates": "LIVE UPDATES",
     "breakingNews": "BREAKING NEWS",
     "noBreaking": "No breaking news right now — stay tuned",
+     "noLiveUpdates": "No live updates right now — stay tuned",
     "updated": "Updated:",
     "loading": "Loading headlines..."
   },
