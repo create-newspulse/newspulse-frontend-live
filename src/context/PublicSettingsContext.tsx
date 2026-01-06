@@ -90,11 +90,11 @@ export function PublicSettingsProvider({ children }: { children: React.ReactNode
     };
   }, [load]);
 
-  // Lightweight polling (20s) to reflect admin publishes without manual refresh.
+  // Lightweight polling (30s) to reflect admin publishes without manual refresh.
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
     if (useLocalOnly) return;
-    const POLL_MS = 20_000;
+    const POLL_MS = 30_000;
     const id = window.setInterval(() => {
       void load();
     }, POLL_MS);
