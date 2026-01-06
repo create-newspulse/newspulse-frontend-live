@@ -10,6 +10,8 @@ import { DEFAULT_TRENDING_TOPICS, type TrendingTopic } from "../src/config/trend
 import { getTrendingTopics } from "../lib/getTrendingTopics";
 import { fetchPublicNews, type Article } from "../lib/publicNewsApi";
 import { fetchPublicSiteSettings, type PublicSiteSettings } from "../lib/publicSiteSettings";
+import { getHomeModuleOrder, getTickerSpeedSeconds, isHomeModuleEnabled, isTickerEnabled, shouldTickerShowWhenEmpty } from "../src/lib/publicSettings";
+import { usePublicSettings } from "../src/context/PublicSettingsContext";
 import AdSlot from "../components/ads/AdSlot";
 import type { GetStaticProps } from "next";
 import { AnimatePresence, motion } from "framer-motion";
@@ -40,7 +42,6 @@ import {
   Video,
   X,
   MapPin,
-  LogIn,
 } from "lucide-react";
 
 /**
@@ -1148,16 +1149,19 @@ function TopCategoriesStrip({ theme, activeKey, onPick }: any) {
                 const content = (
                   <div
                     className={cx(
-                      "inline-flex items-center gap-2 whitespace-nowrap h-9 rounded-full border shadow-[0_1px_0_rgba(0,0,0,0.04)] px-3 text-xs font-semibold transition-all duration-200 focus-visible:outline-none",
+                      "inline-flex items-center gap-2 whitespace-nowrap h-9 rounded-full border px-3 text-xs font-semibold transition-all duration-200 focus-visible:outline-none",
+                      // Keep colorful text (from CATEGORY_THEME), but force neutral pill background/border.
                       chipTheme.base,
-                      chipTheme.hover,
-                      chipTheme.ring,
-                      active && chipTheme.active
+                      "bg-white/90 border-black/10",
+                      "hover:bg-black/[0.02]",
+                      "focus-visible:ring-2 focus-visible:ring-black/20",
+                      active ? "border-black/20 shadow-sm" : null
                     )}
                   >
-                    <c.Icon className="h-4 w-4" />
+                    <span className={cx("grid place-items-center w-7 h-7 rounded-full border bg-white/90 text-slate-700", "border-black/10")}>
+                      <c.Icon className="h-4 w-4" />
+                    </span>
                     {t(labelKeyForCategory(c.key))}
-                    {active ? <span className={cx("ml-1.5 inline-block h-1.5 w-1.5 rounded-full", chipTheme.dot)} aria-hidden="true" /> : null}
                   </div>
                 );
 
@@ -1202,6 +1206,11 @@ function TopCategoriesStrip({ theme, activeKey, onPick }: any) {
 function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick }: any) {
   const { t } = useI18n();
   const cats = useMemo(() => getCats(), []);
+
+  // Quick revert switch (for review):
+  // - false: simple list styling (matches screenshots 1&2)
+  // - true: current colorful card styling
+  const USE_COLORFUL_CATEGORY_THEME = false as boolean;
 
   const labelKeyForCategory = (key: string): string => {
     if (key === 'science-technology') return 'categories.scienceTechnology';
@@ -1368,18 +1377,37 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick }: any) {
           const active = c.key === activeKey;
           const href = CATEGORY_ROUTES[c.key as string];
           const tone = TONE[c.key as string] ?? DEFAULT_TONE;
+
+          const wrapClassName = USE_COLORFUL_CATEGORY_THEME
+            ? [
+                'relative flex items-center gap-3 rounded-3xl border transition',
+                'h-14 px-4',
+                tone.wrap,
+                active ? `ring-2 ${tone.activeRing}` : '',
+              ].join(' ')
+            : [
+                'relative flex items-center gap-3 rounded-2xl border transition',
+                'h-14 px-4',
+                'bg-white border-black/10',
+                active ? 'border-black/20 shadow-sm' : '',
+              ].join(' ');
+
           const content = (
             <div
-              className={[
-                "relative flex items-center gap-3 rounded-3xl border transition",
-                "h-14 px-4",
-                tone.wrap,
-                active ? `ring-2 ${tone.activeRing}` : "",
-              ].join(" ")}
+              className={wrapClassName}
             >
-              <span className={["absolute left-0 top-3 bottom-3 w-1 rounded-full", tone.leftBar].join(" ")} />
+              {USE_COLORFUL_CATEGORY_THEME ? (
+                <span className={["absolute left-0 top-3 bottom-3 w-1 rounded-full", tone.leftBar].join(" ")} />
+              ) : null}
 
-              <span className={["grid place-items-center w-10 h-10 rounded-2xl border", tone.iconWrap].join(" ")}>
+              <span
+                className={cx(
+                  "grid place-items-center w-10 h-10 border",
+                  USE_COLORFUL_CATEGORY_THEME ? "rounded-2xl" : "rounded-full",
+                  tone.iconWrap,
+                  USE_COLORFUL_CATEGORY_THEME ? null : "border-black/10"
+                )}
+              >
                 <c.Icon className="w-5 h-5" />
               </span>
 
@@ -1400,7 +1428,9 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick }: any) {
                 </span>
               </span>
 
-              <ArrowRight className={["ml-auto w-5 h-5", tone.arrow].join(" ")} />
+              {USE_COLORFUL_CATEGORY_THEME ? (
+                <ArrowRight className={["ml-auto w-5 h-5", tone.arrow].join(" ")} />
+              ) : null}
             </div>
           );
 
@@ -1519,11 +1549,12 @@ function FeedList({ theme, title, items, onOpen }: any) {
   );
 }
 
-function LiveTVWidget({ theme, prefs, setPrefs, onToast }: any) {
+function LiveTVWidget({ theme, prefs, setPrefs, onToast, forceOn = false, embedUrlOverride }: any) {
   const { t } = useI18n();
-  if (!prefs.liveTvOn) return null;
+  if (!forceOn && !prefs.liveTvOn) return null;
 
-  const hasUrl = !!prefs.liveTvEmbedUrl?.trim();
+  const effectiveEmbedUrl = (typeof embedUrlOverride === 'string' && embedUrlOverride.trim()) ? embedUrlOverride : prefs.liveTvEmbedUrl;
+  const hasUrl = !!effectiveEmbedUrl?.trim();
 
   return (
     <Surface theme={theme} className="p-4">
@@ -1546,7 +1577,7 @@ function LiveTVWidget({ theme, prefs, setPrefs, onToast }: any) {
           {hasUrl ? (
             <iframe
               title="News Pulse Live TV"
-              src={prefs.liveTvEmbedUrl}
+              src={effectiveEmbedUrl}
               className="absolute inset-0 h-full w-full"
               allow="autoplay; encrypted-media; picture-in-picture"
               allowFullScreen
@@ -2151,16 +2182,155 @@ export default function UiPreviewV145() {
     window.localStorage.setItem(PREF_KEY, JSON.stringify(normalizePrefs(prefs)));
   }, [prefs]);
 
-  const effectiveBreakingMode = publicSettings?.breakingMode;
-  const effectiveLiveTickerOn = publicSettings?.liveTickerOn === true;
+  const { settings: publishedSettings, hasLoaded: hasPublicSettings } = usePublicSettings();
+
+  const settingsSource = String(process.env.NEXT_PUBLIC_SETTINGS_SOURCE || 'backend').toLowerCase();
+  const showLocalSettingsUi = settingsSource === 'local' || !hasPublicSettings;
+
+  const effectiveBreakingMode = (publicSettings?.breakingMode ?? prefs.breakingMode) as 'auto' | 'on' | 'off';
+
+  const showCategoryStrip = hasPublicSettings ? isHomeModuleEnabled(publishedSettings, 'categoryStrip', true) : prefs.showCategoryStrip;
+  const showTrendingStrip = (hasPublicSettings ? isHomeModuleEnabled(publishedSettings, 'trendingStrip', true) : prefs.showTrendingStrip) && externalFetch;
+
+  const showBreakingTicker = hasPublicSettings ? isTickerEnabled(publishedSettings, 'breaking', true) : true;
+  const showLiveUpdatesTicker = hasPublicSettings ? isTickerEnabled(publishedSettings, 'live', true) : true;
+
+  const breakingShowWhenEmpty = hasPublicSettings
+    ? shouldTickerShowWhenEmpty(publishedSettings, 'breaking', true)
+    : !!prefs.showBreakingWhenEmpty;
+
+  // In published-settings mode, admin is the source of truth.
+  // In fallback mode, keep the existing per-user toggle.
+  const effectiveLiveTickerEnabled = hasPublicSettings
+    ? showLiveUpdatesTicker
+    : (showLiveUpdatesTicker && (publicSettings?.liveTickerOn ?? prefs.liveTickerOn) === true);
+  const showAnyTicker = showBreakingTicker || showLiveUpdatesTicker;
+
+  const breakingFallbackSpeedSec = prefs.breakingSpeedSec;
+  const liveFallbackSpeedSec = prefs.liveSpeedSec;
+  const breakingSpeedSec = hasPublicSettings
+    ? getTickerSpeedSeconds(publishedSettings, 'breaking', breakingFallbackSpeedSec)
+    : breakingFallbackSpeedSec;
+  const liveSpeedSec = hasPublicSettings
+    ? getTickerSpeedSeconds(publishedSettings, 'live', liveFallbackSpeedSec)
+    : liveFallbackSpeedSec;
 
   const breakingItems = getBreakingItems(prefs, breakingFromBackend);
-  const showBreaking = (effectiveBreakingMode === 'on' || effectiveBreakingMode === 'auto') && breakingItems.length > 0;
-  const breakingItemsToShow = showBreaking ? breakingItems : [t('home.noBreaking')];
-  const liveItemsToShow = (effectiveLiveTickerOn && liveFromBackend.length > 0)
+  const showBreakingContent = (effectiveBreakingMode === 'on' || effectiveBreakingMode === 'auto') && breakingItems.length > 0;
+  const shouldRenderBreakingTicker = showBreakingTicker && (showBreakingContent || breakingShowWhenEmpty);
+  const breakingItemsToShow = showBreakingContent ? breakingItems : [t('home.noBreaking')];
+  const liveItemsToShow = (effectiveLiveTickerEnabled && liveFromBackend.length > 0)
     ? liveFromBackend
-    : [t('home.noLiveUpdates')];
+    : [t('home.noUpdates')];
   const onToast = (m: string) => setToast(m);
+
+  const sidebarBlocks = [
+    {
+      key: 'exploreCategories',
+      order: hasPublicSettings ? getHomeModuleOrder(publishedSettings, 'exploreCategories', 10) : 10,
+      enabled: (hasPublicSettings ? isHomeModuleEnabled(publishedSettings, 'exploreCategories', true) : prefs.showExploreCategories),
+      node: (
+        <ExploreCategoriesPanel
+          theme={theme}
+          prefs={prefs}
+          activeKey={activeCatKey}
+          onPick={(k: string) => {
+            setActiveCatKey(k);
+            onToast(`Category: ${k}`);
+          }}
+        />
+      ),
+    },
+    {
+      key: 'liveTvCard',
+      order: hasPublicSettings ? getHomeModuleOrder(publishedSettings, 'liveTvCard', 20) : 20,
+      enabled: (hasPublicSettings ? isHomeModuleEnabled(publishedSettings, 'liveTvCard', true) : prefs.showLiveTvCard),
+      node: (
+        <LiveTVWidget
+          theme={theme}
+          prefs={prefs}
+          setPrefs={setPrefs}
+          onToast={onToast}
+          forceOn={hasPublicSettings}
+          embedUrlOverride={hasPublicSettings ? (publishedSettings as any)?.modules?.liveTvCard?.url : undefined}
+        />
+      ),
+    },
+    {
+      key: 'quickTools',
+      order: hasPublicSettings ? getHomeModuleOrder(publishedSettings, 'quickTools', 30) : 30,
+      enabled: (hasPublicSettings ? isHomeModuleEnabled(publishedSettings, 'quickTools', true) : prefs.showQuickTools),
+      node: <QuickToolsCard theme={theme} onToast={onToast} />,
+    },
+    {
+      key: 'snapshots',
+      order: hasPublicSettings ? getHomeModuleOrder(publishedSettings, 'snapshots', 40) : 40,
+      enabled: (hasPublicSettings ? isHomeModuleEnabled(publishedSettings, 'snapshots', true) : prefs.showSnapshots),
+      node: <SnapshotsCard theme={theme} />,
+    },
+  ]
+    .filter((x) => x.enabled)
+    .sort((a, b) => a.order - b.order);
+
+  const tickerBlocks = [
+    {
+      key: 'breakingTicker',
+      order: hasPublicSettings ? getHomeModuleOrder(publishedSettings, 'breakingTicker', 10) : 10,
+      enabled: shouldRenderBreakingTicker,
+      node: (
+        <div className="w-full min-w-0">
+          <TickerBar
+            theme={theme}
+            kind="breaking"
+            items={breakingItemsToShow}
+            speedSec={breakingSpeedSec}
+            onViewAll={() => {
+              setViewAllKind("breaking");
+              setViewAllOpen(true);
+            }}
+          />
+        </div>
+      ),
+    },
+    {
+      key: 'liveUpdatesTicker',
+      order: hasPublicSettings ? getHomeModuleOrder(publishedSettings, 'liveUpdatesTicker', 20) : 20,
+      enabled: effectiveLiveTickerEnabled,
+      node: (
+        <div className="w-full min-w-0">
+          <TickerBar
+            theme={theme}
+            kind="live"
+            items={liveItemsToShow}
+            speedSec={liveSpeedSec}
+            onViewAll={() => {
+              setViewAllKind("live");
+              setViewAllOpen(true);
+            }}
+          />
+        </div>
+      ),
+    },
+  ]
+    .filter((x) => x.enabled)
+    .sort((a, b) => a.order - b.order);
+
+  const bottomBlocks = [
+    {
+      key: 'appPromo',
+      order: hasPublicSettings ? getHomeModuleOrder(publishedSettings, 'appPromo', 10) : 10,
+      enabled: (hasPublicSettings ? isHomeModuleEnabled(publishedSettings, 'appPromo', true) : prefs.showAppPromo),
+      node: <AppPromoSection theme={theme} onToast={onToast} />,
+    },
+    {
+      key: 'footer',
+      order: hasPublicSettings ? getHomeModuleOrder(publishedSettings, 'footer', 20) : 20,
+      enabled: (hasPublicSettings ? isHomeModuleEnabled(publishedSettings, 'footer', true) : prefs.showFooter),
+      node: <SiteFooter theme={theme} onToast={onToast} />,
+    },
+  ]
+    .filter((x) => x.enabled)
+    .sort((a, b) => a.order - b.order);
 
   return (
     <div className="relative min-h-screen w-full overflow-x-hidden overflow-hidden bg-gray-50/30" style={{ background: theme.bg }}>
@@ -2208,13 +2378,11 @@ export default function UiPreviewV145() {
               />
               <ThemePicker theme={theme} themeId={prefs.themeId} setThemeId={(id: string) => setPrefs((p: any) => ({ ...p, themeId: id }))} />
 
-              <IconButton theme={theme} onClick={() => setSettingsOpen(true)} label={t('common.settings')}>
-                <Settings className="h-5 w-5" />
-              </IconButton>
-
-              <Button theme={theme} variant="solid" onClick={() => onToast(`${t('common.login')} (planned)`) }>
-                <LogIn className="h-4 w-4" /> {t('common.login')}
-              </Button>
+              {showLocalSettingsUi ? (
+                <IconButton theme={theme} onClick={() => setSettingsOpen(true)} label={t('common.settings')}>
+                  <Settings className="h-5 w-5" />
+                </IconButton>
+              ) : null}
             </div>
           </div>
 
@@ -2227,7 +2395,7 @@ export default function UiPreviewV145() {
       </div>
 
       {/* CATEGORY STRIP */}
-      {prefs.showCategoryStrip ? (
+      {showCategoryStrip ? (
         <div className="sticky top-0 z-40 mt-4">
           <TopCategoriesStrip
             theme={theme}
@@ -2241,37 +2409,17 @@ export default function UiPreviewV145() {
       ) : null}
 
       {/* TICKERS: Combined premium module wrapper with BREAKING above LIVE */}
-      <div className="mt-0 w-full max-w-full">
-        <div className="mx-auto w-full max-w-[1440px] px-4 md:px-8">
-          <div className="rounded-2xl border border-black/10 bg-white/80 backdrop-blur-md shadow-sm ring-1 ring-black/5 overflow-hidden p-2 flex flex-col gap-2">
-            <div className="w-full min-w-0">
-              <TickerBar
-                theme={theme}
-                kind="breaking"
-                items={breakingItemsToShow}
-                speedSec={publicSettings?.breakingSpeedSec ?? prefs.breakingSpeedSec}
-                onViewAll={() => {
-                  setViewAllKind("breaking");
-                  setViewAllOpen(true);
-                }}
-              />
-            </div>
-
-            <div className="w-full min-w-0">
-              <TickerBar
-                theme={theme}
-                kind="live"
-                items={liveItemsToShow}
-                speedSec={publicSettings?.liveSpeedSec ?? prefs.liveSpeedSec}
-                onViewAll={() => {
-                  setViewAllKind("live");
-                  setViewAllOpen(true);
-                }}
-              />
+      {showAnyTicker ? (
+        <div className="mt-0 w-full max-w-full">
+          <div className="mx-auto w-full max-w-[1440px] px-4 md:px-8">
+            <div className="rounded-2xl border border-black/10 bg-white/80 backdrop-blur-md shadow-sm ring-1 ring-black/5 overflow-hidden p-2 flex flex-col gap-2">
+              {tickerBlocks.map((b) => (
+                <React.Fragment key={b.key}>{b.node}</React.Fragment>
+              ))}
             </div>
           </div>
         </div>
-      </div>
+      ) : null}
 
       <AdSlot
         slot="HOME_728x90"
@@ -2279,7 +2427,7 @@ export default function UiPreviewV145() {
       />
 
       {/* TRENDING */}
-      {(prefs.showTrendingStrip && externalFetch) ? <TrendingStrip theme={theme} onPick={(t: string) => onToast(`Trending: ${t}`)} /> : null}
+      {showTrendingStrip ? <TrendingStrip theme={theme} onPick={(t: string) => onToast(`Trending: ${t}`)} /> : null}
 
       {/* MAIN GRID */}
       <div className="mx-auto w-full max-w-[1440px] px-4 md:px-8 pb-10 pt-4">
@@ -2287,21 +2435,9 @@ export default function UiPreviewV145() {
           {/* LEFT (Navigation) */}
           <aside className="col-span-12 lg:col-span-3">
             <div className="sticky top-4 grid gap-4">
-              {prefs.showExploreCategories ? (
-                <ExploreCategoriesPanel
-                  theme={theme}
-                  prefs={prefs}
-                  activeKey={activeCatKey}
-                  onPick={(k: string) => {
-                    setActiveCatKey(k);
-                    onToast(`Category: ${k}`);
-                  }}
-                />
-              ) : null}
-
-              {prefs.showLiveTvCard ? <LiveTVWidget theme={theme} prefs={prefs} setPrefs={setPrefs} onToast={onToast} /> : null}
-              {prefs.showQuickTools ? <QuickToolsCard theme={theme} onToast={onToast} /> : null}
-              {prefs.showSnapshots ? <SnapshotsCard theme={theme} /> : null}
+              {sidebarBlocks.map((b) => (
+                <React.Fragment key={b.key}>{b.node}</React.Fragment>
+              ))}
             </div>
           </aside>
 
@@ -2366,11 +2502,14 @@ export default function UiPreviewV145() {
       </div>
 
       {/* APP PROMO + FOOTER */}
-      {prefs.showAppPromo ? <AppPromoSection theme={theme} onToast={onToast} /> : null}
-      {prefs.showFooter ? <SiteFooter theme={theme} onToast={onToast} /> : null}
+      {bottomBlocks.map((b) => (
+        <React.Fragment key={b.key}>{b.node}</React.Fragment>
+      ))}
 
       {/* DRAWERS */}
-      <PreferencesDrawer theme={theme} open={settingsOpen} onClose={() => setSettingsOpen(false)} prefs={prefs} setPrefs={setPrefs} onToast={onToast} />
+      {showLocalSettingsUi ? (
+        <PreferencesDrawer theme={theme} open={settingsOpen} onClose={() => setSettingsOpen(false)} prefs={prefs} setPrefs={setPrefs} onToast={onToast} />
+      ) : null}
 
       <Drawer open={mobileLeftOpen} onClose={() => setMobileLeftOpen(false)} theme={theme} title={t('common.menu')} side="left">
         <div className="grid gap-3">
@@ -2480,7 +2619,7 @@ export default function UiPreviewV145() {
         open={viewAllOpen}
         onClose={() => setViewAllOpen(false)}
         theme={theme}
-        title={viewAllKind === 'live' ? t('home.liveUpdates') : t('home.breakingNews')}
+        title={viewAllKind === 'live' ? t('tickers.liveUpdates') : t('tickers.breakingNews')}
       >
         <div className="grid gap-2">
           {(viewAllKind === 'live'

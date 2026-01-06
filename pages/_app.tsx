@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import Script from 'next/script';
 import * as gtag from '../lib/gtag';
 import { LanguageProvider, getMessagesForLang, useI18n } from '../src/i18n/LanguageProvider';
+import { PublicSettingsProvider } from '../src/context/PublicSettingsContext';
 import { ThemeProvider } from '../utils/ThemeContext';
 import { FeatureFlagProvider } from '../utils/FeatureFlagProvider';
 import { PublicModeProvider } from '../utils/PublicModeProvider';
@@ -66,13 +67,15 @@ function MyApp({ Component, pageProps }) {
       />
 
       <ThemeProvider>
-        <PublicModeProvider initialMode={pageProps?.publicMode}>
-          <FeatureFlagProvider initialFlags={pageProps?.featureFlags}>
-            <LanguageProvider>
-              <I18nBridge Component={Component} pageProps={pageProps} />
-            </LanguageProvider>
-          </FeatureFlagProvider>
-        </PublicModeProvider>
+        <PublicSettingsProvider>
+          <PublicModeProvider initialMode={pageProps?.publicMode}>
+            <FeatureFlagProvider initialFlags={pageProps?.featureFlags}>
+              <LanguageProvider>
+                <I18nBridge Component={Component} pageProps={pageProps} />
+              </LanguageProvider>
+            </FeatureFlagProvider>
+          </PublicModeProvider>
+        </PublicSettingsProvider>
       </ThemeProvider>
     </>
   );
