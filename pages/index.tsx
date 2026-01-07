@@ -1549,7 +1549,7 @@ function FeedList({ theme, title, items, onOpen }: any) {
   );
 }
 
-function LiveTVWidget({ theme, prefs, setPrefs, onToast, forceOn = false, embedUrlOverride }: any) {
+function LiveTVWidget({ theme, prefs, setPrefs, onToast, forceOn = false, embedUrlOverride, allowLocalControls = false }: any) {
   const { t } = useI18n();
   if (!forceOn && !prefs.liveTvOn) return null;
 
@@ -1594,9 +1594,11 @@ function LiveTVWidget({ theme, prefs, setPrefs, onToast, forceOn = false, embedU
         <Button theme={theme} variant="soft" className="w-full justify-start" onClick={() => onToast("Live TV full page (planned)")}>
           <Play className="h-4 w-4" /> {t('common.openLiveTv')}
         </Button>
-        <Button theme={theme} variant="ghost" className="w-full justify-start" onClick={() => setPrefs((p: any) => ({ ...p, liveTvOn: false }))}>
-          <X className="h-4 w-4" /> {t('home.turnOffWidget')}
-        </Button>
+        {allowLocalControls && !forceOn ? (
+          <Button theme={theme} variant="ghost" className="w-full justify-start" onClick={() => setPrefs((p: any) => ({ ...p, liveTvOn: false }))}>
+            <X className="h-4 w-4" /> {t('home.turnOffWidget')}
+          </Button>
+        ) : null}
       </div>
     </Surface>
   );
@@ -1990,7 +1992,7 @@ function AppPromoSection({ theme, onToast }: any) {
   );
 }
 
-function SiteFooter({ theme, onToast }: any) {
+function SiteFooter({ theme, onToast, footerTextOverride }: any) {
   const { t } = useI18n();
 
   const footerBg =
@@ -2007,7 +2009,7 @@ function SiteFooter({ theme, onToast }: any) {
               News <span style={{ color: theme.accent2 }}>Pulse</span>
             </div>
             <div className="mt-3 text-sm text-white/80 leading-relaxed">
-              {t('footer.description')}
+              {(typeof footerTextOverride === 'string' && footerTextOverride.trim()) ? footerTextOverride.trim() : t('footer.description')}
             </div>
 
             <div className="mt-6 flex items-center gap-3">
@@ -2085,6 +2087,10 @@ export default function UiPreviewV145() {
   const theme = useMemo(() => getTheme(prefs.themeId), [prefs.themeId]);
   const { externalFetch } = usePublicMode();
 
+  // Public settings drawer must be explicitly enabled (developer/founder mode).
+  // Default is OFF so public users can't toggle live site modules.
+  const enablePublicSettingsDrawer = String(process.env.NEXT_PUBLIC_ENABLE_PUBLIC_SETTINGS_DRAWER || '').toLowerCase() === 'true';
+
   const [publicSettings, setPublicSettings] = useState<PublicSiteSettings | null>(null);
   const [breakingFromBackend, setBreakingFromBackend] = useState<string[]>([]);
   const [liveFromBackend, setLiveFromBackend] = useState<string[]>([]);
@@ -2104,12 +2110,13 @@ export default function UiPreviewV145() {
 
   // load local prefs
   React.useEffect(() => {
+    if (!enablePublicSettingsDrawer) return;
     const raw = typeof window !== "undefined" ? window.localStorage.getItem(PREF_KEY) : null;
     if (!raw) return;
     const parsed = safeJsonParse(raw);
     if (!parsed) return;
     setPrefs(normalizePrefs(parsed));
-  }, []);
+  }, [enablePublicSettingsDrawer]);
 
   // Keep preview prefs in sync with global language (source of truth for UI i18n)
   React.useEffect(() => {
@@ -2119,6 +2126,7 @@ export default function UiPreviewV145() {
 
   // ✅ (optional) load global settings from backend (admin-controlled)
   React.useEffect(() => {
+    if (!enablePublicSettingsDrawer) return;
     const controller = new AbortController();
 
     (async () => {
@@ -2141,7 +2149,7 @@ export default function UiPreviewV145() {
     });
 
     return () => controller.abort();
-  }, []);
+  }, [enablePublicSettingsDrawer]);
 
   // Fetch homepage data (latest + breaking + live ticker items) from backend.
   React.useEffect(() => {
@@ -2178,47 +2186,70 @@ export default function UiPreviewV145() {
 
   // save local prefs
   React.useEffect(() => {
+    if (!enablePublicSettingsDrawer) return;
     if (typeof window === "undefined") return;
     window.localStorage.setItem(PREF_KEY, JSON.stringify(normalizePrefs(prefs)));
-  }, [prefs]);
+  }, [prefs, enablePublicSettingsDrawer]);
 
-  const { settings: publishedSettings, hasLoaded: hasPublicSettings } = usePublicSettings();
+  const { publicSettings: publishedSettings, isLoading: isPublicSettingsLoading } = usePublicSettings();
+
+  // Apply backend-controlled defaults (do not persist). Keep this one-shot to avoid
+  // clobbering user interactions during a session.
+  const appliedPublishedDefaultsRef = useRef(false);
+  React.useEffect(() => {
+    if (enablePublicSettingsDrawer) return;
+    if (appliedPublishedDefaultsRef.current) return;
+
+    const publishedLang = (publishedSettings as any)?.languageTheme?.lang;
+    const publishedThemeId = (publishedSettings as any)?.languageTheme?.themeId;
+
+    if (publishedLang === 'en' || publishedLang === 'hi' || publishedLang === 'gu') {
+      setLang(publishedLang as any, { persist: false } as any);
+    }
+
+    if (typeof publishedThemeId === 'string' && publishedThemeId.trim()) {
+      setPrefs((p: any) => ({ ...p, themeId: String(publishedThemeId) }));
+    }
+
+    appliedPublishedDefaultsRef.current = true;
+  }, [enablePublicSettingsDrawer, publishedSettings, setLang]);
 
   const settingsSource = String(process.env.NEXT_PUBLIC_SETTINGS_SOURCE || 'backend').toLowerCase();
-  const showLocalSettingsUi = settingsSource === 'local' || !hasPublicSettings;
+  const showLocalSettingsUi = enablePublicSettingsDrawer && settingsSource === 'local';
 
-  const effectiveBreakingMode = (publicSettings?.breakingMode ?? prefs.breakingMode) as 'auto' | 'on' | 'off';
+  // When the public settings drawer is disabled, do not let persisted user prefs affect
+  // module/ticker visibility. Fallback behavior becomes hardcoded defaults.
+  const fallbackPrefs = enablePublicSettingsDrawer ? prefs : DEFAULT_PREFS;
 
-  const showCategoryStrip = hasPublicSettings ? isHomeModuleEnabled(publishedSettings, 'categoryStrip', true) : prefs.showCategoryStrip;
-  const showTrendingStrip = (hasPublicSettings ? isHomeModuleEnabled(publishedSettings, 'trendingStrip', true) : prefs.showTrendingStrip) && externalFetch;
+  const effectiveBreakingMode = (
+    (publishedSettings as any)?.breakingMode ??
+    publicSettings?.breakingMode ??
+    fallbackPrefs.breakingMode
+  ) as 'auto' | 'on' | 'off';
 
-  const showBreakingTicker = hasPublicSettings ? isTickerEnabled(publishedSettings, 'breaking', true) : true;
-  const showLiveUpdatesTicker = hasPublicSettings ? isTickerEnabled(publishedSettings, 'live', true) : true;
+  const showCategoryStrip = isHomeModuleEnabled(publishedSettings, 'categoryStrip', true);
+  const showTrendingStrip = isHomeModuleEnabled(publishedSettings, 'trendingStrip', true) && externalFetch;
 
-  const breakingShowWhenEmpty = hasPublicSettings
-    ? shouldTickerShowWhenEmpty(publishedSettings, 'breaking', true)
-    : !!prefs.showBreakingWhenEmpty;
+  const showBreakingTicker = isTickerEnabled(publishedSettings, 'breaking', true);
+  const showLiveUpdatesTicker = isTickerEnabled(publishedSettings, 'live', true);
 
-  // In published-settings mode, admin is the source of truth.
-  // In fallback mode, keep the existing per-user toggle.
-  const effectiveLiveTickerEnabled = hasPublicSettings
-    ? showLiveUpdatesTicker
-    : (showLiveUpdatesTicker && (publicSettings?.liveTickerOn ?? prefs.liveTickerOn) === true);
-  const showAnyTicker = showBreakingTicker || showLiveUpdatesTicker;
+  const breakingShowWhenEmpty = shouldTickerShowWhenEmpty(publishedSettings, 'breaking', true);
+  const liveShowWhenEmpty = shouldTickerShowWhenEmpty(publishedSettings, 'live', true);
 
-  const breakingFallbackSpeedSec = prefs.breakingSpeedSec;
-  const liveFallbackSpeedSec = prefs.liveSpeedSec;
-  const breakingSpeedSec = hasPublicSettings
-    ? getTickerSpeedSeconds(publishedSettings, 'breaking', breakingFallbackSpeedSec)
-    : breakingFallbackSpeedSec;
-  const liveSpeedSec = hasPublicSettings
-    ? getTickerSpeedSeconds(publishedSettings, 'live', liveFallbackSpeedSec)
-    : liveFallbackSpeedSec;
+  // Admin-published public settings are the source of truth.
+  const effectiveLiveTickerEnabled = showLiveUpdatesTicker;
 
-  const breakingItems = getBreakingItems(prefs, breakingFromBackend);
+  const breakingFallbackSpeedSec = fallbackPrefs.breakingSpeedSec;
+  const liveFallbackSpeedSec = fallbackPrefs.liveSpeedSec;
+  const breakingSpeedSec = getTickerSpeedSeconds(publishedSettings, 'breaking', breakingFallbackSpeedSec);
+  const liveSpeedSec = getTickerSpeedSeconds(publishedSettings, 'live', liveFallbackSpeedSec);
+
+  const breakingItems = getBreakingItems(fallbackPrefs, breakingFromBackend);
   const showBreakingContent = (effectiveBreakingMode === 'on' || effectiveBreakingMode === 'auto') && breakingItems.length > 0;
   const shouldRenderBreakingTicker = showBreakingTicker && (showBreakingContent || breakingShowWhenEmpty);
   const breakingItemsToShow = showBreakingContent ? breakingItems : [t('home.noBreaking')];
+
+  const shouldRenderLiveTicker = effectiveLiveTickerEnabled && (liveFromBackend.length > 0 || liveShowWhenEmpty);
   const liveItemsToShow = (effectiveLiveTickerEnabled && liveFromBackend.length > 0)
     ? liveFromBackend
     : [t('home.noUpdates')];
@@ -2227,12 +2258,12 @@ export default function UiPreviewV145() {
   const sidebarBlocks = [
     {
       key: 'exploreCategories',
-      order: hasPublicSettings ? getHomeModuleOrder(publishedSettings, 'exploreCategories', 10) : 10,
-      enabled: (hasPublicSettings ? isHomeModuleEnabled(publishedSettings, 'exploreCategories', true) : prefs.showExploreCategories),
+      order: getHomeModuleOrder(publishedSettings, 'exploreCategories', 10),
+      enabled: isHomeModuleEnabled(publishedSettings, 'exploreCategories', true),
       node: (
         <ExploreCategoriesPanel
           theme={theme}
-          prefs={prefs}
+          prefs={fallbackPrefs}
           activeKey={activeCatKey}
           onPick={(k: string) => {
             setActiveCatKey(k);
@@ -2243,29 +2274,30 @@ export default function UiPreviewV145() {
     },
     {
       key: 'liveTvCard',
-      order: hasPublicSettings ? getHomeModuleOrder(publishedSettings, 'liveTvCard', 20) : 20,
-      enabled: (hasPublicSettings ? isHomeModuleEnabled(publishedSettings, 'liveTvCard', true) : prefs.showLiveTvCard),
+      order: getHomeModuleOrder(publishedSettings, 'liveTvCard', 20),
+      enabled: isHomeModuleEnabled(publishedSettings, 'liveTvCard', true),
       node: (
         <LiveTVWidget
           theme={theme}
-          prefs={prefs}
+          prefs={fallbackPrefs}
           setPrefs={setPrefs}
           onToast={onToast}
-          forceOn={hasPublicSettings}
-          embedUrlOverride={hasPublicSettings ? (publishedSettings as any)?.modules?.liveTvCard?.url : undefined}
+          forceOn={!isPublicSettingsLoading}
+          allowLocalControls={showLocalSettingsUi}
+          embedUrlOverride={(publishedSettings as any)?.modules?.liveTvCard?.url}
         />
       ),
     },
     {
       key: 'quickTools',
-      order: hasPublicSettings ? getHomeModuleOrder(publishedSettings, 'quickTools', 30) : 30,
-      enabled: (hasPublicSettings ? isHomeModuleEnabled(publishedSettings, 'quickTools', true) : prefs.showQuickTools),
+      order: getHomeModuleOrder(publishedSettings, 'quickTools', 30),
+      enabled: isHomeModuleEnabled(publishedSettings, 'quickTools', true),
       node: <QuickToolsCard theme={theme} onToast={onToast} />,
     },
     {
       key: 'snapshots',
-      order: hasPublicSettings ? getHomeModuleOrder(publishedSettings, 'snapshots', 40) : 40,
-      enabled: (hasPublicSettings ? isHomeModuleEnabled(publishedSettings, 'snapshots', true) : prefs.showSnapshots),
+      order: getHomeModuleOrder(publishedSettings, 'snapshots', 40),
+      enabled: isHomeModuleEnabled(publishedSettings, 'snapshots', true),
       node: <SnapshotsCard theme={theme} />,
     },
   ]
@@ -2275,7 +2307,7 @@ export default function UiPreviewV145() {
   const tickerBlocks = [
     {
       key: 'breakingTicker',
-      order: hasPublicSettings ? getHomeModuleOrder(publishedSettings, 'breakingTicker', 10) : 10,
+      order: getHomeModuleOrder(publishedSettings, 'breakingTicker', 10),
       enabled: shouldRenderBreakingTicker,
       node: (
         <div className="w-full min-w-0">
@@ -2294,8 +2326,8 @@ export default function UiPreviewV145() {
     },
     {
       key: 'liveUpdatesTicker',
-      order: hasPublicSettings ? getHomeModuleOrder(publishedSettings, 'liveUpdatesTicker', 20) : 20,
-      enabled: effectiveLiveTickerEnabled,
+      order: getHomeModuleOrder(publishedSettings, 'liveUpdatesTicker', 20),
+      enabled: shouldRenderLiveTicker,
       node: (
         <div className="w-full min-w-0">
           <TickerBar
@@ -2315,18 +2347,20 @@ export default function UiPreviewV145() {
     .filter((x) => x.enabled)
     .sort((a, b) => a.order - b.order);
 
+  const showAnyTicker = tickerBlocks.length > 0;
+
   const bottomBlocks = [
     {
       key: 'appPromo',
-      order: hasPublicSettings ? getHomeModuleOrder(publishedSettings, 'appPromo', 10) : 10,
-      enabled: (hasPublicSettings ? isHomeModuleEnabled(publishedSettings, 'appPromo', true) : prefs.showAppPromo),
+      order: getHomeModuleOrder(publishedSettings, 'appPromo', 10),
+      enabled: isHomeModuleEnabled(publishedSettings, 'appPromo', true),
       node: <AppPromoSection theme={theme} onToast={onToast} />,
     },
     {
       key: 'footer',
-      order: hasPublicSettings ? getHomeModuleOrder(publishedSettings, 'footer', 20) : 20,
-      enabled: (hasPublicSettings ? isHomeModuleEnabled(publishedSettings, 'footer', true) : prefs.showFooter),
-      node: <SiteFooter theme={theme} onToast={onToast} />,
+      order: getHomeModuleOrder(publishedSettings, 'footer', 20),
+      enabled: isHomeModuleEnabled(publishedSettings, 'footer', true),
+      node: <SiteFooter theme={theme} onToast={onToast} footerTextOverride={(publishedSettings as any)?.footerText} />,
     },
   ]
     .filter((x) => x.enabled)

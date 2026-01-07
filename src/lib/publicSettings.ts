@@ -1,5 +1,13 @@
 import { getPublicApiBaseUrl } from '../../lib/publicApiBase';
 
+export type BreakingMode = 'auto' | 'on' | 'off';
+
+export type LanguageTheme = {
+  // Optional defaults controlled by backend for public site.
+  lang?: 'en' | 'hi' | 'gu';
+  themeId?: string;
+};
+
 export type HomeModuleKey =
   | 'exploreCategories'
   | 'categoryStrip'
@@ -32,6 +40,12 @@ export type PublicSettings = {
     breaking: PublishedTickerSettings;
     live: PublishedTickerSettings;
   };
+  // Optional: breaking mode influences content behavior (auto/on/off)
+  breakingMode?: BreakingMode;
+  // Optional: footer text override
+  footerText?: string;
+  // Optional: default language/theme preset
+  languageTheme?: LanguageTheme;
 };
 
 export type PublicSettingsResponse = {
@@ -61,6 +75,7 @@ export const DEFAULT_PUBLIC_SETTINGS: PublicSettings = {
     breaking: { enabled: true, speedSeconds: 18, showWhenEmpty: true },
     live: { enabled: true, speedSeconds: 24, showWhenEmpty: true },
   },
+  breakingMode: 'auto',
 };
 
 export const DEFAULT_PUBLIC_SETTINGS_RESPONSE: PublicSettingsResponse = {
@@ -79,6 +94,107 @@ function clampNum(n: unknown, min: number, max: number, fallback: number): numbe
   const v = Number(n);
   if (!Number.isFinite(v)) return fallback;
   return Math.min(max, Math.max(min, v));
+}
+
+function normalizeBreakingMode(raw: unknown, fallback: BreakingMode = 'auto'): BreakingMode {
+  const v = String(raw ?? '').toLowerCase().trim();
+  if (v === 'auto' || v === 'on' || v === 'off') return v as BreakingMode;
+  return fallback;
+}
+
+function normalizeLanguageTheme(raw: unknown): LanguageTheme | undefined {
+  if (!isRecord(raw)) return undefined;
+  const langRaw = String((raw as any).lang ?? (raw as any).language ?? '').toLowerCase().trim();
+  const lang: LanguageTheme['lang'] = langRaw === 'hi' || langRaw === 'gu' || langRaw === 'en' ? (langRaw as any) : undefined;
+  const themeId = typeof (raw as any).themeId === 'string' ? String((raw as any).themeId) : undefined;
+  const out: LanguageTheme = {};
+  if (lang) out.lang = lang;
+  if (themeId) out.themeId = themeId;
+  return Object.keys(out).length ? out : undefined;
+}
+
+function firstFiniteNumber(...values: unknown[]): number | undefined {
+  for (const v of values) {
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
+
+function getUiBoolean(ui: JsonRecord | null, key: string, fallback: boolean): boolean {
+  const v = ui ? (ui as any)[key] : undefined;
+  return typeof v === 'boolean' ? v : fallback;
+}
+
+function normalizeFromAdminPublishedShape(payload: JsonRecord, defaults: PublicSettings): PublicSettings {
+  const homeModules = isRecord((payload as any).homeModules) ? ((payload as any).homeModules as JsonRecord) : null;
+  const ui = isRecord((payload as any).ui) ? ((payload as any).ui as JsonRecord) : null;
+  const tickersRaw = isRecord((payload as any).tickers) ? ((payload as any).tickers as JsonRecord) : null;
+
+  const mapUiKey: Partial<Record<HomeModuleKey, string>> = {
+    exploreCategories: 'showExploreCategories',
+    categoryStrip: 'showCategoryStrip',
+    trendingStrip: 'showTrendingStrip',
+    liveUpdatesTicker: 'showLiveUpdatesTicker',
+    breakingTicker: 'showBreakingTicker',
+    quickTools: 'showQuickTools',
+    appPromo: 'showAppPromo',
+    footer: 'showFooter',
+  };
+
+  const out: PublicSettings = {
+    modules: { ...defaults.modules },
+    tickers: {
+      breaking: { ...defaults.tickers.breaking },
+      live: { ...defaults.tickers.live },
+    },
+    breakingMode: normalizeBreakingMode((payload as any).breakingMode, defaults.breakingMode ?? 'auto'),
+    footerText: typeof (payload as any).footerText === 'string' ? String((payload as any).footerText) : defaults.footerText,
+    languageTheme: normalizeLanguageTheme((payload as any).languageTheme) ?? defaults.languageTheme,
+  };
+
+  // Tickers: show/hide comes from UI flags (fallback true)
+  out.tickers.breaking.enabled = getUiBoolean(ui, 'showBreakingTicker', defaults.tickers.breaking.enabled);
+  out.tickers.live.enabled = getUiBoolean(ui, 'showLiveUpdatesTicker', defaults.tickers.live.enabled);
+
+  // Ticker speeds: backend already normalizes, but still clamp defensively
+  const breakingTickerRaw = tickersRaw && isRecord((tickersRaw as any).breaking) ? ((tickersRaw as any).breaking as JsonRecord) : null;
+  const liveTickerRaw = tickersRaw && isRecord((tickersRaw as any).live) ? ((tickersRaw as any).live as JsonRecord) : null;
+
+  if (breakingTickerRaw) {
+    out.tickers.breaking.speedSeconds = clampNum((breakingTickerRaw as any).speedSeconds, 5, 300, out.tickers.breaking.speedSeconds);
+    const showWhenEmpty = (breakingTickerRaw as any).showWhenEmpty;
+    if (typeof showWhenEmpty === 'boolean') out.tickers.breaking.showWhenEmpty = showWhenEmpty;
+  }
+  if (liveTickerRaw) {
+    out.tickers.live.speedSeconds = clampNum((liveTickerRaw as any).speedSeconds, 5, 300, out.tickers.live.speedSeconds);
+    const showWhenEmpty = (liveTickerRaw as any).showWhenEmpty;
+    if (typeof showWhenEmpty === 'boolean') out.tickers.live.showWhenEmpty = showWhenEmpty;
+  }
+
+  // Modules: use homeModules if present; otherwise fall back to older UI flags.
+  (Object.keys(defaults.modules) as HomeModuleKey[]).forEach((key) => {
+    const uiKey = mapUiKey[key];
+
+    const hmRaw = homeModules && isRecord((homeModules as any)[key]) ? (((homeModules as any)[key]) as JsonRecord) : null;
+    if (hmRaw) {
+      const enabled = (hmRaw as any).enabled !== false;
+      const order = firstFiniteNumber((hmRaw as any).order, (hmRaw as any).position, (hmRaw as any).orderPosition) ?? 999;
+      const url = typeof (hmRaw as any).url === 'string' ? String((hmRaw as any).url) : defaults.modules[key].url;
+      out.modules[key] = { ...defaults.modules[key], enabled, order, url };
+      return;
+    }
+
+    if (uiKey) {
+      const enabled = getUiBoolean(ui, uiKey, true);
+      out.modules[key] = { ...defaults.modules[key], enabled };
+      return;
+    }
+
+    out.modules[key] = defaults.modules[key];
+  });
+
+  return out;
 }
 
 function normalizeModule(
@@ -119,9 +235,22 @@ function normalizeTicker(
 export function mergePublicSettingsWithDefaults(raw: unknown, defaults: PublicSettings = DEFAULT_PUBLIC_SETTINGS): PublicSettings {
   const root = isRecord(raw) ? raw : {};
 
-  // Preferred backend contract: { settings: { modules, tickers }, version, updatedAt }
-  // Backwards compatibility: allow older shapes like { published: ... } or { modules, tickers }.
-  const payload = isRecord((root as any).settings) ? ((root as any).settings as JsonRecord) : root;
+  // Backend contracts we accept:
+  // - { success: true, data: { homeModules, ui, tickers } }
+  // - { ok: true, settings: { modules, tickers } }
+  // - { settings: { ... } }
+  // - { data: { ... } }
+  // - { modules, tickers }
+  const payload = isRecord((root as any).data)
+    ? ((root as any).data as JsonRecord)
+    : isRecord((root as any).settings)
+      ? ((root as any).settings as JsonRecord)
+      : root;
+
+  // New admin-published shape: { homeModules, ui, tickers }
+  if (isRecord((payload as any).homeModules) || isRecord((payload as any).ui)) {
+    return normalizeFromAdminPublishedShape(payload, defaults);
+  }
 
   const publishedRaw = isRecord((payload as any).published) ? ((payload as any).published as JsonRecord) : null;
 
@@ -146,6 +275,17 @@ export function mergePublicSettingsWithDefaults(raw: unknown, defaults: PublicSe
       breaking: normalizeTicker(breakingRaw, defaults.tickers.breaking),
       live: normalizeTicker(liveRaw, defaults.tickers.live),
     },
+    breakingMode: normalizeBreakingMode(
+      (payload as any).breakingMode ?? (publishedRaw as any)?.breakingMode,
+      defaults.breakingMode ?? 'auto'
+    ),
+    footerText:
+      typeof (payload as any).footerText === 'string'
+        ? String((payload as any).footerText)
+        : typeof (publishedRaw as any)?.footerText === 'string'
+          ? String((publishedRaw as any).footerText)
+          : defaults.footerText,
+    languageTheme: normalizeLanguageTheme((payload as any).languageTheme) ?? normalizeLanguageTheme((publishedRaw as any)?.languageTheme) ?? defaults.languageTheme,
   };
 
   (Object.keys(defaults.modules) as HomeModuleKey[]).forEach((key) => {
@@ -221,13 +361,11 @@ export function shouldTickerShowWhenEmpty(
   return typeof v === 'boolean' ? v : fallback;
 }
 
-export async function fetchPublicSettings(options?: { signal?: AbortSignal }): Promise<PublicSettingsResponse> {
-  const cacheBust = Date.now();
-  // Always hit same-origin Next.js API route so we can:
-  // - enforce `no-store` consistently
-  // - avoid CORS complexity
-  // - optionally proxy to a configured backend
-  const endpoint = `/api/public/settings?ts=${cacheBust}`;
+async function fetchPublicSettingsBody(options?: { signal?: AbortSignal }): Promise<unknown> {
+  const base = getPublicApiBaseUrl();
+  // Preferred backend contract (public): GET {API_BASE}/public/settings
+  // Dev fallback: GET /api/public/settings (Next.js proxy route)
+  const endpoint = base ? `${base}/public/settings` : '/api/public/settings';
 
   const res = await fetch(endpoint, {
     method: 'GET',
@@ -240,10 +378,23 @@ export async function fetchPublicSettings(options?: { signal?: AbortSignal }): P
     cache: 'no-store',
   });
 
-  const data = await res.json().catch(() => null);
-  if (!res.ok || !data) {
+  const body = await res.json().catch(() => null);
+  if (!res.ok || !body) {
     throw new Error(`PUBLIC_SETTINGS_FETCH_FAILED_${res.status || 0}`);
   }
 
-  return mergePublicSettingsResponseWithDefaults(data);
+  return body;
+}
+
+// Required small layer: fetch + return `body.data` (fallback to other known shapes).
+export async function getPublicSettings(options?: { signal?: AbortSignal }): Promise<unknown> {
+  const body = await fetchPublicSettingsBody(options);
+  if (isRecord(body) && isRecord((body as any).data)) return (body as any).data;
+  if (isRecord(body) && isRecord((body as any).settings)) return (body as any).settings;
+  return body;
+}
+
+export async function fetchPublicSettings(options?: { signal?: AbortSignal }): Promise<PublicSettingsResponse> {
+  const body = await fetchPublicSettingsBody(options);
+  return mergePublicSettingsResponseWithDefaults(body);
 }

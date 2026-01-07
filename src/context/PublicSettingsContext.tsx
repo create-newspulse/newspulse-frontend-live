@@ -1,30 +1,42 @@
 import React from 'react';
 
 import {
-  DEFAULT_PUBLIC_SETTINGS_RESPONSE,
-  fetchPublicSettings,
+  DEFAULT_PUBLIC_SETTINGS,
+  getHomeModuleOrder,
+  getTickerSpeedSeconds,
+  isHomeModuleEnabled,
+  isTickerEnabled,
+  shouldTickerShowWhenEmpty,
+  getPublicSettings,
+  type HomeModuleKey,
+  type LanguageTheme,
   type PublicSettings,
-  type PublicSettingsResponse,
+  type PublishedTickerSettings,
+  mergePublicSettingsWithDefaults,
 } from '../lib/publicSettings';
 
 export type PublicSettingsContextValue = {
-  settings: PublicSettings;
-  version: string | null;
-  updatedAt: string | null;
-  hasLoaded: boolean;
-  loading: boolean;
+  publicSettings: PublicSettings;
+  isLoading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
+
+  // Convenience getters for UI modules.
+  isModuleEnabled: (key: HomeModuleKey, fallback?: boolean) => boolean;
+  moduleOrder: (key: HomeModuleKey, fallback?: number) => number;
+  ticker: (key: 'breaking' | 'live', fallback?: Partial<PublishedTickerSettings>) => PublishedTickerSettings;
+  isTickerEnabled: (key: 'breaking' | 'live', fallback?: boolean) => boolean;
+  footerText: () => string | null;
+  liveTvEmbedUrl: () => string;
+  languageTheme: () => LanguageTheme | null;
 };
 
 const PublicSettingsContext = React.createContext<PublicSettingsContextValue | undefined>(undefined);
 
 export function PublicSettingsProvider({ children }: { children: React.ReactNode }) {
-  const [snapshot, setSnapshot] = React.useState<PublicSettingsResponse>(DEFAULT_PUBLIC_SETTINGS_RESPONSE);
-  const [loading, setLoading] = React.useState<boolean>(true);
+  const [publicSettings, setPublicSettings] = React.useState<PublicSettings>(DEFAULT_PUBLIC_SETTINGS);
+  const [isLoading, setIsLoading] = React.useState<boolean>(true);
   const [error, setError] = React.useState<string | null>(null);
-  const [hasLoaded, setHasLoaded] = React.useState<boolean>(false);
-  const loggedRef = React.useRef(false);
 
   const settingsSource = String(process.env.NEXT_PUBLIC_SETTINGS_SOURCE || 'backend').toLowerCase();
   const useLocalOnly = settingsSource === 'local';
@@ -32,35 +44,24 @@ export function PublicSettingsProvider({ children }: { children: React.ReactNode
   const load = React.useCallback(async () => {
     if (useLocalOnly) {
       // Escape hatch: ignore published settings entirely.
-      setLoading(false);
+      setIsLoading(false);
       setError(null);
-      setHasLoaded(false);
       return;
     }
 
-    setLoading(true);
+    setIsLoading(true);
     setError(null);
 
     try {
-      const next = await fetchPublicSettings();
-      setSnapshot(next);
-      setHasLoaded(true);
-
-      if (process.env.NODE_ENV === 'development' && !loggedRef.current) {
-        loggedRef.current = true;
-        // DEV-only debugging hook
-        // eslint-disable-next-line no-console
-        console.log('[PublicSettings] Loaded published settings', {
-          updatedAt: next?.updatedAt ?? null,
-          version: next?.version ?? null,
-          settings: next?.settings,
-        });
-      }
+      const data = await getPublicSettings();
+      const next = mergePublicSettingsWithDefaults(data);
+      setPublicSettings(next);
     } catch (e: any) {
-      // Keep defaults to avoid UI changes/spoiling.
+      // Safe defaults (all modules enabled) should render even if backend is down.
+      setPublicSettings(DEFAULT_PUBLIC_SETTINGS);
       setError(String(e?.message || 'PUBLIC_SETTINGS_LOAD_FAILED'));
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   }, []);
 
@@ -68,67 +69,80 @@ export function PublicSettingsProvider({ children }: { children: React.ReactNode
     void load();
   }, [load]);
 
-  // Refresh on focus/visibility so publish changes show up quickly.
-  React.useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (useLocalOnly) return;
-
-    const onFocus = () => {
-      void load();
-    };
-
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') void load();
-    };
-
-    window.addEventListener('focus', onFocus);
-    document.addEventListener('visibilitychange', onVisibility);
-
-    return () => {
-      window.removeEventListener('focus', onFocus);
-      document.removeEventListener('visibilitychange', onVisibility);
-    };
-  }, [load]);
-
-  // Lightweight polling (30s) to reflect admin publishes without manual refresh.
-  React.useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (useLocalOnly) return;
-    const POLL_MS = 30_000;
-    const id = window.setInterval(() => {
-      void load();
-    }, POLL_MS);
-    return () => window.clearInterval(id);
-  }, [load]);
-
   const value = React.useMemo<PublicSettingsContextValue>(
     () => ({
-      settings: snapshot.settings,
-      version: snapshot.version,
-      updatedAt: snapshot.updatedAt,
-      hasLoaded,
-      loading,
+      publicSettings,
+      isLoading,
       error,
       refetch: load,
+
+      isModuleEnabled: (key, fallback = true) => isHomeModuleEnabled(publicSettings, key, fallback),
+      moduleOrder: (key, fallback = 0) => getHomeModuleOrder(publicSettings, key, fallback),
+      ticker: (key, fallback) => {
+        const enabledFallback = typeof fallback?.enabled === 'boolean' ? fallback.enabled : true;
+        const speedFallback = typeof fallback?.speedSeconds === 'number' ? fallback.speedSeconds : (key === 'breaking' ? 18 : 24);
+        const showEmptyFallback = typeof fallback?.showWhenEmpty === 'boolean' ? fallback.showWhenEmpty : true;
+        return {
+          enabled: isTickerEnabled(publicSettings, key, enabledFallback),
+          speedSeconds: getTickerSpeedSeconds(publicSettings, key, speedFallback),
+          showWhenEmpty: shouldTickerShowWhenEmpty(publicSettings, key, showEmptyFallback),
+        };
+      },
+      isTickerEnabled: (key, fallback = true) => isTickerEnabled(publicSettings, key, fallback),
+      footerText: () => {
+        const v = publicSettings?.footerText;
+        return typeof v === 'string' && v.trim() ? v.trim() : null;
+      },
+      liveTvEmbedUrl: () => {
+        const v = (publicSettings as any)?.modules?.liveTvCard?.url;
+        return typeof v === 'string' ? v : '';
+      },
+      languageTheme: () => (publicSettings?.languageTheme && Object.keys(publicSettings.languageTheme).length ? publicSettings.languageTheme : null),
     }),
-    [snapshot, hasLoaded, loading, error, load]
+    [publicSettings, isLoading, error, load]
   );
 
   return <PublicSettingsContext.Provider value={value}>{children}</PublicSettingsContext.Provider>;
 }
 
+// Alias exports to match naming in product requirements.
+export const PublicSiteSettingsProvider = PublicSettingsProvider;
+export function usePublicSiteSettings(): PublicSettingsContextValue {
+  return usePublicSettings();
+}
+
 export function usePublicSettings(): PublicSettingsContextValue {
   const ctx = React.useContext(PublicSettingsContext);
   if (!ctx) {
-    // Provider should be installed at app root.
+    // Provider should be installed at app root. Return complete fallback.
+    const fallback = DEFAULT_PUBLIC_SETTINGS;
     return {
-      settings: DEFAULT_PUBLIC_SETTINGS_RESPONSE.settings,
-      version: null,
-      updatedAt: null,
-      hasLoaded: false,
-      loading: false,
+      publicSettings: fallback,
+      isLoading: false,
       error: 'PUBLIC_SETTINGS_PROVIDER_MISSING',
       refetch: async () => {},
+      isModuleEnabled: (key, fb = true) => isHomeModuleEnabled(fallback, key, fb),
+      moduleOrder: (key, fb = 0) => getHomeModuleOrder(fallback, key, fb),
+      ticker: (key, fb) => {
+        const enabledFallback = typeof fb?.enabled === 'boolean' ? fb.enabled : true;
+        const speedFallback = typeof fb?.speedSeconds === 'number' ? fb.speedSeconds : (key === 'breaking' ? 18 : 24);
+        const showEmptyFallback = typeof fb?.showWhenEmpty === 'boolean' ? fb.showWhenEmpty : true;
+        return {
+          enabled: isTickerEnabled(fallback, key, enabledFallback),
+          speedSeconds: getTickerSpeedSeconds(fallback, key, speedFallback),
+          showWhenEmpty: shouldTickerShowWhenEmpty(fallback, key, showEmptyFallback),
+        };
+      },
+      isTickerEnabled: (key, fb = true) => isTickerEnabled(fallback, key, fb),
+      footerText: () => {
+        const v = fallback?.footerText;
+        return typeof v === 'string' && v.trim() ? v.trim() : null;
+      },
+      liveTvEmbedUrl: () => {
+        const v = (fallback as any)?.modules?.liveTvCard?.url;
+        return typeof v === 'string' ? v : '';
+      },
+      languageTheme: () => (fallback?.languageTheme && Object.keys(fallback.languageTheme).length ? fallback.languageTheme : null),
     };
   }
   return ctx;

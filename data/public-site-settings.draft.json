@@ -1,0 +1,49 @@
+{
+  "settings": {
+    "modules": {
+      "categoryStrip": {
+        "enabled": true,
+        "order": 10
+      },
+      "breakingTicker": {
+        "enabled": true,
+        "order": 20
+      },
+      "liveUpdatesTicker": {
+        "enabled": true,
+        "order": 30
+      },
+      "trendingStrip": {
+        "enabled": true,
+        "order": 40
+      },
+      "exploreCategories": {
+        "enabled": true,
+        "order": 10
+      },
+      "quickTools": {
+        "enabled": true,
+        "order": 30
+      },
+      "appPromo": {
+        "enabled": true,
+        "order": 10
+      },
+      "footer": {
+        "enabled": true,
+        "order": 20
+      }
+    },
+    "tickers": {
+      "breaking": {
+        "enabled": true,
+        "speedSeconds": 18
+      },
+      "live": {
+        "enabled": true,
+        "speedSeconds": 24
+      }
+    }
+  },
+  "updatedAt": "2026-01-05T22:02:36.304Z"
+}

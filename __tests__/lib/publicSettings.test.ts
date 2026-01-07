@@ -82,16 +82,25 @@ describe('publicSettings helpers', () => {
 
   test('fetchPublicSettings calls /api/public/settings and merges defaults', async () => {
     const originalFetch = (global as any).fetch;
-    const originalNow = Date.now;
-    Date.now = () => 1700000000000;
 
     const fetchMock = jest.fn().mockResolvedValue({
       ok: true,
       status: 200,
       json: async () => ({
-        settings: {
-          modules: { categoryStrip: { enabled: false, order: 7 } },
-          tickers: { breaking: { enabled: true, speedSeconds: 9 }, live: { enabled: false, speedSeconds: 400 } },
+        success: true,
+        data: {
+          // This matches the newer admin-published style (body.data)
+          homeModules: {
+            categoryStrip: { enabled: false, order: 7 },
+          },
+          ui: {
+            showBreakingTicker: true,
+            showLiveUpdatesTicker: false,
+          },
+          tickers: {
+            breaking: { speedSeconds: 9 },
+            live: { speedSeconds: 400 },
+          },
         },
         version: 'v1',
         updatedAt: '2026-01-06T00:00:00.000Z',
@@ -103,7 +112,7 @@ describe('publicSettings helpers', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0];
-    expect(String(url)).toBe('/api/public/settings?ts=1700000000000');
+    expect(String(url)).toBe('/api/public/settings');
     expect(init?.cache).toBe('no-store');
     expect(init?.headers?.['Cache-Control']).toBe('no-store');
 
@@ -116,6 +125,5 @@ describe('publicSettings helpers', () => {
 
     // Cleanup
     (global as any).fetch = originalFetch;
-    Date.now = originalNow;
   });
 });

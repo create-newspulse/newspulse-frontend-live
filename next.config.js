@@ -39,6 +39,30 @@ const nextConfig = {
     ];
   },
 
+  async rewrites() {
+    const backend = (process.env.NEXT_PUBLIC_API_URL || '').trim().replace(/\/+$/, '');
+    
+    if (!backend) {
+      // No backend configured - API routes will handle fallback locally
+      return [];
+    }
+
+    return [
+      {
+        source: '/api/public/settings',
+        destination: `${backend}/api/public/settings`,
+      },
+      {
+        source: '/api/public/news',
+        destination: `${backend}/api/public/news`,
+      },
+      {
+        source: '/api/public/trending-topics',
+        destination: `${backend}/api/public/trending-topics`,
+      },
+    ];
+  },
+
   async headers() {
     const isDev = process.env.NODE_ENV !== 'production';
     const backend = (process.env.NEXT_PUBLIC_API_URL || '').trim().replace(/\/+$/, '');

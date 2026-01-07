@@ -78,7 +78,7 @@ export function getSelectedLanguage(): Lang {
 
 type I18nContextType = {
   lang: Lang;
-  setLang: (lang: Lang) => void;
+  setLang: (lang: Lang, options?: { persist?: boolean }) => void;
   t: (key: string) => string;
 };
 
@@ -91,8 +91,14 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     setLangState(getSelectedLanguage());
   }, []);
 
-  const setLang = useCallback((next: Lang) => {
+  const setLang = useCallback((next: Lang, options?: { persist?: boolean }) => {
     setLangState(next);
+
+    const persist = options?.persist !== false;
+    if (!persist) {
+      // Ephemeral language change (backend-controlled defaults) without touching user storage.
+      return;
+    }
     try {
       window.localStorage.setItem(STORAGE_KEY, next);
     } catch {
