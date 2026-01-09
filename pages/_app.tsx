@@ -9,6 +9,46 @@ import { FeatureFlagProvider } from '../utils/FeatureFlagProvider';
 import { PublicModeProvider } from '../utils/PublicModeProvider';
 import '../styles/globals.css';
 import SafeIntlProvider from '../lib/SafeIntlProvider';
+import { usePublicSettings } from '../src/context/PublicSettingsContext';
+import { useTheme, type ThemeMode } from '../utils/ThemeContext';
+
+function normalizeThemePreset(raw: unknown): ThemeMode | null {
+  const v = String(raw || '').toLowerCase().trim();
+  if (!v) return null;
+  if (v === 'system') return 'system';
+  if (v === 'default') return null;
+  if (v === 'dark' || v === 'night' || v === 'midnight') return 'dark';
+  if (v === 'light' || v === 'aurora' || v === 'ocean' || v === 'sunset') return 'light';
+  return null;
+}
+
+function PublishedThemeApplier() {
+  const { settings, error } = usePublicSettings();
+  const { setMode } = useTheme();
+  const appliedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (appliedRef.current) return;
+    if (!settings || error) return;
+
+    // Respect an explicit user choice.
+    let hasUserTheme = false;
+    try {
+      const saved = window.localStorage.getItem('theme');
+      hasUserTheme = saved === 'dark' || saved === 'light' || saved === 'system';
+    } catch {}
+    if (hasUserTheme) {
+      appliedRef.current = true;
+      return;
+    }
+
+    const preset = normalizeThemePreset((settings as any)?.languageTheme?.themePreset);
+    if (preset) setMode(preset);
+    appliedRef.current = true;
+  }, [settings, error, setMode]);
+
+  return null;
+}
 
 function I18nBridge({ Component, pageProps }: { Component: any; pageProps: any }) {
   const { lang } = useI18n();
@@ -71,6 +111,7 @@ function MyApp({ Component, pageProps }) {
           <PublicModeProvider initialMode={pageProps?.publicMode}>
             <FeatureFlagProvider initialFlags={pageProps?.featureFlags}>
               <LanguageProvider>
+                <PublishedThemeApplier />
                 <I18nBridge Component={Component} pageProps={pageProps} />
               </LanguageProvider>
             </FeatureFlagProvider>

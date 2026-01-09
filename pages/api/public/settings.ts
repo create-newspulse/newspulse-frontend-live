@@ -90,13 +90,9 @@ function mapSiteSettingsToPublicSettingsResponse(raw: unknown): PublicSettingsRe
   const breakingModeRaw = typeof (settings as any).breakingMode === 'string' ? String((settings as any).breakingMode).toLowerCase() : '';
   const liveTickerOn = bool((settings as any).liveTickerOn);
 
-  // Interpret breakingMode
-  // - off => breaking ticker disabled
-  // - on/auto/unknown => enabled (UI can still decide content behavior elsewhere)
-  if (breakingModeRaw === 'off') {
-    out.settings.tickers.breaking = { ...out.settings.tickers.breaking, enabled: false };
-  } else if (breakingModeRaw === 'on' || breakingModeRaw === 'auto') {
-    out.settings.tickers.breaking = { ...out.settings.tickers.breaking, enabled: true };
+  // Propagate breaking mode (content behavior) without forcing ticker visibility.
+  if (breakingModeRaw === 'off' || breakingModeRaw === 'on' || breakingModeRaw === 'auto') {
+    out.settings.breakingMode = breakingModeRaw as any;
   }
 
   if (typeof liveTickerOn === 'boolean') {
@@ -183,16 +179,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const base = getPublicApiBaseUrl();
 
+  // Normalize base to an origin (strip trailing /api if someone configured it that way).
+  const origin = String(base || '').trim().replace(/\/+$/, '').replace(/\/api\/?$/, '');
+
   // Default to same-origin behavior when API base isn't configured.
   // In this case we serve the locally published settings file so the UI can still render.
-  if (!base) {
+  if (!origin) {
     const local = await readPublishedLocal();
     return res.status(200).json(local);
   }
 
-  // 1) Preferred backend contract: GET {base}/api/public/settings
+  // 1) Preferred backend contract: GET {origin}/api/public/settings
   try {
-    const upstream = await fetch(`${base}/public/settings`, {
+    const upstream = await fetch(`${origin}/api/public/settings`, {
       method: 'GET',
       headers: {
         Accept: 'application/json',
@@ -210,9 +209,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Try compatibility fallback below
   }
 
-  // 1b) Back-compat: some deployments still expose /api/public/settings
+  // 1b) Back-compat: older deployments exposed /public/settings
   try {
-    const upstream = await fetch(`${base}/api/public/settings`, {
+    const upstream = await fetch(`${origin}/public/settings`, {
       method: 'GET',
       headers: {
         Accept: 'application/json',
@@ -232,7 +231,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // 2) Compatibility: map existing site-settings endpoint into the published public settings shape
   try {
-    const upstream = await fetch(`${base}/api/site-settings/public`, {
+    const upstream = await fetch(`${origin}/api/site-settings/public`, {
       method: 'GET',
       headers: {
         Accept: 'application/json',

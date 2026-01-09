@@ -62,7 +62,7 @@
     "communityReporter": "Community Reporter"
   },
   "home": {
-    "previewNotice": "Preview UI only (no backend wiring here). Design is safe to integrate into the real home page next.",
+    "previewNotice": "Public site settings could not be loaded. Showing default layout.",
     "breakingNews": "BREAKING NEWS",
     "liveUpdates": "LIVE UPDATES",
     "liveUpdatesItems": {

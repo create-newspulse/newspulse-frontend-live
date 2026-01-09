@@ -87,23 +87,29 @@ describe('publicSettings helpers', () => {
       ok: true,
       status: 200,
       json: async () => ({
-        success: true,
-        data: {
-          // This matches the newer admin-published style (body.data)
-          homeModules: {
-            categoryStrip: { enabled: false, order: 7 },
-          },
-          ui: {
-            showBreakingTicker: true,
-            showLiveUpdatesTicker: false,
-          },
-          tickers: {
-            breaking: { speedSeconds: 9 },
-            live: { speedSeconds: 400 },
-          },
-        },
+        ok: true,
         version: 'v1',
         updatedAt: '2026-01-06T00:00:00.000Z',
+
+        // Simulate backend published schema with drift:
+        // - exploreCategories (old)
+        // - trending (new)
+        // - tickers.*.speedSeconds (old)
+        published: {
+          homepage: {
+            modules: {
+              categoryStrip: { enabled: false, order: 7 },
+              exploreCategories: { enabled: false, order: 11 },
+              trending: { enabled: true, order: 33 },
+            },
+          },
+          tickers: {
+            breaking: { enabled: true, speedSeconds: 9, order: 12 },
+            live: { enabled: true, speedSeconds: 400, order: 22 },
+          },
+          liveTv: { enabled: false, embedUrl: 'https://example.com/embed' },
+          languageTheme: { languages: ['gu', 'hi', 'en'], themePreset: 'midnight' },
+        },
       }),
     });
     (global as any).fetch = fetchMock;
@@ -116,12 +122,27 @@ describe('publicSettings helpers', () => {
     expect(init?.cache).toBe('no-store');
     expect(init?.headers?.['Cache-Control']).toBe('no-store');
 
-    // Ensure defaults merged + clamping applied (live speedSeconds capped at 300)
-    expect(res.settings.modules.categoryStrip.enabled).toBe(false);
-    expect(res.settings.modules.categoryStrip.order).toBe(7);
-    expect(res.settings.tickers.breaking.speedSeconds).toBe(9);
-    expect(res.settings.tickers.live.enabled).toBe(false);
-    expect(res.settings.tickers.live.speedSeconds).toBe(300);
+    // Ensure normalization + clamping applied (live speedSec capped at 300)
+    expect(res.modules.categoryStrip.enabled).toBe(false);
+    expect(res.modules.categoryStrip.order).toBe(7);
+
+    // explore maps from exploreCategories
+    expect(res.modules.explore.enabled).toBe(false);
+    expect(res.modules.explore.order).toBe(11);
+
+    // trending reads new key
+    expect(res.modules.trending.enabled).toBe(true);
+    expect(res.modules.trending.order).toBe(33);
+
+    expect(res.tickers.breaking.speedSec).toBe(9);
+    expect(res.tickers.breaking.order).toBe(12);
+
+    expect(res.tickers.live.enabled).toBe(true);
+    expect(res.tickers.live.speedSec).toBe(300);
+    expect(res.tickers.live.order).toBe(22);
+
+    // liveTv.enabled should propagate
+    expect(res.liveTv.enabled).toBe(false);
 
     // Cleanup
     (global as any).fetch = originalFetch;

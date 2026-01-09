@@ -6,12 +6,11 @@ import { useRouter } from "next/router";
 import { useRegionalPulse } from "../src/features/regional/useRegionalPulse";
 import { useYouthPulse } from "../features/youthPulse/useYouthPulse";
 import { usePublicMode } from "../utils/PublicModeProvider";
+import { usePublicSettings } from "../src/context/PublicSettingsContext";
 import { DEFAULT_TRENDING_TOPICS, type TrendingTopic } from "../src/config/trendingTopics";
 import { getTrendingTopics } from "../lib/getTrendingTopics";
 import { fetchPublicNews, type Article } from "../lib/publicNewsApi";
-import { fetchPublicSiteSettings, type PublicSiteSettings } from "../lib/publicSiteSettings";
-import { getHomeModuleOrder, getTickerSpeedSeconds, isHomeModuleEnabled, isTickerEnabled, shouldTickerShowWhenEmpty } from "../src/lib/publicSettings";
-import { usePublicSettings } from "../src/context/PublicSettingsContext";
+import { DEFAULT_NORMALIZED_PUBLIC_SETTINGS, sanitizeEmbedUrl } from "../src/lib/publicSettings";
 import AdSlot from "../components/ads/AdSlot";
 import type { GetStaticProps } from "next";
 import { AnimatePresence, motion } from "framer-motion";
@@ -55,7 +54,6 @@ import {
  */
 
 const cx = (...c: Array<string | false | null | undefined>) => c.filter(Boolean).join(" ");
-const PREF_KEY = "newspulse.ui.v14_5_3.prefs";
 
 const THEMES = [
   {
@@ -409,24 +407,8 @@ const DEFAULT_PREFS = {
   themeId: "aurora",
   lang: "English",
 
-  breakingMode: "auto" as "auto" | "on" | "off",
-  liveTickerOn: true,
-  liveTvOn: true,
   liveTvEmbedUrl: "",
   showPreviewNotice: true,
-  showBreakingWhenEmpty: true,
-  liveSpeedSec: 24,
-  breakingSpeedSec: 18,
-
-  // module toggles (UI only)
-  showCategoryStrip: true,
-  showTrendingStrip: true,
-  showExploreCategories: true,
-  showLiveTvCard: true,
-  showQuickTools: true,
-  showSnapshots: true,
-  showAppPromo: true,
-  showFooter: true,
 };
 
 type UiLangCode = 'en' | 'hi' | 'gu';
@@ -472,36 +454,34 @@ function normalizePrefs(input: any) {
 
   if (!THEMES.some((t) => t.id === p.themeId)) p.themeId = DEFAULT_PREFS.themeId;
   if (!["English", "Hindi", "Gujarati"].includes(p.lang)) p.lang = DEFAULT_PREFS.lang;
-  if (!["auto", "on", "off"].includes(p.breakingMode)) p.breakingMode = DEFAULT_PREFS.breakingMode;
-
-  p.liveTickerOn = !!p.liveTickerOn;
-  p.liveTvOn = !!p.liveTvOn;
   p.showPreviewNotice = !!p.showPreviewNotice;
-  p.showBreakingWhenEmpty = !!p.showBreakingWhenEmpty;
   p.liveTvEmbedUrl = typeof p.liveTvEmbedUrl === "string" ? p.liveTvEmbedUrl : "";
 
-  p.liveSpeedSec = clampNum(p.liveSpeedSec, 10, 60, DEFAULT_PREFS.liveSpeedSec);
-  p.breakingSpeedSec = clampNum(p.breakingSpeedSec, 10, 60, DEFAULT_PREFS.breakingSpeedSec);
-
-  p.showCategoryStrip = !!p.showCategoryStrip;
-  p.showTrendingStrip = !!p.showTrendingStrip;
-  p.showExploreCategories = !!p.showExploreCategories;
-  p.showLiveTvCard = !!p.showLiveTvCard;
-  p.showQuickTools = !!p.showQuickTools;
-  p.showSnapshots = !!p.showSnapshots;
-  p.showAppPromo = !!p.showAppPromo;
-  p.showFooter = !!p.showFooter;
+  // Legacy fields (module toggles / ticker controls) are intentionally ignored.
+  const legacyKeys = [
+    'breakingMode',
+    'liveTickerOn',
+    'liveTvOn',
+    'showBreakingWhenEmpty',
+    'liveSpeedSec',
+    'breakingSpeedSec',
+    'showCategoryStrip',
+    'showTrendingStrip',
+    'showExploreCategories',
+    'showLiveTvCard',
+    'showQuickTools',
+    'showSnapshots',
+    'showAppPromo',
+    'showFooter',
+  ];
+  legacyKeys.forEach((k) => {
+    if ((p as any)[k] !== undefined) delete (p as any)[k];
+  });
 
   // Remove deprecated category direction from persisted prefs
   if ((p as any).catFlow !== undefined) delete (p as any).catFlow;
 
   return p;
-}
-
-function getBreakingItems(prefs: any, backendItems: string[]) {
-  if (prefs.breakingMode === "off") return [];
-  if (prefs.breakingMode === "on") return BREAKING_DEMO;
-  return backendItems;
 }
 
 function safeTitle(raw: unknown): string {
@@ -690,7 +670,7 @@ function Toast({ theme, message, onDone }: any) {
   );
 }
 
-function ToggleRow({ theme, title, sub, value, onToggle }: any) {
+function ToggleRow({ theme, title, sub, value, onToggle, disabled = false }: any) {
   return (
     <div className="flex items-center justify-between gap-3 rounded-3xl border px-4 py-3" style={{ background: theme.surface, borderColor: theme.border }}>
       <div className="min-w-0">
@@ -706,10 +686,12 @@ function ToggleRow({ theme, title, sub, value, onToggle }: any) {
 
       <button
         type="button"
-        onClick={onToggle}
+        onClick={disabled ? undefined : onToggle}
         className="relative h-7 w-12 rounded-full border transition"
         style={{ background: value ? theme.accent : theme.chip, borderColor: theme.border }}
         aria-label={`Toggle ${title}`}
+        aria-disabled={disabled}
+        disabled={disabled}
       >
         <span
           className="absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full"
@@ -806,7 +788,17 @@ function ThemePicker({ theme, themeId, setThemeId }: any) {
   );
 }
 
-function LanguagePicker({ theme, value, onChange }: { theme: any; value: UiLangCode; onChange: (next: UiLangCode) => void }) {
+function LanguagePicker({
+  theme,
+  value,
+  onChange,
+  options,
+}: {
+  theme: any;
+  value: UiLangCode;
+  onChange: (next: UiLangCode) => void;
+  options: Array<{ code: UiLangCode; label: string }>;
+}) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -821,12 +813,6 @@ function LanguagePicker({ theme, value, onChange }: { theme: any; value: UiLangC
     window.addEventListener("mousedown", onDown);
     return () => window.removeEventListener("mousedown", onDown);
   }, [open]);
-
-  const options: Array<{ code: UiLangCode; label: string }> = [
-    { code: 'en', label: UI_LANG_LABEL.en },
-    { code: 'hi', label: UI_LANG_LABEL.hi },
-    { code: 'gu', label: UI_LANG_LABEL.gu },
-  ];
 
   return (
     <div ref={wrapRef} className="relative">
@@ -1549,12 +1535,13 @@ function FeedList({ theme, title, items, onOpen }: any) {
   );
 }
 
-function LiveTVWidget({ theme, prefs, setPrefs, onToast, forceOn = false, embedUrlOverride, allowLocalControls = false }: any) {
+function LiveTVWidget({ theme, enabled = true, onToast, embedUrlOverride }: any) {
   const { t } = useI18n();
-  if (!forceOn && !prefs.liveTvOn) return null;
+  if (!enabled) return null;
 
-  const effectiveEmbedUrl = (typeof embedUrlOverride === 'string' && embedUrlOverride.trim()) ? embedUrlOverride : prefs.liveTvEmbedUrl;
-  const hasUrl = !!effectiveEmbedUrl?.trim();
+  const effectiveEmbedUrlRaw = (typeof embedUrlOverride === 'string' && embedUrlOverride.trim()) ? embedUrlOverride : '';
+  const effectiveEmbedUrl = sanitizeEmbedUrl(effectiveEmbedUrlRaw);
+  const hasUrl = !!effectiveEmbedUrl;
 
   return (
     <Surface theme={theme} className="p-4">
@@ -1594,11 +1581,15 @@ function LiveTVWidget({ theme, prefs, setPrefs, onToast, forceOn = false, embedU
         <Button theme={theme} variant="soft" className="w-full justify-start" onClick={() => onToast("Live TV full page (planned)")}>
           <Play className="h-4 w-4" /> {t('common.openLiveTv')}
         </Button>
-        {allowLocalControls && !forceOn ? (
-          <Button theme={theme} variant="ghost" className="w-full justify-start" onClick={() => setPrefs((p: any) => ({ ...p, liveTvOn: false }))}>
-            <X className="h-4 w-4" /> {t('home.turnOffWidget')}
-          </Button>
-        ) : null}
+
+        <Button
+          theme={theme}
+          variant="ghost"
+          className="w-full justify-start"
+          onClick={() => onToast("Live TV visibility is admin-controlled")}
+        >
+          <X className="h-4 w-4" /> {t('home.turnOffWidget')}
+        </Button>
       </div>
     </Surface>
   );
@@ -1666,7 +1657,7 @@ function SnapshotsCard({ theme }: any) {
   );
 }
 
-function PreferencesDrawer({ theme, open, onClose, prefs, setPrefs, onToast }: any) {
+function PreferencesDrawer({ theme, open, onClose, moduleState, onToast }: any) {
   return (
     <Drawer open={open} onClose={onClose} theme={theme} title="Settings">
       <div className="space-y-4">
@@ -1677,182 +1668,18 @@ function PreferencesDrawer({ theme, open, onClose, prefs, setPrefs, onToast }: a
             Home layout modules
           </div>
           <div className="mt-2 text-sm" style={{ color: theme.sub }}>
-            Turn sections ON/OFF (Founder-style control).
+            Admin Panel is the only source of truth (read-only here).
           </div>
 
           <div className="mt-3 grid gap-2">
-            <ToggleRow theme={theme} title="Category strip" sub="Top horizontal categories bar" value={prefs.showCategoryStrip} onToggle={() => setPrefs((p: any) => ({ ...p, showCategoryStrip: !p.showCategoryStrip }))} />
-            <ToggleRow theme={theme} title="Trending strip" sub="Trending chips row" value={prefs.showTrendingStrip} onToggle={() => setPrefs((p: any) => ({ ...p, showTrendingStrip: !p.showTrendingStrip }))} />
-            <ToggleRow theme={theme} title="Explore Categories" sub="Left sidebar category list" value={prefs.showExploreCategories} onToggle={() => setPrefs((p: any) => ({ ...p, showExploreCategories: !p.showExploreCategories }))} />
-            <ToggleRow theme={theme} title="Live TV card" sub="Left sidebar Live TV widget" value={prefs.showLiveTvCard} onToggle={() => setPrefs((p: any) => ({ ...p, showLiveTvCard: !p.showLiveTvCard }))} />
-            <ToggleRow theme={theme} title="Quick tools" sub="Left sidebar quick tools buttons" value={prefs.showQuickTools} onToggle={() => setPrefs((p: any) => ({ ...p, showQuickTools: !p.showQuickTools }))} />
-            <ToggleRow theme={theme} title="Snapshots" sub="Left sidebar snapshot cards" value={prefs.showSnapshots} onToggle={() => setPrefs((p: any) => ({ ...p, showSnapshots: !p.showSnapshots }))} />
-            <ToggleRow theme={theme} title="App promo section" sub="‘Take News Pulse Everywhere’ block" value={prefs.showAppPromo} onToggle={() => setPrefs((p: any) => ({ ...p, showAppPromo: !p.showAppPromo }))} />
-            <ToggleRow theme={theme} title="Footer" sub="Full footer with quick links" value={prefs.showFooter} onToggle={() => setPrefs((p: any) => ({ ...p, showFooter: !p.showFooter }))} />
-          </div>
-        </div>
-
-        <div className="rounded-3xl border p-4" style={{ background: theme.surface2, borderColor: theme.border }}>
-          <div className="text-sm font-extrabold" style={{ color: theme.text }}>
-            Live Updates ticker
-          </div>
-          <div className="mt-2 text-sm" style={{ color: theme.sub }}>
-            Keep the Live Updates ticker ON/OFF and control its speed.
-          </div>
-
-          <div className="mt-3 flex gap-2">
-            <Button theme={theme} variant={prefs.liveTickerOn ? "solid" : "soft"} onClick={() => setPrefs((p: any) => ({ ...p, liveTickerOn: true }))}>
-              ON
-            </Button>
-            <Button theme={theme} variant={!prefs.liveTickerOn ? "solid" : "soft"} onClick={() => setPrefs((p: any) => ({ ...p, liveTickerOn: false }))}>
-              OFF
-            </Button>
-          </div>
-
-          <div className="mt-4 rounded-2xl border px-3 py-3" style={{ background: theme.surface, borderColor: theme.border }}>
-            <div className="flex items-center justify-between">
-              <div className="text-xs font-semibold" style={{ color: theme.muted }}>
-                Speed (seconds per loop)
-              </div>
-              <div className="text-xs font-extrabold" style={{ color: theme.text }}>
-                {prefs.liveSpeedSec}s
-              </div>
-            </div>
-            <input
-              type="range"
-              min={10}
-              max={60}
-              step={2}
-              value={prefs.liveSpeedSec}
-              onChange={(e) => setPrefs((p: any) => ({ ...p, liveSpeedSec: Number(e.target.value) }))}
-              className="mt-2 w-full"
-              aria-label="Live updates ticker speed"
-            />
-            <div className="mt-2 flex items-center justify-between text-[11px]" style={{ color: theme.sub }}>
-              <span>Faster</span>
-              <span>Slower</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-3xl border p-4" style={{ background: theme.surface2, borderColor: theme.border }}>
-          <div className="text-sm font-extrabold" style={{ color: theme.text }}>
-            Breaking News ticker
-          </div>
-          <div className="mt-2 text-sm" style={{ color: theme.sub }}>
-            Auto uses backend. Force ON lets you test even if backend is empty.
-          </div>
-
-          <div className="mt-3 grid gap-2">
-            {[
-              { key: "auto", label: "Auto (backend)", sub: "Shows backend items" },
-              { key: "on", label: "Force ON (demo)", sub: "Use demo breaking items" },
-              { key: "off", label: "OFF", sub: "Hide Breaking ticker" },
-            ].map((o: any) => (
-              <button
-                key={o.key}
-                type="button"
-                onClick={() => setPrefs((p: any) => ({ ...p, breakingMode: o.key }))}
-                className="flex items-start justify-between gap-3 rounded-3xl border p-3 text-left"
-                style={{ background: theme.surface, borderColor: theme.border }}
-              >
-                <div>
-                  <div className="text-sm font-extrabold" style={{ color: theme.text }}>
-                    {o.label}
-                  </div>
-                  <div className="mt-1 text-xs" style={{ color: theme.sub }}>
-                    {o.sub}
-                  </div>
-                </div>
-                {prefs.breakingMode === o.key ? <Check className="h-5 w-5" style={{ color: theme.accent }} /> : null}
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-3 rounded-2xl border p-3" style={{ background: theme.surface, borderColor: theme.border }}>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-xs font-extrabold" style={{ color: theme.text }}>
-                  Show when empty
-                </div>
-                <div className="text-[11px]" style={{ color: theme.sub }}>
-                  Keep the red bar visible with a placeholder message.
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setPrefs((p: any) => ({ ...p, showBreakingWhenEmpty: !p.showBreakingWhenEmpty }))}
-                className="relative h-7 w-12 rounded-full border transition"
-                style={{ background: prefs.showBreakingWhenEmpty ? theme.accent : theme.chip, borderColor: theme.border }}
-                aria-label="Toggle show breaking ticker when empty"
-              >
-                <span
-                  className="absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full"
-                  style={{
-                    background: "rgba(255,255,255,0.92)",
-                    left: prefs.showBreakingWhenEmpty ? "calc(100% - 22px)" : "4px",
-                    transition: "left 220ms ease",
-                  }}
-                />
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-4 rounded-2xl border px-3 py-3" style={{ background: theme.surface, borderColor: theme.border }}>
-            <div className="flex items-center justify-between">
-              <div className="text-xs font-semibold" style={{ color: theme.muted }}>
-                Speed (seconds per loop)
-              </div>
-              <div className="text-xs font-extrabold" style={{ color: theme.text }}>
-                {prefs.breakingSpeedSec}s
-              </div>
-            </div>
-            <input
-              type="range"
-              min={10}
-              max={60}
-              step={2}
-              value={prefs.breakingSpeedSec}
-              onChange={(e) => setPrefs((p: any) => ({ ...p, breakingSpeedSec: Number(e.target.value) }))}
-              className="mt-2 w-full"
-              aria-label="Breaking ticker speed"
-            />
-            <div className="mt-2 flex items-center justify-between text-[11px]" style={{ color: theme.sub }}>
-              <span>Faster</span>
-              <span>Slower</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-3xl border p-4" style={{ background: theme.surface2, borderColor: theme.border }}>
-          <div className="text-sm font-extrabold" style={{ color: theme.text }}>
-            Live TV widget
-          </div>
-          <div className="mt-2 text-sm" style={{ color: theme.sub }}>
-            Toggle widget and set embed URL (demo).
-          </div>
-
-          <div className="mt-3 flex gap-2">
-            <Button theme={theme} variant={prefs.liveTvOn ? "solid" : "soft"} onClick={() => setPrefs((p: any) => ({ ...p, liveTvOn: true }))}>
-              ON
-            </Button>
-            <Button theme={theme} variant={!prefs.liveTvOn ? "solid" : "soft"} onClick={() => setPrefs((p: any) => ({ ...p, liveTvOn: false }))}>
-              OFF
-            </Button>
-          </div>
-
-          <div className="mt-3 rounded-2xl border p-3" style={{ background: theme.surface, borderColor: theme.border }}>
-            <div className="text-xs font-semibold" style={{ color: theme.muted }}>
-              Embed URL
-            </div>
-            <input
-              value={prefs.liveTvEmbedUrl}
-              onChange={(e) => setPrefs((p: any) => ({ ...p, liveTvEmbedUrl: e.target.value }))}
-              placeholder="https://… (iframe src)"
-              className="mt-2 w-full rounded-2xl border px-3 py-2 text-sm outline-none"
-              style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}
-            />
+            <ToggleRow theme={theme} disabled title="Category strip" sub="Top horizontal categories bar" value={!!moduleState?.categoryStrip} />
+            <ToggleRow theme={theme} disabled title="Trending strip" sub="Trending chips row" value={!!moduleState?.trending} />
+            <ToggleRow theme={theme} disabled title="Explore Categories" sub="Left sidebar category list" value={!!moduleState?.explore} />
+            <ToggleRow theme={theme} disabled title="Live TV card" sub="Left sidebar Live TV widget" value={!!moduleState?.liveTvCard} />
+            <ToggleRow theme={theme} disabled title="Quick tools" sub="Left sidebar quick tools buttons" value={!!moduleState?.quickTools} />
+            <ToggleRow theme={theme} disabled title="Snapshots" sub="Left sidebar snapshot cards" value={!!moduleState?.snapshots} />
+            <ToggleRow theme={theme} disabled title="App promo section" sub="‘Take News Pulse Everywhere’ block" value={!!moduleState?.appPromo} />
+            <ToggleRow theme={theme} disabled title="Footer" sub="Full footer with quick links" value={!!moduleState?.footer} />
           </div>
         </div>
 
@@ -1861,8 +1688,7 @@ function PreferencesDrawer({ theme, open, onClose, prefs, setPrefs, onToast }: a
             theme={theme}
             variant="ghost"
             onClick={() => {
-              setPrefs(DEFAULT_PREFS);
-              onToast("Settings reset to default");
+              onToast("Settings are admin-controlled");
             }}
           >
             Reset
@@ -2085,13 +1911,20 @@ export default function UiPreviewV145() {
   const { t, lang, setLang } = useI18n();
   const [prefs, setPrefs] = useState<any>(DEFAULT_PREFS);
   const theme = useMemo(() => getTheme(prefs.themeId), [prefs.themeId]);
-  const { externalFetch } = usePublicMode();
+  usePublicMode();
 
   // Public settings drawer must be explicitly enabled (developer/founder mode).
   // Default is OFF so public users can't toggle live site modules.
   const enablePublicSettingsDrawer = String(process.env.NEXT_PUBLIC_ENABLE_PUBLIC_SETTINGS_DRAWER || '').toLowerCase() === 'true';
 
-  const [publicSettings, setPublicSettings] = useState<PublicSiteSettings | null>(null);
+  const {
+    settings,
+    isLoading: settingsLoading,
+    error: settingsError,
+  } = usePublicSettings();
+
+  const effectiveSettings = settings ?? DEFAULT_NORMALIZED_PUBLIC_SETTINGS;
+
   const [breakingFromBackend, setBreakingFromBackend] = useState<string[]>([]);
   const [liveFromBackend, setLiveFromBackend] = useState<string[]>([]);
   const [latestFromBackend, setLatestFromBackend] = useState<any[]>([]);
@@ -2108,48 +1941,12 @@ export default function UiPreviewV145() {
   const regional = useRegionalPulse("gujarat");
   const youth = useYouthPulse();
 
-  // load local prefs
-  React.useEffect(() => {
-    if (!enablePublicSettingsDrawer) return;
-    const raw = typeof window !== "undefined" ? window.localStorage.getItem(PREF_KEY) : null;
-    if (!raw) return;
-    const parsed = safeJsonParse(raw);
-    if (!parsed) return;
-    setPrefs(normalizePrefs(parsed));
-  }, [enablePublicSettingsDrawer]);
-
   // Keep preview prefs in sync with global language (source of truth for UI i18n)
   React.useEffect(() => {
     const code = toUiLangCode(lang);
     setPrefs((p: any) => ({ ...p, lang: UI_LANG_LABEL[code] }));
   }, [lang]);
 
-  // ✅ (optional) load global settings from backend (admin-controlled)
-  React.useEffect(() => {
-    if (!enablePublicSettingsDrawer) return;
-    const controller = new AbortController();
-
-    (async () => {
-      const resp = await fetchPublicSiteSettings({ signal: controller.signal });
-      if (controller.signal.aborted) return;
-      if (!resp.settings) return;
-
-      setPublicSettings(resp.settings);
-
-      // Keep prefs in sync so Settings UI reflects backend state,
-      // but ticker visibility is still gated below (backend must say ON).
-      setPrefs((prev: any) => {
-        const merged = normalizePrefs({ ...prev, ...resp.settings });
-        merged.themeId = prev.themeId;
-        merged.lang = prev.lang;
-        return merged;
-      });
-    })().catch(() => {
-      // ignore
-    });
-
-    return () => controller.abort();
-  }, [enablePublicSettingsDrawer]);
 
   // Fetch homepage data (latest + breaking + live ticker items) from backend.
   React.useEffect(() => {
@@ -2184,86 +1981,120 @@ export default function UiPreviewV145() {
     return () => controller.abort();
   }, [lang]);
 
-  // save local prefs
-  React.useEffect(() => {
-    if (!enablePublicSettingsDrawer) return;
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(PREF_KEY, JSON.stringify(normalizePrefs(prefs)));
-  }, [prefs, enablePublicSettingsDrawer]);
 
-  const { publicSettings: publishedSettings, isLoading: isPublicSettingsLoading } = usePublicSettings();
-
-  // Apply backend-controlled defaults (do not persist). Keep this one-shot to avoid
-  // clobbering user interactions during a session.
+  // Apply backend-controlled defaults (do not persist). Keep this one-shot.
   const appliedPublishedDefaultsRef = useRef(false);
   React.useEffect(() => {
     if (enablePublicSettingsDrawer) return;
     if (appliedPublishedDefaultsRef.current) return;
+    if (!effectiveSettings || settingsError) return;
 
-    const publishedLang = (publishedSettings as any)?.languageTheme?.lang;
-    const publishedThemeId = (publishedSettings as any)?.languageTheme?.themeId;
+    const langs = (effectiveSettings as any)?.languageTheme?.languages;
+    const themePreset = (effectiveSettings as any)?.languageTheme?.themePreset;
 
-    if (publishedLang === 'en' || publishedLang === 'hi' || publishedLang === 'gu') {
-      setLang(publishedLang as any, { persist: false } as any);
+    if (Array.isArray(langs) && langs.length) {
+      const first = String(langs[0]).toLowerCase();
+      if (first === 'en' || first === 'hi' || first === 'gu') {
+        setLang(first as any, { persist: false } as any);
+      }
     }
 
-    if (typeof publishedThemeId === 'string' && publishedThemeId.trim()) {
-      setPrefs((p: any) => ({ ...p, themeId: String(publishedThemeId) }));
+    if (typeof themePreset === 'string') {
+      const next = themePreset.toLowerCase().trim();
+      if (next === 'default') {
+        setPrefs((p: any) => ({ ...p, themeId: DEFAULT_PREFS.themeId }));
+      } else if (next === 'system') {
+        const prefersDark = typeof window !== 'undefined' && window.matchMedia
+          ? window.matchMedia('(prefers-color-scheme: dark)').matches
+          : false;
+        setPrefs((p: any) => ({ ...p, themeId: prefersDark ? 'midnight' : 'aurora' }));
+      } else if (next === 'aurora' || next === 'light' || next === 'ocean' || next === 'sunset') {
+        setPrefs((p: any) => ({ ...p, themeId: 'aurora' }));
+      } else if (next === 'midnight' || next === 'night' || next === 'dark') {
+        setPrefs((p: any) => ({ ...p, themeId: 'midnight' }));
+      }
     }
 
     appliedPublishedDefaultsRef.current = true;
-  }, [enablePublicSettingsDrawer, publishedSettings, setLang]);
+  }, [enablePublicSettingsDrawer, effectiveSettings, settingsError, setLang]);
 
-  const settingsSource = String(process.env.NEXT_PUBLIC_SETTINGS_SOURCE || 'backend').toLowerCase();
-  const showLocalSettingsUi = enablePublicSettingsDrawer && settingsSource === 'local';
+  const publishedLanguageOptions = useMemo(() => {
+    const raw = (effectiveSettings as any)?.languageTheme?.languages;
+    const normalize = (v: any): UiLangCode | null => {
+      const s = String(v || '').toLowerCase().trim();
+      if (s === 'en' || s === 'hi' || s === 'gu') return s as UiLangCode;
+      return null;
+    };
 
-  // When the public settings drawer is disabled, do not let persisted user prefs affect
-  // module/ticker visibility. Fallback behavior becomes hardcoded defaults.
-  const fallbackPrefs = enablePublicSettingsDrawer ? prefs : DEFAULT_PREFS;
+    if (Array.isArray(raw) && raw.length) {
+      const codes = raw.map(normalize).filter(Boolean) as UiLangCode[];
+      const uniq = Array.from(new Set(codes));
+      if (uniq.length) {
+        return uniq.map((c) => ({ code: c, label: UI_LANG_LABEL[c] }));
+      }
+    }
+    return [
+      { code: 'en' as UiLangCode, label: UI_LANG_LABEL.en },
+      { code: 'hi' as UiLangCode, label: UI_LANG_LABEL.hi },
+      { code: 'gu' as UiLangCode, label: UI_LANG_LABEL.gu },
+    ];
+  }, [effectiveSettings]);
 
-  const effectiveBreakingMode = (
-    (publishedSettings as any)?.breakingMode ??
-    publicSettings?.breakingMode ??
-    fallbackPrefs.breakingMode
-  ) as 'auto' | 'on' | 'off';
+  const publishedModulesContainer = useMemo(() => {
+    return effectiveSettings?.modules ?? null;
+  }, [effectiveSettings]);
 
-  const showCategoryStrip = isHomeModuleEnabled(publishedSettings, 'categoryStrip', true);
-  const showTrendingStrip = isHomeModuleEnabled(publishedSettings, 'trendingStrip', true) && externalFetch;
+  const moduleEnabledOrTrue = (key: string) => {
+    const v = (publishedModulesContainer as any)?.[key]?.enabled;
+    if (v === undefined) return true;
+    return v === true;
+  };
 
-  const showBreakingTicker = isTickerEnabled(publishedSettings, 'breaking', true);
-  const showLiveUpdatesTicker = isTickerEnabled(publishedSettings, 'live', true);
+  const moduleOrderOr = (key: string, fallbackOrder: number) => {
+    const raw = Number((publishedModulesContainer as any)?.[key]?.order);
+    return Number.isFinite(raw) ? raw : fallbackOrder;
+  };
 
-  const breakingShowWhenEmpty = shouldTickerShowWhenEmpty(publishedSettings, 'breaking', true);
-  const liveShowWhenEmpty = shouldTickerShowWhenEmpty(publishedSettings, 'live', true);
+  const showCategoryStrip = effectiveSettings.modules.categoryStrip.enabled === true;
+  const showTrendingStrip = effectiveSettings.modules.trending.enabled === true;
 
-  // Admin-published public settings are the source of truth.
-  const effectiveLiveTickerEnabled = showLiveUpdatesTicker;
+  const breakingTickerEnabled = effectiveSettings.tickers.breaking.enabled === true;
+  const liveTickerEnabled = effectiveSettings.tickers.live.enabled === true;
 
-  const breakingFallbackSpeedSec = fallbackPrefs.breakingSpeedSec;
-  const liveFallbackSpeedSec = fallbackPrefs.liveSpeedSec;
-  const breakingSpeedSec = getTickerSpeedSeconds(publishedSettings, 'breaking', breakingFallbackSpeedSec);
-  const liveSpeedSec = getTickerSpeedSeconds(publishedSettings, 'live', liveFallbackSpeedSec);
+  const breakingSpeedSec = clampNum(effectiveSettings.tickers.breaking.speedSec, 5, 300, 18);
+  const liveSpeedSec = clampNum(effectiveSettings.tickers.live.speedSec, 5, 300, 24);
 
-  const breakingItems = getBreakingItems(fallbackPrefs, breakingFromBackend);
-  const showBreakingContent = (effectiveBreakingMode === 'on' || effectiveBreakingMode === 'auto') && breakingItems.length > 0;
-  const shouldRenderBreakingTicker = showBreakingTicker && (showBreakingContent || breakingShowWhenEmpty);
+  const breakingItems = breakingFromBackend;
+  const showBreakingContent = breakingItems.length > 0;
   const breakingItemsToShow = showBreakingContent ? breakingItems : [t('home.noBreaking')];
 
-  const shouldRenderLiveTicker = effectiveLiveTickerEnabled && (liveFromBackend.length > 0 || liveShowWhenEmpty);
-  const liveItemsToShow = (effectiveLiveTickerEnabled && liveFromBackend.length > 0)
-    ? liveFromBackend
-    : [t('home.noUpdates')];
+  const liveItemsToShow = liveFromBackend.length > 0 ? liveFromBackend : [t('home.noUpdates')];
+
   const onToast = (m: string) => setToast(m);
+
+  const liveTvEnabled = effectiveSettings.liveTv.enabled === true;
+  const liveTvEmbedUrl = effectiveSettings.liveTv.embedUrl;
+
+  const moduleState = {
+    categoryStrip: showCategoryStrip,
+    trending: showTrendingStrip,
+    explore: effectiveSettings.modules.explore.enabled === true,
+    liveTvCard: effectiveSettings.modules.liveTvCard.enabled === true && liveTvEnabled,
+    quickTools: effectiveSettings.modules.quickTools.enabled === true,
+    snapshots: effectiveSettings.modules.snapshots.enabled === true,
+    appPromo: effectiveSettings.modules.appPromo.enabled === true,
+    footer: effectiveSettings.modules.footer.enabled === true,
+  };
 
   const sidebarBlocks = [
     {
-      key: 'exploreCategories',
-      order: getHomeModuleOrder(publishedSettings, 'exploreCategories', 10),
-      enabled: isHomeModuleEnabled(publishedSettings, 'exploreCategories', true),
+      key: 'explore',
+      order: effectiveSettings.modules.explore.order,
+      enabled: effectiveSettings.modules.explore.enabled === true,
       node: (
         <ExploreCategoriesPanel
           theme={theme}
-          prefs={fallbackPrefs}
+          prefs={prefs}
           activeKey={activeCatKey}
           onPick={(k: string) => {
             setActiveCatKey(k);
@@ -2274,30 +2105,27 @@ export default function UiPreviewV145() {
     },
     {
       key: 'liveTvCard',
-      order: getHomeModuleOrder(publishedSettings, 'liveTvCard', 20),
-      enabled: isHomeModuleEnabled(publishedSettings, 'liveTvCard', true),
+      order: effectiveSettings.modules.liveTvCard.order,
+      enabled: effectiveSettings.modules.liveTvCard.enabled === true && liveTvEnabled,
       node: (
         <LiveTVWidget
           theme={theme}
-          prefs={fallbackPrefs}
-          setPrefs={setPrefs}
+          enabled={effectiveSettings.modules.liveTvCard.enabled === true && liveTvEnabled}
           onToast={onToast}
-          forceOn={!isPublicSettingsLoading}
-          allowLocalControls={showLocalSettingsUi}
-          embedUrlOverride={(publishedSettings as any)?.modules?.liveTvCard?.url}
+          embedUrlOverride={liveTvEmbedUrl}
         />
       ),
     },
     {
       key: 'quickTools',
-      order: getHomeModuleOrder(publishedSettings, 'quickTools', 30),
-      enabled: isHomeModuleEnabled(publishedSettings, 'quickTools', true),
+      order: effectiveSettings.modules.quickTools.order,
+      enabled: effectiveSettings.modules.quickTools.enabled === true,
       node: <QuickToolsCard theme={theme} onToast={onToast} />,
     },
     {
       key: 'snapshots',
-      order: getHomeModuleOrder(publishedSettings, 'snapshots', 40),
-      enabled: isHomeModuleEnabled(publishedSettings, 'snapshots', true),
+      order: effectiveSettings.modules.snapshots.order,
+      enabled: effectiveSettings.modules.snapshots.enabled === true,
       node: <SnapshotsCard theme={theme} />,
     },
   ]
@@ -2307,8 +2135,8 @@ export default function UiPreviewV145() {
   const tickerBlocks = [
     {
       key: 'breakingTicker',
-      order: getHomeModuleOrder(publishedSettings, 'breakingTicker', 10),
-      enabled: shouldRenderBreakingTicker,
+      order: effectiveSettings.tickers.breaking.order,
+      enabled: breakingTickerEnabled,
       node: (
         <div className="w-full min-w-0">
           <TickerBar
@@ -2326,8 +2154,8 @@ export default function UiPreviewV145() {
     },
     {
       key: 'liveUpdatesTicker',
-      order: getHomeModuleOrder(publishedSettings, 'liveUpdatesTicker', 20),
-      enabled: shouldRenderLiveTicker,
+      order: effectiveSettings.tickers.live.order,
+      enabled: liveTickerEnabled,
       node: (
         <div className="w-full min-w-0">
           <TickerBar
@@ -2352,18 +2180,60 @@ export default function UiPreviewV145() {
   const bottomBlocks = [
     {
       key: 'appPromo',
-      order: getHomeModuleOrder(publishedSettings, 'appPromo', 10),
-      enabled: isHomeModuleEnabled(publishedSettings, 'appPromo', true),
+      order: effectiveSettings.modules.appPromo.order,
+      enabled: effectiveSettings.modules.appPromo.enabled === true,
       node: <AppPromoSection theme={theme} onToast={onToast} />,
     },
     {
       key: 'footer',
-      order: getHomeModuleOrder(publishedSettings, 'footer', 20),
-      enabled: isHomeModuleEnabled(publishedSettings, 'footer', true),
-      node: <SiteFooter theme={theme} onToast={onToast} footerTextOverride={(publishedSettings as any)?.footerText} />,
+      order: effectiveSettings.modules.footer.order,
+      enabled: effectiveSettings.modules.footer.enabled === true,
+      node: <SiteFooter theme={theme} onToast={onToast} footerTextOverride={undefined} />,
     },
   ]
     .filter((x) => x.enabled)
+    .sort((a, b) => a.order - b.order);
+
+  const tickerWrapperOrder = tickerBlocks.length
+    ? Math.min(...tickerBlocks.map((b) => b.order).filter((n) => Number.isFinite(n)))
+    : Number.POSITIVE_INFINITY;
+
+  const topOrderedBlocks = [
+    {
+      key: 'categoryStrip',
+      order: effectiveSettings.modules.categoryStrip.order,
+      enabled: showCategoryStrip,
+      node: (
+        <div className="sticky top-0 z-40 mt-4">
+          <TopCategoriesStrip
+            theme={theme}
+            activeKey={activeCatKey}
+            onPick={(k: string) => {
+              setActiveCatKey(k);
+              onToast(`Category: ${k}`);
+            }}
+          />
+        </div>
+      ),
+    },
+    {
+      key: 'tickers',
+      order: tickerWrapperOrder,
+      enabled: showAnyTicker,
+      node: (
+        <div className="mt-0 w-full max-w-full">
+          <div className="mx-auto w-full max-w-[1440px] px-4 md:px-8">
+            <div className="rounded-2xl border border-black/10 bg-white/80 backdrop-blur-md shadow-sm ring-1 ring-black/5 overflow-hidden p-2 flex flex-col gap-2">
+              {tickerBlocks.map((b) => (
+                <React.Fragment key={b.key}>{b.node}</React.Fragment>
+              ))}
+            </div>
+          </div>
+        </div>
+      ),
+    },
+  ]
+    .filter((b) => b.enabled)
     .sort((a, b) => a.order - b.order);
 
   return (
@@ -2405,6 +2275,7 @@ export default function UiPreviewV145() {
               <LanguagePicker
                 theme={theme}
                 value={toUiLangCode(lang)}
+                options={publishedLanguageOptions}
                 onChange={(nextCode: UiLangCode) => {
                   setLang(nextCode as any);
                   setPrefs((p: any) => ({ ...p, lang: UI_LANG_LABEL[nextCode] }));
@@ -2412,7 +2283,7 @@ export default function UiPreviewV145() {
               />
               <ThemePicker theme={theme} themeId={prefs.themeId} setThemeId={(id: string) => setPrefs((p: any) => ({ ...p, themeId: id }))} />
 
-              {showLocalSettingsUi ? (
+              {enablePublicSettingsDrawer ? (
                 <IconButton theme={theme} onClick={() => setSettingsOpen(true)} label={t('common.settings')}>
                   <Settings className="h-5 w-5" />
                 </IconButton>
@@ -2420,48 +2291,23 @@ export default function UiPreviewV145() {
             </div>
           </div>
 
-          {prefs.showPreviewNotice ? (
-            <div className="mt-3 rounded-2xl border px-3 py-2 text-xs font-semibold" style={{ background: theme.surface2, borderColor: theme.border, color: theme.sub }}>
-              {t('home.previewNotice')}
-            </div>
-          ) : null}
         </Surface>
       </div>
 
-      {/* CATEGORY STRIP */}
-      {showCategoryStrip ? (
-        <div className="sticky top-0 z-40 mt-4">
-          <TopCategoriesStrip
-            theme={theme}
-            activeKey={activeCatKey}
-            onPick={(k: string) => {
-              setActiveCatKey(k);
-              onToast(`Category: ${k}`);
-            }}
-          />
-        </div>
-      ) : null}
-
-      {/* TICKERS: Combined premium module wrapper with BREAKING above LIVE */}
-      {showAnyTicker ? (
-        <div className="mt-0 w-full max-w-full">
-          <div className="mx-auto w-full max-w-[1440px] px-4 md:px-8">
-            <div className="rounded-2xl border border-black/10 bg-white/80 backdrop-blur-md shadow-sm ring-1 ring-black/5 overflow-hidden p-2 flex flex-col gap-2">
-              {tickerBlocks.map((b) => (
-                <React.Fragment key={b.key}>{b.node}</React.Fragment>
-              ))}
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {/* ORDERED TOP MODULES (admin-published source of truth) */}
+      {topOrderedBlocks.map((b) => (
+        <React.Fragment key={b.key}>{b.node}</React.Fragment>
+      ))}
 
       <AdSlot
         slot="HOME_728x90"
         className="mx-auto w-full max-w-[1440px] px-4 md:px-8 my-2"
       />
 
-      {/* TRENDING */}
-      {showTrendingStrip ? <TrendingStrip theme={theme} onPick={(t: string) => onToast(`Trending: ${t}`)} /> : null}
+      {/* TRENDING (below top advertisement) */}
+      {showTrendingStrip ? (
+        <TrendingStrip theme={theme} onPick={(t: string) => onToast(`Trending: ${t}`)} />
+      ) : null}
 
       {/* MAIN GRID */}
       <div className="mx-auto w-full max-w-[1440px] px-4 md:px-8 pb-10 pt-4">
@@ -2541,8 +2387,8 @@ export default function UiPreviewV145() {
       ))}
 
       {/* DRAWERS */}
-      {showLocalSettingsUi ? (
-        <PreferencesDrawer theme={theme} open={settingsOpen} onClose={() => setSettingsOpen(false)} prefs={prefs} setPrefs={setPrefs} onToast={onToast} />
+      {enablePublicSettingsDrawer ? (
+        <PreferencesDrawer theme={theme} open={settingsOpen} onClose={() => setSettingsOpen(false)} moduleState={moduleState} onToast={onToast} />
       ) : null}
 
       <Drawer open={mobileLeftOpen} onClose={() => setMobileLeftOpen(false)} theme={theme} title={t('common.menu')} side="left">

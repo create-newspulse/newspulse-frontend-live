@@ -1,14 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
+import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
+
 type SlotName = 'HOME_728x90' | 'HOME_RIGHT_300x250';
 
 export type PublicAdSettingsResponse = {
   ok: boolean;
   slotEnabled: Record<SlotName, boolean>;
 };
-
-const BACKEND_URL = (process.env.NEXT_PUBLIC_API_URL || '').trim().replace(/\/+$/, '');
-const TTL_MS = 60_000;
 
 const DEFAULT_SETTINGS: PublicAdSettingsResponse = {
   ok: true,
@@ -18,7 +17,11 @@ const DEFAULT_SETTINGS: PublicAdSettingsResponse = {
   },
 };
 
-let cached: { fetchedAt: number; data: PublicAdSettingsResponse } | null = null;
+function noStore(res: NextApiResponse) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+}
 
 function sanitize(upstream: any): PublicAdSettingsResponse {
   const s = upstream && typeof upstream === 'object' ? upstream : null;
@@ -39,21 +42,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ ok: false, message: 'METHOD_NOT_ALLOWED' });
   }
 
-  const now = Date.now();
-  if (cached && now - cached.fetchedAt < TTL_MS) {
-    res.setHeader('Cache-Control', 'public, max-age=60');
-    return res.status(200).json(cached.data);
-  }
+  noStore(res);
 
-  if (!BACKEND_URL) {
-    res.setHeader('Cache-Control', 'public, max-age=60');
-    return res.status(200).json(DEFAULT_SETTINGS);
-  }
+  const base = getPublicApiBaseUrl();
+  const origin = String(base || '').trim().replace(/\/+$/, '').replace(/\/api\/?$/, '');
+  if (!origin) return res.status(200).json(DEFAULT_SETTINGS);
 
   try {
-    const upstream = await fetch(`${BACKEND_URL}/api/public/ad-settings`, {
+    const upstream = await fetch(`${origin}/api/public/ad-settings`, {
       method: 'GET',
-      headers: { Accept: 'application/json' },
+      headers: {
+        Accept: 'application/json',
+        'Cache-Control': 'no-store',
+        Pragma: 'no-cache',
+      },
+      cache: 'no-store',
     });
 
     const text = await upstream.text().catch(() => '');
@@ -68,13 +71,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       : null;
 
     const data = upstream.ok && json ? sanitize(json) : DEFAULT_SETTINGS;
-    cached = { fetchedAt: now, data };
-
-    res.setHeader('Cache-Control', 'public, max-age=60');
     return res.status(200).json(data);
   } catch {
     // Fail open: if backend unreachable, keep slots enabled.
-    res.setHeader('Cache-Control', 'public, max-age=60');
     return res.status(200).json(DEFAULT_SETTINGS);
   }
 }

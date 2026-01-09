@@ -98,12 +98,51 @@ export default function AdSlot({ slot, className = "", fallback }: AdSlotProps) 
   const { slotEnabled } = useAdSettings();
   const isDisabled = slotEnabled?.[slot] === false;
 
+  const pollSec = (() => {
+    const raw = Number(process.env.NEXT_PUBLIC_PUBLIC_ADS_POLL_SEC || 0);
+    return Number.isFinite(raw) && raw > 0 ? Math.min(300, Math.max(5, raw)) : 0;
+  })();
+
   const [ad, setAd] = useState<PublicAd | null>(null);
   const [loaded, setLoaded] = useState(false);
   const firedImpressionFor = useRef<string | number | null>(null);
 
   const base = useMemo(() => getApiBase(), []);
   const sizes = useMemo(() => slotSizing(slot), [slot]);
+
+  const fetchAd = React.useCallback(
+    async (signal?: AbortSignal) => {
+      if (isDisabled) return;
+      const url = `${base ? `${base}` : ""}/api/public/ads/slot/${encodeURIComponent(slot)}`;
+      try {
+        const res = await fetch(url, {
+          signal,
+          cache: "no-store",
+          headers: { "Cache-Control": "no-store", Pragma: "no-cache" },
+        });
+
+        if (signal?.aborted) return;
+
+        if (!res.ok) {
+          setAd(null);
+          return;
+        }
+
+        const json = await res.json().catch(() => null as any);
+        if (signal?.aborted) return;
+
+        const nextAd = (json && (json.ad ?? null)) ? (json.ad as PublicAd) : pickAd(json);
+        // Image-only ads supported; click-through is optional.
+        if (nextAd?.imageUrl) setAd(nextAd);
+        else setAd(null);
+      } catch (err: any) {
+        // Common in dev when ad blockers/CORS/offline interfere. Don't crash the page.
+        if (err?.name === "AbortError") return;
+        setAd(null);
+      }
+    },
+    [base, slot, isDisabled]
+  );
 
   useEffect(() => {
     // If the slot gets disabled (or settings are still loading), ensure we don't keep stale ads around.
@@ -120,15 +159,9 @@ export default function AdSlot({ slot, className = "", fallback }: AdSlotProps) 
     async function run() {
       try {
         if (isDisabled) return;
-        const url = `${base ? `${base}` : ""}/api/public/ads/slot/${encodeURIComponent(slot)}`;
-        const res = await fetch(url, { signal: ac.signal, cache: "no-store" });
-        const json = await res.json().catch(() => null as any);
-        const nextAd = (json && (json.ad ?? null)) ? (json.ad as PublicAd) : pickAd(json);
+        await fetchAd(ac.signal);
 
         if (!mounted) return;
-        // Image-only ads supported; click-through is optional.
-        if (nextAd?.imageUrl) setAd(nextAd);
-        else setAd(null);
       } catch {
         if (!mounted) return;
         setAd(null);
@@ -145,6 +178,35 @@ export default function AdSlot({ slot, className = "", fallback }: AdSlotProps) 
       ac.abort();
     };
   }, [base, slot, isDisabled]);
+
+  // Auto-refetch ad creative without a full page reload.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (isDisabled) return;
+
+    const ac = new AbortController();
+    const onMaybeRefresh = () => {
+      try {
+        if (document.visibilityState && document.visibilityState !== 'visible') return;
+      } catch {}
+      void fetchAd(ac.signal).catch(() => undefined);
+    };
+
+    window.addEventListener('focus', onMaybeRefresh);
+    document.addEventListener('visibilitychange', onMaybeRefresh);
+
+    let intervalId: number | null = null;
+    if (pollSec) {
+      intervalId = window.setInterval(onMaybeRefresh, pollSec * 1000);
+    }
+
+    return () => {
+      window.removeEventListener('focus', onMaybeRefresh);
+      document.removeEventListener('visibilitychange', onMaybeRefresh);
+      if (intervalId != null) window.clearInterval(intervalId);
+      ac.abort();
+    };
+  }, [fetchAd, isDisabled, pollSec]);
 
   useEffect(() => {
     if (isDisabled) return;

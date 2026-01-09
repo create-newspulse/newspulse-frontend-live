@@ -1,105 +1,131 @@
 import React from 'react';
 
 import {
-  DEFAULT_PUBLIC_SETTINGS,
-  getHomeModuleOrder,
-  getTickerSpeedSeconds,
-  isHomeModuleEnabled,
-  isTickerEnabled,
-  shouldTickerShowWhenEmpty,
-  getPublicSettings,
-  type HomeModuleKey,
-  type LanguageTheme,
-  type PublicSettings,
-  type PublishedTickerSettings,
-  mergePublicSettingsWithDefaults,
+  DEFAULT_NORMALIZED_PUBLIC_SETTINGS,
+  fetchPublicSettings,
+  type NormalizedPublicSettings,
 } from '../lib/publicSettings';
 
+export type HomepageModuleKey = keyof NormalizedPublicSettings['modules'];
+
 export type PublicSettingsContextValue = {
-  publicSettings: PublicSettings;
+  settings: NormalizedPublicSettings | null;
   isLoading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
 
-  // Convenience getters for UI modules.
-  isModuleEnabled: (key: HomeModuleKey, fallback?: boolean) => boolean;
-  moduleOrder: (key: HomeModuleKey, fallback?: number) => number;
-  ticker: (key: 'breaking' | 'live', fallback?: Partial<PublishedTickerSettings>) => PublishedTickerSettings;
-  isTickerEnabled: (key: 'breaking' | 'live', fallback?: boolean) => boolean;
-  footerText: () => string | null;
-  liveTvEmbedUrl: () => string;
-  languageTheme: () => LanguageTheme | null;
+  // Strict homepage module getters (NO hardcoded defaults).
+  isModuleEnabled: (key: HomepageModuleKey) => boolean;
+  moduleOrder: (key: HomepageModuleKey) => number;
 };
 
 const PublicSettingsContext = React.createContext<PublicSettingsContextValue | undefined>(undefined);
 
 export function PublicSettingsProvider({ children }: { children: React.ReactNode }) {
-  const [publicSettings, setPublicSettings] = React.useState<PublicSettings>(DEFAULT_PUBLIC_SETTINGS);
+  const [settings, setSettings] = React.useState<NormalizedPublicSettings | null>(null);
   const [isLoading, setIsLoading] = React.useState<boolean>(true);
   const [error, setError] = React.useState<string | null>(null);
 
-  const settingsSource = String(process.env.NEXT_PUBLIC_SETTINGS_SOURCE || 'backend').toLowerCase();
-  const useLocalOnly = settingsSource === 'local';
+  const inFlightRef = React.useRef<Promise<void> | null>(null);
 
-  const load = React.useCallback(async () => {
-    if (useLocalOnly) {
-      // Escape hatch: ignore published settings entirely.
-      setIsLoading(false);
-      setError(null);
-      return;
-    }
+  const pollSec = (() => {
+    const raw = Number(process.env.NEXT_PUBLIC_PUBLIC_SETTINGS_POLL_SEC || 0);
+    return Number.isFinite(raw) && raw > 0 ? Math.min(300, Math.max(5, raw)) : 0;
+  })();
 
-    setIsLoading(true);
-    setError(null);
+  const load = React.useCallback(async (opts?: { background?: boolean }) => {
+    // Deduplicate overlapping calls (poll + focus + manual refetch).
+    if (inFlightRef.current) return inFlightRef.current;
 
-    try {
-      const data = await getPublicSettings();
-      const next = mergePublicSettingsWithDefaults(data);
-      setPublicSettings(next);
-    } catch (e: any) {
-      // Safe defaults (all modules enabled) should render even if backend is down.
-      setPublicSettings(DEFAULT_PUBLIC_SETTINGS);
-      setError(String(e?.message || 'PUBLIC_SETTINGS_LOAD_FAILED'));
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+    const shouldShowLoading = !opts?.background && settings == null;
+    if (shouldShowLoading) setIsLoading(true);
+
+    // For background refreshes, keep last-known-good settings visible.
+    if (!opts?.background) setError(null);
+
+    const p = (async () => {
+      try {
+        const next = await fetchPublicSettings();
+
+        // Avoid state churn if nothing changed.
+        const prevVersion = settings?.version;
+        const nextVersion = next?.version;
+        if (prevVersion && nextVersion && prevVersion === nextVersion) {
+          return;
+        }
+
+        setSettings(next);
+      } catch (e: any) {
+        // Safe fallback defaults: show all modules.
+        if (settings == null) setSettings(DEFAULT_NORMALIZED_PUBLIC_SETTINGS);
+        if (!opts?.background) setError(String(e?.message || 'PUBLIC_SETTINGS_LOAD_FAILED'));
+      } finally {
+        if (shouldShowLoading) setIsLoading(false);
+        inFlightRef.current = null;
+      }
+    })();
+
+    inFlightRef.current = p;
+    return p;
+  }, [settings]);
 
   React.useEffect(() => {
     void load();
   }, [load]);
 
+  // Auto-refresh settings without a full page refresh.
+  // 1) When the tab becomes visible or window gets focus (common after publishing in Admin).
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const onMaybeRefresh = () => {
+      try {
+        if (document.visibilityState && document.visibilityState !== 'visible') return;
+      } catch {}
+      void load({ background: true });
+    };
+
+    window.addEventListener('focus', onMaybeRefresh);
+    document.addEventListener('visibilitychange', onMaybeRefresh);
+    return () => {
+      window.removeEventListener('focus', onMaybeRefresh);
+      document.removeEventListener('visibilitychange', onMaybeRefresh);
+    };
+  }, [load]);
+
+  // 2) Optional polling (disabled by default). Set NEXT_PUBLIC_PUBLIC_SETTINGS_POLL_SEC.
+  React.useEffect(() => {
+    if (!pollSec) return;
+    if (typeof window === 'undefined') return;
+
+    const id = window.setInterval(() => {
+      try {
+        if (document.visibilityState && document.visibilityState !== 'visible') return;
+      } catch {}
+      void load({ background: true });
+    }, pollSec * 1000);
+
+    return () => window.clearInterval(id);
+  }, [pollSec, load]);
+
   const value = React.useMemo<PublicSettingsContextValue>(
     () => ({
-      publicSettings,
+      settings,
       isLoading,
       error,
       refetch: load,
 
-      isModuleEnabled: (key, fallback = true) => isHomeModuleEnabled(publicSettings, key, fallback),
-      moduleOrder: (key, fallback = 0) => getHomeModuleOrder(publicSettings, key, fallback),
-      ticker: (key, fallback) => {
-        const enabledFallback = typeof fallback?.enabled === 'boolean' ? fallback.enabled : true;
-        const speedFallback = typeof fallback?.speedSeconds === 'number' ? fallback.speedSeconds : (key === 'breaking' ? 18 : 24);
-        const showEmptyFallback = typeof fallback?.showWhenEmpty === 'boolean' ? fallback.showWhenEmpty : true;
-        return {
-          enabled: isTickerEnabled(publicSettings, key, enabledFallback),
-          speedSeconds: getTickerSpeedSeconds(publicSettings, key, speedFallback),
-          showWhenEmpty: shouldTickerShowWhenEmpty(publicSettings, key, showEmptyFallback),
-        };
+      isModuleEnabled: (key) => {
+        const v = settings?.modules?.[key]?.enabled;
+        // Safe default: if missing, show it.
+        return typeof v === 'boolean' ? v : true;
       },
-      isTickerEnabled: (key, fallback = true) => isTickerEnabled(publicSettings, key, fallback),
-      footerText: () => {
-        const v = publicSettings?.footerText;
-        return typeof v === 'string' && v.trim() ? v.trim() : null;
+      moduleOrder: (key) => {
+        const raw = Number(settings?.modules?.[key]?.order);
+        return Number.isFinite(raw) ? raw : Number.POSITIVE_INFINITY;
       },
-      liveTvEmbedUrl: () => {
-        const v = (publicSettings as any)?.modules?.liveTvCard?.url;
-        return typeof v === 'string' ? v : '';
-      },
-      languageTheme: () => (publicSettings?.languageTheme && Object.keys(publicSettings.languageTheme).length ? publicSettings.languageTheme : null),
     }),
-    [publicSettings, isLoading, error, load]
+    [settings, isLoading, error, load]
   );
 
   return <PublicSettingsContext.Provider value={value}>{children}</PublicSettingsContext.Provider>;
@@ -114,35 +140,14 @@ export function usePublicSiteSettings(): PublicSettingsContextValue {
 export function usePublicSettings(): PublicSettingsContextValue {
   const ctx = React.useContext(PublicSettingsContext);
   if (!ctx) {
-    // Provider should be installed at app root. Return complete fallback.
-    const fallback = DEFAULT_PUBLIC_SETTINGS;
+    // Provider should be installed at app root.
     return {
-      publicSettings: fallback,
+      settings: DEFAULT_NORMALIZED_PUBLIC_SETTINGS,
       isLoading: false,
       error: 'PUBLIC_SETTINGS_PROVIDER_MISSING',
       refetch: async () => {},
-      isModuleEnabled: (key, fb = true) => isHomeModuleEnabled(fallback, key, fb),
-      moduleOrder: (key, fb = 0) => getHomeModuleOrder(fallback, key, fb),
-      ticker: (key, fb) => {
-        const enabledFallback = typeof fb?.enabled === 'boolean' ? fb.enabled : true;
-        const speedFallback = typeof fb?.speedSeconds === 'number' ? fb.speedSeconds : (key === 'breaking' ? 18 : 24);
-        const showEmptyFallback = typeof fb?.showWhenEmpty === 'boolean' ? fb.showWhenEmpty : true;
-        return {
-          enabled: isTickerEnabled(fallback, key, enabledFallback),
-          speedSeconds: getTickerSpeedSeconds(fallback, key, speedFallback),
-          showWhenEmpty: shouldTickerShowWhenEmpty(fallback, key, showEmptyFallback),
-        };
-      },
-      isTickerEnabled: (key, fb = true) => isTickerEnabled(fallback, key, fb),
-      footerText: () => {
-        const v = fallback?.footerText;
-        return typeof v === 'string' && v.trim() ? v.trim() : null;
-      },
-      liveTvEmbedUrl: () => {
-        const v = (fallback as any)?.modules?.liveTvCard?.url;
-        return typeof v === 'string' ? v : '';
-      },
-      languageTheme: () => (fallback?.languageTheme && Object.keys(fallback.languageTheme).length ? fallback.languageTheme : null),
+      isModuleEnabled: () => true,
+      moduleOrder: () => Number.POSITIVE_INFINITY,
     };
   }
   return ctx;

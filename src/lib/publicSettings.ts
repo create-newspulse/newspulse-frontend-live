@@ -1,5 +1,3 @@
-import { getPublicApiBaseUrl } from '../../lib/publicApiBase';
-
 export type BreakingMode = 'auto' | 'on' | 'off';
 
 export type LanguageTheme = {
@@ -54,6 +52,38 @@ export type PublicSettingsResponse = {
   updatedAt: string | null;
 };
 
+// Recommended backend response shape for published Public Site Settings.
+export type PublicSettingsResp = {
+  ok: boolean;
+  version: number;
+  updatedAt?: string;
+  published: unknown;
+};
+
+// Normalized public-site settings used by the homepage.
+// This supports schema drift across backend versions (old keys/new keys).
+export type NormalizedPublicSettingsModule = { enabled: boolean; order: number };
+
+export type NormalizedPublicSettings = {
+  version: string | null;
+  modules: {
+    categoryStrip: NormalizedPublicSettingsModule;
+    explore: NormalizedPublicSettingsModule;
+    trending: NormalizedPublicSettingsModule;
+    quickTools: NormalizedPublicSettingsModule;
+    appPromo: NormalizedPublicSettingsModule;
+    footer: NormalizedPublicSettingsModule;
+    snapshots: NormalizedPublicSettingsModule;
+    liveTvCard: NormalizedPublicSettingsModule;
+  };
+  tickers: {
+    live: { enabled: boolean; speedSec: number; order: number; mode: string; showWhenEmpty: boolean };
+    breaking: { enabled: boolean; speedSec: number; order: number; mode: string; showWhenEmpty: boolean };
+  };
+  liveTv: { enabled: boolean; embedUrl: string };
+  languageTheme: { languages: string[]; themePreset: string | null };
+};
+
 export const DEFAULT_PUBLIC_SETTINGS: PublicSettings = {
   modules: {
     // Match current homepage default rendering order
@@ -82,6 +112,26 @@ export const DEFAULT_PUBLIC_SETTINGS_RESPONSE: PublicSettingsResponse = {
   settings: DEFAULT_PUBLIC_SETTINGS,
   version: null,
   updatedAt: null,
+};
+
+export const DEFAULT_NORMALIZED_PUBLIC_SETTINGS: NormalizedPublicSettings = {
+  version: null,
+  modules: {
+    categoryStrip: { enabled: true, order: 10 },
+    explore: { enabled: true, order: 10 },
+    liveTvCard: { enabled: true, order: 20 },
+    quickTools: { enabled: true, order: 30 },
+    snapshots: { enabled: true, order: 40 },
+    trending: { enabled: true, order: 30 },
+    appPromo: { enabled: true, order: 10 },
+    footer: { enabled: true, order: 20 },
+  },
+  tickers: {
+    live: { enabled: true, speedSec: 24, order: 20, mode: 'auto', showWhenEmpty: false },
+    breaking: { enabled: true, speedSec: 18, order: 10, mode: 'auto', showWhenEmpty: false },
+  },
+  liveTv: { enabled: true, embedUrl: '' },
+  languageTheme: { languages: ['en', 'hi', 'gu'], themePreset: null },
 };
 
 type JsonRecord = Record<string, unknown>;
@@ -361,13 +411,189 @@ export function shouldTickerShowWhenEmpty(
   return typeof v === 'boolean' ? v : fallback;
 }
 
-async function fetchPublicSettingsBody(options?: { signal?: AbortSignal }): Promise<unknown> {
-  const base = getPublicApiBaseUrl();
-  // Preferred backend contract (public): GET {API_BASE}/public/settings
-  // Dev fallback: GET /api/public/settings (Next.js proxy route)
-  const endpoint = base ? `${base}/public/settings` : '/api/public/settings';
+export function sanitizeEmbedUrl(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  const s = raw.trim();
+  if (!s) return '';
 
-  const res = await fetch(endpoint, {
+  try {
+    const u = new URL(s);
+    const protocol = u.protocol.toLowerCase();
+    if (protocol !== 'https:' && protocol !== 'http:') return '';
+    return u.toString();
+  } catch {
+    return '';
+  }
+}
+
+function getRecord(root: unknown, ...path: Array<string>): JsonRecord | null {
+  let cur: any = root as any;
+  for (const key of path) {
+    if (!isRecord(cur)) return null;
+    cur = cur[key];
+  }
+  return isRecord(cur) ? (cur as JsonRecord) : null;
+}
+
+function getUnknown(root: unknown, ...path: Array<string>): unknown {
+  let cur: any = root as any;
+  for (const key of path) {
+    if (!isRecord(cur)) return undefined;
+    cur = cur[key];
+  }
+  return cur;
+}
+
+function normalizeEnabled(v: unknown, fallback: boolean): boolean {
+  if (typeof v === 'boolean') return v;
+  return fallback;
+}
+
+function normalizeOrder(v: unknown, fallback: number): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function normalizeModuleFrom(
+  rawModule: unknown,
+  fallback: NormalizedPublicSettingsModule
+): NormalizedPublicSettingsModule {
+  if (typeof rawModule === 'boolean') return { ...fallback, enabled: rawModule };
+  if (!isRecord(rawModule)) return fallback;
+  return {
+    enabled: normalizeEnabled((rawModule as any).enabled, fallback.enabled),
+    order: normalizeOrder((rawModule as any).order, fallback.order),
+  };
+}
+
+function normalizeTickerFrom(
+  rawTicker: unknown,
+  fallback: { enabled: boolean; speedSec: number; order: number; mode: string; showWhenEmpty: boolean }
+): { enabled: boolean; speedSec: number; order: number; mode: string; showWhenEmpty: boolean } {
+  if (!isRecord(rawTicker)) return fallback;
+  const speedRaw = (rawTicker as any).speedSec ?? (rawTicker as any).speedSeconds;
+  return {
+    enabled: normalizeEnabled((rawTicker as any).enabled, fallback.enabled),
+    speedSec: clampNum(speedRaw, 5, 300, fallback.speedSec),
+    order: normalizeOrder((rawTicker as any).order, fallback.order),
+    mode: typeof (rawTicker as any).mode === 'string' ? String((rawTicker as any).mode) : fallback.mode,
+    showWhenEmpty:
+      typeof (rawTicker as any).showWhenEmpty === 'boolean'
+        ? (rawTicker as any).showWhenEmpty
+        : fallback.showWhenEmpty,
+  };
+}
+
+function normalizeLanguages(raw: unknown, fallback: string[]): string[] {
+  if (!Array.isArray(raw) || !raw.length) return fallback;
+  const cleaned = raw
+    .map((v) => String(v || '').toLowerCase().trim())
+    .filter(Boolean);
+  const uniq = Array.from(new Set(cleaned));
+  return uniq.length ? uniq : fallback;
+}
+
+function normalizeThemePreset(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const s = raw.trim();
+  return s ? s : null;
+}
+
+export function normalizePublicSettings(raw: unknown, defaults: NormalizedPublicSettings = DEFAULT_NORMALIZED_PUBLIC_SETTINGS): NormalizedPublicSettings {
+  const root = isRecord(raw) ? (raw as JsonRecord) : ({} as JsonRecord);
+
+  // The backend can return:
+  // - { ok, version, updatedAt, published: {...} }
+  // - { ok, version, updatedAt, settings: {...} }
+  // - { published: {...} }
+  // - { ...publishedObject }
+  const published = getRecord(root, 'published') ?? getRecord(root, 'settings') ?? (root as JsonRecord);
+
+  const versionRaw = (root as any).version ?? (published as any).version;
+  const version = typeof versionRaw === 'string' || typeof versionRaw === 'number' ? String(versionRaw) : defaults.version;
+
+  const homepageModules =
+    getRecord(published, 'homepage', 'modules') ??
+    getRecord(published, 'homeModules') ??
+    getRecord(published, 'modules') ??
+    ({} as JsonRecord);
+
+  // Schema drift mapping (old -> new)
+  const exploreRaw = (homepageModules as any).explore ?? (homepageModules as any).exploreCategories;
+  const trendingRaw = (homepageModules as any).trending ?? (homepageModules as any).trendingStrip;
+  const liveTvCardRaw = (homepageModules as any).liveTvCard;
+
+  const tickers = getRecord(published, 'tickers') ?? getRecord(published, 'homepage', 'tickers') ?? ({} as JsonRecord);
+  const liveTickerRaw = (tickers as any).live;
+  const breakingTickerRaw = (tickers as any).breaking;
+
+  const liveTv = getRecord(published, 'liveTv') ?? getRecord(published, 'homepage', 'liveTv') ?? ({} as JsonRecord);
+  const liveTvEnabled = normalizeEnabled((liveTv as any).enabled, defaults.liveTv.enabled);
+
+  const embedUrlRaw =
+    getUnknown(liveTv, 'embedUrl') ??
+    getUnknown(liveTv, 'url') ??
+    (isRecord(liveTvCardRaw) ? (liveTvCardRaw as any).embedUrl ?? (liveTvCardRaw as any).url : undefined);
+  const embedUrl = sanitizeEmbedUrl(embedUrlRaw);
+
+  // languageTheme can exist at root or under published
+  const languageTheme =
+    getRecord(published, 'languageTheme') ??
+    getRecord(published, 'homepage', 'languageTheme') ??
+    getRecord(root, 'languageTheme') ??
+    ({} as JsonRecord);
+
+  const languagesRaw = (languageTheme as any).languages ?? (languageTheme as any).langs;
+  const themePresetRaw = (languageTheme as any).themePreset ?? (languageTheme as any).preset;
+
+  const out: NormalizedPublicSettings = {
+    version,
+    modules: {
+      categoryStrip: normalizeModuleFrom((homepageModules as any).categoryStrip, defaults.modules.categoryStrip),
+      explore: normalizeModuleFrom(exploreRaw, defaults.modules.explore),
+      trending: normalizeModuleFrom(trendingRaw, defaults.modules.trending),
+      quickTools: normalizeModuleFrom((homepageModules as any).quickTools, defaults.modules.quickTools),
+      appPromo: normalizeModuleFrom((homepageModules as any).appPromo, defaults.modules.appPromo),
+      footer: normalizeModuleFrom((homepageModules as any).footer, defaults.modules.footer),
+      snapshots: normalizeModuleFrom((homepageModules as any).snapshots, defaults.modules.snapshots),
+      liveTvCard: normalizeModuleFrom(
+        liveTvCardRaw,
+        // If liveTv.enabled is explicitly false, reflect that in the Live TV card by default.
+        ((): NormalizedPublicSettingsModule => {
+          const base = defaults.modules.liveTvCard;
+          if (typeof (liveTv as any).enabled === 'boolean') return { ...base, enabled: liveTvEnabled };
+          return base;
+        })()
+      ),
+    },
+    tickers: {
+      live: normalizeTickerFrom(liveTickerRaw, defaults.tickers.live),
+      breaking: normalizeTickerFrom(breakingTickerRaw, defaults.tickers.breaking),
+    },
+    liveTv: {
+      enabled: liveTvEnabled,
+      embedUrl,
+    },
+    languageTheme: {
+      languages: normalizeLanguages(languagesRaw, defaults.languageTheme.languages),
+      themePreset: normalizeThemePreset(themePresetRaw) ?? defaults.languageTheme.themePreset,
+    },
+  };
+
+  return out;
+}
+
+// Recommended API: normalize the published object directly.
+export function normalizePublished(published: unknown): NormalizedPublicSettings {
+  return normalizePublicSettings({ published });
+}
+
+async function fetchPublicSettingsBody(options?: { signal?: AbortSignal }): Promise<unknown> {
+  // Always use same-origin. Next.js rewrites (and/or the local API route)
+  // take care of proxying to the backend.
+  const endpoint = '/api/public/settings';
+
+  const init = {
     method: 'GET',
     headers: {
       Accept: 'application/json',
@@ -376,7 +602,12 @@ async function fetchPublicSettingsBody(options?: { signal?: AbortSignal }): Prom
     },
     signal: options?.signal,
     cache: 'no-store',
-  });
+    // Next.js server fetch hint (ignored in the browser).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    next: { revalidate: 0 } as any,
+  } as unknown as RequestInit;
+
+  const res = await fetch(endpoint, init);
 
   const body = await res.json().catch(() => null);
   if (!res.ok || !body) {
@@ -394,7 +625,15 @@ export async function getPublicSettings(options?: { signal?: AbortSignal }): Pro
   return body;
 }
 
-export async function fetchPublicSettings(options?: { signal?: AbortSignal }): Promise<PublicSettingsResponse> {
+// Legacy: returns the older {settings, version, updatedAt} shape (kept for internal tools).
+export async function fetchPublicSettingsResponse(options?: { signal?: AbortSignal }): Promise<PublicSettingsResponse> {
   const body = await fetchPublicSettingsBody(options);
   return mergePublicSettingsResponseWithDefaults(body);
+}
+
+// Required by product: UI should fetch GET /api/public/settings, then normalize.
+export async function fetchPublicSettings(options?: { signal?: AbortSignal }): Promise<NormalizedPublicSettings> {
+  // On the server (if ever called there), hint Next to not cache.
+  const body = await fetchPublicSettingsBody({ signal: options?.signal });
+  return normalizePublicSettings(body);
 }

@@ -40,7 +40,7 @@ const nextConfig = {
   },
 
   async rewrites() {
-    const backend = (process.env.NEXT_PUBLIC_API_URL || '').trim().replace(/\/+$/, '');
+    const backend = (process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_BASE_URL || '').trim().replace(/\/+$/, '');
     
     if (!backend) {
       // No backend configured - API routes will handle fallback locally
@@ -65,7 +65,7 @@ const nextConfig = {
 
   async headers() {
     const isDev = process.env.NODE_ENV !== 'production';
-    const backend = (process.env.NEXT_PUBLIC_API_URL || '').trim().replace(/\/+$/, '');
+    const backend = (process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_BASE_URL || '').trim().replace(/\/+$/, '');
 
     // Content Security Policy
     const csp = [
