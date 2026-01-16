@@ -10,6 +10,7 @@ import { usePublicSettings } from "../src/context/PublicSettingsContext";
 import { DEFAULT_TRENDING_TOPICS, type TrendingTopic } from "../src/config/trendingTopics";
 import { getTrendingTopics } from "../lib/getTrendingTopics";
 import { fetchPublicNews, type Article } from "../lib/publicNewsApi";
+import { fetchPublicBroadcast, shouldRenderTicker, toTickerTexts } from "../lib/publicBroadcast";
 import { DEFAULT_NORMALIZED_PUBLIC_SETTINGS, sanitizeEmbedUrl } from "../src/lib/publicSettings";
 import AdSlot from "../components/ads/AdSlot";
 import type { GetStaticProps } from "next";
@@ -874,7 +875,7 @@ function LanguagePicker({
 
 function TickerBar({ theme, kind, items, onViewAll, speedSec }: any) {
   const { t } = useI18n();
-  const label = kind === "breaking" ? t('home.breakingNews') : t('home.liveUpdates');
+  const label = kind === "breaking" ? `🔥 ${t('home.breakingNews')}` : `🔵 ${t('home.liveUpdates')}`;
 
   const safeItems =
     kind === "live"
@@ -1929,6 +1930,11 @@ export default function UiPreviewV145() {
   const [liveFromBackend, setLiveFromBackend] = useState<string[]>([]);
   const [latestFromBackend, setLatestFromBackend] = useState<any[]>([]);
 
+  const [broadcastBreakingEnabled, setBroadcastBreakingEnabled] = useState<boolean | null>(null);
+  const [broadcastLiveEnabled, setBroadcastLiveEnabled] = useState<boolean | null>(null);
+  const [broadcastBreakingSpeedSec, setBroadcastBreakingSpeedSec] = useState<number | null>(null);
+  const [broadcastLiveSpeedSec, setBroadcastLiveSpeedSec] = useState<number | null>(null);
+
   const [activeCatKey, setActiveCatKey] = useState<string>("breaking");
   const [toast, setToast] = useState<string>("");
 
@@ -1962,20 +1968,27 @@ export default function UiPreviewV145() {
       const latestArticles = latestResp.items || [];
       setLatestFromBackend(latestArticles.map(articleToFeedItem));
 
-      // Live updates ticker: latest titles (separate rendering surface)
-      const liveItems = latestArticles.map(articleToTickerText).filter(Boolean) as string[];
-      setLiveFromBackend(liveItems);
-
-      // Breaking ticker: breaking category titles
-      const breakingResp = await fetchPublicNews({ category: 'breaking', language: apiLang, limit: 10, signal: controller.signal });
+      // Broadcast center tickers (preferred source)
+      const broadcast = await fetchPublicBroadcast({ signal: controller.signal });
       if (controller.signal.aborted) return;
-      const breakingItems = (breakingResp.items || []).map(articleToTickerText).filter(Boolean) as string[];
-      setBreakingFromBackend(breakingItems);
+
+      setBreakingFromBackend(toTickerTexts(broadcast.items.breaking));
+      setLiveFromBackend(toTickerTexts(broadcast.items.live));
+
+      setBroadcastBreakingEnabled(shouldRenderTicker(broadcast.settings.breaking));
+      setBroadcastLiveEnabled(shouldRenderTicker(broadcast.settings.live));
+      setBroadcastBreakingSpeedSec(broadcast.settings.breaking.speedSec);
+      setBroadcastLiveSpeedSec(broadcast.settings.live.speedSec);
     })().catch(() => {
       if (controller.signal.aborted) return;
       setLatestFromBackend([]);
       setLiveFromBackend([]);
       setBreakingFromBackend([]);
+
+      setBroadcastBreakingEnabled(null);
+      setBroadcastLiveEnabled(null);
+      setBroadcastBreakingSpeedSec(null);
+      setBroadcastLiveSpeedSec(null);
     });
 
     return () => controller.abort();
@@ -2061,8 +2074,17 @@ export default function UiPreviewV145() {
   const breakingTickerEnabled = effectiveSettings.tickers.breaking.enabled === true;
   const liveTickerEnabled = effectiveSettings.tickers.live.enabled === true;
 
-  const breakingSpeedSec = clampNum(effectiveSettings.tickers.breaking.speedSec, 5, 300, 18);
-  const liveSpeedSec = clampNum(effectiveSettings.tickers.live.speedSec, 5, 300, 24);
+  // Broadcast-center settings take precedence over published homepage settings.
+  const breakingTickerVisible = broadcastBreakingEnabled ?? breakingTickerEnabled;
+  const liveTickerVisible = broadcastLiveEnabled ?? liveTickerEnabled;
+
+  const breakingSpeedSec = clampNum(
+    broadcastBreakingSpeedSec ?? effectiveSettings.tickers.breaking.speedSec,
+    5,
+    300,
+    18
+  );
+  const liveSpeedSec = clampNum(broadcastLiveSpeedSec ?? effectiveSettings.tickers.live.speedSec, 5, 300, 24);
 
   const breakingItems = breakingFromBackend;
   const showBreakingContent = breakingItems.length > 0;
@@ -2136,7 +2158,7 @@ export default function UiPreviewV145() {
     {
       key: 'breakingTicker',
       order: effectiveSettings.tickers.breaking.order,
-      enabled: breakingTickerEnabled,
+      enabled: breakingTickerVisible,
       node: (
         <div className="w-full min-w-0">
           <TickerBar
@@ -2155,7 +2177,7 @@ export default function UiPreviewV145() {
     {
       key: 'liveUpdatesTicker',
       order: effectiveSettings.tickers.live.order,
-      enabled: liveTickerEnabled,
+      enabled: liveTickerVisible,
       node: (
         <div className="w-full min-w-0">
           <TickerBar
@@ -2173,7 +2195,13 @@ export default function UiPreviewV145() {
     },
   ]
     .filter((x) => x.enabled)
-    .sort((a, b) => a.order - b.order);
+    .sort((a, b) => {
+      // UX requirement: Breaking (red) should always appear above Live Updates (blue).
+      if (a.key === b.key) return 0;
+      if (a.key === 'breakingTicker') return -1;
+      if (b.key === 'breakingTicker') return 1;
+      return a.order - b.order;
+    });
 
   const showAnyTicker = tickerBlocks.length > 0;
 
