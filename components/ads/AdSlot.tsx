@@ -5,6 +5,7 @@ import Link from "next/link";
 import SpotlightFallback728 from "./SpotlightFallback728";
 import { useAdSettings } from "../../hooks/useAdSettings";
 import { useLanguage } from "../../src/i18n/language";
+import { getPublicApiBaseUrl } from "../../lib/publicApiBase";
 
 export type AdSlotName = "HOME_728x90" | "HOME_RIGHT_300x250";
 
@@ -24,8 +25,7 @@ type PublicAd = {
 };
 
 function getApiBase(): string {
-  const raw = (process.env.NEXT_PUBLIC_API_URL || "").toString().trim();
-  return raw.replace(/\/+$/, "");
+  return getPublicApiBaseUrl();
 }
 
 function pickAd(payload: any): PublicAd | null {

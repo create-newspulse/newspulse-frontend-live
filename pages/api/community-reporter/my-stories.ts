@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 
 // Align with other community-reporter proxies (submit/withdraw)
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.NEXT_PUBLIC_API_BASE ||
   '';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -19,7 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const email = emailRaw.toLowerCase();
   const base = (API_BASE_URL || '').toString().trim().replace(/\/+$/, '');
   if (!base) {
-    return res.status(500).json({ ok: false, message: 'NEXT_PUBLIC_API_URL not set' });
+    return res.status(500).json({ ok: false, message: 'NEXT_PUBLIC_API_BASE not set' });
   }
   const targetUrl = `${base}/api/community-reporter/my-stories?email=${encodeURIComponent(email)}`;
 

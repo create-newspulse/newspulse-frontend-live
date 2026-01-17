@@ -34,7 +34,6 @@ export interface SubmitCommunityStoryResult {
 export async function submitCommunityStory(
   payload: SubmitCommunityStoryPayload,
 ): Promise<SubmitCommunityStoryResult> {
-  const base = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/+$/, '');
   const requestUrl = `/api/community-reporter/submit`;
 
   const res = await fetch(requestUrl, {

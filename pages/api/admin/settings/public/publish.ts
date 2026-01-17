@@ -13,6 +13,26 @@ import {
 const DRAFT_PATH = path.join(process.cwd(), 'data', 'public-site-settings.draft.json');
 const PUBLISHED_PATH = path.join(process.cwd(), 'data', 'public-site-settings.published.json');
 
+const DEV_ALLOWED_ORIGINS = new Set(['http://localhost:5173', 'http://127.0.0.1:5173']);
+
+function setCors(req: NextApiRequest, res: NextApiResponse) {
+  const origin = String(req.headers.origin || '').trim();
+  if (!origin) return;
+
+  const isProdDeployment =
+    String(process.env.VERCEL_ENV || '').toLowerCase() === 'production' ||
+    ['prod', 'production'].includes(String(process.env.NEWS_PULSE_DEPLOYMENT || process.env.NEWS_PULSE_ENV || '').toLowerCase());
+
+  if (isProdDeployment) return;
+  if (!DEV_ALLOWED_ORIGINS.has(origin)) return;
+
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+}
+
 function noStore(res: NextApiResponse) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.setHeader('Pragma', 'no-cache');
@@ -48,10 +68,16 @@ async function writePublishedLocal(settingsRaw: unknown): Promise<PublicSettings
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  setCors(req, res);
   noStore(res);
 
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Allow', 'POST,OPTIONS');
+    return res.status(200).end();
+  }
+
   if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST');
+    res.setHeader('Allow', 'POST,OPTIONS');
     return res.status(405).json({ ok: false, message: 'METHOD_NOT_ALLOWED' });
   }
 

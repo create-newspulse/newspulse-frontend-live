@@ -392,17 +392,19 @@ const MyCommunityStoriesPage: React.FC<FeatureToggleProps> = ({ communityReporte
 export default MyCommunityStoriesPage;
 
 export const getServerSideProps: GetServerSideProps<FeatureToggleProps> = async ({ locale }) => {
-  const base = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/+$/, '');
+  const base = (process.env.NEXT_PUBLIC_API_BASE || '').replace(/\/+$/, '');
   let communityReporterClosed = false;
   let reporterPortalClosed = false;
-  try {
-    const resp = await fetch(`${base}/api/public/feature-toggles`, { headers: { Accept: 'application/json' } });
-    const data = await resp.json().catch(() => null as any);
-    if (resp.ok && data) {
-      communityReporterClosed = Boolean(data.communityReporterClosed);
-      reporterPortalClosed = Boolean(data.reporterPortalClosed);
-    }
-  } catch {}
+  if (base) {
+    try {
+      const resp = await fetch(`${base}/api/public/feature-toggles`, { headers: { Accept: 'application/json' } });
+      const data = await resp.json().catch(() => null as any);
+      if (resp.ok && data) {
+        communityReporterClosed = Boolean(data.communityReporterClosed);
+        reporterPortalClosed = Boolean(data.reporterPortalClosed);
+      }
+    } catch {}
+  }
   const { getMessages } = await import('../lib/getMessages');
   return { props: { communityReporterClosed, reporterPortalClosed, messages: await getMessages(locale as string) } };
 };

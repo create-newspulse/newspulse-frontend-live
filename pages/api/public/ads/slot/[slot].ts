@@ -14,7 +14,7 @@ type PublicAd = {
 
 type PublicAdResponse = { ok: boolean; ad: PublicAd | null };
 
-const BACKEND_URL = (process.env.NEXT_PUBLIC_API_URL || '').trim().replace(/\/+$/, '');
+const BACKEND_URL = (process.env.NEXT_PUBLIC_API_BASE || '').trim().replace(/\/+$/, '');
 
 function pickAd(payload: any): PublicAd | null {
   if (!payload) return null;

@@ -45,23 +45,27 @@ function formatDateLabel(iso?: string): string {
 }
 
 async function fetchYouthPulseArticles(limit: number, language?: string): Promise<any[]> {
-  const origin = getApiOrigin();
+  const isBrowser = typeof window !== 'undefined';
+  const base = getApiOrigin();
+  if (!isBrowser && !base) return [];
   const params = new URLSearchParams({ category: 'youth-pulse', limit: String(limit) });
   if (language) {
     params.set('lang', String(language));
     params.set('language', String(language));
   }
-  const url = `${origin}/api/public/news?${params.toString()}`;
+  const url = `${base}/api/public/news?${params.toString()}`;
 
-  const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' } });
-  if (!res.ok) {
-    throw new Error(`Request failed (${res.status})`);
+  try {
+    const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' } });
+    if (!res.ok) return [];
+
+    const data = await res.json().catch(() => null);
+    const list: unknown =
+      (data && (data.items || data.articles || data.news || data.data)) ?? (Array.isArray(data) ? data : []);
+    return Array.isArray(list) ? (list as any[]) : [];
+  } catch {
+    return [];
   }
-
-  const data = await res.json().catch(() => null);
-  const list: unknown =
-    (data && (data.items || data.articles || data.news || data.data)) ?? (Array.isArray(data) ? data : []);
-  return Array.isArray(list) ? (list as any[]) : [];
 }
 
 function toYouthStory(raw: any, fallbackCategoryLabel?: string): YouthStory {

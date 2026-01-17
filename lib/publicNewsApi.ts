@@ -1,3 +1,5 @@
+import { getPublicApiBaseUrl } from './publicApiBase';
+
 export type Article = {
   _id: string;
   title?: string;
@@ -16,9 +18,8 @@ export type Article = {
 };
 
 export function getApiOrigin() {
-  // Per project convention: ONLY NEXT_PUBLIC_API_URL is allowed.
-  const origin = process.env.NEXT_PUBLIC_API_URL || '';
-  return String(origin).trim().replace(/\/+$/, '');
+  // Keep name for back-compat, but source is now NEXT_PUBLIC_API_BASE.
+  return getPublicApiBaseUrl();
 }
 
 export function unwrapArticles(payload: any): Article[] {
@@ -63,13 +64,14 @@ export async function fetchPublicNews(options: {
   error?: string;
   status?: number;
 }> {
-  const origin = getApiOrigin();
-  if (!origin) {
+  const isBrowser = typeof window !== 'undefined';
+  const base = getApiOrigin();
+  if (!isBrowser && !base) {
     return {
       items: [],
       meta: { limit: options.limit },
       endpoint: '',
-      error: 'NEXT_PUBLIC_API_URL not set',
+      error: 'NEXT_PUBLIC_API_BASE not set',
     };
   }
   const params = new URLSearchParams();
@@ -94,7 +96,8 @@ export async function fetchPublicNews(options: {
     }
   }
 
-  const endpoint = `${origin}/api/public/news?${params.toString()}`;
+  // In the browser, `base` may be "" which yields a same-origin request.
+  const endpoint = `${base}/api/public/news?${params.toString()}`;
 
   try {
     const res = await fetch(endpoint, {
@@ -137,12 +140,12 @@ export async function fetchPublishedCategoryArticles(options: {
   categoryKey: string;
   limit?: number;
 }): Promise<{ articles: Article[]; error?: string; endpoint: string }> {
-  const origin = getApiOrigin();
-  if (!origin) {
-    return { articles: [], error: 'NEXT_PUBLIC_API_URL not set', endpoint: '' };
+  const base = getApiOrigin();
+  if (!base) {
+    return { articles: [], error: 'NEXT_PUBLIC_API_BASE not set', endpoint: '' };
   }
   const limit = options.limit ?? 30;
-  const endpoint = `${origin}/api/news?category=${encodeURIComponent(options.categoryKey)}&limit=${encodeURIComponent(String(limit))}`;
+  const endpoint = `${base}/api/news?category=${encodeURIComponent(options.categoryKey)}&limit=${encodeURIComponent(String(limit))}`;
 
   try {
     const res = await fetch(endpoint);
@@ -165,17 +168,17 @@ export async function fetchPublishedCategoryArticles(options: {
 export async function fetchArticleBySlugOrId(options: {
   slugOrId: string;
 }): Promise<{ article: Article | null; error?: string; status?: number; endpointTried: string[] }> {
-  const origin = getApiOrigin();
-  if (!origin) {
-    return { article: null, error: 'NEXT_PUBLIC_API_URL not set', endpointTried: [] };
+  const base = getApiOrigin();
+  if (!base) {
+    return { article: null, error: 'NEXT_PUBLIC_API_BASE not set', endpointTried: [] };
   }
   const slug = options.slugOrId;
 
   const endpoints = [
     // Current backend: article detail is served under /api/articles/:id
-    `${origin}/api/articles/${encodeURIComponent(slug)}`,
-    `${origin}/api/news/${encodeURIComponent(slug)}`,
-    `${origin}/api/news/by-slug/${encodeURIComponent(slug)}`,
+    `${base}/api/articles/${encodeURIComponent(slug)}`,
+    `${base}/api/news/${encodeURIComponent(slug)}`,
+    `${base}/api/news/by-slug/${encodeURIComponent(slug)}`,
   ];
 
   for (let i = 0; i < endpoints.length; i++) {

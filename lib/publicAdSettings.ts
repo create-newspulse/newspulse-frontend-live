@@ -19,7 +19,7 @@ let cached: PublicAdSettingsResponse | null = null;
 let inFlight: Promise<PublicAdSettingsResponse> | null = null;
 
 function getApiBase(): string {
-  const raw = (process.env.NEXT_PUBLIC_API_URL || '').toString().trim();
+  const raw = (process.env.NEXT_PUBLIC_API_BASE || '').toString().trim();
   return raw.replace(/\/+$/, '');
 }
 

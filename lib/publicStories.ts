@@ -1,3 +1,5 @@
+import { getPublicApiBaseUrl } from './publicApiBase';
+
 export type PublicStory = {
   _id: string;
   slug?: string;
@@ -12,9 +14,7 @@ export type PublicStory = {
 };
 
 export function getApiBaseUrl(): string {
-  // Per project convention: ONLY NEXT_PUBLIC_API_URL is allowed.
-  const base = process.env.NEXT_PUBLIC_API_URL || '';
-  return String(base).trim().replace(/\/+$/, '');
+  return getPublicApiBaseUrl();
 }
 
 function unwrapStories(payload: any): PublicStory[] {

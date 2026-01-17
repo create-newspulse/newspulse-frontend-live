@@ -119,15 +119,15 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
   const [settingsError, setSettingsError] = useState<string | null>(null);
   // Category values already use stable slugs; no mapping required.
 
-  // Public backend base URL (env override -> fallback)
-  const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://newspulse-backend-real.onrender.com';
+  // Public backend base URL (no prod fallback)
+  const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE || '').toString().trim().replace(/\/+$/, '');
 
   // Fetch public community settings on mount
   useEffect(() => {
     let cancelled = false;
     setSettingsLoading(true);
     setSettingsError(null);
-    fetch('/api/public/community/settings', { headers: { Accept: 'application/json' } })
+    fetch(`${API_BASE_URL}/api/public/community/settings`, { headers: { Accept: 'application/json' } })
       .then(async (res) => {
         const data = await res.json().catch(() => null);
         if (cancelled) return;
@@ -825,7 +825,7 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
 export default CommunityReporterPage;
 
 export const getServerSideProps: GetServerSideProps<FeatureToggleProps> = async ({ locale }) => {
-  const base = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/+$/, '');
+  const base = (process.env.NEXT_PUBLIC_API_BASE || '').replace(/\/+$/, '');
   let communityReporterClosed = false;
   let reporterPortalClosed = false;
   try {

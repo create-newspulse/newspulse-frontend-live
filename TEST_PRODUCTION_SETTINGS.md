@@ -93,7 +93,7 @@ npm run dev
 ```bash
 # Simulate backend failure:
 # 1. Edit .env.local:
-NEXT_PUBLIC_API_URL=http://localhost:9999
+NEXT_PUBLIC_API_BASE=http://localhost:9999
 
 # 2. Restart dev server: npm run dev
 # 3. Visit homepage
@@ -103,7 +103,7 @@ NEXT_PUBLIC_API_URL=http://localhost:9999
 # ✅ Expected: No errors, graceful fallback
 
 # 4. Restore correct backend URL
-NEXT_PUBLIC_API_URL=https://newspulse-backend-real.onrender.com
+NEXT_PUBLIC_API_BASE=https://YOUR_PROD_BACKEND_DOMAIN
 
 # 5. Restart server
 ```
@@ -210,5 +210,5 @@ All criteria met:
 
 **Implementation Date:** January 8, 2026  
 **Status:** ✅ Production Ready  
-**Backend URL:** https://newspulse-backend-real.onrender.com  
+**Backend URL:** Set via `NEXT_PUBLIC_API_BASE`  
 **Frontend URL:** http://localhost:3000 (dev) | https://newspulse.vercel.app (prod)

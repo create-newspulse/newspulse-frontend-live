@@ -9,9 +9,9 @@ export const config = {
 
 function getBackendBaseUrl(): string {
   const raw =
+    process.env.NEXT_PUBLIC_API_BASE ||
     process.env.NEWS_PULSE_BACKEND_URL ||
     process.env.API_BASE_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
     ''
   return raw.toString().trim().replace(/\/+$/, '')
 }
@@ -29,11 +29,11 @@ export default async function uploadIdHandler(
   if (!base) {
     console.error(
       '[community-reporter/upload-id]',
-      new Error('Missing env var: API_BASE_URL'),
+      new Error('Missing env var: NEXT_PUBLIC_API_BASE'),
     )
     return res
       .status(500)
-      .json({ ok: false, message: 'Missing env var: API_BASE_URL' })
+      .json({ ok: false, message: 'Missing env var: NEXT_PUBLIC_API_BASE' })
   }
 
   const targetUrl = `${base}/api/community-reporter/upload-id`

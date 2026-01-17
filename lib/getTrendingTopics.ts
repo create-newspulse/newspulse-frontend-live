@@ -1,11 +1,12 @@
 import { DEFAULT_TRENDING_TOPICS, type TrendingTopic } from '../src/config/trendingTopics';
+import { getPublicApiBaseUrl } from './publicApiBase';
 
 function trimTrailingSlashes(value: string): string {
   return value.replace(/\/+$/, '');
 }
 
 function getApiOrigin(): string {
-  return trimTrailingSlashes(process.env.NEXT_PUBLIC_API_URL || '');
+  return trimTrailingSlashes(getPublicApiBaseUrl() || '');
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -49,7 +50,10 @@ function normalizeTopic(raw: unknown): TrendingTopic | null {
 }
 
 export function getTrendingTopicsRequestUrl(): string {
-  return `${getApiOrigin()}/api/public/trending-topics`;
+  const base = getApiOrigin();
+  // In the browser, base may be "" which yields a same-origin request.
+  if (typeof window !== 'undefined') return `${base}/api/public/trending-topics`;
+  return `${base}/api/public/trending-topics`;
 }
 
 export async function getTrendingTopics(): Promise<TrendingTopic[]> {

@@ -73,7 +73,7 @@ export async function fetchPublicSiteSettings(options?: {
   const endpoint = base ? `${base}/api/site-settings/public` : '';
 
   if (!base) {
-    return { settings: null, endpoint, error: 'NEXT_PUBLIC_API_URL not set' };
+    return { settings: null, endpoint, error: 'NEXT_PUBLIC_API_BASE not set' };
   }
 
   const now = Date.now();

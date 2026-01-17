@@ -10,7 +10,10 @@ type PublicModeResponse = {
   message?: string;
 };
 
-const BACKEND_URL = 'https://newspulse-backend-real.onrender.com';
+function getApiBase(): string {
+  const raw = (process.env.NEXT_PUBLIC_API_BASE || '').toString().trim();
+  return raw.replace(/\/+$/, '');
+}
 const TTL_MS = 60_000;
 
 const DEFAULT_MODE: PublicModeResponse = {
@@ -46,7 +49,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const upstream = await fetch(`${BACKEND_URL}/api/system/public-mode`, {
+    const base = getApiBase();
+    if (!base) {
+      res.setHeader('Cache-Control', 'public, max-age=60');
+      return res.status(200).json(DEFAULT_MODE);
+    }
+
+    const upstream = await fetch(`${base}/api/system/public-mode`, {
       method: 'GET',
       headers: { Accept: 'application/json' },
     });

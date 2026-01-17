@@ -251,5 +251,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // ignore
   }
 
-  return res.status(502).json({ ok: false, message: 'PUBLIC_SETTINGS_UPSTREAM_UNAVAILABLE' });
+  // Fail open in local/dev when the backend isn't reachable.
+  // This keeps the UI usable and avoids confusing 502s.
+  try {
+    const local = await readPublishedLocal();
+    return res.status(200).json(local);
+  } catch {
+    return res.status(200).json(DEFAULT_PUBLIC_SETTINGS_RESPONSE);
+  }
 }

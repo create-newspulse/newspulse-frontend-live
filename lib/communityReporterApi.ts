@@ -1,8 +1,13 @@
 import type { CommunitySettingsPublic, CommunityStorySummary } from "../types/community-reporter";
 
+function getApiBase(): string {
+  return String(process.env.NEXT_PUBLIC_API_BASE || '').trim().replace(/\/+$/, '');
+}
+
 export async function fetchPublicSettings(): Promise<CommunitySettingsPublic | null> {
   try {
-    const res = await fetch('/api/public/community/settings', { headers: { Accept: 'application/json' } });
+    const base = getApiBase();
+    const res = await fetch(`${base}/api/public/community/settings`, { headers: { Accept: 'application/json' } });
     const data = await res.json().catch(() => null as any);
     if (res.ok && data && data.ok === true && data.settings) {
       return {
@@ -18,7 +23,8 @@ export async function fetchPublicSettings(): Promise<CommunitySettingsPublic | n
 
 export async function fetchMyStoriesByEmail(email: string): Promise<CommunityStorySummary[]> {
   if (!email) return [];
-  const res = await fetch(`/api/community-reporter/my-stories?email=${encodeURIComponent(email.toLowerCase())}`);
+  const base = getApiBase();
+  const res = await fetch(`${base}/api/community-reporter/my-stories?email=${encodeURIComponent(email.toLowerCase())}`);
   const data = await res.json().catch(() => null as any);
   if (res.ok && (data?.ok === true || data?.success === true)) {
     const items = Array.isArray(data?.stories)
@@ -36,7 +42,8 @@ export async function fetchMyStoriesByEmail(email: string): Promise<CommunitySto
 export async function withdrawStoryById(id: string, reporterId?: string | null): Promise<boolean> {
   const sid = String(id || '').trim();
   if (!sid) return false;
-  const res = await fetch(`/api/community-reporter/${encodeURIComponent(sid)}/withdraw`, {
+  const base = getApiBase();
+  const res = await fetch(`${base}/api/public/community-reporter/${encodeURIComponent(sid)}/withdraw`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ reporterId: reporterId || undefined }),

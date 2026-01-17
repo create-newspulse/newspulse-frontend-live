@@ -10,8 +10,8 @@
 
 ### 2. Next.js Rewrite Configuration ✅
 - **File:** `next.config.js`
-- **Rule:** `/api/public/settings` → `${NEXT_PUBLIC_API_URL}/api/public/settings`
-- **Backend URL:** `https://newspulse-backend-real.onrender.com`
+- **Rule:** `/api/public/settings` → `${NEXT_PUBLIC_API_BASE}/api/public/settings`
+- **Backend URL:** Set via `NEXT_PUBLIC_API_BASE` (no hardcoded default)
 - **No CORS issues:** Proxied through Next.js server
 
 ### 3. UI Rendering Controlled by Backend ✅
@@ -134,7 +134,7 @@ NEXT_PUBLIC_ENABLE_PUBLIC_SETTINGS_DRAWER=true
 
 Before deploying to production:
 
-- [ ] Verify `NEXT_PUBLIC_API_URL` points to production backend
+- [ ] Verify `NEXT_PUBLIC_API_BASE` points to production backend
 - [ ] Ensure `NEXT_PUBLIC_ENABLE_PUBLIC_SETTINGS_DRAWER` is **not set** or `false`
 - [ ] Test Admin Panel → Publish → Frontend refresh flow
 - [ ] Verify settings icon is NOT visible to public users
@@ -231,5 +231,5 @@ Frontend normalizes both shapes automatically.
 
 **Status:** ✅ Production Ready  
 **Implementation Date:** January 7, 2026  
-**Backend URL:** https://newspulse-backend-real.onrender.com  
+**Backend URL:** Set via `NEXT_PUBLIC_API_BASE`  
 **Frontend URL:** http://localhost:3000 (dev) | https://newspulse.vercel.app (prod)

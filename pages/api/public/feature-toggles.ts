@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || ''
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || ''
 
 export default async function handler(
   req: NextApiRequest,
@@ -13,7 +13,7 @@ export default async function handler(
 
   const base = (API_BASE_URL || '').replace(/\/+$/, '')
   if (!base) {
-    return res.status(200).json({ ok: false, message: 'NEXT_PUBLIC_API_URL not set' })
+    return res.status(200).json({ ok: false, message: 'NEXT_PUBLIC_API_BASE not set' })
   }
   const targetUrl = `${base}/api/public/feature-toggles`
 

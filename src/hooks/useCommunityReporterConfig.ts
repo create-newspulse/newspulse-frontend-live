@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { getPublicApiBaseUrl } from '../../lib/publicApiBase';
 
 export interface CommunityReporterConfig {
   communityMyStoriesEnabled: boolean;
@@ -13,8 +14,9 @@ export function useCommunityReporterConfig() {
     let cancelled = false;
     setIsLoading(true);
     setError(null);
+    const base = getPublicApiBaseUrl();
     // Use new public settings endpoint
-    fetch('/api/public/community/settings', { headers: { Accept: 'application/json' } })
+    fetch(`${base}/api/public/community/settings`, { headers: { Accept: 'application/json' } })
       .then(async (res) => {
         const data = await res.json().catch(() => null);
         if (cancelled) return;

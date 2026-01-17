@@ -40,32 +40,26 @@ const nextConfig = {
   },
 
   async rewrites() {
-    const backend = (process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_BASE_URL || '').trim().replace(/\/+$/, '');
-    
-    if (!backend) {
-      // No backend configured - API routes will handle fallback locally
-      return [];
-    }
-
-    return [
-      {
-        source: '/api/public/settings',
-        destination: `${backend}/api/public/settings`,
-      },
-      {
-        source: '/api/public/news',
-        destination: `${backend}/api/public/news`,
-      },
-      {
-        source: '/api/public/trending-topics',
-        destination: `${backend}/api/public/trending-topics`,
-      },
-    ];
+    // Prefer Next.js API routes under pages/api for proxying.
+    // Rewrites here can bypass those handlers and return 502 when the backend is unreachable.
+    return [];
   },
 
   async headers() {
     const isDev = process.env.NODE_ENV !== 'production';
-    const backend = (process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_BASE_URL || '').trim().replace(/\/+$/, '');
+    const isProdDeployment =
+      String(process.env.VERCEL_ENV || '').toLowerCase() === 'production' ||
+      ['prod', 'production'].includes(String(process.env.NEWS_PULSE_DEPLOYMENT || process.env.NEWS_PULSE_ENV || '').toLowerCase());
+    const backendRaw =
+      (process.env.NEXT_PUBLIC_API_BASE ||
+        (isProdDeployment ? process.env.NEXT_PUBLIC_API_BASE_PROD : process.env.NEXT_PUBLIC_API_BASE_DEV) ||
+        process.env.NEXT_PUBLIC_API_URL ||
+        process.env.NEXT_PUBLIC_BACKEND_URL ||
+        process.env.NEXT_PUBLIC_API_BASE_URL ||
+        '')
+        .toString()
+        .trim();
+    const backend = backendRaw.replace(/\/+$/, '').replace(/\/api\/?$/, '');
 
     // Content Security Policy
     const csp = [

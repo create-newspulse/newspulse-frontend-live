@@ -11,7 +11,7 @@ App Load → PublicSettingsContext (src/context/PublicSettingsContext.tsx)
   ↓
   GET /api/public/settings (proxied via Next.js rewrite)
   ↓
-  Backend: https://newspulse-backend-real.onrender.com/api/public/settings
+  Backend: ${NEXT_PUBLIC_API_BASE}/api/public/settings
   ↓
   Response: { ok: true, published: { modules, tickers, languageTheme, footerText } }
   ↓
@@ -23,7 +23,7 @@ App Load → PublicSettingsContext (src/context/PublicSettingsContext.tsx)
 
 ```javascript
 async rewrites() {
-  const backend = process.env.NEXT_PUBLIC_API_URL;
+  const backend = process.env.NEXT_PUBLIC_API_BASE;
   return [
     {
       source: '/api/public/settings',
@@ -33,7 +33,7 @@ async rewrites() {
 }
 ```
 
-**Environment Variable:** `NEXT_PUBLIC_API_URL=https://newspulse-backend-real.onrender.com`
+**Environment Variable:** `NEXT_PUBLIC_API_BASE=http://localhost:5000` (dev) or `NEXT_PUBLIC_API_BASE=https://YOUR_PROD_BACKEND_DOMAIN` (prod)
 
 ### 3. Settings Applied to UI
 
@@ -151,7 +151,7 @@ If backend fetch fails:
 
 ## Production Checklist
 
-- [x] Backend URL configured: `NEXT_PUBLIC_API_URL=https://newspulse-backend-real.onrender.com`
+- [x] Backend URL configured via `NEXT_PUBLIC_API_BASE`
 - [x] Settings drawer hidden by default: `NEXT_PUBLIC_ENABLE_PUBLIC_SETTINGS_DRAWER` unset or `false`
 - [x] Next.js rewrite proxies `/api/public/settings` to backend
 - [x] No localStorage writes for production users
@@ -242,7 +242,7 @@ Frontend normalizes both shapes via `mergePublicSettingsWithDefaults()`.
 
 ### Settings not updating after Admin Panel publish?
 1. Check browser console for fetch errors
-2. Verify `NEXT_PUBLIC_API_URL` is set correctly
+2. Verify `NEXT_PUBLIC_API_BASE` is set correctly
 3. Check backend logs: `GET /api/public/settings` should return 200
 4. Hard refresh: Ctrl+Shift+R (clears cache)
 

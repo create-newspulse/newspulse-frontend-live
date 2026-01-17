@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 
 // Resolve backend origin strictly from env (no localhost default)
 const RAW_API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE ||
   process.env.NEWS_PULSE_BACKEND_URL ||
   process.env.API_BASE_URL ||
   ''
@@ -20,8 +21,8 @@ export default async function submitHandler(
   // Validate required env vars used by this route
   const base = (RAW_API_BASE_URL || '').toString().trim()
   if (!base) {
-    console.error('[community-reporter/submit]', new Error('Missing env var: API_BASE_URL'))
-    return res.status(500).json({ error: 'Missing env var: API_BASE_URL' })
+    console.error('[community-reporter/submit]', new Error('Missing env var: NEXT_PUBLIC_API_BASE'))
+    return res.status(500).json({ error: 'Missing env var: NEXT_PUBLIC_API_BASE' })
   }
 
   const targetUrl = `${base.replace(/\/+$/, '')}/api/community-reporter/submit`

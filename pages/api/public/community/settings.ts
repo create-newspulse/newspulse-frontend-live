@@ -15,7 +15,7 @@ export default async function handler(
   }
 
   try {
-    const base = process.env.NEXT_PUBLIC_API_URL
+    const base = process.env.NEXT_PUBLIC_API_BASE
 
     // Default: everything open
     let toggles: CommunitySettings = {
@@ -26,7 +26,7 @@ export default async function handler(
 
     try {
       if (!base) {
-        console.warn('[api/public/community/settings] NEXT_PUBLIC_API_URL not set; using defaults')
+        console.warn('[api/public/community/settings] NEXT_PUBLIC_API_BASE not set; using defaults')
       } else {
         const r = await fetch(`${base.replace(/\/+$/, '')}/api/public/feature-toggles`, { cache: 'no-store' })
         if (r.ok) {

@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 
 // Server-side proxy to avoid browser CORS. Forwards POST to backend with a
 // minimal, backend-compatible payload (headline, story, category only).
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://newspulse-backend-real.onrender.com'
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE || '').toString().trim()
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -10,7 +10,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ code: 'method_not_allowed' })
   }
 
-  const targetUrl = `${API_BASE_URL.replace(/\/+$/, '')}/api/community/submissions`
+  const base = API_BASE_URL.replace(/\/+$/, '')
+  if (!base) {
+    return res.status(500).json({ error: 'missing_api_base', message: 'Missing env var: NEXT_PUBLIC_API_BASE' })
+  }
+
+  const targetUrl = `${base}/api/community/submissions`
 
   try {
     const body = (req.body && typeof req.body === 'object') ? req.body as Record<string, any> : {}

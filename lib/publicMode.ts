@@ -11,7 +11,10 @@ export type PublicModeResponse = {
   message?: string;
 };
 
-const BACKEND_URL = 'https://newspulse-backend-real.onrender.com';
+function getApiBase(): string {
+  const raw = (process.env.NEXT_PUBLIC_API_BASE || '').toString().trim();
+  return raw.replace(/\/+$/, '');
+}
 const CACHE_TTL_MS = 60_000; // 60 seconds
 
 let cachedResponse: { fetchedAt: number; data: PublicModeResponse } | null = null;
@@ -32,9 +35,9 @@ export async function fetchPublicMode(): Promise<PublicModeResponse> {
   }
 
   try {
-    const url = typeof window !== 'undefined'
-      ? '/api/public/mode'
-      : `${BACKEND_URL}/api/system/public-mode`;
+    // In the browser, use Next API route proxy (avoids CORS and backend-down 502s).
+    const url = typeof window !== 'undefined' ? '/api/public/mode' : `${getApiBase()}/api/system/public-mode`;
+    if (typeof window === 'undefined' && !getApiBase()) return DEFAULT_MODE;
 
     const res = await fetch(url, {
       method: 'GET',

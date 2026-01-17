@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useI18n } from '../src/i18n/LanguageProvider';
 import { LanguageDropdown } from '../src/i18n/language';
+import { getPublicApiBaseUrl } from '../lib/publicApiBase';
 
 export default function NavBar() {
   const { t } = useI18n();
@@ -11,7 +12,8 @@ export default function NavBar() {
     let cancelled = false;
     const load = async () => {
       try {
-        const res = await fetch('/api/public/feature-toggles', { headers: { Accept: 'application/json' } });
+        const base = getPublicApiBaseUrl();
+        const res = await fetch(`${base}/api/public/feature-toggles`, { headers: { Accept: 'application/json' } });
         const data = await res.json().catch(() => null);
         if (!cancelled && res.ok && data) {
           setHideCommunityReporter(Boolean(data.communityReporterClosed));

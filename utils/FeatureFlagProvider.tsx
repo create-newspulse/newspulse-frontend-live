@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { getPublicApiBaseUrl } from '../lib/publicApiBase';
 
 export type FeatureFlagKey = 'comments.enabled' | 'voice.enabled' | 'askAnchor.enabled';
 export type FeatureFlags = Record<FeatureFlagKey, boolean>;
@@ -18,8 +19,9 @@ const TTL_MS = 60_000;
 let cached: { fetchedAt: number; flags: Partial<FeatureFlags> } | null = null;
 
 async function fetchPublicSettings(keys: FeatureFlagKey[]): Promise<Partial<FeatureFlags>> {
+  const base = getPublicApiBaseUrl();
   const qs = encodeURIComponent(keys.join(','));
-  const res = await fetch(`/api/public/settings?keys=${qs}`, { headers: { Accept: 'application/json' } });
+  const res = await fetch(`${base}/api/public/settings?keys=${qs}`, { headers: { Accept: 'application/json' } });
   const data = await res.json().catch(() => null);
   if (!res.ok || !data || data.ok !== true || !data.settings) return {};
   return data.settings as Partial<FeatureFlags>;

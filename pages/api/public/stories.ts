@@ -1,0 +1,36 @@
+import type { NextApiRequest, NextApiResponse } from 'next';
+
+function getApiBase(): string {
+  return String(process.env.NEXT_PUBLIC_API_BASE || '').trim().replace(/\/+$/, '');
+}
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'GET') {
+    res.setHeader('Allow', 'GET');
+    return res.status(405).json({ ok: false, message: 'METHOD_NOT_ALLOWED' });
+  }
+
+  const base = getApiBase();
+  if (!base) return res.status(200).json([]);
+
+  const qsIndex = (req.url || '').indexOf('?');
+  const qs = qsIndex >= 0 ? (req.url || '').slice(qsIndex) : '';
+  const targetUrl = `${base}/api/public/stories${qs}`;
+
+  try {
+    const upstream = await fetch(targetUrl, { method: 'GET', headers: { Accept: 'application/json' } });
+    const text = await upstream.text().catch(() => '');
+
+    if (upstream.status === 404) return res.status(200).json([]);
+    if (!upstream.ok) return res.status(200).json([]);
+
+    try {
+      const json = text ? JSON.parse(text) : [];
+      return res.status(200).json(json);
+    } catch {
+      return res.status(200).json([]);
+    }
+  } catch {
+    return res.status(200).json([]);
+  }
+}

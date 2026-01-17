@@ -66,6 +66,43 @@ npm run dev
 
 Visit `http://localhost:3000` to see the application.
 
+### Backend API base (required)
+
+Create `.env.local` with:
+
+```dotenv
+NEXT_PUBLIC_API_BASE_DEV=http://localhost:3010
+```
+
+On Vercel (production deployment), set:
+
+```dotenv
+NEXT_PUBLIC_API_BASE_PROD=https://PROD_BACKEND_DOMAIN
+```
+
+You can still use the legacy single var `NEXT_PUBLIC_API_BASE`, but the split vars are recommended.
+
+### Admin + Public environment separation
+
+This frontend assumes **environment separation happens at the backend**:
+
+- Local Admin + Local Public → point to the **dev backend**, which must use the **dev DB**
+- Production Admin + Production Public → point to the **prod backend**, which must use the **prod DB**
+
+In practice:
+
+- DEV backend DB: `newspulse_dev`
+- PROD backend DB: `newspulse_prod`
+
+Frontend env:
+
+- Local: set `NEXT_PUBLIC_API_BASE_DEV=http://localhost:3010`
+- Vercel: set `NEXT_PUBLIC_API_BASE_PROD=https://YOUR_PROD_BACKEND_DOMAIN`
+
+Safety: in dev, the server will refuse a `newspulse.co.in` backend unless you explicitly set `NEXT_PUBLIC_ALLOW_PROD_BACKEND_IN_DEV=true`.
+
+For the backend/DB contract (DEV=`newspulse_dev`, PROD=`newspulse_prod`), see [BACKEND_ENV_SEPARATION.md](BACKEND_ENV_SEPARATION.md).
+
 ## 🛠️ Tech Stack
 
 ### **Frontend**

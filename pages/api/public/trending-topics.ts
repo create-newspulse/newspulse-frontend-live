@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 function getApiBase(): string {
-  const raw = process.env.NEXT_PUBLIC_API_URL || '';
+  const raw = process.env.NEXT_PUBLIC_API_BASE || '';
   return String(raw).trim().replace(/\/+$/, '');
 }
 

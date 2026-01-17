@@ -112,7 +112,7 @@ React.useEffect(() => {
 
 ```javascript
 async rewrites() {
-  const backend = process.env.NEXT_PUBLIC_API_URL;
+  const backend = process.env.NEXT_PUBLIC_API_BASE;
   
   if (!backend) {
     return [];
@@ -129,7 +129,7 @@ async rewrites() {
 ```
 
 **Production Setup:**
-- `NEXT_PUBLIC_API_URL=https://newspulse-backend-real.onrender.com`
+- `NEXT_PUBLIC_API_BASE=https://YOUR_PROD_BACKEND_DOMAIN`
 - Rewrites `/api/public/settings` → backend
 - No CORS issues (proxied through Next.js)
 
@@ -311,19 +311,19 @@ Expected: Key does NOT exist (or not being written)
 
 ### Production (.env.production)
 ```bash
-NEXT_PUBLIC_API_URL=https://newspulse-backend-real.onrender.com
+NEXT_PUBLIC_API_BASE=https://YOUR_PROD_BACKEND_DOMAIN
 # NEXT_PUBLIC_ENABLE_PUBLIC_SETTINGS_DRAWER is NOT set (defaults to false)
 ```
 
 ### Development (.env.local - current)
 ```bash
-NEXT_PUBLIC_API_URL=https://newspulse-backend-real.onrender.com
+NEXT_PUBLIC_API_BASE=http://localhost:5000
 # NEXT_PUBLIC_ENABLE_PUBLIC_SETTINGS_DRAWER is NOT set (settings UI hidden)
 ```
 
 ### Dev with Settings Drawer (.env.local - optional)
 ```bash
-NEXT_PUBLIC_API_URL=https://newspulse-backend-real.onrender.com
+NEXT_PUBLIC_API_BASE=http://localhost:5000
 NEXT_PUBLIC_ENABLE_PUBLIC_SETTINGS_DRAWER=true  # ← Enable for dev/testing only
 ```
 
@@ -334,7 +334,7 @@ NEXT_PUBLIC_ENABLE_PUBLIC_SETTINGS_DRAWER=true  # ← Enable for dev/testing onl
 1. Go to Vercel dashboard
 2. Select project: newspulse-frontend-live-main
 3. Settings → Environment Variables
-4. Ensure: NEXT_PUBLIC_API_URL = https://newspulse-backend-real.onrender.com
+4. Ensure: NEXT_PUBLIC_API_BASE = https://YOUR_PROD_BACKEND_DOMAIN
 5. Ensure: NEXT_PUBLIC_ENABLE_PUBLIC_SETTINGS_DRAWER is NOT set
 6. Deploy
 ```
@@ -381,6 +381,6 @@ All criteria met:
 **Implementation Complete:** January 8, 2026  
 **Status:** ✅ Production Ready  
 **Tested:** ✅ All acceptance criteria passed  
-**Backend:** https://newspulse-backend-real.onrender.com  
+**Backend:** Set via `NEXT_PUBLIC_API_BASE`  
 **Frontend Dev:** http://localhost:3000  
 **Frontend Prod:** https://newspulse.vercel.app
