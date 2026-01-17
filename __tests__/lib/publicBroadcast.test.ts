@@ -19,6 +19,18 @@ describe('publicBroadcast', () => {
     expect(toTickerTexts(res.items.live)).toEqual(['L1']);
   });
 
+  test('exposes meta.hasSettings based on payload', () => {
+    const withSettings = normalizePublicBroadcast({
+      ok: true,
+      settings: { breaking: { enabled: true, mode: 'AUTO', speedSec: 10 }, live: { enabled: true, mode: 'AUTO', speedSec: 20 } },
+      items: { breaking: [], live: [] },
+    });
+    expect(withSettings.meta.hasSettings).toBe(true);
+
+    const withoutSettings = normalizePublicBroadcast({ ok: true, items: { breaking: [], live: [] } });
+    expect(withoutSettings.meta.hasSettings).toBe(false);
+  });
+
   test('respects mode FORCE_ON/FORCE_OFF and AUTO uses enabled', () => {
     expect(shouldRenderTicker({ enabled: false, mode: 'AUTO', speedSec: 10 })).toBe(false);
     expect(shouldRenderTicker({ enabled: true, mode: 'AUTO', speedSec: 10 })).toBe(true);

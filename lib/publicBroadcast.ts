@@ -22,6 +22,9 @@ export type BroadcastTickerSettings = {
 
 export type PublicBroadcast = {
   ok: boolean;
+  meta: {
+    hasSettings: boolean;
+  };
   settings: {
     breaking: BroadcastTickerSettings;
     live: BroadcastTickerSettings;
@@ -71,6 +74,16 @@ export function normalizePublicBroadcast(raw: unknown): PublicBroadcast {
   const breakingSettingsRaw = settingsRaw?.breaking ?? settingsRaw?.tickers?.breaking ?? settingsRaw?.breakingTicker ?? null;
   const liveSettingsRaw = settingsRaw?.live ?? settingsRaw?.tickers?.live ?? settingsRaw?.liveTicker ?? null;
 
+  const hasBreakingSettings =
+    !!breakingSettingsRaw &&
+    typeof breakingSettingsRaw === 'object' &&
+    ('enabled' in (breakingSettingsRaw as any) || 'mode' in (breakingSettingsRaw as any) || 'speedSec' in (breakingSettingsRaw as any) || 'speedSeconds' in (breakingSettingsRaw as any));
+  const hasLiveSettings =
+    !!liveSettingsRaw &&
+    typeof liveSettingsRaw === 'object' &&
+    ('enabled' in (liveSettingsRaw as any) || 'mode' in (liveSettingsRaw as any) || 'speedSec' in (liveSettingsRaw as any) || 'speedSeconds' in (liveSettingsRaw as any));
+  const hasSettings = Boolean(root?._meta?.hasSettings ?? (hasBreakingSettings || hasLiveSettings));
+
   const settings = {
     breaking: {
       enabled: Boolean(breakingSettingsRaw?.enabled ?? DEFAULT_BREAKING_SETTINGS.enabled),
@@ -98,6 +111,7 @@ export function normalizePublicBroadcast(raw: unknown): PublicBroadcast {
 
   return {
     ok: root?.ok !== false,
+    meta: { hasSettings },
     settings,
     items: {
       breaking,
@@ -135,11 +149,11 @@ export async function fetchPublicBroadcast(options?: { signal?: AbortSignal }): 
 
     const json = await res.json().catch(() => null);
     if (!res.ok || !json) {
-      return normalizePublicBroadcast({ ok: false, settings: { breaking: DEFAULT_BREAKING_SETTINGS, live: DEFAULT_LIVE_SETTINGS }, items: { breaking: [], live: [] } });
+      return normalizePublicBroadcast({ ok: false, _meta: { hasSettings: false }, settings: { breaking: DEFAULT_BREAKING_SETTINGS, live: DEFAULT_LIVE_SETTINGS }, items: { breaking: [], live: [] } });
     }
 
     return normalizePublicBroadcast(json);
   } catch {
-    return normalizePublicBroadcast({ ok: false, settings: { breaking: DEFAULT_BREAKING_SETTINGS, live: DEFAULT_LIVE_SETTINGS }, items: { breaking: [], live: [] } });
+    return normalizePublicBroadcast({ ok: false, _meta: { hasSettings: false }, settings: { breaking: DEFAULT_BREAKING_SETTINGS, live: DEFAULT_LIVE_SETTINGS }, items: { breaking: [], live: [] } });
   }
 }

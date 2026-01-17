@@ -1968,17 +1968,35 @@ export default function UiPreviewV145() {
       const latestArticles = latestResp.items || [];
       setLatestFromBackend(latestArticles.map(articleToFeedItem));
 
+      // Fallback tickers (legacy behavior) in case broadcast is unavailable
+      const fallbackLiveItems = latestArticles.map(articleToTickerText).filter(Boolean) as string[];
+
+      const breakingResp = await fetchPublicNews({ category: 'breaking', language: apiLang, limit: 10, signal: controller.signal });
+      if (controller.signal.aborted) return;
+      const fallbackBreakingItems = (breakingResp.items || []).map(articleToTickerText).filter(Boolean) as string[];
+
       // Broadcast center tickers (preferred source)
       const broadcast = await fetchPublicBroadcast({ signal: controller.signal });
       if (controller.signal.aborted) return;
 
-      setBreakingFromBackend(toTickerTexts(broadcast.items.breaking));
-      setLiveFromBackend(toTickerTexts(broadcast.items.live));
+      const breakingTexts = toTickerTexts(broadcast.items.breaking);
+      const liveTexts = toTickerTexts(broadcast.items.live);
 
-      setBroadcastBreakingEnabled(shouldRenderTicker(broadcast.settings.breaking));
-      setBroadcastLiveEnabled(shouldRenderTicker(broadcast.settings.live));
-      setBroadcastBreakingSpeedSec(broadcast.settings.breaking.speedSec);
-      setBroadcastLiveSpeedSec(broadcast.settings.live.speedSec);
+      setBreakingFromBackend(breakingTexts.length ? breakingTexts : fallbackBreakingItems);
+      setLiveFromBackend(liveTexts.length ? liveTexts : fallbackLiveItems);
+
+      if (broadcast.meta.hasSettings) {
+        setBroadcastBreakingEnabled(shouldRenderTicker(broadcast.settings.breaking));
+        setBroadcastLiveEnabled(shouldRenderTicker(broadcast.settings.live));
+        setBroadcastBreakingSpeedSec(broadcast.settings.breaking.speedSec);
+        setBroadcastLiveSpeedSec(broadcast.settings.live.speedSec);
+      } else {
+        // If backend doesn't provide broadcast settings, fall back to published public settings.
+        setBroadcastBreakingEnabled(null);
+        setBroadcastLiveEnabled(null);
+        setBroadcastBreakingSpeedSec(null);
+        setBroadcastLiveSpeedSec(null);
+      }
     })().catch(() => {
       if (controller.signal.aborted) return;
       setLatestFromBackend([]);
