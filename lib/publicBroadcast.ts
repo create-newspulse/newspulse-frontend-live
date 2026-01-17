@@ -137,23 +137,52 @@ export function toTickerTexts(items: BroadcastItem[]): string[] {
 }
 
 export async function fetchPublicBroadcast(options?: { signal?: AbortSignal }): Promise<PublicBroadcast> {
+  const isBrowser = typeof window !== 'undefined';
   const base = getPublicApiBaseUrl();
-  const endpoint = `${base}/api/public/broadcast`;
+  const primaryEndpoint = isBrowser ? '/public-api/broadcast' : `${base}/api/public/broadcast`;
+  const fallbackEndpoint = isBrowser ? '/api/public/broadcast' : '';
+
+  const fetchOnce = async (endpoint: string): Promise<PublicBroadcast | null> => {
+    if (!endpoint) return null;
+    try {
+      const res = await fetch(endpoint, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          'Cache-Control': 'no-store',
+          Pragma: 'no-cache',
+        },
+        cache: 'no-store',
+        signal: options?.signal,
+      });
+
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json) return null;
+      return normalizePublicBroadcast(json);
+    } catch {
+      return null;
+    }
+  };
 
   try {
-    const res = await fetch(endpoint, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-      signal: options?.signal,
+    const primary = await fetchOnce(primaryEndpoint);
+    if (primary) return primary;
+
+    const fallback = await fetchOnce(fallbackEndpoint);
+    if (fallback) return fallback;
+
+    return normalizePublicBroadcast({
+      ok: false,
+      _meta: { hasSettings: false },
+      settings: { breaking: DEFAULT_BREAKING_SETTINGS, live: DEFAULT_LIVE_SETTINGS },
+      items: { breaking: [], live: [] },
     });
-
-    const json = await res.json().catch(() => null);
-    if (!res.ok || !json) {
-      return normalizePublicBroadcast({ ok: false, _meta: { hasSettings: false }, settings: { breaking: DEFAULT_BREAKING_SETTINGS, live: DEFAULT_LIVE_SETTINGS }, items: { breaking: [], live: [] } });
-    }
-
-    return normalizePublicBroadcast(json);
   } catch {
-    return normalizePublicBroadcast({ ok: false, _meta: { hasSettings: false }, settings: { breaking: DEFAULT_BREAKING_SETTINGS, live: DEFAULT_LIVE_SETTINGS }, items: { breaking: [], live: [] } });
+    return normalizePublicBroadcast({
+      ok: false,
+      _meta: { hasSettings: false },
+      settings: { breaking: DEFAULT_BREAKING_SETTINGS, live: DEFAULT_LIVE_SETTINGS },
+      items: { breaking: [], live: [] },
+    });
   }
 }
