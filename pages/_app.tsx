@@ -8,9 +8,28 @@ import { ThemeProvider } from '../utils/ThemeContext';
 import { FeatureFlagProvider } from '../utils/FeatureFlagProvider';
 import { PublicModeProvider } from '../utils/PublicModeProvider';
 import '../styles/globals.css';
+import { Inter, Noto_Sans_Gujarati, Noto_Sans_Devanagari } from 'next/font/google';
 import SafeIntlProvider from '../lib/SafeIntlProvider';
 import { usePublicSettings } from '../src/context/PublicSettingsContext';
 import { useTheme, type ThemeMode } from '../utils/ThemeContext';
+
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
+  display: 'swap',
+});
+
+const gujarati = Noto_Sans_Gujarati({
+  subsets: ['gujarati'],
+  variable: '--font-gujarati',
+  display: 'swap',
+});
+
+const devanagari = Noto_Sans_Devanagari({
+  subsets: ['devanagari'],
+  variable: '--font-devanagari',
+  display: 'swap',
+});
 
 function normalizeThemePreset(raw: unknown): ThemeMode | null {
   const v = String(raw || '').toLowerCase().trim();
@@ -55,7 +74,7 @@ function I18nBridge({ Component, pageProps }: { Component: any; pageProps: any }
   const messages = getMessagesForLang(lang);
   return (
     <SafeIntlProvider messages={messages} locale={lang} onError={() => {}}>
-      <div className="relative overflow-x-hidden">
+      <div className={`${inter.variable} ${gujarati.variable} ${devanagari.variable} relative overflow-x-hidden`}>
         <Component {...pageProps} />
       </div>
     </SafeIntlProvider>

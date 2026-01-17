@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import React, { useId, useMemo } from 'react';
+import { useI18n } from '../../src/i18n/LanguageProvider';
 
 function classNames(...s: Array<string | false | null | undefined>) {
   return s.filter(Boolean).join(' ');
@@ -43,6 +44,8 @@ export default function BreakingTicker({
   emptyText = 'No breaking news right now — stay tuned',
   className,
 }: BreakingTickerProps) {
+  const { lang } = useI18n();
+  const tickerLang = lang === 'gu' ? 'gu' : lang === 'hi' ? 'hi' : 'en';
   const id = useId().replace(/:/g, '');
 
   const safeItems = useMemo(() => {
@@ -86,7 +89,7 @@ export default function BreakingTicker({
           <div className={classNames(`np-marquee-${id}`, 'flex gap-10 text-sm font-medium')}
           >
             {loop.map((t, i) => (
-              <span key={`${id}-${i}`} className="whitespace-nowrap">
+              <span key={`${id}-${i}`} className="tickerText whitespace-nowrap" lang={tickerLang}>
                 {t}
               </span>
             ))}

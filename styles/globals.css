@@ -2,6 +2,41 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --font-body: var(--font-inter), system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+
+body {
+  font-family: var(--font-body);
+}
+
+/* Language-specific fallback */
+:lang(gu) {
+  font-family: var(--font-gujarati), var(--font-body);
+}
+
+:lang(hi) {
+  font-family: var(--font-devanagari), var(--font-body);
+}
+
+/* Premium ticker typography (English included) */
+.tickerText {
+  font-family: var(--font-body);
+  font-weight: 600;
+  letter-spacing: 0.15px;
+  line-height: 1.2;
+  font-variant-ligatures: none;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+
+@media (min-width: 768px) {
+  .tickerText {
+    font-weight: 600;
+    letter-spacing: 0.2px;
+  }
+}
+
 /* Performance optimizations */
 html, body {
   max-width: 100%;

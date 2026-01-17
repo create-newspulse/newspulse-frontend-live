@@ -874,8 +874,9 @@ function LanguagePicker({
 }
 
 function TickerBar({ theme, kind, items, onViewAll, speedSec }: any) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const label = kind === "breaking" ? `🔥 ${t('home.breakingNews')}` : `🔵 ${t('home.liveUpdates')}`;
+  const tickerLang = lang === 'gu' ? 'gu' : lang === 'hi' ? 'hi' : 'en';
 
   const safeItems =
     kind === "live"
@@ -919,10 +920,10 @@ function TickerBar({ theme, kind, items, onViewAll, speedSec }: any) {
               >
                 <div className="np-tickerTrack" style={{ animationDuration: `${speedSec || 24}s` }}>
                   <div className="np-tickerSeq whitespace-nowrap text-sm font-semibold text-white">
-                    <span className="pr-10">{text}</span>
+                    <span className="tickerText pr-10" lang={tickerLang}>{text}</span>
                   </div>
                   <div className="np-tickerSeq whitespace-nowrap text-sm font-semibold text-white">
-                    <span className="pr-10">{text}</span>
+                    <span className="tickerText pr-10" lang={tickerLang}>{text}</span>
                   </div>
                 </div>
               </div>
