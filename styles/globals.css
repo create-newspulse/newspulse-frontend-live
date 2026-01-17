@@ -22,17 +22,31 @@ body {
 /* Premium ticker typography (English included) */
 .tickerText {
   font-family: var(--font-body);
-  font-weight: 600;
-  letter-spacing: 0.15px;
+  font-weight: 500;
+  letter-spacing: 0.12px;
   line-height: 1.2;
   font-variant-ligatures: none;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+}
+
+.tickerLabel {
+  font-family: var(--font-body);
+  font-weight: 600;
+  letter-spacing: 0.18px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   text-rendering: geometricPrecision;
 }
 
 @media (min-width: 768px) {
   .tickerText {
-    font-weight: 600;
+    font-weight: 500;
+    letter-spacing: 0.18px;
+  }
+
+  .tickerLabel {
     letter-spacing: 0.2px;
   }
 }

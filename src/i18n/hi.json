@@ -152,6 +152,10 @@
     "searchFailed": "खोज विफल रही"
   }
   ,
+  "content": {
+    "original": "मूल"
+  }
+  ,
   "trending": {
     "title": "ट्रेंडिंग",
     "breaking": "ब्रेकिंग",

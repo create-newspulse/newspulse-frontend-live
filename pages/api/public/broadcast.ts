@@ -25,7 +25,9 @@ async function safeJson(res: Response): Promise<any | null> {
 }
 
 async function fetchItems(origin: string, type: BroadcastType, req: NextApiRequest): Promise<any[]> {
-  const upstream = await fetch(`${origin}/api/public/broadcast/items?type=${encodeURIComponent(type)}`, {
+  const lang = String((req.query as any)?.lang || '').toLowerCase().trim();
+  const langParam = lang === 'en' || lang === 'hi' || lang === 'gu' ? `&lang=${encodeURIComponent(lang)}` : '';
+  const upstream = await fetch(`${origin}/api/public/broadcast/items?type=${encodeURIComponent(type)}${langParam}`, {
     method: 'GET',
     headers: {
       Accept: 'application/json',
@@ -66,6 +68,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const base = getPublicApiBaseUrl();
   const origin = toOrigin(base);
 
+  const qLang = String((req.query as any)?.lang || '').toLowerCase().trim();
+  const langParam = qLang === 'en' || qLang === 'hi' || qLang === 'gu' ? `?lang=${encodeURIComponent(qLang)}` : '';
+
   // Fail open: keep UI alive even if env not configured.
   if (!origin) {
     return res.status(200).json({ ok: true, settings: { breaking: { enabled: true, mode: 'AUTO', speedSec: 18 }, live: { enabled: true, mode: 'AUTO', speedSec: 24 } }, items: { breaking: [], live: [] } });
@@ -73,7 +78,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // Preferred: single backend call.
   try {
-    const upstream = await fetch(`${origin}/api/public/broadcast`, {
+    const upstream = await fetch(`${origin}/api/public/broadcast${langParam}`, {
       method: 'GET',
       headers: {
         Accept: 'application/json',

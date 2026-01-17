@@ -3,11 +3,17 @@ import { getPublicApiBaseUrl } from './publicApiBase';
 export type BroadcastType = 'breaking' | 'live';
 export type BroadcastMode = 'AUTO' | 'FORCE_ON' | 'FORCE_OFF';
 
+export type BroadcastLang = 'en' | 'hi' | 'gu';
+
 export type BroadcastItem = {
   _id?: string;
   id?: string;
   text?: string;
   title?: string;
+  sourceLang?: BroadcastLang | string;
+  texts?: Record<string, string> | null;
+  translations?: Record<string, string> | null;
+  i18n?: Record<string, string> | null;
   createdAt?: string;
   publishedAt?: string;
   updatedAt?: string;
@@ -63,6 +69,34 @@ function normalizeMode(v: unknown): BroadcastMode {
 
 function asArray<T = any>(v: unknown): T[] {
   return Array.isArray(v) ? (v as T[]) : [];
+}
+
+function normalizeLang(raw: unknown): BroadcastLang | null {
+  const v = String(raw || '').toLowerCase().trim();
+  if (v === 'en' || v === 'hi' || v === 'gu') return v;
+  return null;
+}
+
+function pickFirstNonEmpty(candidates: unknown[]): string | null {
+  for (const c of candidates) {
+    const s = String(c ?? '').trim();
+    if (s) return s;
+  }
+  return null;
+}
+
+function getTranslationsRecord(item: any): Record<string, string> | null {
+  const rec =
+    (item && typeof item === 'object' && (item.texts || item.translations || item.i18n || item.textByLang || item.byLang)) ||
+    null;
+  const r = rec && typeof rec === 'object' ? (rec as Record<string, any>) : null;
+  if (!r) return null;
+  const out: Record<string, string> = {};
+  for (const k of Object.keys(r)) {
+    const v = String((r as any)[k] ?? '').trim();
+    if (v) out[String(k).toLowerCase().trim()] = v;
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 export function normalizePublicBroadcast(raw: unknown): PublicBroadcast {
@@ -127,19 +161,63 @@ export function shouldRenderTicker(s: BroadcastTickerSettings): boolean {
   return s.enabled === true;
 }
 
-export function itemToTickerText(item: BroadcastItem): string | null {
-  const t = String(item?.text ?? item?.title ?? '').trim();
-  return t ? t : null;
+export function itemToTickerText(item: unknown, opts?: { lang?: BroadcastLang }): string | null {
+  if (!item) return null;
+
+  // Backend (or fallbacks) might already provide plain strings.
+  if (typeof item === 'string') {
+    const s = item.trim();
+    return s ? s : null;
+  }
+
+  const it = item as any;
+  const direct = pickFirstNonEmpty([it?.text, it?.title, it?.headline]);
+  if (direct) return direct;
+
+  const wanted = normalizeLang(opts?.lang);
+  const source = normalizeLang(it?.sourceLang ?? it?.sourceLanguage ?? it?.lang);
+  const rec = getTranslationsRecord(it);
+
+  if (rec) {
+    const candidates: unknown[] = [];
+    if (wanted && rec[wanted]) candidates.push(rec[wanted]);
+    if (source && rec[source]) candidates.push(rec[source]);
+    for (const k of ['en', 'hi', 'gu']) {
+      if (rec[k]) candidates.push(rec[k]);
+    }
+    // Last resort: any translation value.
+    for (const v of Object.values(rec)) candidates.push(v);
+    return pickFirstNonEmpty(candidates);
+  }
+
+  return null;
 }
 
-export function toTickerTexts(items: BroadcastItem[]): string[] {
-  return (items || []).map(itemToTickerText).filter(Boolean) as string[];
+export function toTickerTexts(items: unknown[], opts?: { lang?: BroadcastLang }): string[] {
+  return (items || []).map((it) => itemToTickerText(it, opts)).filter(Boolean) as string[];
 }
 
-export async function fetchPublicBroadcast(options?: { signal?: AbortSignal }): Promise<PublicBroadcast> {
+export async function fetchPublicBroadcast(options?: { signal?: AbortSignal; lang?: BroadcastLang }): Promise<PublicBroadcast> {
   const isBrowser = typeof window !== 'undefined';
   const base = getPublicApiBaseUrl();
-  const primaryEndpoint = isBrowser ? '/public-api/broadcast' : `${base}/api/public/broadcast`;
+  const lang = normalizeLang(options?.lang);
+
+  // IMPORTANT: same-origin path so Vercel rewrites handle backend without CORS.
+  // Repo reality: Vercel currently rewrites `/public-api/*` to backend `/admin-api/public/*`.
+  // Request requirement: use `/admin-api/*` to keep requests same-origin and avoid CORS.
+  // So: try `/admin-api/*` first, then `/public-api/*`.
+  const browserAdminApi = isBrowser
+    ? `/admin-api/public/broadcast${lang ? `?lang=${encodeURIComponent(lang)}` : ''}`
+    : '';
+  const browserPublicApi = isBrowser
+    ? `/public-api/broadcast${lang ? `?lang=${encodeURIComponent(lang)}` : ''}`
+    : '';
+
+  const primaryEndpoint = isBrowser
+    ? browserAdminApi || browserPublicApi || '/public-api/broadcast'
+    : `${base}/api/public/broadcast${lang ? `?lang=${encodeURIComponent(lang)}` : ''}`;
+
+  const secondaryEndpoint = isBrowser ? (browserPublicApi && browserPublicApi !== primaryEndpoint ? browserPublicApi : '') : '';
   const fallbackEndpoint = isBrowser ? '/api/public/broadcast' : '';
 
   const fetchOnce = async (endpoint: string): Promise<PublicBroadcast | null> => {
@@ -167,6 +245,9 @@ export async function fetchPublicBroadcast(options?: { signal?: AbortSignal }): 
   try {
     const primary = await fetchOnce(primaryEndpoint);
     if (primary) return primary;
+
+    const secondary = await fetchOnce(secondaryEndpoint);
+    if (secondary) return secondary;
 
     const fallback = await fetchOnce(fallbackEndpoint);
     if (fallback) return fallback;

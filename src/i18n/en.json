@@ -152,6 +152,10 @@
     "searchFailed": "Search failed"
   }
   ,
+  "content": {
+    "original": "Original"
+  }
+  ,
   "trending": {
     "title": "Trending",
     "breaking": "Breaking",

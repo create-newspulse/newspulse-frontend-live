@@ -878,14 +878,20 @@ function TickerBar({ theme, kind, items, onViewAll, speedSec }: any) {
   const label = kind === "breaking" ? `🔥 ${t('home.breakingNews')}` : `🔵 ${t('home.liveUpdates')}`;
   const tickerLang = lang === 'gu' ? 'gu' : lang === 'hi' ? 'hi' : 'en';
 
+  const stayTuned = (k: 'breaking' | 'live'): string => {
+    if (tickerLang === 'hi') return k === 'breaking' ? 'कोई ब्रेकिंग न्यूज़ नहीं — अपडेट के लिए जुड़े रहें' : 'लाइव अपडेट नहीं — जुड़े रहें';
+    if (tickerLang === 'gu') return k === 'breaking' ? 'હાલ કોઈ બ્રેકિંગ નથી — અપડેટ માટે જોડાયેલા રહો' : 'હાલ લાઇવ અપડેટ નથી — જોડાયેલા રહો';
+    return k === 'breaking' ? 'No breaking news right now — stay tuned' : 'No live updates right now — stay tuned';
+  };
+
   const safeItems =
     kind === "live"
       ? items?.length
         ? items
-        : [t('home.noUpdates')]
+        : [t('home.noUpdates') || stayTuned('live')]
       : items?.length
         ? items
-        : [t('home.noBreaking')];
+        : [t('home.noBreaking') || stayTuned('breaking')];
 
   const text = (safeItems?.length ? safeItems : [""]).join("  •  ");
 
@@ -901,8 +907,9 @@ function TickerBar({ theme, kind, items, onViewAll, speedSec }: any) {
           <div className="px-3 py-2">
             <div className="flex items-center gap-3">
               <span
-                className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-extrabold text-white border"
+                className="tickerLabel inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold text-white border"
                 style={{ borderColor: "rgba(255,255,255,0.18)", background: "rgba(255,255,255,0.10)" }}
+                lang={tickerLang}
               >
                 <Radio className="h-4 w-4" /> {label}
               </span>
@@ -919,10 +926,10 @@ function TickerBar({ theme, kind, items, onViewAll, speedSec }: any) {
                 }}
               >
                 <div className="np-tickerTrack" style={{ animationDuration: `${speedSec || 24}s` }}>
-                  <div className="np-tickerSeq whitespace-nowrap text-sm font-semibold text-white">
+                  <div className="np-tickerSeq whitespace-nowrap text-sm font-medium text-white">
                     <span className="tickerText pr-10" lang={tickerLang}>{text}</span>
                   </div>
-                  <div className="np-tickerSeq whitespace-nowrap text-sm font-semibold text-white">
+                  <div className="np-tickerSeq whitespace-nowrap text-sm font-medium text-white">
                     <span className="tickerText pr-10" lang={tickerLang}>{text}</span>
                   </div>
                 </div>
@@ -1977,11 +1984,11 @@ export default function UiPreviewV145() {
       const fallbackBreakingItems = (breakingResp.items || []).map(articleToTickerText).filter(Boolean) as string[];
 
       // Broadcast center tickers (preferred source)
-      const broadcast = await fetchPublicBroadcast({ signal: controller.signal });
+      const broadcast = await fetchPublicBroadcast({ signal: controller.signal, lang: apiLang });
       if (controller.signal.aborted) return;
 
-      const breakingTexts = toTickerTexts(broadcast.items.breaking);
-      const liveTexts = toTickerTexts(broadcast.items.live);
+      const breakingTexts = toTickerTexts(broadcast.items.breaking as any, { lang: apiLang });
+      const liveTexts = toTickerTexts(broadcast.items.live as any, { lang: apiLang });
 
       setBreakingFromBackend(breakingTexts.length ? breakingTexts : fallbackBreakingItems);
       setLiveFromBackend(liveTexts.length ? liveTexts : fallbackLiveItems);

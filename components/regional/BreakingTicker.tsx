@@ -82,7 +82,7 @@ export default function BreakingTicker({
       <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2">
         <div className="flex items-center gap-2">
           <span className="inline-flex h-2 w-2 animate-pulse rounded-full bg-white" />
-          <span className="text-xs font-black tracking-widest">{label}</span>
+          <span className="tickerLabel text-xs font-semibold tracking-widest" lang={tickerLang}>{label}</span>
         </div>
 
         <div className="relative flex-1 overflow-hidden">
