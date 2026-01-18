@@ -28,7 +28,7 @@ export type BreakingTickerProps = {
 function clampSeconds(raw: unknown, fallback: number): number {
   const n = Number(raw);
   if (!Number.isFinite(n)) return fallback;
-  return Math.min(40, Math.max(6, n));
+  return Math.min(40, Math.max(10, n));
 }
 
 function normalizeTag(t: unknown): string {
@@ -83,7 +83,7 @@ export default function BreakingTicker({
   const label = isBreaking ? t('home.breakingNews') : t('home.liveUpdates');
   const viewAllHref = '/breaking';
 
-  const fallbackSpeed = isBreaking ? 6 : 8;
+  const fallbackSpeed = isBreaking ? 18 : 24;
   const settingsSpeed = (() => {
     const tickers: any = (settings as any)?.tickers;
     const rawTicker = isBreaking ? tickers?.breaking : tickers?.live;

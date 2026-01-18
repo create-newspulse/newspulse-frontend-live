@@ -889,10 +889,10 @@ function TickerBar({ theme, kind, items, onViewAll, speedSec }: any) {
   const clampSeconds = (raw: any, fallback: number) => {
     const n = Number(raw);
     if (!Number.isFinite(n)) return fallback;
-    return Math.min(40, Math.max(6, n));
+    return Math.min(40, Math.max(10, n));
   };
 
-  const durationSec = clampSeconds(speedSec, kind === 'breaking' ? 6 : 8);
+  const durationSec = clampSeconds(speedSec, kind === 'breaking' ? 18 : 24);
 
   const stayTuned = (k: 'breaking' | 'live'): string => {
     if (tickerLang === 'hi') return k === 'breaking' ? 'कोई ब्रेकिंग न्यूज़ नहीं — अपडेट के लिए जुड़े रहें' : 'लाइव अपडेट नहीं — जुड़े रहें';

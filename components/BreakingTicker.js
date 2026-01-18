@@ -19,7 +19,7 @@ const fetchHeadlines = async (category = '', language = 'english') => {
 };
 
 export default function BreakingTicker({
-  speed = 8, // seconds for one full scroll (clamped)
+  speed = 24, // seconds for one full scroll (clamped)
   className = '',
   pollingInterval = 300000, // 5 minutes
   category = '',
@@ -28,10 +28,10 @@ export default function BreakingTicker({
   const clampSeconds = (raw, fallback) => {
     const n = Number(raw);
     if (!Number.isFinite(n)) return fallback;
-    return Math.min(40, Math.max(6, n));
+    return Math.min(40, Math.max(10, n));
   };
 
-  const durationSec = clampSeconds(speed, 8);
+  const durationSec = clampSeconds(speed, 24);
   const [headlines, setHeadlines] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
