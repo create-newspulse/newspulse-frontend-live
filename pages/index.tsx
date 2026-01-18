@@ -1971,7 +1971,7 @@ export default function UiPreviewV145() {
     return (code === 'en' ? 'en' : code === 'hi' ? 'hi' : 'gu') as 'en' | 'hi' | 'gu';
   }, [lang]);
 
-  const broadcastTickers = usePublicBroadcastTicker({ lang: apiLang, pollMs: 10_000, enableSse: false });
+  const broadcastTickers = usePublicBroadcastTicker({ lang: apiLang, pollMs: 10_000, enableSse: true });
 
   const [activeCatKey, setActiveCatKey] = useState<string>("breaking");
   const [toast, setToast] = useState<string>("");
@@ -2321,8 +2321,8 @@ export default function UiPreviewV145() {
         .np-no-scrollbar::-webkit-scrollbar { display: none; }
         .np-no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         @keyframes np-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-        .np-tickerTrack { display: flex; width: max-content; will-change: transform; animation-name: np-marquee; animation-timing-function: linear; animation-iteration-count: infinite; }
-        .np-tickerSeq { flex-shrink: 0; }
+        .np-tickerTrack { display: flex; align-items: center; width: max-content; will-change: transform; animation-name: np-marquee; animation-timing-function: linear; animation-iteration-count: infinite; }
+        .np-tickerSeq { flex-shrink: 0; display: flex; align-items: center; }
         .np-marqueeWrap:hover .np-tickerTrack { animation-play-state: paused; }
         @media (prefers-reduced-motion: reduce) {
           .np-tickerTrack { animation: none !important; transform: none !important; }
