@@ -886,6 +886,14 @@ function TickerBar({ theme, kind, items, onViewAll, speedSec }: any) {
   const label = kind === "breaking" ? `🔥 ${t('home.breakingNews')}` : `🔵 ${t('home.liveUpdates')}`;
   const tickerLang = lang === 'gu' ? 'gu' : lang === 'hi' ? 'hi' : 'en';
 
+  const clampSeconds = (raw: any, fallback: number) => {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(40, Math.max(6, n));
+  };
+
+  const durationSec = clampSeconds(speedSec, kind === 'breaking' ? 6 : 8);
+
   const stayTuned = (k: 'breaking' | 'live'): string => {
     if (tickerLang === 'hi') return k === 'breaking' ? 'कोई ब्रेकिंग न्यूज़ नहीं — अपडेट के लिए जुड़े रहें' : 'लाइव अपडेट नहीं — जुड़े रहें';
     if (tickerLang === 'gu') return k === 'breaking' ? 'હાલ કોઈ બ્રેકિંગ નથી — અપડેટ માટે જોડાયેલા રહો' : 'હાલ લાઇવ અપડેટ નથી — જોડાયેલા રહો';
@@ -933,7 +941,7 @@ function TickerBar({ theme, kind, items, onViewAll, speedSec }: any) {
                   maskSize: "100% 100%",
                 }}
               >
-                <div className="np-tickerTrack" style={{ animationDuration: `${speedSec || 24}s` }}>
+                <div className="np-tickerTrack" style={{ animationDuration: `${durationSec}s` }}>
                   <div className="np-tickerSeq whitespace-nowrap text-sm font-medium text-white">
                     <span className="tickerText pr-10" lang={tickerLang}>{text}</span>
                   </div>

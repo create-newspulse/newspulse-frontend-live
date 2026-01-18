@@ -19,12 +19,19 @@ const fetchHeadlines = async (category = '', language = 'english') => {
 };
 
 export default function BreakingTicker({
-  speed = 24, // seconds for one full scroll
+  speed = 8, // seconds for one full scroll (clamped)
   className = '',
   pollingInterval = 300000, // 5 minutes
   category = '',
   language = 'english',
 }) {
+  const clampSeconds = (raw, fallback) => {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(40, Math.max(6, n));
+  };
+
+  const durationSec = clampSeconds(speed, 8);
   const [headlines, setHeadlines] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -121,7 +128,7 @@ export default function BreakingTicker({
           className="relative min-w-0 flex-1 overflow-hidden"
           style={{ WebkitMaskImage: 'linear-gradient(to right, black 0%, black 90%, transparent)', maskImage: 'linear-gradient(to right, black 0%, black 90%, transparent)' }}
         >
-          <div className="whitespace-nowrap font-semibold animate-marquee" style={{ animationDuration: `${speed}s` }}>
+          <div className="whitespace-nowrap font-semibold animate-marquee" style={{ animationDuration: `${durationSec}s` }}>
             <span className="pr-10">{marqueeText}</span>
             <span className="pr-10">{marqueeText}</span>
           </div>

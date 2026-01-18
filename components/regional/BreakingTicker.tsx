@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import React, { useId, useMemo } from 'react';
 import { useI18n } from '../../src/i18n/LanguageProvider';
+import { usePublicSettings } from '../../src/context/PublicSettingsContext';
 
 function classNames(...s: Array<string | false | null | undefined>) {
   return s.filter(Boolean).join(' ');
@@ -20,7 +21,15 @@ export type BreakingTickerProps = {
   variant?: 'breaking' | 'live';
   emptyText?: string;
   className?: string;
+  /** Backend speed in seconds (will be clamped to a safe range). */
+  speedSeconds?: number;
 };
+
+function clampSeconds(raw: unknown, fallback: number): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(40, Math.max(6, n));
+}
 
 function normalizeTag(t: unknown): string {
   return String(t || '').trim().toLowerCase();
@@ -43,8 +52,10 @@ export default function BreakingTicker({
   variant = 'breaking',
   emptyText,
   className,
+  speedSeconds,
 }: BreakingTickerProps) {
   const { lang, t } = useI18n();
+  const { settings } = usePublicSettings();
   const tickerLang = lang === 'gu' ? 'gu' : lang === 'hi' ? 'hi' : 'en';
   const id = useId().replace(/:/g, '');
 
@@ -71,6 +82,14 @@ export default function BreakingTicker({
   const isBreaking = variant === 'breaking';
   const label = isBreaking ? t('home.breakingNews') : t('home.liveUpdates');
   const viewAllHref = '/breaking';
+
+  const fallbackSpeed = isBreaking ? 6 : 8;
+  const settingsSpeed = (() => {
+    const tickers: any = (settings as any)?.tickers;
+    const rawTicker = isBreaking ? tickers?.breaking : tickers?.live;
+    return rawTicker?.speedSec ?? rawTicker?.speedSeconds;
+  })();
+  const durationSec = clampSeconds(speedSeconds ?? settingsSpeed, fallbackSpeed);
 
   return (
     <div
@@ -106,7 +125,7 @@ export default function BreakingTicker({
       </div>
 
       <style>{`
-        .np-marquee-${id} { width: max-content; animation: np-marquee-${id} 22s linear infinite; }
+        .np-marquee-${id} { width: max-content; animation: np-marquee-${id} ${durationSec}s linear infinite; }
         @keyframes np-marquee-${id} { from { transform: translateX(0);} to { transform: translateX(-50%);} }
       `}</style>
     </div>
