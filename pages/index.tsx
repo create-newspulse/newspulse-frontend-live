@@ -10,7 +10,8 @@ import { usePublicSettings } from "../src/context/PublicSettingsContext";
 import { DEFAULT_TRENDING_TOPICS, type TrendingTopic } from "../src/config/trendingTopics";
 import { getTrendingTopics } from "../lib/getTrendingTopics";
 import { fetchPublicNews, type Article } from "../lib/publicNewsApi";
-import { fetchPublicBroadcast, shouldRenderTicker, toTickerTexts } from "../lib/publicBroadcast";
+import { toTickerTexts } from "../lib/publicBroadcast";
+import { usePublicBroadcastTicker } from "../hooks/usePublicBroadcastTicker";
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle } from "../lib/contentFallback";
 import OriginalTag from "../components/OriginalTag";
 import { DEFAULT_NORMALIZED_PUBLIC_SETTINGS, sanitizeEmbedUrl } from "../src/lib/publicSettings";
@@ -881,7 +882,7 @@ function LanguagePicker({
   );
 }
 
-function TickerBar({ theme, kind, items, onViewAll, speedSec }: any) {
+function TickerBar({ theme, kind, items, onViewAll, durationSec }: any) {
   const { t, lang } = useI18n();
   const label = kind === "breaking" ? `🔥 ${t('home.breakingNews')}` : `🔵 ${t('home.liveUpdates')}`;
   const tickerLang = lang === 'gu' ? 'gu' : lang === 'hi' ? 'hi' : 'en';
@@ -894,8 +895,7 @@ function TickerBar({ theme, kind, items, onViewAll, speedSec }: any) {
     return Math.min(40, Math.max(10, n));
   };
 
-  // Baseline readability: never go faster than defaults.
-  const durationSec = Math.max(defaultDurationSec, clampSeconds(speedSec, defaultDurationSec));
+  const safeDurationSec = clampSeconds(durationSec, defaultDurationSec);
 
   const stayTuned = (k: 'breaking' | 'live'): string => {
     if (tickerLang === 'hi') return k === 'breaking' ? 'कोई ब्रेकिंग न्यूज़ नहीं — अपडेट के लिए जुड़े रहें' : 'लाइव अपडेट नहीं — जुड़े रहें';
@@ -944,7 +944,7 @@ function TickerBar({ theme, kind, items, onViewAll, speedSec }: any) {
                   maskSize: "100% 100%",
                 }}
               >
-                <div className="np-tickerTrack" style={{ animationDuration: `${durationSec}s` }}>
+                <div className="np-tickerTrack" style={{ animationDuration: `${safeDurationSec}s` }}>
                   <div className="np-tickerSeq whitespace-nowrap text-sm font-medium text-white">
                     <span className="tickerText pr-10" lang={tickerLang}>{text}</span>
                   </div>
@@ -1966,6 +1966,13 @@ export default function UiPreviewV145() {
   const [broadcastBreakingSpeedSec, setBroadcastBreakingSpeedSec] = useState<number | null>(null);
   const [broadcastLiveSpeedSec, setBroadcastLiveSpeedSec] = useState<number | null>(null);
 
+  const apiLang = useMemo(() => {
+    const code = toUiLangCode(lang);
+    return (code === 'en' ? 'en' : code === 'hi' ? 'hi' : 'gu') as 'en' | 'hi' | 'gu';
+  }, [lang]);
+
+  const broadcastTickers = usePublicBroadcastTicker({ lang: apiLang, pollMs: 10_000, enableSse: false });
+
   const [activeCatKey, setActiveCatKey] = useState<string>("breaking");
   const [toast, setToast] = useState<string>("");
 
@@ -1985,85 +1992,57 @@ export default function UiPreviewV145() {
   }, [lang]);
 
 
-  // Fetch homepage data (latest + breaking + live ticker items) from backend.
+  // Fetch homepage data (latest) from backend.
   React.useEffect(() => {
     const controller = new AbortController();
 
     (async () => {
-      const code = toUiLangCode(lang);
-      const apiLang = code === 'en' ? 'en' : code === 'hi' ? 'hi' : 'gu';
-
       // Latest news list (homepage)
       const latestResp = await fetchPublicNews({ language: apiLang, limit: 12, signal: controller.signal });
       if (controller.signal.aborted) return;
       const latestArticles = latestResp.items || [];
       setLatestFromBackend(latestArticles.map((a) => articleToFeedItem(a as any, apiLang)));
-
-      // Fallback tickers (legacy behavior) in case broadcast is unavailable
-      const fallbackLiveItems = latestArticles.map((a) => articleToTickerText(a as any, apiLang)).filter(Boolean) as string[];
-
       const breakingResp = await fetchPublicNews({ category: 'breaking', language: apiLang, limit: 10, signal: controller.signal });
       if (controller.signal.aborted) return;
-      const fallbackBreakingItems = (breakingResp.items || []).map((a) => articleToTickerText(a as any, apiLang)).filter(Boolean) as string[];
 
-      // Broadcast center tickers (preferred source)
-      // Fallback order when selected language has no items: selected -> English -> Gujarati
-      const langChain = [apiLang, 'en', 'gu'].filter((v, i, a) => a.indexOf(v) === i) as Array<'en' | 'hi' | 'gu'>;
-
-      let breakingTexts: string[] = [];
-      let liveTexts: string[] = [];
-      let settingsSource: any = null;
-
-      for (const l of langChain) {
-        const b = await fetchPublicBroadcast({ signal: controller.signal, lang: l });
-        if (controller.signal.aborted) return;
-
-        // Pick the first response that includes settings (if any).
-        if (!settingsSource && b?.meta?.hasSettings) settingsSource = b;
-        if (!settingsSource) settingsSource = b;
-
-        if (!breakingTexts.length) {
-          const t = toTickerTexts(b.items.breaking as any, { lang: l });
-          if (t.length) breakingTexts = t;
-        }
-
-        if (!liveTexts.length) {
-          const t = toTickerTexts(b.items.live as any, { lang: l });
-          if (t.length) liveTexts = t;
-        }
-
-        if (breakingTexts.length && liveTexts.length && settingsSource?.meta?.hasSettings) break;
-      }
-
-      setBreakingFromBackend(breakingTexts.length ? breakingTexts : fallbackBreakingItems);
-      setLiveFromBackend(liveTexts.length ? liveTexts : fallbackLiveItems);
-
-      if (settingsSource?.meta?.hasSettings) {
-        setBroadcastBreakingEnabled(shouldRenderTicker(settingsSource.settings.breaking));
-        setBroadcastLiveEnabled(shouldRenderTicker(settingsSource.settings.live));
-        setBroadcastBreakingSpeedSec(settingsSource.settings.breaking.speedSec);
-        setBroadcastLiveSpeedSec(settingsSource.settings.live.speedSec);
-      } else {
-        // If backend doesn't provide broadcast settings, fall back to published public settings.
-        setBroadcastBreakingEnabled(null);
-        setBroadcastLiveEnabled(null);
-        setBroadcastBreakingSpeedSec(null);
-        setBroadcastLiveSpeedSec(null);
-      }
+      // Keep this fetch for other UI uses; tickers now come from broadcast hook.
+      void breakingResp;
     })().catch(() => {
       if (controller.signal.aborted) return;
       setLatestFromBackend([]);
-      setLiveFromBackend([]);
-      setBreakingFromBackend([]);
+    });
 
+    return () => controller.abort();
+  }, [apiLang]);
+
+  // Apply broadcast-center tickers/settings live (polling + focus + SSE).
+  React.useEffect(() => {
+    const b = broadcastTickers.broadcast;
+
+    setBreakingFromBackend(broadcastTickers.breakingTexts);
+    setLiveFromBackend(broadcastTickers.liveTexts);
+
+    if (b?.meta?.hasSettings) {
+      setBroadcastBreakingEnabled(broadcastTickers.breakingEnabled);
+      setBroadcastLiveEnabled(broadcastTickers.liveEnabled);
+      setBroadcastBreakingSpeedSec(broadcastTickers.breakingSpeedSec);
+      setBroadcastLiveSpeedSec(broadcastTickers.liveSpeedSec);
+    } else {
+      // If backend doesn't provide broadcast settings, fall back to published public settings.
       setBroadcastBreakingEnabled(null);
       setBroadcastLiveEnabled(null);
       setBroadcastBreakingSpeedSec(null);
       setBroadcastLiveSpeedSec(null);
-    });
-
-    return () => controller.abort();
-  }, [lang]);
+    }
+  }, [
+    broadcastTickers.broadcast,
+    broadcastTickers.breakingTexts,
+    broadcastTickers.liveTexts,
+    broadcastTickers.breakingEnabled,
+    broadcastTickers.liveEnabled,
+    broadcastTickers.breakingSpeedSec,
+    broadcastTickers.liveSpeedSec,
+  ]);
 
 
   // Apply backend-controlled defaults (do not persist). Keep this one-shot.
@@ -2142,20 +2121,19 @@ export default function UiPreviewV145() {
   const showCategoryStrip = effectiveSettings.modules.categoryStrip.enabled === true;
   const showTrendingStrip = effectiveSettings.modules.trending.enabled === true;
 
-  const breakingTickerEnabled = effectiveSettings.tickers.breaking.enabled === true;
-  const liveTickerEnabled = effectiveSettings.tickers.live.enabled === true;
+  // Module toggles control whether the ticker can render at all.
+  const breakingModuleEnabled = moduleEnabledOrTrue('breakingTicker');
+  const liveModuleEnabled = moduleEnabledOrTrue('liveUpdatesTicker');
 
-  // Broadcast-center settings take precedence over published homepage settings.
-  const breakingTickerVisible = broadcastBreakingEnabled ?? breakingTickerEnabled;
-  const liveTickerVisible = broadcastLiveEnabled ?? liveTickerEnabled;
+  const breakingTickerEnabled = breakingModuleEnabled && effectiveSettings.tickers.breaking.enabled === true;
+  const liveTickerEnabled = liveModuleEnabled && effectiveSettings.tickers.live.enabled === true;
 
-  const breakingSpeedSec = clampNum(
-    broadcastBreakingSpeedSec ?? effectiveSettings.tickers.breaking.speedSec,
-    5,
-    300,
-    18
-  );
-  const liveSpeedSec = clampNum(broadcastLiveSpeedSec ?? effectiveSettings.tickers.live.speedSec, 5, 300, 24);
+  // Broadcast config controls whether the ticker is active; it must not override module toggles.
+  const breakingTickerVisible = breakingTickerEnabled && (broadcastBreakingEnabled ?? true);
+  const liveTickerVisible = liveTickerEnabled && (broadcastLiveEnabled ?? true);
+
+  const breakingDurationSec = clampNum(broadcastBreakingSpeedSec ?? effectiveSettings.tickers.breaking.speedSec, 10, 40, 18);
+  const liveDurationSec = clampNum(broadcastLiveSpeedSec ?? effectiveSettings.tickers.live.speedSec, 10, 40, 24);
 
   const breakingItems = breakingFromBackend;
   const showBreakingContent = breakingItems.length > 0;
@@ -2236,7 +2214,7 @@ export default function UiPreviewV145() {
             theme={theme}
             kind="breaking"
             items={breakingItemsToShow}
-            speedSec={breakingSpeedSec}
+              durationSec={breakingDurationSec}
             onViewAll={() => {
               setViewAllKind("breaking");
               setViewAllOpen(true);
@@ -2255,7 +2233,7 @@ export default function UiPreviewV145() {
             theme={theme}
             kind="live"
             items={liveItemsToShow}
-            speedSec={liveSpeedSec}
+              durationSec={liveDurationSec}
             onViewAll={() => {
               setViewAllKind("live");
               setViewAllOpen(true);

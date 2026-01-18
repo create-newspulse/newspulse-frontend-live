@@ -1,6 +1,22 @@
 import { normalizePublicBroadcast, shouldRenderTicker, toTickerTexts } from '../../lib/publicBroadcast';
 
 describe('publicBroadcast', () => {
+  test('normalizes new breaking/live bundle shape (durationSeconds + items)', () => {
+    const res = normalizePublicBroadcast({
+      ok: true,
+      breaking: { enabled: true, durationSeconds: 22, items: [{ text: 'B1' }] },
+      live: { enabled: false, durationSeconds: 30, items: [{ text: 'L1' }] },
+    });
+
+    expect(res.meta.hasSettings).toBe(true);
+    expect(res.settings.breaking.enabled).toBe(true);
+    expect(res.settings.breaking.speedSec).toBe(22);
+    expect(res.settings.live.enabled).toBe(false);
+    expect(res.settings.live.speedSec).toBe(30);
+    expect(toTickerTexts(res.items.breaking)).toEqual(['B1']);
+    expect(toTickerTexts(res.items.live)).toEqual(['L1']);
+  });
+
   test('normalizes flat items with type into breaking/live lists', () => {
     const res = normalizePublicBroadcast({
       ok: true,

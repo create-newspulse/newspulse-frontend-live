@@ -89,8 +89,7 @@ export default function BreakingTicker({
     const rawTicker = isBreaking ? tickers?.breaking : tickers?.live;
     return rawTicker?.speedSec ?? rawTicker?.speedSeconds;
   })();
-  // Baseline readability: never go faster than defaults.
-  const durationSec = Math.max(fallbackSpeed, clampSeconds(speedSeconds ?? settingsSpeed, fallbackSpeed));
+  const durationSec = clampSeconds(speedSeconds ?? settingsSpeed, fallbackSpeed);
 
   return (
     <div

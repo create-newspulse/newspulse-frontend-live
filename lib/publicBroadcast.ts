@@ -53,10 +53,20 @@ const DEFAULT_LIVE_SETTINGS: BroadcastTickerSettings = {
   speedSec: 24,
 };
 
+export function clampTickerSpeedSeconds(raw: unknown, fallback: number): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(40, Math.max(10, n));
+}
+
 function clampNum(n: unknown, min: number, max: number, fallback: number): number {
   const v = Number(n);
   if (!Number.isFinite(v)) return fallback;
   return Math.min(max, Math.max(min, v));
+}
+
+function isRecord(v: unknown): v is Record<string, any> {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
 }
 
 function normalizeMode(v: unknown): BroadcastMode {
@@ -102,6 +112,58 @@ function getTranslationsRecord(item: any): Record<string, string> | null {
 export function normalizePublicBroadcast(raw: unknown): PublicBroadcast {
   const root = raw && typeof raw === 'object' ? (raw as any) : null;
 
+  // New backend shape (single-call):
+  // {
+  //   breaking: { enabled, durationSeconds, items },
+  //   live: { enabled, durationSeconds, items }
+  // }
+  const breakingBundle = root?.breaking;
+  const liveBundle = root?.live;
+  const isBundleShape =
+    (isRecord(breakingBundle) || Array.isArray(breakingBundle)) && (isRecord(liveBundle) || Array.isArray(liveBundle));
+
+  if (isBundleShape) {
+    const breakingEnabledRaw = isRecord(breakingBundle) ? (breakingBundle as any).enabled : undefined;
+    const liveEnabledRaw = isRecord(liveBundle) ? (liveBundle as any).enabled : undefined;
+
+    const breakingDurationRaw = isRecord(breakingBundle)
+      ? (breakingBundle as any).durationSeconds ?? (breakingBundle as any).durationSec ?? (breakingBundle as any).speedSec ?? (breakingBundle as any).speedSeconds
+      : undefined;
+    const liveDurationRaw = isRecord(liveBundle)
+      ? (liveBundle as any).durationSeconds ?? (liveBundle as any).durationSec ?? (liveBundle as any).speedSec ?? (liveBundle as any).speedSeconds
+      : undefined;
+
+    const breakingItemsRaw = isRecord(breakingBundle)
+      ? (breakingBundle as any).items ?? (breakingBundle as any).data ?? (breakingBundle as any).list
+      : breakingBundle;
+    const liveItemsRaw = isRecord(liveBundle) ? (liveBundle as any).items ?? (liveBundle as any).data ?? (liveBundle as any).list : liveBundle;
+
+    const hasSettings =
+      (isRecord(breakingBundle) && ('enabled' in (breakingBundle as any) || 'durationSeconds' in (breakingBundle as any) || 'durationSec' in (breakingBundle as any))) ||
+      (isRecord(liveBundle) && ('enabled' in (liveBundle as any) || 'durationSeconds' in (liveBundle as any) || 'durationSec' in (liveBundle as any)));
+
+    return {
+      ok: root?.ok !== false,
+      meta: { hasSettings: Boolean(hasSettings) },
+      settings: {
+        breaking: {
+          enabled: breakingEnabledRaw === undefined ? DEFAULT_BREAKING_SETTINGS.enabled : Boolean(breakingEnabledRaw),
+          mode: 'AUTO',
+          speedSec: clampTickerSpeedSeconds(breakingDurationRaw, DEFAULT_BREAKING_SETTINGS.speedSec),
+        },
+        live: {
+          enabled: liveEnabledRaw === undefined ? DEFAULT_LIVE_SETTINGS.enabled : Boolean(liveEnabledRaw),
+          mode: 'AUTO',
+          speedSec: clampTickerSpeedSeconds(liveDurationRaw, DEFAULT_LIVE_SETTINGS.speedSec),
+        },
+      },
+      items: {
+        breaking: asArray<BroadcastItem>(breakingItemsRaw),
+        live: asArray<BroadcastItem>(liveItemsRaw),
+      },
+    };
+  }
+
   const settingsRaw = root?.settings ?? root?.data?.settings ?? null;
   const itemsRaw = root?.items ?? root?.data?.items ?? root?.data ?? null;
 
@@ -122,12 +184,12 @@ export function normalizePublicBroadcast(raw: unknown): PublicBroadcast {
     breaking: {
       enabled: Boolean(breakingSettingsRaw?.enabled ?? DEFAULT_BREAKING_SETTINGS.enabled),
       mode: normalizeMode(breakingSettingsRaw?.mode ?? DEFAULT_BREAKING_SETTINGS.mode),
-      speedSec: clampNum(breakingSettingsRaw?.speedSec ?? breakingSettingsRaw?.speedSeconds, 5, 300, DEFAULT_BREAKING_SETTINGS.speedSec),
+      speedSec: clampTickerSpeedSeconds(breakingSettingsRaw?.speedSec ?? breakingSettingsRaw?.speedSeconds, DEFAULT_BREAKING_SETTINGS.speedSec),
     },
     live: {
       enabled: Boolean(liveSettingsRaw?.enabled ?? DEFAULT_LIVE_SETTINGS.enabled),
       mode: normalizeMode(liveSettingsRaw?.mode ?? DEFAULT_LIVE_SETTINGS.mode),
-      speedSec: clampNum(liveSettingsRaw?.speedSec ?? liveSettingsRaw?.speedSeconds, 5, 300, DEFAULT_LIVE_SETTINGS.speedSec),
+      speedSec: clampTickerSpeedSeconds(liveSettingsRaw?.speedSec ?? liveSettingsRaw?.speedSeconds, DEFAULT_LIVE_SETTINGS.speedSec),
     },
   };
 
@@ -202,6 +264,32 @@ export async function fetchPublicBroadcast(options?: { signal?: AbortSignal; lan
   const base = getPublicApiBaseUrl();
   const lang = normalizeLang(options?.lang);
 
+  const origin = String(base || '')
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/\/api\/?$/, '');
+
+  const withTs = (url: string): string => {
+    if (!isBrowser) return url;
+    const sep = url.includes('?') ? '&' : '?';
+    return `${url}${sep}_ts=${Date.now()}`;
+  };
+
+  // Phase 1 contract:
+  // - Config: GET /public/broadcast/config
+  // - Items: GET /public/broadcast/items?type=breaking&lang=xx and ...type=live&lang=xx
+  // - No caching
+  // - durationSec used directly as animation duration seconds (clamped).
+
+  if (!isBrowser && !origin) {
+    return normalizePublicBroadcast({
+      ok: true,
+      _meta: { hasSettings: false },
+      settings: { breaking: DEFAULT_BREAKING_SETTINGS, live: DEFAULT_LIVE_SETTINGS },
+      items: { breaking: [], live: [] },
+    });
+  }
+
   const safeJson = async (res: Response): Promise<any | null> => {
     try {
       const text = await res.text().catch(() => '');
@@ -221,40 +309,9 @@ export async function fetchPublicBroadcast(options?: { signal?: AbortSignal; lan
     return [];
   };
 
-  const fetchItemsByType = async (type: BroadcastType, requestedLang?: BroadcastLang): Promise<BroadcastItem[]> => {
-    const langQs = requestedLang ? `&lang=${encodeURIComponent(requestedLang)}` : '';
-
-    // Browser requirement: use /public/broadcast/items?type=...&lang=...
-    // (Next rewrite maps this to /api/public/broadcast/items)
-    const endpoint = isBrowser
-      ? `/public/broadcast/items?type=${encodeURIComponent(type)}${langQs}`
-      : `${String(base || '').replace(/\/+$/, '')}/api/public/broadcast/items?type=${encodeURIComponent(type)}${langQs}`;
-
+  const fetchNoStore = async (url: string): Promise<any | null> => {
     try {
-      const res = await fetch(endpoint, {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json',
-          'Cache-Control': 'no-store',
-          Pragma: 'no-cache',
-        },
-        cache: 'no-store',
-        signal: options?.signal,
-      });
-      const json = await safeJson(res);
-      if (!res.ok || !json) return [];
-      return unwrapItems(json);
-    } catch {
-      return [];
-    }
-  };
-
-  const fetchSettings = async (): Promise<any | null> => {
-    const endpoint = isBrowser
-      ? '/public/broadcast/settings'
-      : `${String(base || '').replace(/\/+$/, '')}/api/public/broadcast/settings`;
-    try {
-      const res = await fetch(endpoint, {
+      const res = await fetch(withTs(url), {
         method: 'GET',
         headers: {
           Accept: 'application/json',
@@ -272,104 +329,51 @@ export async function fetchPublicBroadcast(options?: { signal?: AbortSignal; lan
     }
   };
 
-  // Phase 1 requirement:
-  // - Fetch ticker items by selected language
-  // - Fallback chain if empty: requested -> en -> hi -> gu
-  // - Never go blank: as a last resort, retry without lang so backend can return its default/original
-  try {
-    const settingsRaw = await fetchSettings();
+  const configEndpoint = isBrowser ? '/public/broadcast/config' : `${origin}/api/public/broadcast/config`;
+  const itemsBase = isBrowser ? '/public/broadcast/items' : `${origin}/api/public/broadcast/items`;
 
-    const fallbackChain = ([lang, 'en', 'hi', 'gu'] as Array<BroadcastLang | null>)
-      .filter(Boolean)
-      .filter((v, i, a) => a.indexOf(v) === i) as BroadcastLang[];
-
-    let breaking: BroadcastItem[] = [];
-    let live: BroadcastItem[] = [];
-
-    for (const l of fallbackChain) {
-      if (options?.signal?.aborted) break;
-
-      const [b, lv] = await Promise.all([
-        breaking.length ? Promise.resolve([] as BroadcastItem[]) : fetchItemsByType('breaking', l),
-        live.length ? Promise.resolve([] as BroadcastItem[]) : fetchItemsByType('live', l),
-      ]);
-
-      if (!breaking.length && b.length) breaking = b;
-      if (!live.length && lv.length) live = lv;
-      if (breaking.length && live.length) break;
-    }
-
-    // Last resort: try without lang so backend can return default/original.
-    if (!breaking.length) breaking = await fetchItemsByType('breaking', undefined);
-    if (!live.length) live = await fetchItemsByType('live', undefined);
-
-    const normalized = normalizePublicBroadcast({
-      ok: true,
-      _meta: { hasSettings: Boolean(settingsRaw) },
-      settings: (settingsRaw as any)?.settings ?? settingsRaw ?? { breaking: DEFAULT_BREAKING_SETTINGS, live: DEFAULT_LIVE_SETTINGS },
-      items: { breaking, live },
-    });
-
-    return normalized;
-  } catch {
-    // continue to legacy fallback below
-  }
-
-  // IMPORTANT: same-origin path so Vercel rewrites handle backend without CORS.
-  // Repo reality: Vercel currently rewrites `/public-api/*` to backend `/admin-api/public/*`.
-  // Request requirement: use `/admin-api/*` to keep requests same-origin and avoid CORS.
-  // So: try `/admin-api/*` first, then `/public-api/*`.
-  const browserAdminApi = isBrowser
-    ? `/admin-api/public/broadcast${lang ? `?lang=${encodeURIComponent(lang)}` : ''}`
-    : '';
-  const browserPublicApi = isBrowser
-    ? `/public-api/broadcast${lang ? `?lang=${encodeURIComponent(lang)}` : ''}`
-    : '';
-
-  const primaryEndpoint = isBrowser
-    ? browserAdminApi || browserPublicApi || '/public-api/broadcast'
-    : `${base}/api/public/broadcast${lang ? `?lang=${encodeURIComponent(lang)}` : ''}`;
-
-  const secondaryEndpoint = isBrowser ? (browserPublicApi && browserPublicApi !== primaryEndpoint ? browserPublicApi : '') : '';
-  const fallbackEndpoint = isBrowser ? '/api/public/broadcast' : '';
-
-  const fetchOnce = async (endpoint: string): Promise<PublicBroadcast | null> => {
-    if (!endpoint) return null;
-    try {
-      const res = await fetch(endpoint, {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json',
-          'Cache-Control': 'no-store',
-          Pragma: 'no-cache',
-        },
-        cache: 'no-store',
-        signal: options?.signal,
-      });
-
-      const json = await res.json().catch(() => null);
-      if (!res.ok || !json) return null;
-      return normalizePublicBroadcast(json);
-    } catch {
-      return null;
-    }
-  };
+  const langParam = lang ? `&lang=${encodeURIComponent(lang)}` : '';
 
   try {
-    const primary = await fetchOnce(primaryEndpoint);
-    if (primary) return primary;
+    const [configJson, breakingJson, liveJson] = await Promise.all([
+      fetchNoStore(configEndpoint),
+      fetchNoStore(`${itemsBase}?type=breaking${langParam}`),
+      fetchNoStore(`${itemsBase}?type=live${langParam}`),
+    ]);
 
-    const secondary = await fetchOnce(secondaryEndpoint);
-    if (secondary) return secondary;
+    const cfgRoot = configJson && typeof configJson === 'object' ? (configJson as any) : null;
+    const cfg = cfgRoot?.config ?? cfgRoot;
+    const breakingCfg = cfg?.breaking ?? cfg?.settings?.breaking ?? null;
+    const liveCfg = cfg?.live ?? cfg?.settings?.live ?? null;
 
-    const fallback = await fetchOnce(fallbackEndpoint);
-    if (fallback) return fallback;
+    const hasSettings = Boolean(breakingCfg || liveCfg);
+
+    const breakingEnabled = breakingCfg?.enabled;
+    const liveEnabled = liveCfg?.enabled;
+
+    const breakingDuration =
+      breakingCfg?.durationSec ?? breakingCfg?.durationSeconds ?? breakingCfg?.speedSec ?? breakingCfg?.speedSeconds;
+    const liveDuration = liveCfg?.durationSec ?? liveCfg?.durationSeconds ?? liveCfg?.speedSec ?? liveCfg?.speedSeconds;
+
+    const breakingItems = unwrapItems(breakingJson);
+    const liveItems = unwrapItems(liveJson);
 
     return normalizePublicBroadcast({
-      ok: false,
-      _meta: { hasSettings: false },
-      settings: { breaking: DEFAULT_BREAKING_SETTINGS, live: DEFAULT_LIVE_SETTINGS },
-      items: { breaking: [], live: [] },
+      ok: true,
+      _meta: { hasSettings },
+      settings: {
+        breaking: {
+          enabled: breakingEnabled === undefined ? DEFAULT_BREAKING_SETTINGS.enabled : Boolean(breakingEnabled),
+          mode: 'AUTO',
+          speedSec: clampTickerSpeedSeconds(breakingDuration, DEFAULT_BREAKING_SETTINGS.speedSec),
+        },
+        live: {
+          enabled: liveEnabled === undefined ? DEFAULT_LIVE_SETTINGS.enabled : Boolean(liveEnabled),
+          mode: 'AUTO',
+          speedSec: clampTickerSpeedSeconds(liveDuration, DEFAULT_LIVE_SETTINGS.speedSec),
+        },
+      },
+      items: { breaking: breakingItems, live: liveItems },
     });
   } catch {
     return normalizePublicBroadcast({
