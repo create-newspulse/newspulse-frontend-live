@@ -886,13 +886,16 @@ function TickerBar({ theme, kind, items, onViewAll, speedSec }: any) {
   const label = kind === "breaking" ? `🔥 ${t('home.breakingNews')}` : `🔵 ${t('home.liveUpdates')}`;
   const tickerLang = lang === 'gu' ? 'gu' : lang === 'hi' ? 'hi' : 'en';
 
+  const defaultDurationSec = kind === 'breaking' ? 18 : 24;
+
   const clampSeconds = (raw: any, fallback: number) => {
     const n = Number(raw);
     if (!Number.isFinite(n)) return fallback;
     return Math.min(40, Math.max(10, n));
   };
 
-  const durationSec = clampSeconds(speedSec, kind === 'breaking' ? 18 : 24);
+  // Baseline readability: never go faster than defaults.
+  const durationSec = Math.max(defaultDurationSec, clampSeconds(speedSec, defaultDurationSec));
 
   const stayTuned = (k: 'breaking' | 'live'): string => {
     if (tickerLang === 'hi') return k === 'breaking' ? 'कोई ब्रेकिंग न्यूज़ नहीं — अपडेट के लिए जुड़े रहें' : 'लाइव अपडेट नहीं — जुड़े रहें';

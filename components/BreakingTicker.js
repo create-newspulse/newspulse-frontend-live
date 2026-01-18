@@ -31,7 +31,8 @@ export default function BreakingTicker({
     return Math.min(40, Math.max(10, n));
   };
 
-  const durationSec = clampSeconds(speed, 24);
+  // Baseline readability: never go faster than default.
+  const durationSec = Math.max(24, clampSeconds(speed, 24));
   const [headlines, setHeadlines] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
