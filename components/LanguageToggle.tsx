@@ -1,4 +1,5 @@
 import React from 'react';
+import { useRouter } from 'next/router';
 
 import { useLanguage } from '../utils/LanguageContext';
 import { useI18n } from '../src/i18n/LanguageProvider';
@@ -11,6 +12,7 @@ function normalizeLangCode(raw: unknown): 'en' | 'hi' | 'gu' | null {
 }
 
 export default function LanguageToggle() {
+  const router = useRouter();
   const { language, setLanguage } = useLanguage();
   const { t } = useI18n();
   const { settings } = usePublicSettings();
@@ -32,9 +34,7 @@ export default function LanguageToggle() {
     const selected = e.target.value as 'en' | 'hi' | 'gu';
     if (!options.includes(selected)) return;
     setLanguage(selected);
-    try {
-      localStorage.setItem('np_lang', selected);
-    } catch {}
+    router.push({ pathname: router.pathname, query: router.query }, undefined, { locale: selected }).catch(() => {});
   };
 
   return (

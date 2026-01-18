@@ -107,6 +107,7 @@ export type CategoryNewsMeta = {
 export async function fetchCategoryNews(options: {
   categoryKey: string;
   limit?: number;
+  language?: string;
 }): Promise<{
   items: Article[];
   meta: CategoryNewsMeta;
@@ -117,15 +118,17 @@ export async function fetchCategoryNews(options: {
   const origin = getApiOrigin();
   const limit = options.limit ?? 30;
   const key = options.categoryKey;
+  const lang = options.language ? String(options.language) : '';
+  const langQuery = lang ? `&lang=${encodeURIComponent(lang)}&language=${encodeURIComponent(lang)}` : '';
 
   // Backends vary: some expect `category`, others `cat`/`section`.
   // Try a small set and pick the one that actually looks filtered.
   const candidates: Array<{ label: string; url: string }> = [
-    { label: 'category', url: `${origin}/api/news?category=${encodeURIComponent(key)}&limit=${encodeURIComponent(String(limit))}` },
-    { label: 'cat', url: `${origin}/api/news?cat=${encodeURIComponent(key)}&limit=${encodeURIComponent(String(limit))}` },
-    { label: 'section', url: `${origin}/api/news?section=${encodeURIComponent(key)}&limit=${encodeURIComponent(String(limit))}` },
-    { label: 'categoryKey', url: `${origin}/api/news?categoryKey=${encodeURIComponent(key)}&limit=${encodeURIComponent(String(limit))}` },
-    { label: 'path', url: `${origin}/api/news/category/${encodeURIComponent(key)}?limit=${encodeURIComponent(String(limit))}` },
+    { label: 'category', url: `${origin}/api/news?category=${encodeURIComponent(key)}&limit=${encodeURIComponent(String(limit))}${langQuery}` },
+    { label: 'cat', url: `${origin}/api/news?cat=${encodeURIComponent(key)}&limit=${encodeURIComponent(String(limit))}${langQuery}` },
+    { label: 'section', url: `${origin}/api/news?section=${encodeURIComponent(key)}&limit=${encodeURIComponent(String(limit))}${langQuery}` },
+    { label: 'categoryKey', url: `${origin}/api/news?categoryKey=${encodeURIComponent(key)}&limit=${encodeURIComponent(String(limit))}${langQuery}` },
+    { label: 'path', url: `${origin}/api/news/category/${encodeURIComponent(key)}?limit=${encodeURIComponent(String(limit))}${langQuery}` },
   ];
 
   const primaryEndpoint = candidates[0].url;

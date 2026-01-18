@@ -37,9 +37,11 @@ function unwrapStory(payload: any): PublicStory | null {
   return null;
 }
 
-export async function fetchPublicStories(baseUrl?: string): Promise<PublicStory[]> {
+export async function fetchPublicStories(baseUrl?: string, options?: { language?: string }): Promise<PublicStory[]> {
   const base = (baseUrl || getApiBaseUrl()).replace(/\/+$/, '');
-  const url = `${base}/api/public/stories`;
+  const lang = options?.language ? String(options.language).toLowerCase().trim() : '';
+  const langQuery = lang ? `?lang=${encodeURIComponent(lang)}&language=${encodeURIComponent(lang)}` : '';
+  const url = `${base}/api/public/stories${langQuery}`;
 
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch stories (${res.status})`);
@@ -48,12 +50,18 @@ export async function fetchPublicStories(baseUrl?: string): Promise<PublicStory[
   return unwrapStories(json);
 }
 
-export async function fetchPublicStoryByIdOrSlug(idOrSlug: string, baseUrl?: string): Promise<PublicStory | null> {
+export async function fetchPublicStoryByIdOrSlug(
+  idOrSlug: string,
+  baseUrl?: string,
+  options?: { language?: string }
+): Promise<PublicStory | null> {
   const base = (baseUrl || getApiBaseUrl()).replace(/\/+$/, '');
+  const lang = options?.language ? String(options.language).toLowerCase().trim() : '';
+  const langQuery = lang ? `?lang=${encodeURIComponent(lang)}&language=${encodeURIComponent(lang)}` : '';
 
   // Preferred endpoint
   try {
-    const res = await fetch(`${base}/api/public/stories/${encodeURIComponent(idOrSlug)}`);
+    const res = await fetch(`${base}/api/public/stories/${encodeURIComponent(idOrSlug)}${langQuery}`);
     if (res.ok) {
       const json = await res.json().catch(() => null);
       const story = unwrapStory(json);
@@ -67,7 +75,7 @@ export async function fetchPublicStoryByIdOrSlug(idOrSlug: string, baseUrl?: str
 
   // Fallback: fetch list and match by _id or slug
   try {
-    const stories = await fetchPublicStories(base);
+    const stories = await fetchPublicStories(base, { language: lang });
     const match = stories.find((s) => s?._id === idOrSlug || (s?.slug && s.slug === idOrSlug));
     return match || null;
   } catch {

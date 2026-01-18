@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { useI18n } from '../src/i18n/LanguageProvider';
 import { LanguageDropdown } from '../src/i18n/language';
 import { getPublicApiBaseUrl } from '../lib/publicApiBase';
+import { useUiLabels } from '../hooks/useUiLabels';
 
 export default function NavBar() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const { label } = useUiLabels(lang);
   const [isOpen, setIsOpen] = useState(false);
   const [hideCommunityReporter, setHideCommunityReporter] = useState(false);
 
@@ -41,13 +43,13 @@ export default function NavBar() {
 
         {/* Desktop Menu */}
         <ul className="hidden md:flex space-x-6 font-medium text-gray-700 items-center">
-          <li><a href="/" className="hover:text-blue-600">{t('common.home')}</a></li>
-          <li><a href="/editorial" className="hover:text-blue-600">{t('common.editorial')}</a></li>
-          <li><a href="/about" className="hover:text-blue-600">{t('common.about')}</a></li>
-          <li><a href="/contact" className="hover:text-blue-600">{t('common.contact')}</a></li>
-          <li><a href="/news" className="text-blue-700 hover:underline">📰 {t('common.topNews')}</a></li>
+          <li><a href="/" className="hover:text-blue-600">{label('common.home') || t('common.home')}</a></li>
+          <li><a href="/editorial" className="hover:text-blue-600">{label('common.editorial') || t('common.editorial')}</a></li>
+          <li><a href="/about" className="hover:text-blue-600">{label('common.about') || t('common.about')}</a></li>
+          <li><a href="/contact" className="hover:text-blue-600">{label('common.contact') || t('common.contact')}</a></li>
+          <li><a href="/news" className="text-blue-700 hover:underline">📰 {label('common.topNews') || t('common.topNews')}</a></li>
           {!hideCommunityReporter && (
-            <li><a href="/community-reporter" className="hover:text-blue-600">{t('common.communityReporter')}</a></li>
+            <li><a href="/community-reporter" className="hover:text-blue-600">{label('common.communityReporter') || t('common.communityReporter')}</a></li>
           )}
           <li><LanguageDropdown compact /></li>
         </ul>
@@ -56,13 +58,13 @@ export default function NavBar() {
       {/* Mobile Menu */}
       {isOpen && (
         <ul className="md:hidden px-4 pb-4 space-y-2 font-medium text-gray-700 bg-white shadow-inner">
-          <li><a href="/" className="block hover:text-blue-600">{t('common.home')}</a></li>
-          <li><a href="/editorial" className="block hover:text-blue-600">{t('common.editorial')}</a></li>
-          <li><a href="/about" className="block hover:text-blue-600">{t('common.about')}</a></li>
-          <li><a href="/contact" className="block hover:text-blue-600">{t('common.contact')}</a></li>
-          <li><a href="/news" className="block text-blue-700 hover:underline">📰 {t('common.topNews')}</a></li>
+          <li><a href="/" className="block hover:text-blue-600">{label('common.home') || t('common.home')}</a></li>
+          <li><a href="/editorial" className="block hover:text-blue-600">{label('common.editorial') || t('common.editorial')}</a></li>
+          <li><a href="/about" className="block hover:text-blue-600">{label('common.about') || t('common.about')}</a></li>
+          <li><a href="/contact" className="block hover:text-blue-600">{label('common.contact') || t('common.contact')}</a></li>
+          <li><a href="/news" className="block text-blue-700 hover:underline">📰 {label('common.topNews') || t('common.topNews')}</a></li>
           {!hideCommunityReporter && (
-            <li><a href="/community-reporter" className="block hover:text-blue-600">{t('common.communityReporter')}</a></li>
+            <li><a href="/community-reporter" className="block hover:text-blue-600">{label('common.communityReporter') || t('common.communityReporter')}</a></li>
           )}
           <li><LanguageDropdown /></li>
         </ul>

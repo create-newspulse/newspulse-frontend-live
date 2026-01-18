@@ -1,6 +1,7 @@
 {
   "common": {
     "language": "भाषा",
+    "back": "वापस",
     "beta": "बीटा",
     "style": "शैली",
     "search": "खोजें",
@@ -16,6 +17,75 @@
     "listen": "सुनें",
     "share": "शेयर",
     "new": "नया",
+    "regionalHub": {
+      "title": "रीजनल पल्स – गुजरात",
+      "subtitle": "गुजरात की रीयल-टाइम सिविक, ज़िला और शहर खबरों की पल्स।",
+      "searchPlaceholder": "ज़िला या शहर खोजें…",
+      "voiceListen": "सुनें",
+      "voiceMute": "म्यूट",
+      "voiceListenTitle": "लोकल हाइलाइट्स सुनें",
+      "voiceMuteTitle": "म्यूट",
+      "voiceHighlightsIntro": "यहाँ शीर्ष क्षेत्रीय हाइलाइट्स हैं। ",
+      "filterDistrict": "ज़िला",
+      "filterCity": "शहर",
+      "filterAllDistricts": "सभी ज़िले",
+      "filterCityOptional": "वैकल्पिक",
+      "chipSmartCity": "स्मार्ट सिटी",
+      "chipIndustrial": "औद्योगिक",
+      "chipCoastal": "तटीय",
+      "chipTribal": "आदिवासी",
+      "tabFeed": "फ़ीड",
+      "tabDistricts": "ज़िले",
+      "tabCities": "शहर",
+      "tabCivic": "सिविक",
+      "tabMap": "मानचित्र",
+      "feedTitle": "फ़ीड",
+      "feedTitleWithPlace": "फ़ीड — {{place}}",
+      "feedSubtitle": "ताज़ा क्षेत्रीय स्टोरीज़",
+      "loading": "लोड हो रहा है…",
+      "noStoriesForFilters": "वर्तमान फ़िल्टर के लिए कोई स्टोरी नहीं मिली।",
+      "districtsTitle": "गुजरात — {{count}} ज़िले",
+      "districtsSubtitle": "शीर्ष हेडलाइन + कुल अपडेट",
+      "districtMeta": "ज़िला · गुजरात",
+      "updates": "{{count}} अपडेट",
+      "noHeadlineYet": "अभी कोई हेडलाइन नहीं।",
+      "citiesTitle": "शहर",
+      "citiesSubtitle": "शीर्ष शहर + शहर फ़ीड",
+      "typeCity": "शहर",
+      "typeDistrict": "ज़िला",
+      "cityLabelCurrent": "वर्तमान",
+      "cityLabelApproved": "अनुमोदित",
+      "cityLabelNew": "नया",
+      "placeTypeMeta": "{{type}} · गुजरात",
+      "cityFeedTitle": "शहर फ़ीड",
+      "cityFeedTitleWithPlace": "शहर फ़ीड — {{place}}",
+      "cityFeedSubtitle": "ताज़ा अपडेट + लोकल आवाज़ें",
+      "noStoriesForSelection": "वर्तमान चयन के लिए कोई स्टोरी नहीं मिली।",
+      "voicesTitle": "आपके शहर की आवाज़ें",
+      "voicesSubtitle": "यूथ पल्स – राय, कैंपस, करियर",
+      "noYouthStories": "अभी कोई यूथ स्टोरी नहीं।",
+      "noYouthStoriesHint": "(/api/news/youth से जोड़ें)",
+      "cityInMotionTitle": "शहर की हलचल",
+      "cityInMotionSubtitle": "लोकल क्लिप्स और एक्सप्लेनर",
+      "civicTitle": "सिविक",
+      "civicSubtitle": "सिविक ट्रैकर + विकास परियोजनाएँ",
+      "metricRainfallAlerts": "बारिश अलर्ट",
+      "metricWaterSupplyOk": "जल आपूर्ति ठीक",
+      "metricProjectsTracked": "ट्रैक की गई परियोजनाएँ",
+      "metricElectionNotices": "चुनाव नोटिस",
+      "metricHintDistricts": "ज़िले",
+      "metricHintActive": "सक्रिय",
+      "metricHintThisWeek": "इस सप्ताह",
+      "developmentProjectsTitle": "फोकस में विकास परियोजनाएँ",
+      "developmentProjectsSubtitle": "KiranOS द्वारा ट्रैक — स्थिति और माइलस्टोन",
+      "statusOnTrack": "समय पर",
+      "statusPlanned": "योजनाबद्ध",
+      "statusDelayed": "विलंबित",
+      "developmentCardHint": "ऑटो-अपडेटेड नोट्स और माइलस्टोन यहाँ दिखेंगे। /api/projects/regional से कनेक्ट करें।",
+      "exploreOnMapTitle": "मानचित्र पर देखें",
+      "exploreOnMapSubtitle": "इंटरैक्टिव गुजरात मानचित्र — ज़िला चुनकर खबरें फ़िल्टर करें",
+      "mapPlaceholder": "यहाँ Leaflet/Mapbox मानचित्र आएगा। लागू होने पर ज़िला फ़िल्टर से जोड़ें।"
+    },
     "trending": "ट्रेंडिंग",
     "watch": "देखें",
     "live": "लाइव",
@@ -37,6 +107,8 @@
     "voiceNotSupported": "इस ब्राउज़र में वॉइस प्लेबैक समर्थित नहीं है।",
     "loadingMore": "और लोड हो रहा है…",
     "results": "परिणाम",
+    "minutesShort": "मिन",
+    "source": "स्रोत",
     "untitled": "शीर्षक नहीं",
     "video": "वीडियो"
   },
@@ -70,6 +142,8 @@
       "aiVerifiedBadges": "सत्यापित स्टोरीज़ पर AI‑Verified बैज दिखाई देंगे",
       "newCategoriesRollingOut": "नई श्रेणियाँ और स्टोरी पैनल जारी किए जा रहे हैं"
     },
+    "noLiveUpdates": "अभी कोई लाइव अपडेट नहीं — जुड़े रहें",
+    "updateFallback": "अपडेट",
     "noUpdates": "अभी कोई अपडेट नहीं — जुड़े रहें",
     "noBreaking": "अभी कोई ब्रेकिंग न्यूज़ नहीं — जुड़े रहें",
     "topStory": "मुख्य खबर",
@@ -150,10 +224,57 @@
     "tryDifferent": "कोई दूसरा कीवर्ड आज़माएँ या छोटा वाक्यांश लिखें।",
     "startTyping": "खोजने के लिए टाइप करना शुरू करें। आप Ctrl + K से भी सीधे सर्च पर जा सकते हैं।",
     "searchFailed": "खोज विफल रही"
-  }
-  ,
+  },
+  "errors": {
+    "fetchFailed": "डेटा लोड नहीं हो सका",
+    "networkError": "नेटवर्क त्रुटि हुई"
+  },
+  "topicPage": {
+    "title": "विषय",
+    "titleWithQuery": "विषय: {{query}}",
+    "unableToLoadStories": "स्टोरीज़ लोड नहीं हो सकीं",
+    "noStoriesYet": "अभी कोई स्टोरी नहीं।"
+  },
+  "offlinePage": {
+    "title": "आप ऑफलाइन हैं",
+    "subtitle": "ऑनलाइन होने पर कंटेंट अपने आप अपडेट हो जाएगा।",
+    "retry": "फिर से कोशिश करें"
+  },
+  "maintenancePage": {
+    "headTitle": "मेंटेनेंस",
+    "title": "हम जल्द वापस आएँगे",
+    "description": "News Pulse पर शेड्यूल्ड मेंटेनेंस चल रहा है। हम आपका अनुभव बेहतर बना रहे हैं।",
+    "hint": "कुछ मिनटों में फिर से देखें। आपके धैर्य के लिए धन्यवाद।"
+  },
   "content": {
     "original": "मूल"
+  }
+  ,
+  "liveNews": {
+    "failedToFetch": "समाचार लोड नहीं हो सके"
+  },
+  "communityReporter": {
+    "errors": {
+      "missingEmail": "आपका रिपोर्टर ईमेल नहीं मिला। कृपया पहले नई स्टोरी सबमिट करें।",
+      "loadStoriesFailed": "अभी आपकी स्टोरीज़ लोड नहीं हो रहीं। कृपया बाद में फिर से कोशिश करें।",
+      "couldNotLoadYourStories": "आपकी स्टोरीज़ लोड नहीं हो सकीं"
+    }
+  },
+  "newsDetail": {
+    "back": "← वापस",
+    "categoryLabel": "श्रेणी:",
+    "languageLabel": "भाषा:",
+    "publishedLabel": "प्रकाशित:",
+    "unableToLoadTitle": "लेख लोड नहीं हो सका",
+    "ensureBackendRunning": "बैकएंड चल रहा हो यह सुनिश्चित करें और NEXT_PUBLIC_API_BASE उसी की ओर संकेत करे।",
+    "articleNotFound": "लेख नहीं मिला",
+    "fetchFailed": "फ़ेच विफल"
+  }
+  ,
+  "youthPulse": {
+    "title": "यूथ पल्स",
+    "failedToLoad": "यूथ पल्स लोड नहीं हो सका।",
+    "noPostsYet": "अभी कोई पोस्ट नहीं। थोड़ी देर बाद फिर देखें!"
   }
   ,
   "trending": {
@@ -226,12 +347,16 @@
     "districtFilterHint": "टिप: स्टोरीज़ फ़िल्टर करने के लिए ज़िला चुनें।",
     "emptyTitle": "अभी कोई स्टोरी नहीं",
     "emptyHint": "श्रेणी या ज़िला बदलकर देखें।",
+    "failedToLoadStories": "स्टोरीज़ लोड नहीं हो सकीं।",
+    "failedToLoad": "क्षेत्रीय फ़ीड लोड नहीं हो सकी।",
     "readMore": "और पढ़ें →",
     "videoPreviewHidden": "वीडियो प्रीव्यू छुपा है",
     "chooseDistrictTitle": "ज़िला चुनें",
     "close": "बंद करें",
     "typeToSearch": "खोजने के लिए टाइप करें…",
-    "noDistrictsFound": "कोई ज़िला नहीं मिला।"
+    "noDistrictsFound": "कोई ज़िला नहीं मिला।",
+    "noStoriesFoundForYet": "{{name}} के लिए अभी कोई स्टोरी नहीं मिली।",
+    "noStoriesFoundTryBroader": "{{name}} के लिए अभी कोई स्टोरी नहीं मिली। {{category}} समाचार आज़माएँ।"
   },
   "regionalGujaratPage": {
     "headTitle": "गुजरात – क्षेत्रीय",

@@ -5,6 +5,9 @@ import { ALL_REGIONS } from '../../utils/india';
 import { useLanguage } from '../../utils/LanguageContext';
 import { getRegionName, tHeading, toLanguageKey } from '../../utils/localizedNames';
 import type { GetStaticProps } from 'next';
+import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../../lib/contentFallback';
+import OriginalTag from '../../components/OriginalTag';
+import { useI18n } from '../../src/i18n/LanguageProvider';
 
 function normalize(s: string) {
   return (s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -21,7 +24,15 @@ export default function RegionPage() {
   const router = useRouter();
   const { region } = router.query as { region?: string };
   const { language } = useLanguage();
+  const { t } = useI18n();
   const langKey = toLanguageKey(language);
+
+  const uiLang: UiLang = (() => {
+    const v = String(language || '').toLowerCase().trim();
+    if (v === 'hi' || v === 'hindi') return 'hi';
+    if (v === 'gu' || v === 'gujarati') return 'gu';
+    return 'en';
+  })();
 
   const entry = ALL_REGIONS.find((r) => r.slug === region);
   const displayName = entry ? getRegionName(langKey, entry.type, entry.slug, entry.name) : 'Region';
@@ -55,13 +66,28 @@ export default function RegionPage() {
                   display.map((article: any, idx: number) => (
                     <a key={idx} href={article._id ? `/story/${article._id}` : '#'} className="block p-6 rounded-2xl border shadow-sm hover:shadow-md bg-white dark:bg-gray-800 transition">
                       <div className="text-xs text-gray-500 mb-2">{new Date(article.publishedAt).toLocaleString()}</div>
-                      <h3 className="font-bold text-lg mb-2">{article.title}</h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3">{article.excerpt || article.content?.slice(0,160) + '...'}</p>
-                      <div className="mt-3 text-xs text-gray-400">Source: {article.source || 'News Pulse'}</div>
+                      {(() => {
+                        const titleRes = resolveArticleTitle(article, uiLang);
+                        const summaryRes = resolveArticleSummaryOrExcerpt(article, uiLang);
+                        const desc = summaryRes.text || (article.excerpt || (article.content ? String(article.content).slice(0, 160) + '...' : ''));
+                        return (
+                          <>
+                            <h3 className="font-bold text-lg mb-2">
+                              {titleRes.text || article.title}{' '}
+                              {titleRes.isOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
+                            </h3>
+                            <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3">
+                              {desc}
+                              {summaryRes.isOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
+                            </p>
+                          </>
+                        );
+                      })()}
+                      <div className="mt-3 text-xs text-gray-400">{t('common.source')}: {article.source || t('brand.name')}</div>
                     </a>
                   ))
                 ) : (
-                  <div className="col-span-2 text-gray-600">No stories found for {displayName} yet.</div>
+                    <div className="col-span-2 text-gray-600">{t('regionalUI.noStoriesFoundForYet', { name: displayName })}</div>
                 )}
               </div>
             );

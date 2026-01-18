@@ -5,7 +5,10 @@ import { useEffect, useMemo, useState } from 'react';
 import type { GetStaticProps } from 'next';
 
 import { fetchPublicNews, type Article } from '../../lib/publicNewsApi';
+import { resolveArticleSummaryOrExcerpt, resolveArticleTitle } from '../../lib/contentFallback';
+import OriginalTag from '../../components/OriginalTag';
 import { useLanguage } from '../../utils/LanguageContext';
+import { useI18n } from '../../src/i18n/LanguageProvider';
 
 function formatWhenLabel(iso?: string) {
   if (!iso) return '';
@@ -31,6 +34,7 @@ function slugToQuery(slug: string) {
 export default function TopicPage() {
   const router = useRouter();
   const { language } = useLanguage();
+  const { t } = useI18n();
 
   const slug = typeof router.query.slug === 'string' ? router.query.slug : '';
   const explicitQ = typeof router.query.q === 'string' ? router.query.q : '';
@@ -67,7 +71,7 @@ export default function TopicPage() {
       setLoaded(true);
     })().catch(() => {
       if (controller.signal.aborted) return;
-      setError('Fetch failed');
+      setError(t('errors.fetchFailed'));
       setItems([]);
       setLoaded(false);
     });
@@ -75,12 +79,12 @@ export default function TopicPage() {
     return () => controller.abort();
   }, [language, q]);
 
-  const title = q ? `Topic: ${q}` : 'Topic';
+  const title = q ? t('topicPage.titleWithQuery', { query: q }) : t('topicPage.title');
 
   return (
     <>
       <Head>
-        <title>{`${title} | News Pulse`}</title>
+        <title>{`${title} | ${t('brand.name')}`}</title>
       </Head>
 
       <main className="min-h-screen bg-white">
@@ -88,20 +92,20 @@ export default function TopicPage() {
           <header className="flex flex-col gap-2">
             <h1 className="text-4xl font-extrabold tracking-tight text-slate-900">{title}</h1>
             <div className="text-sm text-slate-600">
-              <Link href="/search" className="text-blue-600 hover:underline">Search</Link>
+              <Link href="/search" className="text-blue-600 hover:underline">{t('common.search')}</Link>
               <span> · </span>
-              <Link href="/" className="text-blue-600 hover:underline">Home</Link>
+              <Link href="/" className="text-blue-600 hover:underline">{t('common.home')}</Link>
             </div>
           </header>
 
           {error ? (
             <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5 text-slate-800">
-              <div className="text-base font-bold">Unable to load stories</div>
+              <div className="text-base font-bold">{t('topicPage.unableToLoadStories')}</div>
               <div className="mt-1 text-sm">{error}</div>
             </div>
           ) : loaded && items.length === 0 ? (
             <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6">
-              <div className="text-lg font-semibold text-slate-900">No stories yet.</div>
+              <div className="text-lg font-semibold text-slate-900">{t('topicPage.noStoriesYet')}</div>
             </div>
           ) : (
             <section className="mt-8">
@@ -110,7 +114,9 @@ export default function TopicPage() {
                   const slugOrId = a._id || a.slug;
                   const href = `/news/${encodeURIComponent(String(slugOrId))}`;
                   const when = formatWhenLabel(a.publishedAt || a.createdAt);
-                  const summary = a.summary || a.excerpt || '';
+                  const titleRes = resolveArticleTitle(a as any, language);
+                  const summaryRes = resolveArticleSummaryOrExcerpt(a as any, language);
+                  const summary = summaryRes.text;
                   const image = a.imageUrl || a.image || '';
 
                   return (
@@ -120,7 +126,7 @@ export default function TopicPage() {
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={image}
-                            alt={a.title || 'Article image'}
+                            alt={titleRes.text || t('categoryPage.articleImageAlt')}
                             loading="lazy"
                             className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
                           />
@@ -129,7 +135,10 @@ export default function TopicPage() {
 
                       <div className="p-4">
                         <Link href={href} className="block text-lg font-bold text-slate-900 hover:underline">
-                          {a.title || 'Untitled'}
+                          <span className="inline-flex flex-wrap items-center gap-2">
+                            <span>{titleRes.text || t('categoryPage.untitled')}</span>
+                            {titleRes.isOriginal ? <OriginalTag /> : null}
+                          </span>
                         </Link>
 
                         {summary ? (
@@ -142,7 +151,8 @@ export default function TopicPage() {
                               overflow: 'hidden',
                             }}
                           >
-                            {summary}
+                            <span>{summary}</span>
+                            {summaryRes.isOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
                           </p>
                         ) : null}
 

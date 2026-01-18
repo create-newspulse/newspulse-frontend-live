@@ -2,9 +2,9 @@ import { fetchCategoryNews } from "../../lib/fetchCategoryNews";
 import { GUJARAT_DISTRICTS } from "../../utils/regions";
 import type { RegionalArticle, City, District } from "./types";
 
-export async function getRegionalFeed(limit = 30): Promise<RegionalArticle[]> {
+export async function getRegionalFeed(limit = 30, language?: string): Promise<RegionalArticle[]> {
   try {
-    const res = await fetchCategoryNews({ categoryKey: "Regional", limit });
+    const res = await fetchCategoryNews({ categoryKey: "Regional", limit, language });
     return (res.items || []) as RegionalArticle[];
   } catch {
     return [];

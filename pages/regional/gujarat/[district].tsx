@@ -115,6 +115,13 @@ export default function GujaratDistrictPage() {
 
   const langKey = React.useMemo(() => toLanguageKey(language), [language]);
 
+  const uiLang = React.useMemo(() => {
+    const v = String(language || '').toLowerCase().trim();
+    if (v === 'hi' || v === 'hindi') return 'hi' as const;
+    if (v === 'gu' || v === 'gujarati') return 'gu' as const;
+    return 'en' as const;
+  }, [language]);
+
   const districtSlug = typeof district === 'string' ? district : undefined;
   const entry = React.useMemo(() => GUJARAT_DISTRICTS.find((d) => d.slug === districtSlug), [districtSlug]);
 
@@ -132,14 +139,14 @@ export default function GujaratDistrictPage() {
     setLoading(true);
     setError(null);
 
-    fetchPublicStories()
+    fetchPublicStories(undefined, { language: uiLang })
       .then((items) => {
         if (cancelled) return;
         setStories(items as AnyStory[]);
       })
       .catch((e: any) => {
         if (cancelled) return;
-        setError(e?.message || 'Failed to load stories');
+        setError(e?.message || t('regionalUI.failedToLoadStories'));
       })
       .finally(() => {
         if (cancelled) return;
@@ -149,7 +156,7 @@ export default function GujaratDistrictPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t, uiLang]);
 
   const districtName = entry ? getGujaratDistrictName(langKey, entry.slug, entry.name) : t('regionalUI.allGujarat');
   const displayDistrictName = entry
@@ -427,6 +434,7 @@ export default function GujaratDistrictPage() {
 
             <RegionalFeedCards
               stories={filteredStories}
+              requestedLang={uiLang}
               loading={loading}
               districtFilteringEnabled={districtFilteringEnabled}
               showDistrictBadges={districtFilteringEnabled}

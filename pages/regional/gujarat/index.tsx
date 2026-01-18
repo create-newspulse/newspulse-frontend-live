@@ -114,6 +114,13 @@ export default function GujaratIndexPage() {
   const { language } = useLanguage();
   const { t } = useI18n();
 
+  const uiLang = React.useMemo(() => {
+    const v = String(language || '').toLowerCase().trim();
+    if (v === 'hi' || v === 'hindi') return 'hi' as const;
+    if (v === 'gu' || v === 'gujarati') return 'gu' as const;
+    return 'en' as const;
+  }, [language]);
+
   const langKey = React.useMemo(() => toLanguageKey(language), [language]);
 
   const localizedDistricts = React.useMemo(
@@ -145,14 +152,14 @@ export default function GujaratIndexPage() {
     setLoading(true);
     setError(null);
 
-    fetchPublicStories()
+    fetchPublicStories(undefined, { language: uiLang })
       .then((items) => {
         if (cancelled) return;
         setStories(items as AnyStory[]);
       })
       .catch((e: any) => {
         if (cancelled) return;
-        setError(e?.message || 'Failed to load stories');
+        setError(e?.message || t('regionalUI.failedToLoadStories'));
       })
       .finally(() => {
         if (cancelled) return;
@@ -162,7 +169,7 @@ export default function GujaratIndexPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t, uiLang]);
 
   const districtFilteringEnabled = React.useMemo(() => stories.some((s) => !!extractDistrict(s)), [stories]);
 
@@ -415,6 +422,7 @@ export default function GujaratIndexPage() {
 
             <RegionalFeedCards
               stories={filteredStories}
+              requestedLang={uiLang}
               loading={loading}
               districtFilteringEnabled={districtFilteringEnabled}
               showDistrictBadges={districtFilteringEnabled}

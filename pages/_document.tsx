@@ -4,8 +4,9 @@ import { GA_TRACKING_ID } from '../lib/gtag';
 
 export default class MyDocument extends Document {
   render() {
+    const locale = (this.props as any)?.__NEXT_DATA__?.locale || (this.props as any)?.locale || 'en';
     return (
-      <Html>
+      <Html lang={locale}>
         <Head>
           {/* Meta Tags */}
           <meta name="theme-color" content="#0f172a" />

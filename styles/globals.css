@@ -153,11 +153,35 @@ html {
     .tickerText,
     .tickerLabel {
       font-family: var(--font-inter), system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      font-weight: 600;
       letter-spacing: 0.2px;
       -webkit-font-smoothing: antialiased;
       text-rendering: optimizeLegibility;
-      line-height: 1.25;
+      line-height: 1.15;
+    }
+
+    .tickerText {
+      font-weight: 500;
+    }
+
+    .tickerLabel {
+      font-weight: 600;
+    }
+
+    /* Global multilingual typography (Phase 2A): apply per-language fonts site-wide.
+       The wrapper class is set in pages/_app.tsx so it updates immediately on language change. */
+    .np-lang-en {
+      font-family: var(--font-inter), system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      font-weight: 400;
+    }
+
+    .np-lang-hi {
+      font-family: var(--font-devanagari), system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      font-weight: 400;
+    }
+
+    .np-lang-gu {
+      font-family: var(--font-gujarati), system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      font-weight: 400;
     }
 
     .tickerText:lang(hi),

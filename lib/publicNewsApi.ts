@@ -167,6 +167,7 @@ export async function fetchPublishedCategoryArticles(options: {
 
 export async function fetchArticleBySlugOrId(options: {
   slugOrId: string;
+  language?: string;
 }): Promise<{ article: Article | null; error?: string; status?: number; endpointTried: string[] }> {
   const base = getApiOrigin();
   if (!base) {
@@ -174,11 +175,14 @@ export async function fetchArticleBySlugOrId(options: {
   }
   const slug = options.slugOrId;
 
+  const lang = options.language ? String(options.language).toLowerCase().trim() : '';
+  const langQuery = lang ? `?lang=${encodeURIComponent(lang)}&language=${encodeURIComponent(lang)}` : '';
+
   const endpoints = [
     // Current backend: article detail is served under /api/articles/:id
-    `${base}/api/articles/${encodeURIComponent(slug)}`,
-    `${base}/api/news/${encodeURIComponent(slug)}`,
-    `${base}/api/news/by-slug/${encodeURIComponent(slug)}`,
+    `${base}/api/articles/${encodeURIComponent(slug)}${langQuery}`,
+    `${base}/api/news/${encodeURIComponent(slug)}${langQuery}`,
+    `${base}/api/news/by-slug/${encodeURIComponent(slug)}${langQuery}`,
   ];
 
   for (let i = 0; i < endpoints.length; i++) {

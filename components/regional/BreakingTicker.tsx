@@ -41,10 +41,10 @@ function toTagList(tags: any): string[] {
 export default function BreakingTicker({
   items,
   variant = 'breaking',
-  emptyText = 'No breaking news right now — stay tuned',
+  emptyText,
   className,
 }: BreakingTickerProps) {
-  const { lang } = useI18n();
+  const { lang, t } = useI18n();
   const tickerLang = lang === 'gu' ? 'gu' : lang === 'hi' ? 'hi' : 'en';
   const id = useId().replace(/:/g, '');
 
@@ -54,21 +54,22 @@ export default function BreakingTicker({
   }, [items]);
 
   const messages = useMemo(() => {
-    if (!safeItems.length) return [emptyText];
+    const effectiveEmpty = emptyText || (variant === 'live' ? t('home.noLiveUpdates') : t('home.noBreaking'));
+    if (!safeItems.length) return [effectiveEmpty];
     return safeItems.map((it) => {
       const title = String(it?.title || '').trim();
       if (title) return title;
 
       const tags = toTagList(it?.tags);
-      return tags.length ? tags[0] : 'Update';
+      return tags.length ? tags[0] : t('home.updateFallback');
     });
-  }, [emptyText, safeItems]);
+  }, [emptyText, safeItems, t, variant]);
 
   // Duplicate list to get a seamless loop.
   const loop = useMemo(() => messages.concat(messages), [messages]);
 
   const isBreaking = variant === 'breaking';
-  const label = isBreaking ? 'BREAKING' : 'LIVE';
+  const label = isBreaking ? t('home.breakingNews') : t('home.liveUpdates');
   const viewAllHref = '/breaking';
 
   return (
@@ -100,7 +101,7 @@ export default function BreakingTicker({
           href={viewAllHref}
           className="shrink-0 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold hover:bg-white/25"
         >
-          View all
+          {t('common.viewAll')}
         </Link>
       </div>
 

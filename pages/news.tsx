@@ -4,10 +4,14 @@ import Head from 'next/head';
 import type { GetStaticProps } from 'next';
 import { getApiOrigin } from '../lib/publicNewsApi';
 import { useLanguage } from '../utils/LanguageContext';
+import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../lib/contentFallback';
+import OriginalTag from '../components/OriginalTag';
 
 type NewsApiArticle = {
   title: string;
+  titleIsOriginal?: boolean;
   description?: string;
+  descriptionIsOriginal?: boolean;
   url?: string;
   publishedAt?: string;
   source?: { name?: string };
@@ -16,6 +20,13 @@ type NewsApiArticle = {
 export default function News() {
   const { language } = useLanguage();
   const [articles, setArticles] = useState<NewsApiArticle[]>([]);
+
+  const uiLang: UiLang = (() => {
+    const v = String(language || '').toLowerCase().trim();
+    if (v === 'hi' || v === 'hindi') return 'hi';
+    if (v === 'gu' || v === 'gujarati') return 'gu';
+    return 'en';
+  })();
 
   useEffect(() => {
     const fetchNews = async () => {
@@ -40,15 +51,21 @@ export default function News() {
         const items = Array.isArray(list) ? (list as any[]) : [];
         const mapped: NewsApiArticle[] = items
           .map((raw) => {
-            const title = String(raw?.title || '').trim();
+            const titleRes = resolveArticleTitle(raw, uiLang);
+            const title = String(titleRes.text || '').trim();
             if (!title) return null;
 
             const slugOrId = raw?._id || raw?.id || raw?.slug;
             const href = slugOrId ? `/news/${encodeURIComponent(String(slugOrId))}` : undefined;
 
+            const summaryRes = resolveArticleSummaryOrExcerpt(raw, uiLang);
+            const description = String(summaryRes.text || '').trim() || undefined;
+
             return {
               title,
-              description: String(raw?.summary || raw?.excerpt || '').trim() || undefined,
+              titleIsOriginal: titleRes.isOriginal,
+              description,
+              descriptionIsOriginal: summaryRes.isOriginal,
               url: href,
               publishedAt: String(raw?.publishedAt || raw?.createdAt || '').trim() || undefined,
               source: { name: String(raw?.source?.name || raw?.source || '').trim() || undefined },
@@ -80,9 +97,15 @@ export default function News() {
               key={idx}
               className="bg-white p-4 rounded-xl shadow-md border-l-4 border-blue-600 transition hover:shadow-lg"
             >
-              <h2 className="text-xl font-semibold text-gray-800">{article.title}</h2>
+              <h2 className="text-xl font-semibold text-gray-800">
+                {article.title} {article.titleIsOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
+              </h2>
               <p className="text-sm text-gray-500">{(article.source?.name || 'Unknown source')} – {new Date(article.publishedAt || '').toLocaleString()}</p>
-              <p className="mt-2 text-gray-700">{article.description}</p>
+              {article.description ? (
+                <p className="mt-2 text-gray-700">
+                  {article.description} {article.descriptionIsOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
+                </p>
+              ) : null}
               {article.url && (
                 <a
                   href={article.url}

@@ -23,7 +23,13 @@ const nextConfig = {
     ],
   },
 
-  // UI language is handled by the in-app LanguageProvider (no locale routes).
+  // Enable locale routes (/hi, /gu) for SEO + shareable URLs.
+  // UI strings still come from the in-app LanguageProvider dictionaries.
+  i18n: {
+    locales: ['en', 'hi', 'gu'],
+    defaultLocale: 'en',
+    localeDetection: false,
+  },
 
   // Dev-only (suppresses allowedDevOrigins warning for LAN testing)
   allowedDevOrigins: ['localhost', '127.0.0.1', '10.145.86.143'],
@@ -59,9 +65,23 @@ const nextConfig = {
         .trim();
     const backend = backendRaw.replace(/\/+$/, '').replace(/\/api\/?$/, '');
 
-    if (!backend) return [];
+    // Frontend-friendly alias (requested contract) for ticker endpoints.
+    // These hit our Next API routes under /pages/api/public/broadcast/*.
+    const localAliases = [
+      {
+        source: '/public/broadcast/:path*',
+        destination: '/api/public/broadcast/:path*',
+      },
+      {
+        source: '/public/ui-labels',
+        destination: '/api/public/ui-labels',
+      },
+    ];
+
+    if (!backend) return localAliases;
 
     return [
+      ...localAliases,
       {
         source: '/admin-api/public/:path*',
         destination: `${backend}/admin-api/public/:path*`,

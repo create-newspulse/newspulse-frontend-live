@@ -116,6 +116,39 @@ function getStatusField(item: any, field: 'title' | 'summary' | 'excerpt', lang:
   return null;
 }
 
+function getTranslationFallbackFlag(item: any, field: 'title' | 'summary' | 'excerpt', lang: UiLang): boolean {
+  try {
+    // Common shapes:
+    // - translationFallback: true
+    // - translationFallback: { [lang]: true }
+    // - titleTranslationFallback / summaryTranslationFallback
+    // - translations[lang][field].translationFallback
+    if (item?.translationFallback === true) return true;
+    if (item?.translationFallback && typeof item.translationFallback === 'object' && item.translationFallback?.[lang] === true) return true;
+
+    const directKey = `${field}TranslationFallback`;
+    if (item?.[directKey] === true) return true;
+
+    const container = getTranslationContainer(item);
+    const rec = getRecord(container);
+    if (!rec) return false;
+
+    const a = getNested(rec, [lang, field]);
+    if (a?.translationFallback === true) return true;
+    if (a?.fallbackOriginal === true) return true;
+    if (a?.useOriginal === true) return true;
+
+    const b = getNested(rec, [field, lang]);
+    if (b?.translationFallback === true) return true;
+    if (b?.fallbackOriginal === true) return true;
+    if (b?.useOriginal === true) return true;
+  } catch {
+    return false;
+  }
+
+  return false;
+}
+
 function getSourceLang(item: any): UiLang | null {
   return normLang(item?.sourceLang) || normLang(item?.sourceLanguage) || normLang(item?.language) || normLang(item?.lang);
 }
@@ -140,6 +173,14 @@ export function resolveArticleField(
   const source = getFieldSource(item, field);
   const translated = getTranslatedField(item, field, lang);
   const status = getStatusField(item, field, lang);
+  const translationFallback = getTranslationFallbackFlag(item, field, lang);
+
+  // If backend explicitly requests an accuracy fallback, prefer source/original text,
+  // but keep the UI clean (no "Original" badge).
+  if (translationFallback) {
+    const text = source || translated || pickNonEmpty(item?.[field]);
+    return { text, isOriginal: false };
+  }
 
   // If backend exposes a status, enforce safety rules.
   if (status) {

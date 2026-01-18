@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLanguage } from "../utils/LanguageContext";
 import { useRegionalPulse } from "../src/features/regional/useRegionalPulse";
 import { useFeatureFlags } from "../utils/FeatureFlagProvider";
+import { useI18n } from '../src/i18n/LanguageProvider';
 
 /**
  * Regional – Gujarat (News Pulse)
@@ -217,8 +218,8 @@ function useVoiceReader() {
     }
   }, []);
 
-  const speak = (text: string) => {
-    if (!synthRef.current) return alert("Voice not supported on this device.");
+  const speak = (text: string, notSupportedMessage: string) => {
+    if (!synthRef.current) return alert(notSupportedMessage);
     try {
       synthRef.current.cancel();
       const u = new SpeechSynthesisUtterance(text);
@@ -239,9 +240,9 @@ function useVoiceReader() {
     }
   };
 
-  const toggle = (text: string) => {
+  const toggle = (text: string, notSupportedMessage: string) => {
     if (speaking) stop();
-    else speak(text);
+    else speak(text, notSupportedMessage);
   };
 
   return { speak, stop, toggle, speaking };
@@ -302,6 +303,7 @@ function ClientTime({ iso }: { iso?: string }) {
 function RegionalGujaratPage() {
   const { language, setLanguage } = useLanguage();
   const { isEnabled } = useFeatureFlags();
+  const { t } = useI18n();
   const {
     FILTERS: R_FILTERS,
     filter,
@@ -376,8 +378,8 @@ function RegionalGujaratPage() {
       <div className="max-w-7xl mx-auto px-4 md:px-6 pt-6 pb-4">
         <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
           <div>
-            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Regional Pulse – Gujarat</h1>
-            <p className="text-slate-600 mt-1">Your real-time civic, district, and city news pulse of Gujarat.</p>
+            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">{t('regionalHub.title')}</h1>
+            <p className="text-slate-600 mt-1">{t('regionalHub.subtitle')}</p>
           </div>
 
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full lg:w-auto">
@@ -385,7 +387,7 @@ function RegionalGujaratPage() {
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search district or city..."
+                placeholder={t('regionalHub.searchPlaceholder')}
                 className="w-full border rounded-xl px-3 py-2 text-sm"
               />
               <span className="absolute right-3 top-2.5">🔎</span>
@@ -394,15 +396,15 @@ function RegionalGujaratPage() {
             <div className="flex items-center gap-2">
               {isEnabled("voice.enabled", true) && (
                 <button
-                  onClick={() => voice.toggle(`Here are top regional highlights. ${highlightsText}`)}
+                  onClick={() => voice.toggle(`${t('regionalHub.voiceHighlightsIntro')}${highlightsText}`, t('common.voiceNotSupported'))}
                   className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
-                  title={voice.speaking ? "Mute" : "Listen to local highlights"}
+                  title={voice.speaking ? t('regionalHub.voiceMuteTitle') : t('regionalHub.voiceListenTitle')}
                   aria-pressed={voice.speaking}
                 >
                   <span role="img" aria-label={voice.speaking ? "muted" : "speaker"}>
                     {voice.speaking ? "🔇" : "🔊"}
                   </span>
-                  {voice.speaking ? "Mute" : "Listen"}
+                  {voice.speaking ? t('regionalHub.voiceMute') : t('regionalHub.voiceListen')}
                 </button>
               )}
             </div>
@@ -415,7 +417,7 @@ function RegionalGujaratPage() {
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 flex flex-col md:flex-row md:items-center gap-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:flex md:items-center">
             <label className="flex items-center gap-2">
-              <span className="text-xs text-slate-500 whitespace-nowrap">District</span>
+              <span className="text-xs text-slate-500 whitespace-nowrap">{t('regionalHub.filterDistrict')}</span>
               <select
                 className="border rounded-lg px-3 py-2 text-sm w-full"
                 value={selectedDistrict}
@@ -424,7 +426,7 @@ function RegionalGujaratPage() {
                   setSelectedCity("");
                 }}
               >
-                <option value="">All districts</option>
+                <option value="">{t('regionalHub.filterAllDistricts')}</option>
                 {districts.map((d) => (
                   <option key={d.id} value={d.name}>
                     {d.name}
@@ -434,13 +436,13 @@ function RegionalGujaratPage() {
             </label>
 
             <label className="flex items-center gap-2">
-              <span className="text-xs text-slate-500 whitespace-nowrap">City</span>
+              <span className="text-xs text-slate-500 whitespace-nowrap">{t('regionalHub.filterCity')}</span>
               <select
                 className="border rounded-lg px-3 py-2 text-sm w-full"
                 value={selectedCity}
                 onChange={(e) => setSelectedCity(e.target.value)}
               >
-                <option value="">Optional</option>
+                <option value="">{t('regionalHub.filterCityOptional')}</option>
                 {cityOptions.map((name) => (
                   <option key={name} value={name}>
                     {name}
@@ -460,7 +462,15 @@ function RegionalGujaratPage() {
                   filter === c.key ? "bg-black text-white border-black" : "hover:bg-slate-50"
                 )}
               >
-                {c.label}
+                {c.key === 'smart'
+                  ? t('regionalHub.chipSmartCity')
+                  : c.key === 'industrial'
+                    ? t('regionalHub.chipIndustrial')
+                    : c.key === 'coastal'
+                      ? t('regionalHub.chipCoastal')
+                      : c.key === 'tribal'
+                        ? t('regionalHub.chipTribal')
+                        : c.label}
               </button>
             ))}
           </div>
@@ -472,11 +482,11 @@ function RegionalGujaratPage() {
         <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b">
           {(
             [
-              { key: "feed", label: "Feed" },
-              { key: "districts", label: "Districts" },
-              { key: "cities", label: "Cities" },
-              { key: "civic", label: "Civic" },
-              { key: "map", label: "Map" },
+              { key: "feed", label: t('regionalHub.tabFeed') },
+              { key: "districts", label: t('regionalHub.tabDistricts') },
+              { key: "cities", label: t('regionalHub.tabCities') },
+              { key: "civic", label: t('regionalHub.tabCivic') },
+              { key: "map", label: t('regionalHub.tabMap') },
             ] as const
           ).map((t) => (
             <button
@@ -499,14 +509,14 @@ function RegionalGujaratPage() {
           {tab === "feed" && (
             <section>
               <SectionTitle
-                title={activePlace ? `Feed — ${activePlace}` : "Feed"}
-                subtitle="Latest regional stories"
+                title={activePlace ? t('regionalHub.feedTitleWithPlace', { place: activePlace }) : t('regionalHub.feedTitle')}
+                subtitle={t('regionalHub.feedSubtitle')}
               />
 
               {loading ? (
-                <div className="text-sm text-slate-500">Loading…</div>
+                <div className="text-sm text-slate-500">{t('regionalHub.loading')}</div>
               ) : visibleNews.length === 0 ? (
-                <div className="text-sm text-slate-500">No stories found for the current filters.</div>
+                <div className="text-sm text-slate-500">{t('regionalHub.noStoriesForFilters')}</div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {visibleNews.map((item) => (
@@ -520,7 +530,7 @@ function RegionalGujaratPage() {
                       <div className="mt-3 flex items-center justify-between text-sm">
                         <div className="text-slate-500">{item.district}</div>
                         <a href={item.url || "#"} className="text-blue-600 hover:underline" target="_blank" rel="noreferrer">
-                          Read more →
+                          {t('regionalUI.readMore')}
                         </a>
                       </div>
                     </article>
@@ -533,19 +543,19 @@ function RegionalGujaratPage() {
           {/* Tab 2: Districts */}
           {tab === "districts" && (
             <section>
-              <SectionTitle title={`Gujarat — ${districts.length} Districts`} subtitle="Top headline + total updates" />
+              <SectionTitle title={t('regionalHub.districtsTitle', { count: String(districts.length) })} subtitle={t('regionalHub.districtsSubtitle')} />
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {districtStats.map((d) => (
                   <div key={d.district.id} className="rounded-2xl border p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="font-semibold text-lg">{d.district.name}</div>
-                        <div className="text-xs text-slate-500">District · Gujarat</div>
+                        <div className="text-xs text-slate-500">{t('regionalHub.districtMeta')}</div>
                       </div>
-                      <Chip>{d.count} updates</Chip>
+                      <Chip>{t('regionalHub.updates', { count: String(d.count) })}</Chip>
                     </div>
                     <div className="mt-3 text-sm text-slate-700">
-                      {d.topHeadline ? d.topHeadline : <span className="text-slate-500">No headline yet.</span>}
+                      {d.topHeadline ? d.topHeadline : <span className="text-slate-500">{t('regionalHub.noHeadlineYet')}</span>}
                     </div>
                   </div>
                 ))}
@@ -556,7 +566,7 @@ function RegionalGujaratPage() {
           {/* Tab 3: Cities */}
           {tab === "cities" && (
             <section>
-              <SectionTitle title="Cities" subtitle="Top cities carousel + city feed" />
+              <SectionTitle title={t('regionalHub.citiesTitle')} subtitle={t('regionalHub.citiesSubtitle')} />
 
               <div className="-mx-4 md:-mx-6 px-4 md:px-6 overflow-x-auto pb-2">
                 <div className="flex gap-4 min-w-max">
@@ -567,12 +577,23 @@ function RegionalGujaratPage() {
                           <span className="text-2xl">🏛️</span>
                           <div>
                             <h3 className="font-semibold text-lg">{city.name}</h3>
-                            <p className="text-xs text-slate-500">{city.type} · Gujarat</p>
+                            <p className="text-xs text-slate-500">
+                              {t('regionalHub.placeTypeMeta', {
+                                type:
+                                  city.type === 'City' ? t('regionalHub.typeCity') : city.type === 'District' ? t('regionalHub.typeDistrict') : String(city.type),
+                              })}
+                            </p>
                           </div>
                         </div>
                         {city.label && (
                           <Chip tone={city.label === "Current" ? "success" : city.label === "New" ? "warning" : "info"}>
-                            {city.label}
+                            {city.label === 'Current'
+                              ? t('regionalHub.cityLabelCurrent')
+                              : city.label === 'New'
+                                ? t('regionalHub.cityLabelNew')
+                                : city.label === 'Approved'
+                                  ? t('regionalHub.cityLabelApproved')
+                                  : city.label}
                           </Chip>
                         )}
                       </div>
@@ -590,12 +611,12 @@ function RegionalGujaratPage() {
 
               <div className="mt-10">
                 <SectionTitle
-                  title={activePlace ? `City Feed — ${activePlace}` : "City Feed"}
-                  subtitle="Latest updates + local voices"
+                  title={activePlace ? t('regionalHub.cityFeedTitleWithPlace', { place: activePlace }) : t('regionalHub.cityFeedTitle')}
+                  subtitle={t('regionalHub.cityFeedSubtitle')}
                 />
 
                 {visibleNews.length === 0 ? (
-                  <div className="text-sm text-slate-500">No stories found for the current selection.</div>
+                  <div className="text-sm text-slate-500">{t('regionalHub.noStoriesForSelection')}</div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {visibleNews.slice(0, 6).map((item) => (
@@ -614,9 +635,11 @@ function RegionalGujaratPage() {
               </div>
 
               <div className="mt-10">
-                <SectionTitle title="Voices from Your City" subtitle="Youth Pulse – opinions, campus, careers" />
+                <SectionTitle title={t('regionalHub.voicesTitle')} subtitle={t('regionalHub.voicesSubtitle')} />
                 {visibleYouth.length === 0 ? (
-                  <div className="text-sm text-slate-500">No youth stories right now. (Hook to /api/news/youth)</div>
+                  <div className="text-sm text-slate-500">
+                    {t('regionalHub.noYouthStories')} {t('regionalHub.noYouthStoriesHint')}
+                  </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {visibleYouth.map((y) => (
@@ -632,7 +655,7 @@ function RegionalGujaratPage() {
               </div>
 
               <div className="mt-10">
-                <SectionTitle title="City in Motion" subtitle="Local clips & explainers" />
+                <SectionTitle title={t('regionalHub.cityInMotionTitle')} subtitle={t('regionalHub.cityInMotionSubtitle')} />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {[
                     "https://www.youtube.com/embed/dQw4w9WgXcQ",
@@ -656,28 +679,28 @@ function RegionalGujaratPage() {
           {/* Tab 4: Civic */}
           {tab === "civic" && (
             <section>
-              <SectionTitle title="Civic" subtitle="Civic tracker + development projects" />
+              <SectionTitle title={t('regionalHub.civicTitle')} subtitle={t('regionalHub.civicSubtitle')} />
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <MetricCard label="Rainfall Alerts" value={metrics?.rainfallAlertDistricts ?? "—"} hint="districts" />
-                <MetricCard label="Water Supply OK" value={metrics?.waterSupplyOK ?? "—"} hint="districts" />
-                <MetricCard label="Projects Tracked" value={metrics?.projectsTracked ?? "—"} hint="active" />
-                <MetricCard label="Election Notices" value={metrics?.electionNotices ?? "—"} hint="this week" />
+                <MetricCard label={t('regionalHub.metricRainfallAlerts')} value={metrics?.rainfallAlertDistricts ?? "—"} hint={t('regionalHub.metricHintDistricts')} />
+                <MetricCard label={t('regionalHub.metricWaterSupplyOk')} value={metrics?.waterSupplyOK ?? "—"} hint={t('regionalHub.metricHintDistricts')} />
+                <MetricCard label={t('regionalHub.metricProjectsTracked')} value={metrics?.projectsTracked ?? "—"} hint={t('regionalHub.metricHintActive')} />
+                <MetricCard label={t('regionalHub.metricElectionNotices')} value={metrics?.electionNotices ?? "—"} hint={t('regionalHub.metricHintThisWeek')} />
               </div>
 
               <div className="mt-10">
-                <SectionTitle title="Development Projects in Focus" subtitle="Tracked by KiranOS – status & milestones" />
+                <SectionTitle title={t('regionalHub.developmentProjectsTitle')} subtitle={t('regionalHub.developmentProjectsSubtitle')} />
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {["Ahmedabad Metro Phase-2", "Dholera SIR Solar Park", "Narmada Canal Modernization"].map((p, i) => (
                     <div key={i} className="rounded-2xl border p-4">
                       <div className="flex items-center justify-between">
                         <h3 className="font-semibold">{p}</h3>
                         <Chip tone={i === 0 ? "success" : i === 1 ? "info" : "warning"}>
-                          {i === 0 ? "On Track" : i === 1 ? "Planned" : "Delayed"}
+                          {i === 0 ? t('regionalHub.statusOnTrack') : i === 1 ? t('regionalHub.statusPlanned') : t('regionalHub.statusDelayed')}
                         </Chip>
                       </div>
                       <p className="text-sm text-slate-600 mt-1">
-                        Auto-updated notes and milestones will appear here. Connect to /api/projects/regional.
+                        {t('regionalHub.developmentCardHint')}
                       </p>
                     </div>
                   ))}
@@ -689,9 +712,9 @@ function RegionalGujaratPage() {
           {/* Tab 5: Map */}
           {tab === "map" && (
             <section>
-              <SectionTitle title="Explore on Map" subtitle="Interactive Gujarat map – click a district to filter news" />
+              <SectionTitle title={t('regionalHub.exploreOnMapTitle')} subtitle={t('regionalHub.exploreOnMapSubtitle')} />
               <div className="rounded-2xl border p-6 h-72 flex items-center justify-center text-slate-500">
-                Leaflet/Mapbox map goes here. Hook into district filter when implemented.
+                {t('regionalHub.mapPlaceholder')}
               </div>
             </section>
           )}

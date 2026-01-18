@@ -4,6 +4,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import type { GetServerSideProps } from 'next';
+import { useI18n } from '../src/i18n/LanguageProvider';
 
 type StoryStatus = 'pending' | 'approved' | 'rejected';
 
@@ -68,6 +69,7 @@ type FeatureToggleProps = {
 
 const MyCommunityStoriesPage: React.FC<FeatureToggleProps> = ({ communityReporterClosed, reporterPortalClosed }) => {
   const router = useRouter();
+  const { t } = useI18n();
   const [stories, setStories] = useState<ReporterStory[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -124,11 +126,11 @@ const MyCommunityStoriesPage: React.FC<FeatureToggleProps> = ({ communityReporte
           const incoming = (data as any).stories ?? (data as any).data?.stories ?? [];
           setStories(Array.isArray(incoming) ? incoming : []);
         } else {
-          setError('Could not load your stories');
+          setError(t('communityReporter.errors.couldNotLoadYourStories'));
           setStories([]);
         }
       } catch {
-        setError('Could not load your stories');
+        setError(t('communityReporter.errors.couldNotLoadYourStories'));
         setStories([]);
       } finally {
         setLoading(false);

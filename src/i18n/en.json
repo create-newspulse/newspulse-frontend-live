@@ -1,6 +1,7 @@
 {
   "common": {
     "language": "Language",
+    "back": "Back",
     "beta": "Beta",
     "style": "Style",
     "search": "Search",
@@ -16,6 +17,75 @@
     "listen": "Listen",
     "share": "Share",
     "new": "NEW",
+    "regionalHub": {
+      "title": "Regional Pulse – Gujarat",
+      "subtitle": "Your real-time civic, district, and city news pulse of Gujarat.",
+      "searchPlaceholder": "Search district or city…",
+      "voiceListen": "Listen",
+      "voiceMute": "Mute",
+      "voiceListenTitle": "Listen to local highlights",
+      "voiceMuteTitle": "Mute",
+      "voiceHighlightsIntro": "Here are top regional highlights. ",
+      "filterDistrict": "District",
+      "filterCity": "City",
+      "filterAllDistricts": "All districts",
+      "filterCityOptional": "Optional",
+      "chipSmartCity": "Smart City",
+      "chipIndustrial": "Industrial",
+      "chipCoastal": "Coastal",
+      "chipTribal": "Tribal",
+      "tabFeed": "Feed",
+      "tabDistricts": "Districts",
+      "tabCities": "Cities",
+      "tabCivic": "Civic",
+      "tabMap": "Map",
+      "feedTitle": "Feed",
+      "feedTitleWithPlace": "Feed — {{place}}",
+      "feedSubtitle": "Latest regional stories",
+      "loading": "Loading…",
+      "noStoriesForFilters": "No stories found for the current filters.",
+      "districtsTitle": "Gujarat — {{count}} Districts",
+      "districtsSubtitle": "Top headline + total updates",
+      "districtMeta": "District · Gujarat",
+      "updates": "{{count}} updates",
+      "noHeadlineYet": "No headline yet.",
+      "citiesTitle": "Cities",
+      "citiesSubtitle": "Top cities carousel + city feed",
+      "typeCity": "City",
+      "typeDistrict": "District",
+      "cityLabelCurrent": "Current",
+      "cityLabelApproved": "Approved",
+      "cityLabelNew": "New",
+      "placeTypeMeta": "{{type}} · Gujarat",
+      "cityFeedTitle": "City Feed",
+      "cityFeedTitleWithPlace": "City Feed — {{place}}",
+      "cityFeedSubtitle": "Latest updates + local voices",
+      "noStoriesForSelection": "No stories found for the current selection.",
+      "voicesTitle": "Voices from Your City",
+      "voicesSubtitle": "Youth Pulse – opinions, campus, careers",
+      "noYouthStories": "No youth stories right now.",
+      "noYouthStoriesHint": "(Hook to /api/news/youth)",
+      "cityInMotionTitle": "City in Motion",
+      "cityInMotionSubtitle": "Local clips & explainers",
+      "civicTitle": "Civic",
+      "civicSubtitle": "Civic tracker + development projects",
+      "metricRainfallAlerts": "Rainfall Alerts",
+      "metricWaterSupplyOk": "Water Supply OK",
+      "metricProjectsTracked": "Projects Tracked",
+      "metricElectionNotices": "Election Notices",
+      "metricHintDistricts": "districts",
+      "metricHintActive": "active",
+      "metricHintThisWeek": "this week",
+      "developmentProjectsTitle": "Development Projects in Focus",
+      "developmentProjectsSubtitle": "Tracked by KiranOS – status & milestones",
+      "statusOnTrack": "On Track",
+      "statusPlanned": "Planned",
+      "statusDelayed": "Delayed",
+      "developmentCardHint": "Auto-updated notes and milestones will appear here. Connect to /api/projects/regional.",
+      "exploreOnMapTitle": "Explore on Map",
+      "exploreOnMapSubtitle": "Interactive Gujarat map – click a district to filter news",
+      "mapPlaceholder": "Leaflet/Mapbox map goes here. Hook into district filter when implemented."
+    },
     "trending": "Trending",
     "watch": "Watch",
     "live": "LIVE",
@@ -37,6 +107,8 @@
     "voiceNotSupported": "Voice playback is not supported in this browser.",
     "loadingMore": "Loading more…",
     "results": "results",
+    "minutesShort": "min",
+    "source": "Source",
     "untitled": "Untitled",
     "video": "Video"
   },
@@ -72,6 +144,8 @@
     },
     "noUpdates": "No updates right now — stay tuned",
     "noBreaking": "No breaking news right now — stay tuned",
+    "noLiveUpdates": "No live updates right now — stay tuned",
+    "updateFallback": "Update",
     "topStory": "Top Story",
     "exploreCategories": "Explore Categories",
     "tapToFilter": "Tap to filter",
@@ -152,8 +226,62 @@
     "searchFailed": "Search failed"
   }
   ,
+  "errors": {
+    "fetchFailed": "Fetch failed",
+    "networkError": "Network error occurred"
+  }
+  ,
+  "topicPage": {
+    "title": "Topic",
+    "titleWithQuery": "Topic: {{query}}",
+    "unableToLoadStories": "Unable to load stories",
+    "noStoriesYet": "No stories yet."
+  }
+  ,
+  "offlinePage": {
+    "title": "You’re offline",
+    "subtitle": "Content will update automatically when you’re back online.",
+    "retry": "Retry Connection"
+  }
+  ,
+  "maintenancePage": {
+    "headTitle": "Maintenance",
+    "title": "We'll Be Back Soon",
+    "description": "News Pulse is currently undergoing scheduled maintenance. We're working to improve your experience.",
+    "hint": "Please check back in a few minutes. Thank you for your patience."
+  }
+  ,
   "content": {
     "original": "Original"
+  }
+  ,
+  "newsDetail": {
+    "back": "← Back",
+    "categoryLabel": "Category:",
+    "languageLabel": "Language:",
+    "publishedLabel": "Published:",
+    "unableToLoadTitle": "Unable to load article",
+    "ensureBackendRunning": "Ensure the backend is running and NEXT_PUBLIC_API_BASE points to it.",
+    "articleNotFound": "Article not found",
+    "fetchFailed": "Fetch failed"
+  }
+  ,
+  "youthPulse": {
+    "title": "Youth Pulse",
+    "failedToLoad": "Failed to load Youth Pulse.",
+    "noPostsYet": "No posts yet. Check back soon!"
+  }
+  ,
+  "liveNews": {
+    "failedToFetch": "Failed to fetch news"
+  }
+  ,
+  "communityReporter": {
+    "errors": {
+      "missingEmail": "We couldn't find your reporter email. Please submit a new story first.",
+      "loadStoriesFailed": "Couldn't load your stories right now. Please try again later.",
+      "couldNotLoadYourStories": "Could not load your stories"
+    }
   }
   ,
   "trending": {
@@ -226,12 +354,16 @@
     "districtFilterHint": "Tip: select a district to filter stories.",
     "emptyTitle": "No stories yet",
     "emptyHint": "Try changing category or district.",
+    "failedToLoadStories": "Failed to load stories.",
+    "failedToLoad": "Failed to load regional feed.",
     "readMore": "Read more →",
     "videoPreviewHidden": "Video preview hidden",
     "chooseDistrictTitle": "Choose a District",
     "close": "Close",
     "typeToSearch": "Type to search…",
-    "noDistrictsFound": "No districts found."
+    "noDistrictsFound": "No districts found.",
+    "noStoriesFoundForYet": "No stories found for {{name}} yet.",
+    "noStoriesFoundTryBroader": "No stories found for {{name}} yet. Try broader {{category}} news."
   },
   "regionalGujaratPage": {
     "headTitle": "Gujarat – Regional",

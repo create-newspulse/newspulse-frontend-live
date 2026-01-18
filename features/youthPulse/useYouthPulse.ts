@@ -2,9 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 import { getYouthTopics, getYouthTrendingByLanguage, getYouthByCategory } from "./api";
 import type { YouthCategory, YouthStory } from "./types";
 import { useLanguage } from "../../utils/LanguageContext";
+import { useI18n } from "../../src/i18n/LanguageProvider";
 
 export function useYouthPulse(trendingLimit: number = 12) {
   const { language } = useLanguage();
+  const { t } = useI18n();
   const [topics, setTopics] = useState<YouthCategory[]>([]);
   const [trending, setTrending] = useState<YouthStory[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -21,11 +23,11 @@ export function useYouthPulse(trendingLimit: number = 12) {
       setTopics(t);
       setTrending(tr);
     } catch (e: any) {
-      setError(e?.message || "Failed to load youth pulse data");
+      setError(e?.message || t('youthPulse.failedToLoad'));
     } finally {
       setLoading(false);
     }
-  }, [language, trendingLimit]);
+  }, [language, t, trendingLimit]);
 
   useEffect(() => {
     fetchAll();

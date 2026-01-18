@@ -37,7 +37,7 @@ function writeCookie(name: string, value: string) {
   }
 }
 
-function normalizeLang(value: unknown): Lang {
+export function normalizeLang(value: unknown): Lang {
   const v = String(value || '').toLowerCase().trim();
   if (v === 'gu' || v === 'gujarati') return 'gu';
   if (v === 'hi' || v === 'hindi') return 'hi';
@@ -79,7 +79,7 @@ export function getSelectedLanguage(): Lang {
 type I18nContextType = {
   lang: Lang;
   setLang: (lang: Lang, options?: { persist?: boolean }) => void;
-  t: (key: string) => string;
+  t: (key: string, vars?: Record<string, string | number>) => string;
 };
 
 const I18nContext = createContext<I18nContextType | undefined>(undefined);
@@ -115,15 +115,23 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
 
   const dict = useMemo(() => getDictionary(lang), [lang]);
 
+  const applyVars = useCallback((template: string, vars?: Record<string, string | number>) => {
+    if (!vars) return template;
+    return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (m, k) => {
+      const v = (vars as any)[k];
+      return v === undefined || v === null ? m : String(v);
+    });
+  }, []);
+
   const t = useCallback(
-    (key: string) => {
+    (key: string, vars?: Record<string, string | number>) => {
       const v = getFromPath(dict, key);
-      if (typeof v === 'string') return v;
+      if (typeof v === 'string') return applyVars(v, vars);
       const fallback = getFromPath(en as any, key);
-      if (typeof fallback === 'string') return fallback;
-      return key;
+      if (typeof fallback === 'string') return applyVars(fallback, vars);
+      return applyVars(key, vars);
     },
-    [dict]
+    [applyVars, dict]
   );
 
   const value = useMemo(() => ({ lang, setLang, t }), [lang, setLang, t]);

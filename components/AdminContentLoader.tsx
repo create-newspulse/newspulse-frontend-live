@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { fetchCategoryNews } from '../lib/fetchCategoryNews';
 import { fetchPublicNews } from '../lib/publicNewsApi';
+import { useI18n } from '../src/i18n/LanguageProvider';
 
 interface AdminContentLoaderProps {
   category?: string;
@@ -27,6 +28,7 @@ const AdminContentLoader: React.FC<AdminContentLoaderProps> = ({
   showBreaking = true,
   children
 }) => {
+  const { lang } = useI18n();
   const refreshInterval = 300000; // 5 minutes
   const [news, setNews] = useState<any[]>([]);
   const [breakingNews, setBreakingNews] = useState<any[]>([]);
@@ -39,11 +41,11 @@ const AdminContentLoader: React.FC<AdminContentLoaderProps> = ({
 
     try {
       if (category) {
-        const res = await fetchCategoryNews({ categoryKey: category, limit });
+        const res = await fetchCategoryNews({ categoryKey: category, limit, language: lang });
         if (signal?.aborted) return;
         setNews(res.items || []);
       } else {
-        const res = await fetchPublicNews({ limit, signal });
+        const res = await fetchPublicNews({ limit, language: lang, signal });
         if (signal?.aborted) return;
         setNews(res.items || []);
       }
@@ -74,7 +76,7 @@ const AdminContentLoader: React.FC<AdminContentLoaderProps> = ({
       controller.abort();
       clearInterval(id);
     };
-  }, [category, limit]);
+  }, [category, limit, lang]);
 
   // Determine which news to display
   const displayNews = news.slice(0, limit);

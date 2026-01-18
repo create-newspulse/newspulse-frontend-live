@@ -2,6 +2,9 @@ import type { GetServerSideProps } from 'next';
 import Head from 'next/head';
 import sanitizeHtml from 'sanitize-html';
 
+import OriginalTag from '../../components/OriginalTag';
+import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../../lib/contentFallback';
+
 import {
   fetchPublicStoryByIdOrSlug,
   getApiBaseUrl,
@@ -9,12 +12,17 @@ import {
   getStoryDateIso,
   type PublicStory,
 } from '../../lib/publicStories';
+import { useI18n } from '../../src/i18n/LanguageProvider';
 
 type Props = {
   story: PublicStory;
   baseUrl: string;
   safeHtml: string;
   publishedAtLabel: string;
+  resolvedTitle: string;
+  resolvedSummary: string;
+  titleIsOriginal: boolean;
+  summaryIsOriginal: boolean;
   messages: any;
   locale: string;
 };
@@ -83,9 +91,17 @@ function sanitizeContent(html: string) {
   });
 }
 
-export default function StoryDetailPage({ story, safeHtml, publishedAtLabel }: Props) {
-  const title = story.title || 'Story';
-  const summary = story.summary || '';
+function toUiLang(value: unknown): UiLang {
+  const v = String(value || '').toLowerCase().trim();
+  if (v === 'hi' || v === 'hindi') return 'hi';
+  if (v === 'gu' || v === 'gujarati') return 'gu';
+  return 'en';
+}
+
+export default function StoryDetailPage({ story, safeHtml, publishedAtLabel, resolvedTitle, resolvedSummary, titleIsOriginal, summaryIsOriginal }: Props) {
+  const { t } = useI18n();
+  const title = resolvedTitle || story.title || 'Story';
+  const summary = resolvedSummary || story.summary || '';
   const category = getStoryCategoryLabel(story.category);
   const language = story.language || '';
   const publishedAt = publishedAtLabel;
@@ -99,27 +115,33 @@ export default function StoryDetailPage({ story, safeHtml, publishedAtLabel }: P
       <main className="min-h-screen bg-white">
         <div className="max-w-3xl mx-auto px-4 py-10">
           <div className="space-y-3">
-            <h1 className="text-3xl font-extrabold text-slate-900 leading-tight">{title}</h1>
+            <h1 className="text-3xl font-extrabold text-slate-900 leading-tight">
+              {title} {titleIsOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
+            </h1>
 
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
               {category ? (
                 <span>
-                  <span className="font-semibold">Category:</span> {category}
+                  <span className="font-semibold">{t('newsDetail.categoryLabel')}</span> {category}
                 </span>
               ) : null}
               {language ? (
                 <span>
-                  <span className="font-semibold">Language:</span> {language}
+                  <span className="font-semibold">{t('newsDetail.languageLabel')}</span> {language}
                 </span>
               ) : null}
               {publishedAt ? (
                 <span>
-                  <span className="font-semibold">Published:</span> {publishedAt}
+                  <span className="font-semibold">{t('newsDetail.publishedLabel')}</span> {publishedAt}
                 </span>
               ) : null}
             </div>
 
-            {summary ? <p className="text-lg text-slate-700">{summary}</p> : null}
+            {summary ? (
+              <p className="text-lg text-slate-700">
+                {summary} {summaryIsOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
+              </p>
+            ) : null}
           </div>
 
           <hr className="my-8" />
@@ -143,8 +165,12 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   const messages = await getMessages(locale);
 
   const baseUrl = getApiBaseUrl();
-  const story = await fetchPublicStoryByIdOrSlug(idOrSlug, baseUrl);
+  const requestedLang = toUiLang(ctx.req.cookies?.np_lang || ctx.query?.lang || locale);
+  const story = await fetchPublicStoryByIdOrSlug(idOrSlug, baseUrl, { language: requestedLang });
   if (!story) return { notFound: true };
+
+  const titleRes = resolveArticleTitle(story, requestedLang);
+  const summaryRes = resolveArticleSummaryOrExcerpt(story, requestedLang);
 
   const html =
     (typeof story.content === 'string' && story.content) ||
@@ -161,6 +187,10 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
       baseUrl,
       safeHtml,
       publishedAtLabel,
+      resolvedTitle: titleRes.text,
+      resolvedSummary: summaryRes.text,
+      titleIsOriginal: titleRes.isOriginal,
+      summaryIsOriginal: summaryRes.isOriginal,
       messages,
       locale,
     },

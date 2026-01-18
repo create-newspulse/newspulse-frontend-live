@@ -2,6 +2,7 @@ import { useContext, createContext, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import type { CommunitySettingsPublic, CommunityStorySummary } from '../types/community-reporter';
 import { fetchMyStoriesByEmail, fetchPublicSettings, withdrawStoryById } from '../lib/communityReporterApi';
+import { useI18n } from '../src/i18n/LanguageProvider';
 
 export type UseCommunityStoriesValue = {
   settings: CommunitySettingsPublic | null;
@@ -25,6 +26,7 @@ export function useCommunityStories(): UseCommunityStoriesValue {
   const override = useContext(CommunityStoriesOverrideContext);
   if (override) return override;
   const router = useRouter();
+  const { t } = useI18n();
 
   const [settings, setSettings] = useState<CommunitySettingsPublic | null>(null);
   const [settingsLoading, setSettingsLoading] = useState<boolean>(true);
@@ -101,7 +103,7 @@ export function useCommunityStories(): UseCommunityStoriesValue {
     try {
       const hasEmail = em && em.includes('@');
       if (!hasEmail) {
-        setError("We couldn't find your reporter email. Please submit a new story first.");
+        setError(t('communityReporter.errors.missingEmail'));
         setStories([]);
         setHasLoadedOnce(true);
         return;
@@ -113,7 +115,7 @@ export function useCommunityStories(): UseCommunityStoriesValue {
         if (em) window.localStorage.setItem('np_cr_email', em.toLowerCase());
       } catch {}
     } catch (err: any) {
-      setError("Couldn't load your stories right now. Please try again later.");
+      setError(t('communityReporter.errors.loadStoriesFailed'));
       setStories([]);
       setHasLoadedOnce(true);
     } finally {

@@ -4,6 +4,9 @@ import Link from 'next/link';
 import sanitizeHtml from 'sanitize-html';
 
 import { fetchArticleBySlugOrId } from '../../lib/publicNewsApi';
+import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../../lib/contentFallback';
+import OriginalTag from '../../components/OriginalTag';
+import { useI18n } from '../../src/i18n/LanguageProvider';
 
 type Article = {
   _id: string;
@@ -26,6 +29,10 @@ type Props = {
   article?: Article;
   safeHtml?: string;
   error?: string;
+  resolvedTitle?: string;
+  resolvedSummary?: string;
+  titleIsOriginal?: boolean;
+  summaryIsOriginal?: boolean;
   messages: any;
   locale: string;
 };
@@ -106,6 +113,13 @@ function formatWhenLabel(iso?: string) {
   }
 }
 
+function toUiLang(value: unknown): UiLang {
+  const v = String(value || '').toLowerCase().trim();
+  if (v === 'hi' || v === 'hindi') return 'hi';
+  if (v === 'gu' || v === 'gujarati') return 'gu';
+  return 'en';
+}
+
 export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   const slug = String(ctx.params?.slug || '').trim();
   if (!slug) return { notFound: true };
@@ -114,11 +128,22 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   const { getMessages } = await import('../../lib/getMessages');
   const messages = await getMessages(locale);
 
+  const requestedLang = toUiLang(ctx.req.cookies?.np_lang || ctx.query?.lang || locale);
+
   try {
-    const { article, error, status } = await fetchArticleBySlugOrId({ slugOrId: slug });
+    const { article, error, status } = await fetchArticleBySlugOrId({ slugOrId: slug, language: requestedLang });
     if (!article?._id) {
-      return { props: { error: error || (status === 404 ? 'Article not found' : 'Unable to load article'), messages, locale } };
+      return {
+        props: {
+          error: error || (status === 404 ? 'newsDetail.articleNotFound' : 'newsDetail.unableToLoadTitle'),
+          messages,
+          locale,
+        },
+      };
     }
+
+    const titleRes = resolveArticleTitle(article, requestedLang);
+    const summaryRes = resolveArticleSummaryOrExcerpt(article, requestedLang);
 
     const html =
       (typeof article.content === 'string' && article.content) ||
@@ -128,17 +153,31 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
 
     const safeHtml = sanitizeContent(html);
 
-    return { props: { article, safeHtml, messages, locale } };
+    return {
+      props: {
+        article,
+        safeHtml,
+        resolvedTitle: titleRes.text,
+        resolvedSummary: summaryRes.text,
+        titleIsOriginal: titleRes.isOriginal,
+        summaryIsOriginal: summaryRes.isOriginal,
+        messages,
+        locale,
+      },
+    };
   } catch {
-    return { props: { error: 'Fetch failed', messages, locale } };
+    return { props: { error: 'newsDetail.fetchFailed', messages, locale } };
   }
 };
 
-export default function NewsDetailPage({ article, safeHtml, error }: Props) {
-  const title = article?.title || 'News';
-  const summary = article?.summary || article?.excerpt || '';
+export default function NewsDetailPage({ article, safeHtml, error, resolvedTitle, resolvedSummary, titleIsOriginal, summaryIsOriginal }: Props) {
+  const { t } = useI18n();
+  const title = resolvedTitle || article?.title || 'News';
+  const summary = resolvedSummary || article?.summary || article?.excerpt || '';
   const when = formatWhenLabel(article?.publishedAt || article?.createdAt);
   const image = article?.imageUrl || article?.image || '';
+
+  const errorLabel = error && error.startsWith('newsDetail.') ? t(error) : error;
 
   return (
     <>
@@ -150,16 +189,16 @@ export default function NewsDetailPage({ article, safeHtml, error }: Props) {
         <div className="max-w-3xl mx-auto px-4 py-10">
           <div className="mb-6">
             <Link href="/" className="text-sm text-slate-600 hover:underline">
-              ← Back
+              {t('newsDetail.back')}
             </Link>
           </div>
 
           {error ? (
             <div className="rounded-xl border border-slate-200 bg-white p-4 text-slate-700">
-              <div className="font-semibold">Unable to load article</div>
-              <div className="mt-1">{error}</div>
+              <div className="font-semibold">{t('newsDetail.unableToLoadTitle')}</div>
+              <div className="mt-1">{errorLabel}</div>
               <div className="mt-2 text-sm text-slate-600">
-                Ensure the backend is running and NEXT_PUBLIC_API_BASE points to it.
+                {t('newsDetail.ensureBackendRunning')}
               </div>
             </div>
           ) : null}
@@ -167,27 +206,33 @@ export default function NewsDetailPage({ article, safeHtml, error }: Props) {
           {article ? (
             <>
               <header className="space-y-3">
-                <h1 className="text-3xl font-extrabold text-slate-900 leading-tight">{title}</h1>
+                <h1 className="text-3xl font-extrabold text-slate-900 leading-tight">
+                  {title} {titleIsOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
+                </h1>
 
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
                   {article.category ? (
                     <span>
-                      <span className="font-semibold">Category:</span> {article.category}
+                      <span className="font-semibold">{t('newsDetail.categoryLabel')}</span> {article.category}
                     </span>
                   ) : null}
                   {article.language ? (
                     <span>
-                      <span className="font-semibold">Language:</span> {article.language}
+                      <span className="font-semibold">{t('newsDetail.languageLabel')}</span> {article.language}
                     </span>
                   ) : null}
                   {when ? (
                     <span>
-                      <span className="font-semibold">Published:</span> {when}
+                      <span className="font-semibold">{t('newsDetail.publishedLabel')}</span> {when}
                     </span>
                   ) : null}
                 </div>
 
-                {summary ? <p className="text-lg text-slate-700">{summary}</p> : null}
+                {summary ? (
+                  <p className="text-lg text-slate-700">
+                    {summary} {summaryIsOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
+                  </p>
+                ) : null}
 
                 {image ? (
                   <div className="mt-4 aspect-[16/9] overflow-hidden rounded-xl bg-slate-100">

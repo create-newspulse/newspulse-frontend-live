@@ -1,5 +1,7 @@
 import React from 'react';
 import { getStoryCategoryLabel, getStoryDateIso } from '../../lib/publicStories';
+import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../../lib/contentFallback';
+import OriginalTag from '../OriginalTag';
 
 function classNames(...s: Array<string | false | null | undefined>) {
   return s.filter(Boolean).join(' ');
@@ -9,6 +11,7 @@ type AnyStory = any;
 
 export type RegionalFeedCardsProps = {
   stories: AnyStory[];
+  requestedLang?: UiLang;
   loading?: boolean;
   emptyTitle?: string;
   emptyHint?: string;
@@ -35,6 +38,7 @@ function StoryCard({
   videoPreviewHiddenLabel,
   untitledLabel,
   fallbackCategoryLabel,
+  requestedLang,
 }: {
   story: AnyStory;
   showDistrictBadges?: boolean;
@@ -43,6 +47,7 @@ function StoryCard({
   videoPreviewHiddenLabel: string;
   untitledLabel: string;
   fallbackCategoryLabel: string;
+  requestedLang: UiLang;
 }) {
   const href = story?._id ? `/story/${story._id}` : story?.slug ? `/story/${story.slug}` : '#';
   const categoryLabel = getStoryCategoryLabel(story?.category) || story?.category || fallbackCategoryLabel;
@@ -52,8 +57,15 @@ function StoryCard({
   const districtLabel = showDistrictBadges && getDistrictLabel ? getDistrictLabel(story) : '';
 
   // Never render embeds/videos in cards; keep it clean.
-  const title = story?.title || untitledLabel;
-  const excerpt = story?.summary || story?.excerpt || (story?.content ? String(story.content).slice(0, 160) + '…' : '');
+  const titleRes = resolveArticleTitle(story, requestedLang);
+  const summaryRes = resolveArticleSummaryOrExcerpt(story, requestedLang);
+
+  const title = titleRes.text || story?.title || untitledLabel;
+  const excerpt =
+    summaryRes.text ||
+    story?.summary ||
+    story?.excerpt ||
+    (story?.content ? String(story.content).slice(0, 160) + '…' : '');
 
   return (
     <a
@@ -76,9 +88,16 @@ function StoryCard({
 
       <div className="mt-3 text-base font-semibold leading-snug">{title}</div>
 
+      {titleRes.isOriginal ? (
+        <div className="mt-1">
+          <OriginalTag />
+        </div>
+      ) : null}
+
       {!!excerpt && (
         <div className="mt-2 line-clamp-3 text-sm text-slate-600">
           {excerpt}
+          {summaryRes.isOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
         </div>
       )}
 
@@ -99,6 +118,7 @@ function StoryCard({
 
 export default function RegionalFeedCards({
   stories,
+  requestedLang = 'en',
   loading,
   emptyTitle = 'No stories match your filters.',
   emptyHint = 'Try another category or clear search.',
@@ -144,6 +164,7 @@ export default function RegionalFeedCards({
         <StoryCard
           key={story?._id || story?.slug || story?.title}
           story={story}
+          requestedLang={requestedLang}
           showDistrictBadges={showDistrictBadges}
           getDistrictLabel={getDistrictLabel}
           readMoreLabel={readMoreLabel}

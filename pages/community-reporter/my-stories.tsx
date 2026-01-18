@@ -11,6 +11,7 @@ import LoadingNote from '../../components/community-reporter/LoadingNote';
 import EmptyState from '../../components/community-reporter/EmptyState';
 import StoryTable from '../../components/community-reporter/StoryTable';
 import ViewModal from '../../components/community-reporter/ViewModal';
+import { useI18n } from '../../src/i18n/LanguageProvider';
 
 // Types moved to types/community-reporter.ts
 
@@ -28,6 +29,7 @@ const statusColor = (s: string) => {
 // FeatureToggleProps imported from types
 
 const CommunityReporterMyStoriesPage: React.FC<FeatureToggleProps> = ({ communityReporterClosed, reporterPortalClosed }) => {
+  const { t } = useI18n();
   const {
     settings,
     settingsLoading,
@@ -108,7 +110,7 @@ const CommunityReporterMyStoriesPage: React.FC<FeatureToggleProps> = ({ communit
           )}
 
           {!error && hasLoadedOnce && stories.length === 0 && (
-            <EmptyState text="No stories found for this email yet..." />
+            <EmptyState text={t('categoryPage.noStoriesYet')} />
           )}
 
           {stories.length > 0 && (

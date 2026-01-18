@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getRegionalFeed, getGujaratDistricts, getTopCities, matchesCity, matchesDistrict } from "./api";
 import type { RegionalArticle, City, District, RegionalFilters } from "./types";
+import { useI18n } from "../../src/i18n/LanguageProvider";
 
 export function useRegionalPulse() {
+  const { lang, t } = useI18n();
   const [topCities] = useState<City[]>(() => getTopCities());
   const [districts] = useState<District[]>(() => getGujaratDistricts());
   const [rawFeed, setRawFeed] = useState<RegionalArticle[]>([]);
@@ -14,14 +16,14 @@ export function useRegionalPulse() {
     setLoading(true);
     setError(null);
     try {
-      const items = await getRegionalFeed(60);
+      const items = await getRegionalFeed(60, lang);
       setRawFeed(items);
     } catch (e: any) {
-      setError(e?.message || "Failed to load regional feed");
+      setError(e?.message || t('regionalUI.failedToLoad'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [lang, t]);
 
   useEffect(() => {
     fetchFeed();

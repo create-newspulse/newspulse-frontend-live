@@ -5,6 +5,9 @@ import { matchesCity } from '../../../../features/regional/api';
 import { useLanguage } from '../../../../utils/LanguageContext';
 import { getGujaratCityName, getStateName, tHeading } from '../../../../utils/localizedNames';
 import type { GetStaticProps } from 'next';
+import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../../../../lib/contentFallback';
+import OriginalTag from '../../../../components/OriginalTag';
+import { useI18n } from '../../../../src/i18n/LanguageProvider';
 
 function normalize(s: string) {
   return (s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -22,6 +25,14 @@ export default function GujaratCityPage() {
   const { city } = router.query as { city?: string };
   const { language } = useLanguage();
   const { feed, loading } = useRegionalPulse();
+  const { t } = useI18n();
+
+  const uiLang: UiLang = (() => {
+    const v = String(language || '').toLowerCase().trim();
+    if (v === 'hi' || v === 'hindi') return 'hi';
+    if (v === 'gu' || v === 'gujarati') return 'gu';
+    return 'en';
+  })();
   const slug = (city || '').toString();
   const displayNameFallback = (slug || '').replace(/-/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
   const displayName = getGujaratCityName(language as any, slug, displayNameFallback || 'City');
@@ -52,13 +63,34 @@ export default function GujaratCityPage() {
                 filtered.map((article: any, idx: number) => (
                   <a key={idx} href={article._id ? `/story/${article._id}` : '#'} className="block p-6 rounded-2xl border shadow-sm hover:shadow-md bg-white dark:bg-gray-800 transition">
                     <div className="text-xs text-gray-500 mb-2">{article.publishedAt ? new Date(article.publishedAt).toLocaleString() : ''}</div>
-                    <h3 className="font-bold text-lg mb-2">{article.title}</h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3">{article.excerpt || (article.content ? (article.content as string).slice(0,160) + '...' : '')}</p>
-                    <div className="mt-3 text-xs text-gray-400">Source: {article.source || 'News Pulse'}</div>
+                    {(() => {
+                      const titleRes = resolveArticleTitle(article, uiLang);
+                      const summaryRes = resolveArticleSummaryOrExcerpt(article, uiLang);
+                      const desc =
+                        summaryRes.text ||
+                        article.excerpt ||
+                        (article.content ? String(article.content).slice(0, 160) + '...' : '');
+
+                      return (
+                        <>
+                          <h3 className="font-bold text-lg mb-2">
+                            {titleRes.text || article.title}{' '}
+                            {titleRes.isOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
+                          </h3>
+                          <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3">
+                            {desc}
+                            {summaryRes.isOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
+                          </p>
+                        </>
+                      );
+                    })()}
+                    <div className="mt-3 text-xs text-gray-400">{t('common.source')}: {article.source || t('brand.name')}</div>
                   </a>
                 ))
               ) : (
-                <div className="col-span-2 text-gray-600">No stories found for {displayName} yet. Try broader {tHeading(language as any, 'regional')} news.</div>
+                <div className="col-span-2 text-gray-600">
+                  {t('regionalUI.noStoriesFoundTryBroader', { name: displayName, category: tHeading(language as any, 'regional') })}
+                </div>
               )}
             </div>
           );

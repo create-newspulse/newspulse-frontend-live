@@ -1,13 +1,17 @@
 import React from "react";
 import { useLanguage } from "../utils/LanguageContext";
 import { fetchPublicNews, type Article } from "../lib/publicNewsApi";
+import { resolveArticleSummaryOrExcerpt, resolveArticleTitle } from "../lib/contentFallback";
 import LanguageToggle from "../components/LanguageToggle";
+import OriginalTag from "../components/OriginalTag";
 import { useI18n } from "../src/i18n/LanguageProvider";
 
 type BreakingItem = {
   id: string;
   title: string;
+  titleIsOriginal?: boolean;
   summary?: string;
+  summaryIsOriginal?: boolean;
   source?: string;
   desk?: string;
   publishedAt?: string;
@@ -51,21 +55,33 @@ const FALLBACK_LIVE: LiveUpdate[] = [
 ];
 
 // ---- replace these later with your real endpoints
-function articleToBreakingItem(raw: Article): BreakingItem | null {
-  const title = String((raw as any)?.title || '').trim();
+function articleToBreakingItem(raw: Article, requestedLang: 'en' | 'hi' | 'gu'): BreakingItem | null {
+  const titleRes = resolveArticleTitle(raw as any, requestedLang);
+  const title = String(titleRes.text || '').trim();
   if (!title) return null;
 
   const slugOrId = (raw as any)?._id || (raw as any)?.id || (raw as any)?.slug;
   const id = String(slugOrId || '').trim();
   if (!id) return null;
 
-  const summary = String((raw as any)?.summary || (raw as any)?.excerpt || '').trim() || undefined;
+  const summaryRes = resolveArticleSummaryOrExcerpt(raw as any, requestedLang);
+  const summary = String(summaryRes.text || '').trim() || undefined;
   const publishedAt = String((raw as any)?.publishedAt || (raw as any)?.createdAt || '').trim() || undefined;
   const source = String((raw as any)?.source?.name || (raw as any)?.source || '').trim() || undefined;
   const desk = String((raw as any)?.desk || '').trim() || undefined;
   const url = `/news/${encodeURIComponent(id)}`;
 
-  return { id, title, summary, source, desk, publishedAt, url };
+  return {
+    id,
+    title,
+    titleIsOriginal: titleRes.isOriginal,
+    summary,
+    summaryIsOriginal: summaryRes.isOriginal,
+    source,
+    desk,
+    publishedAt,
+    url,
+  };
 }
 async function fetchLiveUpdates(): Promise<LiveUpdate[]> {
   try {
@@ -150,7 +166,7 @@ export default function BreakingPage() {
       const resp = await fetchPublicNews({ category: 'breaking', language, limit: 12, signal: controller.signal });
       if (controller.signal.aborted) return;
 
-      const mapped = (resp.items || []).map(articleToBreakingItem).filter(Boolean) as BreakingItem[];
+      const mapped = (resp.items || []).map((a) => articleToBreakingItem(a, language)).filter(Boolean) as BreakingItem[];
       if (mapped.length) {
         setHero(mapped[0] || FALLBACK_HERO);
         setTrending(mapped.slice(1, 6).length ? mapped.slice(1, 6) : FALLBACK_TRENDING);
@@ -219,11 +235,15 @@ export default function BreakingPage() {
           {/* Hero */}
           <div className="lg:col-span-2 rounded-3xl border bg-rose-50/60 p-6 shadow-sm">
             <h2 className="text-2xl md:text-3xl font-extrabold leading-tight">
-              {hero.title}
+              <span className="inline-flex flex-wrap items-center gap-2">
+                <span>{hero.title}</span>
+                {hero.titleIsOriginal ? <OriginalTag /> : null}
+              </span>
             </h2>
             {hero.summary && (
               <p className="text-slate-700 mt-3 text-lg leading-relaxed">
-                {hero.summary}
+                <span>{hero.summary}</span>
+                {hero.summaryIsOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
               </p>
             )}
 
@@ -263,7 +283,12 @@ export default function BreakingPage() {
                     <span className="w-6 text-purple-700 font-bold">
                       {String(idx + 1).padStart(2, "0")}
                     </span>
-                    <span className="text-slate-800">{t.title}</span>
+                    <span className="text-slate-800">
+                      <span className="inline-flex flex-wrap items-center gap-2">
+                        <span>{t.title}</span>
+                        {t.titleIsOriginal ? <OriginalTag /> : null}
+                      </span>
+                    </span>
                   </li>
                 ))}
               </ol>

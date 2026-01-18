@@ -11,7 +11,7 @@ interface LanguageContextType {
 // Compatibility wrapper:
 // - Keeps existing imports working (`useLanguage`, `getSelectedLanguage`)
 // - Ensures ONE global language state for UI + API
-// - Avoids Next locale routing (/hi, /gu) entirely
+// - Next locale routing (/hi, /gu) is enabled for SEO/shareable URLs
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   // The real provider lives in src/i18n and is mounted in pages/_app.tsx.

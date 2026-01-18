@@ -223,8 +223,11 @@ export async function fetchPublicBroadcast(options?: { signal?: AbortSignal; lan
 
   const fetchItemsByType = async (type: BroadcastType, requestedLang?: BroadcastLang): Promise<BroadcastItem[]> => {
     const langQs = requestedLang ? `&lang=${encodeURIComponent(requestedLang)}` : '';
+
+    // Browser requirement: use /public/broadcast/items?type=...&lang=...
+    // (Next rewrite maps this to /api/public/broadcast/items)
     const endpoint = isBrowser
-      ? `/api/public/broadcast/items?type=${encodeURIComponent(type)}${langQs}`
+      ? `/public/broadcast/items?type=${encodeURIComponent(type)}${langQs}`
       : `${String(base || '').replace(/\/+$/, '')}/api/public/broadcast/items?type=${encodeURIComponent(type)}${langQs}`;
 
     try {
@@ -248,7 +251,7 @@ export async function fetchPublicBroadcast(options?: { signal?: AbortSignal; lan
 
   const fetchSettings = async (): Promise<any | null> => {
     const endpoint = isBrowser
-      ? '/api/public/broadcast/settings'
+      ? '/public/broadcast/settings'
       : `${String(base || '').replace(/\/+$/, '')}/api/public/broadcast/settings`;
     try {
       const res = await fetch(endpoint, {
@@ -269,22 +272,36 @@ export async function fetchPublicBroadcast(options?: { signal?: AbortSignal; lan
     }
   };
 
-  // Phase 1 requirement: fetch ticker items by selected language via
-  // - /api/public/broadcast/items?type=breaking&lang=...
-  // - /api/public/broadcast/items?type=live&lang=...
-  // Safe fallback: if response is empty for a language, retry without lang
-  // (backend returns original/default language text) so tickers never go blank.
+  // Phase 1 requirement:
+  // - Fetch ticker items by selected language
+  // - Fallback chain if empty: requested -> en -> hi -> gu
+  // - Never go blank: as a last resort, retry without lang so backend can return its default/original
   try {
-    const [breakingByLang, liveByLang, settingsRaw] = await Promise.all([
-      fetchItemsByType('breaking', lang || undefined),
-      fetchItemsByType('live', lang || undefined),
-      fetchSettings(),
-    ]);
+    const settingsRaw = await fetchSettings();
 
-    const [breaking, live] = await Promise.all([
-      breakingByLang.length || !lang ? Promise.resolve(breakingByLang) : fetchItemsByType('breaking', undefined),
-      liveByLang.length || !lang ? Promise.resolve(liveByLang) : fetchItemsByType('live', undefined),
-    ]);
+    const fallbackChain = ([lang, 'en', 'hi', 'gu'] as Array<BroadcastLang | null>)
+      .filter(Boolean)
+      .filter((v, i, a) => a.indexOf(v) === i) as BroadcastLang[];
+
+    let breaking: BroadcastItem[] = [];
+    let live: BroadcastItem[] = [];
+
+    for (const l of fallbackChain) {
+      if (options?.signal?.aborted) break;
+
+      const [b, lv] = await Promise.all([
+        breaking.length ? Promise.resolve([] as BroadcastItem[]) : fetchItemsByType('breaking', l),
+        live.length ? Promise.resolve([] as BroadcastItem[]) : fetchItemsByType('live', l),
+      ]);
+
+      if (!breaking.length && b.length) breaking = b;
+      if (!live.length && lv.length) live = lv;
+      if (breaking.length && live.length) break;
+    }
+
+    // Last resort: try without lang so backend can return default/original.
+    if (!breaking.length) breaking = await fetchItemsByType('breaking', undefined);
+    if (!live.length) live = await fetchItemsByType('live', undefined);
 
     const normalized = normalizePublicBroadcast({
       ok: true,

@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo } from 'react';
+import { useRouter } from 'next/router';
 import { useLanguage } from '../utils/LanguageContext';
 import { useI18n } from '../src/i18n/LanguageProvider';
 import { usePublicSettings } from '../src/context/PublicSettingsContext';
@@ -16,6 +17,7 @@ function normalizeLangCode(raw: unknown): 'en' | 'hi' | 'gu' | null {
 }
 
 export const LanguageSelector: React.FC<{ compact?: boolean }> = ({ compact = false }) => {
+  const router = useRouter();
   const { language, setLanguage } = useLanguage();
   const { t } = useI18n();
   const { settings } = usePublicSettings();
@@ -37,18 +39,12 @@ export const LanguageSelector: React.FC<{ compact?: boolean }> = ({ compact = fa
   const change = useCallback(async (lng: string) => {
     const allowed = new Set(available.map((x) => x.code));
     if (!allowed.has(lng)) return;
-    // Global feed language (hard requirement)
-    try {
-      if (lng === 'en' || lng === 'hi' || lng === 'gu') {
-        setLanguage(lng);
-      }
-    } catch {}
-    try {
-      try {
-        localStorage.setItem('np_lang', lng);
-      } catch {}
-    } catch {}
-  }, [available, setLanguage]);
+    if (lng === 'en' || lng === 'hi' || lng === 'gu') {
+      setLanguage(lng);
+      // Keep URL in sync for SEO/shareability.
+      router.push({ pathname: router.pathname, query: router.query }, undefined, { locale: lng }).catch(() => {});
+    }
+  }, [available, router, setLanguage]);
 
   if (compact) {
     return (

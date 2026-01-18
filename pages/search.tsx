@@ -3,6 +3,8 @@ import Link from 'next/link';
 import type { GetStaticProps } from 'next';
 
 import { fetchPublicNews, type Article } from '../lib/publicNewsApi';
+import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../lib/contentFallback';
+import OriginalTag from '../components/OriginalTag';
 import { useLanguage } from '../utils/LanguageContext';
 import { useI18n } from '../src/i18n/LanguageProvider';
 
@@ -15,7 +17,9 @@ import { useI18n } from '../src/i18n/LanguageProvider';
 type SearchItem = {
   id: string;
   title: string;
+  titleIsOriginal?: boolean;
   summary?: string;
+  summaryIsOriginal?: boolean;
   category?: string;
   publishedAt?: string;
 };
@@ -52,14 +56,16 @@ function formatDateLikeUI(d?: string) {
   }
 }
 
-function toSearchItem(a: Article): SearchItem | null {
-  const title = String(a?.title || '').trim();
+function toSearchItem(a: Article, requestedLang: UiLang): SearchItem | null {
+  const titleRes = resolveArticleTitle(a as any, requestedLang);
+  const title = String(titleRes.text || '').trim();
   if (!title) return null;
 
   const id = String(a?._id || a?.slug || '').trim();
   if (!id) return null;
 
-  const summary = String((a as any)?.summary || (a as any)?.excerpt || '').trim() || undefined;
+  const summaryRes = resolveArticleSummaryOrExcerpt(a as any, requestedLang);
+  const summary = String(summaryRes.text || '').trim() || undefined;
   const category = String((a as any)?.category || '').trim() || undefined;
   const publishedAt =
     String((a as any)?.publishedAt || (a as any)?.createdAt || '').trim() || undefined;
@@ -67,7 +73,9 @@ function toSearchItem(a: Article): SearchItem | null {
   return {
     id,
     title,
+    titleIsOriginal: titleRes.isOriginal,
     summary,
+    summaryIsOriginal: summaryRes.isOriginal,
     category,
     publishedAt,
   };
@@ -245,8 +253,16 @@ function ResultCard({ item }: { item: SearchItem }) {
     <div className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm hover:shadow-md transition">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-base font-semibold leading-snug">{item.title}</div>
-          {item.summary && <div className="mt-1 text-sm text-black/70">{item.summary}</div>}
+          <div className="flex flex-wrap items-center gap-2 text-base font-semibold leading-snug">
+            <span>{item.title}</span>
+            {item.titleIsOriginal ? <OriginalTag /> : null}
+          </div>
+          {item.summary && (
+            <div className="mt-1 text-sm text-black/70">
+              <span>{item.summary}</span>
+              {item.summaryIsOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
+            </div>
+          )}
         </div>
         <div className="flex flex-col items-end gap-2">
           {item.category && (
@@ -307,7 +323,7 @@ export default function SearchPagePreview() {
         return;
       }
 
-      const mapped = (resp.items || []).map(toSearchItem).filter(Boolean) as SearchItem[];
+      const mapped = (resp.items || []).map((a) => toSearchItem(a, language)).filter(Boolean) as SearchItem[];
       setResults(mapped);
     } catch (e: any) {
       if (signal?.aborted) return;
@@ -367,7 +383,7 @@ export default function SearchPagePreview() {
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="text-sm text-black/60">{hint}</div>
               <div className="text-xs text-black/45">
-                Showing <span className="font-semibold text-black/70">{results.length}</span> results
+                {t('searchPage.showing')} <span className="font-semibold text-black/70">{results.length}</span> {t('searchPage.results')}
               </div>
             </div>
 
@@ -407,8 +423,9 @@ export default function SearchPagePreview() {
 
           {!loading && canSearch && results.length === 0 && !error && (
             <div className="rounded-2xl border border-black/10 bg-white p-6 text-sm text-black/60">
-              No results found for <span className="font-semibold text-black/80">“{query.trim()}”</span>.
-              <div className="mt-3">Try a different keyword or use a shorter phrase.</div>
+              {t('searchPage.noResults')}{' '}
+              <span className="font-semibold text-black/80">“{query.trim()}”</span>.
+              <div className="mt-3">{t('searchPage.tryDifferent')}</div>
             </div>
           )}
 
@@ -422,7 +439,7 @@ export default function SearchPagePreview() {
 
           {!loading && !query.trim() && (
             <div className="mt-6 rounded-2xl border border-black/10 bg-white p-6 text-sm text-black/60">
-              Start typing to search. You can also use <span className="font-semibold">Ctrl + K</span> to jump into search.
+              {t('searchPage.startTyping')}
             </div>
           )}
         </div>

@@ -11,6 +11,8 @@ import { DEFAULT_TRENDING_TOPICS, type TrendingTopic } from "../src/config/trend
 import { getTrendingTopics } from "../lib/getTrendingTopics";
 import { fetchPublicNews, type Article } from "../lib/publicNewsApi";
 import { fetchPublicBroadcast, shouldRenderTicker, toTickerTexts } from "../lib/publicBroadcast";
+import { resolveArticleSummaryOrExcerpt, resolveArticleTitle } from "../lib/contentFallback";
+import OriginalTag from "../components/OriginalTag";
 import { DEFAULT_NORMALIZED_PUBLIC_SETTINGS, sanitizeEmbedUrl } from "../src/lib/publicSettings";
 import AdSlot from "../components/ads/AdSlot";
 import type { GetStaticProps } from "next";
@@ -489,15 +491,19 @@ function safeTitle(raw: unknown): string {
   return String(raw || '').trim();
 }
 
-function articleToTickerText(a: Article): string | null {
-  const title = safeTitle((a as any)?.title);
+function articleToTickerText(a: Article, requestedLang: 'en' | 'hi' | 'gu'): string | null {
+  const { text } = resolveArticleTitle(a as any, requestedLang);
+  const title = safeTitle(text || (a as any)?.title);
   return title ? title : null;
 }
 
-function articleToFeedItem(a: Article) {
+function articleToFeedItem(a: Article, requestedLang: 'en' | 'hi' | 'gu') {
   const id = safeTitle((a as any)?._id || (a as any)?.id || (a as any)?.slug) || undefined;
-  const title = safeTitle((a as any)?.title) || 'Untitled';
-  const desc = safeTitle((a as any)?.summary || (a as any)?.excerpt) || '';
+  const titleRes = resolveArticleTitle(a as any, requestedLang);
+  const descRes = resolveArticleSummaryOrExcerpt(a as any, requestedLang);
+
+  const title = safeTitle(titleRes.text || (a as any)?.title) || 'Untitled';
+  const desc = safeTitle(descRes.text || (a as any)?.summary || (a as any)?.excerpt) || '';
 
   const iso = safeTitle((a as any)?.publishedAt || (a as any)?.createdAt) || '';
   let time = '';
@@ -516,6 +522,8 @@ function articleToFeedItem(a: Article) {
     id: id || title,
     title,
     desc,
+    titleIsOriginal: titleRes.isOriginal,
+    descIsOriginal: descRes.isOriginal,
     time: time || '—',
     source,
     category,
@@ -1469,11 +1477,13 @@ function FeaturedCard({ theme, item, onToast }: any) {
           </div>
         </div>
 
-        <div className="mt-3 text-xl sm:text-2xl font-black tracking-tight" style={{ color: theme.text }}>
-          {item.title}
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xl sm:text-2xl font-black tracking-tight" style={{ color: theme.text }}>
+          <span>{item.title}</span>
+          {item.titleIsOriginal ? <OriginalTag /> : null}
         </div>
         <div className="mt-1 text-sm" style={{ color: theme.sub }}>
           {item.desc}
+          {item.descIsOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -1531,11 +1541,13 @@ function FeedList({ theme, title, items, onOpen }: any) {
                 </>
               ) : null}
             </div>
-            <div className="mt-2 text-base font-extrabold" style={{ color: theme.text }}>
-              {f.title}
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-base font-extrabold" style={{ color: theme.text }}>
+              <span>{f.title}</span>
+              {f.titleIsOriginal ? <OriginalTag /> : null}
             </div>
             <div className="mt-1 text-sm" style={{ color: theme.sub }}>
               {f.desc}
+              {f.descIsOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
             </div>
           </button>
         ))}
@@ -1974,30 +1986,52 @@ export default function UiPreviewV145() {
       const latestResp = await fetchPublicNews({ language: apiLang, limit: 12, signal: controller.signal });
       if (controller.signal.aborted) return;
       const latestArticles = latestResp.items || [];
-      setLatestFromBackend(latestArticles.map(articleToFeedItem));
+      setLatestFromBackend(latestArticles.map((a) => articleToFeedItem(a as any, apiLang)));
 
       // Fallback tickers (legacy behavior) in case broadcast is unavailable
-      const fallbackLiveItems = latestArticles.map(articleToTickerText).filter(Boolean) as string[];
+      const fallbackLiveItems = latestArticles.map((a) => articleToTickerText(a as any, apiLang)).filter(Boolean) as string[];
 
       const breakingResp = await fetchPublicNews({ category: 'breaking', language: apiLang, limit: 10, signal: controller.signal });
       if (controller.signal.aborted) return;
-      const fallbackBreakingItems = (breakingResp.items || []).map(articleToTickerText).filter(Boolean) as string[];
+      const fallbackBreakingItems = (breakingResp.items || []).map((a) => articleToTickerText(a as any, apiLang)).filter(Boolean) as string[];
 
       // Broadcast center tickers (preferred source)
-      const broadcast = await fetchPublicBroadcast({ signal: controller.signal, lang: apiLang });
-      if (controller.signal.aborted) return;
+      // Fallback order when selected language has no items: selected -> English -> Gujarati
+      const langChain = [apiLang, 'en', 'gu'].filter((v, i, a) => a.indexOf(v) === i) as Array<'en' | 'hi' | 'gu'>;
 
-      const breakingTexts = toTickerTexts(broadcast.items.breaking as any, { lang: apiLang });
-      const liveTexts = toTickerTexts(broadcast.items.live as any, { lang: apiLang });
+      let breakingTexts: string[] = [];
+      let liveTexts: string[] = [];
+      let settingsSource: any = null;
+
+      for (const l of langChain) {
+        const b = await fetchPublicBroadcast({ signal: controller.signal, lang: l });
+        if (controller.signal.aborted) return;
+
+        // Pick the first response that includes settings (if any).
+        if (!settingsSource && b?.meta?.hasSettings) settingsSource = b;
+        if (!settingsSource) settingsSource = b;
+
+        if (!breakingTexts.length) {
+          const t = toTickerTexts(b.items.breaking as any, { lang: l });
+          if (t.length) breakingTexts = t;
+        }
+
+        if (!liveTexts.length) {
+          const t = toTickerTexts(b.items.live as any, { lang: l });
+          if (t.length) liveTexts = t;
+        }
+
+        if (breakingTexts.length && liveTexts.length && settingsSource?.meta?.hasSettings) break;
+      }
 
       setBreakingFromBackend(breakingTexts.length ? breakingTexts : fallbackBreakingItems);
       setLiveFromBackend(liveTexts.length ? liveTexts : fallbackLiveItems);
 
-      if (broadcast.meta.hasSettings) {
-        setBroadcastBreakingEnabled(shouldRenderTicker(broadcast.settings.breaking));
-        setBroadcastLiveEnabled(shouldRenderTicker(broadcast.settings.live));
-        setBroadcastBreakingSpeedSec(broadcast.settings.breaking.speedSec);
-        setBroadcastLiveSpeedSec(broadcast.settings.live.speedSec);
+      if (settingsSource?.meta?.hasSettings) {
+        setBroadcastBreakingEnabled(shouldRenderTicker(settingsSource.settings.breaking));
+        setBroadcastLiveEnabled(shouldRenderTicker(settingsSource.settings.live));
+        setBroadcastBreakingSpeedSec(settingsSource.settings.breaking.speedSec);
+        setBroadcastLiveSpeedSec(settingsSource.settings.live.speedSec);
       } else {
         // If backend doesn't provide broadcast settings, fall back to published public settings.
         setBroadcastBreakingEnabled(null);

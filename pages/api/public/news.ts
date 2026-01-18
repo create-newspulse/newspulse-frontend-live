@@ -13,6 +13,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const base = getApiBase();
   if (!base) {
     // Keep UI alive even if env not configured.
+    res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json({ items: [], total: 0, page: 1, totalPages: 1, limit: 0 });
   }
 
@@ -33,20 +34,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const text = await upstream.text().catch(() => '');
     // If backend is missing the route (or temporarily down), fail open.
     if (upstream.status === 404) {
+      res.setHeader('Cache-Control', 'no-store');
       return res.status(200).json({ items: [] });
     }
 
     if (!upstream.ok) {
+      res.setHeader('Cache-Control', 'no-store');
       return res.status(200).json({ items: [] });
     }
 
     try {
       const json = text ? JSON.parse(text) : { items: [] };
+      // Cache article lists briefly; ticker/broadcast remains no-store elsewhere.
+      // Vercel/edge caching varies by full URL (including query string like lang/category/q).
+      res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=30');
       return res.status(200).json(json);
     } catch {
+      res.setHeader('Cache-Control', 'no-store');
       return res.status(200).json({ items: [] });
     }
   } catch {
+    res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json({ items: [] });
   }
 }

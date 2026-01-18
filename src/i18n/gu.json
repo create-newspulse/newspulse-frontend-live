@@ -1,6 +1,7 @@
 {
   "common": {
     "language": "ભાષા",
+    "back": "પાછા",
     "beta": "બીટા",
     "style": "શૈલી",
     "search": "શોધ",
@@ -16,6 +17,75 @@
     "listen": "સાંભળો",
     "share": "શેર",
     "new": "નવું",
+    "regionalHub": {
+      "title": "રીજનલ પલ્સ – ગુજરાત",
+      "subtitle": "ગુજરાતની રિયલ-ટાઇમ સિવિક, જિલ્લા અને શહેર સમાચારની પલ્સ.",
+      "searchPlaceholder": "જિલ્લો અથવા શહેર શોધો…",
+      "voiceListen": "સાંભળો",
+      "voiceMute": "મ્યૂટ",
+      "voiceListenTitle": "લોકલ હાઇલાઇટ્સ સાંભળો",
+      "voiceMuteTitle": "મ્યૂટ",
+      "voiceHighlightsIntro": "અહીં ટોચની પ્રાદેશિક હાઇલાઇટ્સ છે. ",
+      "filterDistrict": "જિલ્લો",
+      "filterCity": "શહેર",
+      "filterAllDistricts": "બધા જિલ્લાઓ",
+      "filterCityOptional": "વૈકલ્પિક",
+      "chipSmartCity": "સ્માર્ટ સિટી",
+      "chipIndustrial": "ઔદ્યોગિક",
+      "chipCoastal": "તટીય",
+      "chipTribal": "આદિવાસી",
+      "tabFeed": "ફીડ",
+      "tabDistricts": "જિલ્લાઓ",
+      "tabCities": "શહેરો",
+      "tabCivic": "સિવિક",
+      "tabMap": "નકશો",
+      "feedTitle": "ફીડ",
+      "feedTitleWithPlace": "ફીડ — {{place}}",
+      "feedSubtitle": "તાજા પ્રાદેશિક સમાચાર",
+      "loading": "લોડ થાય છે…",
+      "noStoriesForFilters": "વર્તમાન ફિલ્ટર માટે કોઈ સ્ટોરી મળી નથી.",
+      "districtsTitle": "ગુજરાત — {{count}} જિલ્લાઓ",
+      "districtsSubtitle": "ટોચની હેડલાઇન + કુલ અપડેટ્સ",
+      "districtMeta": "જિલ્લો · ગુજરાત",
+      "updates": "{{count}} અપડેટ્સ",
+      "noHeadlineYet": "હજુ હેડલાઇન નથી.",
+      "citiesTitle": "શહેરો",
+      "citiesSubtitle": "ટોચના શહેરો + શહેર ફીડ",
+      "typeCity": "શહેર",
+      "typeDistrict": "જિલ્લો",
+      "cityLabelCurrent": "વર્તમાન",
+      "cityLabelApproved": "મંજૂર",
+      "cityLabelNew": "નવું",
+      "placeTypeMeta": "{{type}} · ગુજરાત",
+      "cityFeedTitle": "શહેર ફીડ",
+      "cityFeedTitleWithPlace": "શહેર ફીડ — {{place}}",
+      "cityFeedSubtitle": "તાજા અપડેટ્સ + લોકલ અવાજ",
+      "noStoriesForSelection": "વર્તમાન પસંદગી માટે કોઈ સ્ટોરી મળી નથી.",
+      "voicesTitle": "તમારા શહેરના અવાજ",
+      "voicesSubtitle": "યુથ પલ્સ – અભિપ્રાય, કેમ્પસ, કરિયર",
+      "noYouthStories": "હમણાં કોઈ યુથ સ્ટોરી નથી.",
+      "noYouthStoriesHint": "(/api/news/youth સાથે જોડો)",
+      "cityInMotionTitle": "શહેરની ગતિ",
+      "cityInMotionSubtitle": "લોકલ ક્લિપ્સ અને એક્સપ્લેનર",
+      "civicTitle": "સિવિક",
+      "civicSubtitle": "સિવિક ટ્રેકર + વિકાસ પ્રોજેક્ટ્સ",
+      "metricRainfallAlerts": "વરસાદ એલર્ટ",
+      "metricWaterSupplyOk": "પાણી પુરવઠો OK",
+      "metricProjectsTracked": "ટ્રેક થયેલા પ્રોજેક્ટ્સ",
+      "metricElectionNotices": "ચૂંટણી સૂચનાઓ",
+      "metricHintDistricts": "જિલ્લાઓ",
+      "metricHintActive": "સક્રિય",
+      "metricHintThisWeek": "આ અઠવાડિયે",
+      "developmentProjectsTitle": "ફોકસમાં વિકાસ પ્રોજેક્ટ્સ",
+      "developmentProjectsSubtitle": "KiranOS દ્વારા ટ્રેક — સ્થિતિ અને માઇલસ્ટોન",
+      "statusOnTrack": "ટ્રેક પર",
+      "statusPlanned": "યોજનાબદ્ધ",
+      "statusDelayed": "વિલંબિત",
+      "developmentCardHint": "ઓટો-અપડેટેડ નોંધો અને માઇલસ્ટોન અહીં દેખાશે. /api/projects/regional સાથે કનેક્ટ કરો.",
+      "exploreOnMapTitle": "નકશા પર જુઓ",
+      "exploreOnMapSubtitle": "ઇન્ટરએક્ટિવ ગુજરાત નકશો — જિલ્લો ક્લિક કરીને સમાચાર ફિલ્ટર કરો",
+      "mapPlaceholder": "અહીં Leaflet/Mapbox નકશો આવશે. અમલમાં આવ્યા પછી જિલ્લા ફિલ્ટર સાથે જોડો."
+    },
     "trending": "ટ્રેન્ડિંગ",
     "watch": "જુઓ",
     "live": "લાઈવ",
@@ -37,6 +107,8 @@
     "voiceNotSupported": "આ બ્રાઉઝરમાં વૉઇસ પ્લેબેક સપોર્ટેડ નથી.",
     "loadingMore": "વધુ લોડ થાય છે…",
     "results": "પરિણામો",
+    "minutesShort": "મિન",
+    "source": "સ્ત્રોત",
     "untitled": "શીર્ષક નથી",
     "video": "વીડિયો"
   },
@@ -73,6 +145,8 @@
     "noUpdates": "હમણાં કોઈ અપડેટ નથી — જોડાયેલા રહો",
     "noBreaking": "હમણાં કોઈ બ્રેકિંગ સમાચાર નથી — જોડાયેલા રહો",
     "topStory": "મુખ્ય વાર્તા",
+    "noLiveUpdates": "હમણાં કોઈ લાઇવ અપડેટ્સ નથી — જોડાયેલા રહો",
+    "updateFallback": "અપડેટ",
     "exploreCategories": "કેટેગરીઝ શોધો",
     "tapToFilter": "ફિલ્ટર કરવા ટેપ કરો",
     "freshUpdates": "તાજા અપડેટ્સ",
@@ -150,10 +224,57 @@
     "tryDifferent": "અન્ય કીવર્ડ અજમાવો અથવા નાનો વાક્યખંડ લખો.",
     "startTyping": "શોધ માટે ટાઇપ કરવાનું શરૂ કરો. તમે Ctrl + Kથી સીધા સર્ચ પર પણ જઈ શકો છો.",
     "searchFailed": "શોધ નિષ્ફળ ગઈ"
-  }
-  ,
+  },
+  "errors": {
+    "fetchFailed": "ડેટા લોડ થઈ શક્યો નથી",
+    "networkError": "નેટવર્ક ભૂલ થઈ"
+  },
+  "topicPage": {
+    "title": "વિષય",
+    "titleWithQuery": "વિષય: {{query}}",
+    "unableToLoadStories": "સ્ટોરીઝ લોડ થઈ શકી નથી",
+    "noStoriesYet": "હમણાં કોઈ સ્ટોરી નથી."
+  },
+  "offlinePage": {
+    "title": "તમે ઑફલાઇન છો",
+    "subtitle": "તમે ફરી ઑનલાઇન થશો ત્યારે કન્ટેન્ટ આપમેળે અપડેટ થશે.",
+    "retry": "ફરી પ્રયાસ કરો"
+  },
+  "maintenancePage": {
+    "headTitle": "મેન્ટેનન્સ",
+    "title": "અમે જલ્દી પાછા આવીશું",
+    "description": "News Pulse પર શેડ્યૂલ્ડ મેન્ટેનન્સ ચાલી રહ્યું છે. અમે તમારો અનુભવ વધુ સારો બનાવી રહ્યા છીએ.",
+    "hint": "થોડી મિનિટમાં ફરી તપાસો. તમારી સહનશક્તિ માટે આભાર."
+  },
+  "liveNews": {
+    "failedToFetch": "સમાચાર લોડ થઈ શક્યા નથી"
+  },
+  "communityReporter": {
+    "errors": {
+      "missingEmail": "તમારું રિપોર્ટર ઇમેલ મળ્યું નથી. કૃપા કરીને પહેલા નવી સ્ટોરી સબમિટ કરો.",
+      "loadStoriesFailed": "હમણાં તમારી સ્ટોરીઝ લોડ થઈ શકતી નથી. કૃપા કરીને પછી ફરી પ્રયાસ કરો.",
+      "couldNotLoadYourStories": "તમારી સ્ટોરીઝ લોડ થઈ શકી નથી"
+    }
+  },
   "content": {
     "original": "મૂળ"
+  }
+  ,
+  "newsDetail": {
+    "back": "← પાછા",
+    "categoryLabel": "કેટેગરી:",
+    "languageLabel": "ભાષા:",
+    "publishedLabel": "પ્રકાશિત:",
+    "unableToLoadTitle": "લેખ લોડ થઈ શક્યો નથી",
+    "ensureBackendRunning": "બેકએન્ડ ચાલી રહ્યું છે તેની ખાતરી કરો અને NEXT_PUBLIC_API_BASE તે તરફ સૂચવે છે.",
+    "articleNotFound": "લેખ મળ્યો નથી",
+    "fetchFailed": "ફેચ નિષ્ફળ"
+  }
+  ,
+  "youthPulse": {
+    "title": "યુથ પલ્સ",
+    "failedToLoad": "યુથ પલ્સ લોડ થઈ શક્યો નથી.",
+    "noPostsYet": "હમણાં કોઈ પોસ્ટ નથી. થોડીવાર પછી ફરી તપાસો!"
   }
   ,
   "trending": {
@@ -226,12 +347,16 @@
     "districtFilterHint": "ટિપ: સ્ટોરીઝ ફિલ્ટર કરવા જિલ્લો પસંદ કરો.",
     "emptyTitle": "હમણાં કોઈ સ્ટોરી નથી",
     "emptyHint": "કેટેગરી અથવા જિલ્લો બદલીને જુઓ.",
+    "failedToLoadStories": "સ્ટોરીઝ લોડ થઈ શકી નથી.",
+    "failedToLoad": "પ્રાદેશિક ફીડ લોડ થઈ શકી નથી.",
     "readMore": "વધુ વાંચો →",
     "videoPreviewHidden": "વિડિયો પ્રિવ્યૂ છુપાયેલ છે",
     "chooseDistrictTitle": "જિલ્લો પસંદ કરો",
     "close": "બંધ",
     "typeToSearch": "શોધવા માટે ટાઇપ કરો…",
-    "noDistrictsFound": "કોઈ જિલ્લો મળ્યો નથી."
+    "noDistrictsFound": "કોઈ જિલ્લો મળ્યો નથી.",
+    "noStoriesFoundForYet": "{{name}} માટે હમણાં કોઈ સ્ટોરી મળી નથી.",
+    "noStoriesFoundTryBroader": "{{name}} માટે હમણાં કોઈ સ્ટોરી મળી નથી. વધુ વિસ્તૃત {{category}} સમાચાર જુઓ."
   },
   "regionalGujaratPage": {
     "headTitle": "ગુજરાત – પ્રાદેશિક",

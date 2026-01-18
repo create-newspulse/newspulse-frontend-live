@@ -1,6 +1,7 @@
 import React from 'react';
 import { renderHook, act } from '@testing-library/react';
 import { useCommunityStories } from '../../hooks/useCommunityStories';
+import { LanguageProvider } from '../../src/i18n/LanguageProvider';
 
 // Minimal shim for Next router
 jest.mock('next/router', () => ({
@@ -32,7 +33,9 @@ describe('useCommunityStories', () => {
         { id: '3', headline: 'C', category: 'Cat', status: 'rejected', createdAt: new Date().toISOString() },
       ] }) });
 
-    const { result, waitForNextUpdate } = renderHook(() => useCommunityStories());
+    const { result } = renderHook(() => useCommunityStories(), {
+      wrapper: ({ children }) => <LanguageProvider>{children}</LanguageProvider>,
+    });
 
     // Wait for settings load
     await act(async () => { await Promise.resolve(); });

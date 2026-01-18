@@ -2,8 +2,10 @@ import Head from 'next/head';
 import Link from 'next/link';
 import React, { useMemo, useState } from 'react';
 import { fetchPublicNews, type Article } from '../lib/publicNewsApi';
+import { resolveArticleSummaryOrExcerpt, resolveArticleTitle } from '../lib/contentFallback';
 import { useLanguage } from '../utils/LanguageContext';
 import { useI18n } from '../src/i18n/LanguageProvider';
+import OriginalTag from './OriginalTag';
 
 export type CategoryFeedPageProps = {
   title: string;
@@ -89,7 +91,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
       setLoaded(true);
     })().catch(() => {
       if (controller.signal.aborted) return;
-      setError('Fetch failed');
+      setError(t('errors.fetchFailed'));
       setItems([]);
       setLoaded(false);
     });
@@ -143,7 +145,9 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
                   const slugOrId = a._id || a.slug;
                   const href = `/news/${encodeURIComponent(String(slugOrId))}`;
                   const when = formatWhenLabel(a.publishedAt || a.createdAt);
-                  const summary = a.summary || a.excerpt || '';
+                  const titleRes = resolveArticleTitle(a as any, language);
+                  const summaryRes = resolveArticleSummaryOrExcerpt(a as any, language);
+                  const summary = summaryRes.text;
                   const image = a.imageUrl || a.image || '';
 
                   return (
@@ -152,7 +156,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
                         <div className="aspect-[16/9] bg-slate-100">
                           <img
                             src={image}
-                            alt={a.title || t('categoryPage.articleImageAlt')}
+                            alt={titleRes.text || t('categoryPage.articleImageAlt')}
                             loading="lazy"
                             className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
                           />
@@ -161,7 +165,10 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
 
                       <div className="p-4">
                         <Link href={href} className="block text-lg font-bold text-slate-900 hover:underline">
-                          {a.title || t('categoryPage.untitled')}
+                          <span className="inline-flex flex-wrap items-center gap-2">
+                            <span>{titleRes.text || t('categoryPage.untitled')}</span>
+                            {titleRes.isOriginal ? <OriginalTag /> : null}
+                          </span>
                         </Link>
 
                         {summary ? (
@@ -174,7 +181,8 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
                               overflow: 'hidden',
                             }}
                           >
-                            {summary}
+                            <span>{summary}</span>
+                            {summaryRes.isOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
                           </p>
                         ) : null}
 

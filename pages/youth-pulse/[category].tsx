@@ -4,9 +4,11 @@ import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import { useYouthPulse } from '../../features/youthPulse/useYouthPulse';
 import type { YouthStory } from '../../features/youthPulse/types';
+import { useI18n } from '../../src/i18n/LanguageProvider';
 
 export default function YouthCategoryPage() {
   const router = useRouter();
+  const { t } = useI18n();
   const { category } = router.query as { category?: string };
   const { topics, getByCategory } = useYouthPulse();
   const [stories, setStories] = useState<YouthStory[]>([]);
@@ -25,7 +27,7 @@ export default function YouthCategoryPage() {
   return (
     <div className="min-h-screen bg-white dark:bg-dark-primary text-black dark:text-dark-text">
       <Head>
-        <title>{meta ? `${meta.title} • Youth Pulse` : 'Youth Pulse'}</title>
+        <title>{meta ? `${meta.title} • ${t('youthPulse.title')}` : t('youthPulse.title')}</title>
         <meta name="robots" content="index,follow" />
       </Head>
 
@@ -33,18 +35,18 @@ export default function YouthCategoryPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-extrabold">
-              {meta ? `${meta.emoji} ${meta.title}` : 'Youth Pulse'}
+              {meta ? `${meta.emoji} ${meta.title}` : t('youthPulse.title')}
             </h1>
             {meta && (
               <p className="mt-2 text-gray-600 dark:text-gray-300">{meta.description}</p>
             )}
           </div>
-          <Link href="/youth-pulse" className="text-sm text-indigo-600">← Back</Link>
+          <Link href="/youth-pulse" className="text-sm text-indigo-600">← {t('common.back')}</Link>
         </div>
 
         <div className="mt-8 grid gap-6 sm:grid-cols-2">
           {stories.length === 0 ? (
-            <p className="text-gray-600 dark:text-gray-300">No posts yet. Check back soon!</p>
+            <p className="text-gray-600 dark:text-gray-300">{t('youthPulse.noPostsYet')}</p>
           ) : (
             stories.map((s) => (
               <article key={s.id} className="overflow-hidden rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">

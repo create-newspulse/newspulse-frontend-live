@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useI18n } from '../src/i18n/LanguageProvider';
 
 interface NewsArticle {
   id: string;
@@ -22,6 +23,7 @@ interface NewsResponse {
 }
 
 export const useLiveNews = (category: string = 'all', autoRefresh: boolean = true) => {
+  const { t } = useI18n();
   const [news, setNews] = useState<NewsArticle[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,15 +41,15 @@ export const useLiveNews = (category: string = 'all', autoRefresh: boolean = tru
         setNews(data.articles);
         setLastUpdated(data.lastUpdated);
       } else {
-        setError('Failed to fetch news');
+        setError(t('liveNews.failedToFetch'));
       }
     } catch (err) {
-      setError('Network error occurred');
+      setError(t('errors.networkError'));
       console.error('News fetch error:', err);
     } finally {
       setLoading(false);
     }
-  }, [category]);
+  }, [category, t]);
 
   // Initial load
   useEffect(() => {
