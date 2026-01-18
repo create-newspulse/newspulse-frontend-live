@@ -35,7 +35,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!origin) return res.status(200).json({ items: [] });
 
   const type = String(req.query.type || '').toLowerCase();
-  const qs = type ? `?type=${encodeURIComponent(type)}` : '';
+  const lang = String((req.query as any)?.lang || '').toLowerCase().trim();
+  const langParam = lang === 'en' || lang === 'hi' || lang === 'gu' ? `&lang=${encodeURIComponent(lang)}` : '';
+  const qs = type ? `?type=${encodeURIComponent(type)}${langParam}` : '';
 
   try {
     const upstream = await fetch(`${origin}/api/public/broadcast/items${qs}`, {

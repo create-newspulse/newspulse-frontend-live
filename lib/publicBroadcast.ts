@@ -202,6 +202,102 @@ export async function fetchPublicBroadcast(options?: { signal?: AbortSignal; lan
   const base = getPublicApiBaseUrl();
   const lang = normalizeLang(options?.lang);
 
+  const safeJson = async (res: Response): Promise<any | null> => {
+    try {
+      const text = await res.text().catch(() => '');
+      if (!text) return null;
+      return JSON.parse(text);
+    } catch {
+      return null;
+    }
+  };
+
+  const unwrapItems = (json: any): BroadcastItem[] => {
+    if (!json) return [];
+    if (Array.isArray(json)) return json as BroadcastItem[];
+    if (Array.isArray(json.items)) return json.items as BroadcastItem[];
+    if (Array.isArray(json.data)) return json.data as BroadcastItem[];
+    if (Array.isArray(json.result)) return json.result as BroadcastItem[];
+    return [];
+  };
+
+  const fetchItemsByType = async (type: BroadcastType, requestedLang?: BroadcastLang): Promise<BroadcastItem[]> => {
+    const langQs = requestedLang ? `&lang=${encodeURIComponent(requestedLang)}` : '';
+    const endpoint = isBrowser
+      ? `/api/public/broadcast/items?type=${encodeURIComponent(type)}${langQs}`
+      : `${String(base || '').replace(/\/+$/, '')}/api/public/broadcast/items?type=${encodeURIComponent(type)}${langQs}`;
+
+    try {
+      const res = await fetch(endpoint, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          'Cache-Control': 'no-store',
+          Pragma: 'no-cache',
+        },
+        cache: 'no-store',
+        signal: options?.signal,
+      });
+      const json = await safeJson(res);
+      if (!res.ok || !json) return [];
+      return unwrapItems(json);
+    } catch {
+      return [];
+    }
+  };
+
+  const fetchSettings = async (): Promise<any | null> => {
+    const endpoint = isBrowser
+      ? '/api/public/broadcast/settings'
+      : `${String(base || '').replace(/\/+$/, '')}/api/public/broadcast/settings`;
+    try {
+      const res = await fetch(endpoint, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          'Cache-Control': 'no-store',
+          Pragma: 'no-cache',
+        },
+        cache: 'no-store',
+        signal: options?.signal,
+      });
+      const json = await safeJson(res);
+      if (!res.ok || !json) return null;
+      return json;
+    } catch {
+      return null;
+    }
+  };
+
+  // Phase 1 requirement: fetch ticker items by selected language via
+  // - /api/public/broadcast/items?type=breaking&lang=...
+  // - /api/public/broadcast/items?type=live&lang=...
+  // Safe fallback: if response is empty for a language, retry without lang
+  // (backend returns original/default language text) so tickers never go blank.
+  try {
+    const [breakingByLang, liveByLang, settingsRaw] = await Promise.all([
+      fetchItemsByType('breaking', lang || undefined),
+      fetchItemsByType('live', lang || undefined),
+      fetchSettings(),
+    ]);
+
+    const [breaking, live] = await Promise.all([
+      breakingByLang.length || !lang ? Promise.resolve(breakingByLang) : fetchItemsByType('breaking', undefined),
+      liveByLang.length || !lang ? Promise.resolve(liveByLang) : fetchItemsByType('live', undefined),
+    ]);
+
+    const normalized = normalizePublicBroadcast({
+      ok: true,
+      _meta: { hasSettings: Boolean(settingsRaw) },
+      settings: (settingsRaw as any)?.settings ?? settingsRaw ?? { breaking: DEFAULT_BREAKING_SETTINGS, live: DEFAULT_LIVE_SETTINGS },
+      items: { breaking, live },
+    });
+
+    return normalized;
+  } catch {
+    // continue to legacy fallback below
+  }
+
   // IMPORTANT: same-origin path so Vercel rewrites handle backend without CORS.
   // Repo reality: Vercel currently rewrites `/public-api/*` to backend `/admin-api/public/*`.
   // Request requirement: use `/admin-api/*` to keep requests same-origin and avoid CORS.
