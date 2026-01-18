@@ -40,9 +40,37 @@ const nextConfig = {
   },
 
   async rewrites() {
-    // Prefer Next.js API routes under pages/api for proxying.
-    // Rewrites here can bypass those handlers and return 502 when the backend is unreachable.
-    return [];
+    // Prefer Next.js API routes under pages/api for most proxying.
+    // BUT: broadcast tickers intentionally use same-origin `/admin-api/public/*` (and legacy `/public-api/*`)
+    // so Vercel rewrites can forward to backend without CORS.
+    const isProdDeployment =
+      String(process.env.VERCEL_ENV || '').toLowerCase() === 'production' ||
+      ['prod', 'production'].includes(
+        String(process.env.NEWS_PULSE_DEPLOYMENT || process.env.NEWS_PULSE_ENV || '').toLowerCase()
+      );
+    const backendRaw =
+      (process.env.NEXT_PUBLIC_API_BASE ||
+        (isProdDeployment ? process.env.NEXT_PUBLIC_API_BASE_PROD : process.env.NEXT_PUBLIC_API_BASE_DEV) ||
+        process.env.NEXT_PUBLIC_API_URL ||
+        process.env.NEXT_PUBLIC_BACKEND_URL ||
+        process.env.NEXT_PUBLIC_API_BASE_URL ||
+        'https://newspulse-backend-real.onrender.com')
+        .toString()
+        .trim();
+    const backend = backendRaw.replace(/\/+$/, '').replace(/\/api\/?$/, '');
+
+    if (!backend) return [];
+
+    return [
+      {
+        source: '/admin-api/public/:path*',
+        destination: `${backend}/admin-api/public/:path*`,
+      },
+      {
+        source: '/public-api/:path*',
+        destination: `${backend}/admin-api/public/:path*`,
+      },
+    ];
   },
 
   async headers() {
