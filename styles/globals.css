@@ -21,7 +21,7 @@ body {
 
 /* Premium ticker typography (English included) */
 .tickerText {
-  font-family: var(--font-body);
+  font-family: inherit;
   font-weight: 500;
   letter-spacing: 0.12px;
   line-height: 1.2;
@@ -32,7 +32,7 @@ body {
 }
 
 .tickerLabel {
-  font-family: var(--font-body);
+  font-family: inherit;
   font-weight: 600;
   letter-spacing: 0.18px;
   -webkit-font-smoothing: antialiased;
@@ -148,26 +148,25 @@ html {
     color: #000;
   }
   
-  .dark .text-gray-400 {
-    color: #fff;
-  }
-}
 
-@layer utilities {
-  .animate-marquee {
-    animation: marquee 30s linear infinite;
-  }
+    /* Ticker-only multilingual typography */
+    .tickerText,
+    .tickerLabel {
+      font-family: var(--font-inter), system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      line-height: 1.25;
+    }
 
-  @keyframes marquee {
-    0% { transform: translateX(100%); }
-    100% { transform: translateX(-100%); }
-  }
+    .tickerText:lang(hi),
+    .tickerLabel:lang(hi) {
+      font-family: var(--font-devanagari), var(--font-inter), system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
 
-  .text-gradient {
-    background-image: linear-gradient(to right, #1e3a8a, #9333ea);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    color: transparent;
+    .tickerText:lang(gu),
+    .tickerLabel:lang(gu) {
+      font-family: var(--font-gujarati), var(--font-inter), system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
   }
-}
