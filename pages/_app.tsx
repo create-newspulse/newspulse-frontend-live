@@ -85,6 +85,14 @@ function RouteLanguageSync() {
     const defaultLocale = router.defaultLocale ? normalizeLang(router.defaultLocale) : 'en';
     const routeLocale = normalizeLang(router.locale || router.defaultLocale || 'en');
 
+    const asPath = String(router.asPath || '');
+    const pathOnly = asPath.split('?')[0] || '/';
+    const hasExplicitLocalePrefix =
+      pathOnly === '/hi' ||
+      pathOnly.startsWith('/hi/') ||
+      pathOnly === '/gu' ||
+      pathOnly.startsWith('/gu/');
+
     const rawQueryLang = (router.query?.lang ?? '') as string | string[];
     const queryLangValue = Array.isArray(rawQueryLang) ? rawQueryLang[0] : rawQueryLang;
     const queryLang = queryLangValue ? normalizeLang(queryLangValue) : null;
@@ -103,22 +111,28 @@ function RouteLanguageSync() {
       return;
     }
 
-    // 2) Preferred locale (cookie/localStorage): ensure URL locale matches so
-    //    locale-dependent pages (getStaticProps/getServerSideProps) update immediately.
-    //    This also helps prevent hydration mismatches after a user changes language.
+    // 2) Explicit locale route should win (shareable URLs).
+    //    Persist it so subsequent visits to '/' keep the user's chosen language.
+    if (hasExplicitLocalePrefix || routeLocale !== defaultLocale) {
+      if (routeLocale !== lang) {
+        const key = `r:${routeLocale}|${router.asPath}`;
+        if (lastAppliedRef.current === key) return;
+        lastAppliedRef.current = key;
+        setLang(routeLocale, { persist: true });
+      }
+      return;
+    }
+
+    // 3) Default-locale route ('/') with a non-default preference: redirect to preferred.
     const preferred = getSelectedLanguage();
-    if (preferred && preferred !== routeLocale) {
+    const shouldEnforce = preferred !== defaultLocale;
+    if (shouldEnforce && preferred !== routeLocale) {
       const key = `p:${preferred}|${router.asPath}`;
       if (lastAppliedRef.current === key) return;
       lastAppliedRef.current = key;
 
-      // Avoid overriding URLs that intentionally use default locale without a prefix
-      // unless the user has a non-default preference.
-      const shouldEnforce = preferred !== defaultLocale;
-      if (shouldEnforce) {
-        if (preferred !== lang) setLang(preferred, { persist: true });
-        router.replace({ pathname: router.pathname, query: router.query }, undefined, { shallow: false, locale: preferred }).catch(() => {});
-      }
+      if (preferred !== lang) setLang(preferred, { persist: true });
+      router.replace({ pathname: router.pathname, query: router.query }, undefined, { shallow: false, locale: preferred }).catch(() => {});
     }
   }, [router.isReady, router.asPath, router.locale, router.defaultLocale, router.pathname, router.query, lang, setLang]);
 

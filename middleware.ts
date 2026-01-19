@@ -31,8 +31,21 @@ export function middleware(req: NextRequest) {
   const preferred = normalizeLocale(cookieValue);
   if (!preferred) return NextResponse.next();
 
+  // Respect explicit locale routes (shareable URLs).
+  // Only redirect when the request is for the default locale (unprefixed routes like '/').
+  const pathnameLower = pathname.toLowerCase();
+  const hasExplicitLocalePrefix =
+    pathnameLower === '/hi' ||
+    pathnameLower.startsWith('/hi/') ||
+    pathnameLower === '/gu' ||
+    pathnameLower.startsWith('/gu/') ||
+    pathnameLower === '/en' ||
+    pathnameLower.startsWith('/en/');
+  if (hasExplicitLocalePrefix) return NextResponse.next();
+
   const current = normalizeLocale(url.locale) ?? 'en';
   if (preferred === current) return NextResponse.next();
+  if (current !== 'en') return NextResponse.next();
 
   const next = url.clone();
   next.locale = preferred;
