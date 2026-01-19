@@ -1,5 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
+import path from 'path';
+import { promises as fs } from 'fs';
+
 import { getPublicApiBaseUrl } from '../../../../lib/publicApiBase';
 
 function noStore(res: NextApiResponse) {
@@ -26,6 +29,64 @@ function clampDurationSec(raw: unknown, fallback: number): number {
   const n = Number(raw);
   if (!Number.isFinite(n)) return fallback;
   return Math.min(40, Math.max(10, n));
+}
+
+const DEV_ALLOWED_ORIGINS = new Set(['http://localhost:5173', 'http://127.0.0.1:5173']);
+const LOCAL_CONFIG_PATH = path.join(process.cwd(), 'data', 'broadcast-config.json');
+const DEFAULT_LOCAL_CONFIG = {
+  breaking: { enabled: true, durationSec: 18 },
+  live: { enabled: true, durationSec: 24 },
+};
+
+function setCors(req: NextApiRequest, res: NextApiResponse) {
+  const origin = String(req.headers.origin || '');
+  if (!origin || !DEV_ALLOWED_ORIGINS.has(origin)) return;
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,PUT,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+}
+
+async function readLocalConfig(): Promise<any> {
+  try {
+    const raw = await fs.readFile(LOCAL_CONFIG_PATH, 'utf8');
+    const parsed = JSON.parse(raw);
+    const root = parsed && typeof parsed === 'object' ? parsed : {};
+    const cfg = (root as any).config && typeof (root as any).config === 'object' ? (root as any).config : root;
+    const breaking = (cfg as any).breaking && typeof (cfg as any).breaking === 'object' ? (cfg as any).breaking : {};
+    const live = (cfg as any).live && typeof (cfg as any).live === 'object' ? (cfg as any).live : {};
+    return {
+      ok: true,
+      config: {
+        breaking: {
+          enabled: breaking.enabled === undefined ? DEFAULT_LOCAL_CONFIG.breaking.enabled : Boolean(breaking.enabled),
+          durationSec: clampDurationSec(
+            breaking.durationSec ?? breaking.durationSeconds ?? breaking.speedSec ?? breaking.speedSeconds,
+            DEFAULT_LOCAL_CONFIG.breaking.durationSec
+          ),
+        },
+        live: {
+          enabled: live.enabled === undefined ? DEFAULT_LOCAL_CONFIG.live.enabled : Boolean(live.enabled),
+          durationSec: clampDurationSec(
+            live.durationSec ?? live.durationSeconds ?? live.speedSec ?? live.speedSeconds,
+            DEFAULT_LOCAL_CONFIG.live.durationSec
+          ),
+        },
+      },
+    };
+  } catch (err: any) {
+    if (err?.code === 'ENOENT') {
+      await fs.mkdir(path.dirname(LOCAL_CONFIG_PATH), { recursive: true });
+      await fs.writeFile(LOCAL_CONFIG_PATH, JSON.stringify({ ok: true, config: DEFAULT_LOCAL_CONFIG }, null, 2), 'utf8');
+      return { ok: true, config: DEFAULT_LOCAL_CONFIG };
+    }
+    return { ok: true, config: DEFAULT_LOCAL_CONFIG };
+  }
+}
+
+async function writeLocalConfig(nextConfig: any): Promise<void> {
+  await fs.mkdir(path.dirname(LOCAL_CONFIG_PATH), { recursive: true });
+  await fs.writeFile(LOCAL_CONFIG_PATH, JSON.stringify({ ok: true, config: nextConfig }, null, 2), 'utf8');
 }
 
 function normalizeConfig(raw: any) {
@@ -63,10 +124,18 @@ function normalizeConfig(raw: any) {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') {
-    res.setHeader('Allow', 'GET');
+  setCors(req, res);
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  if (req.method !== 'GET' && req.method !== 'PUT') {
+    res.setHeader('Allow', 'GET,PUT,OPTIONS');
     return res.status(405).json({ ok: false, message: 'METHOD_NOT_ALLOWED' });
   }
+
+  const allowWrite = process.env.NODE_ENV !== 'production';
 
   noStore(res);
 
@@ -75,13 +144,47 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // Fail-open: keep UI alive even if env not configured.
   if (!origin) {
-    return res.status(200).json({
-      ok: true,
-      config: {
-        breaking: { enabled: true, durationSec: 18 },
-        live: { enabled: true, durationSec: 24 },
-      },
-    });
+    if (req.method === 'PUT') {
+      if (!allowWrite) return res.status(405).json({ ok: false, message: 'WRITE_DISABLED' });
+
+      const raw = req.body && typeof req.body === 'object' ? req.body : {};
+      const incoming = (raw as any).config && typeof (raw as any).config === 'object' ? (raw as any).config : raw;
+      const current = await readLocalConfig();
+      const curCfg = (current as any).config || DEFAULT_LOCAL_CONFIG;
+
+      const next = {
+        breaking: {
+          enabled:
+            (incoming as any).breaking?.enabled === undefined
+              ? Boolean(curCfg.breaking?.enabled)
+              : Boolean((incoming as any).breaking.enabled),
+          durationSec: clampDurationSec(
+            (incoming as any).breaking?.durationSec ?? (incoming as any).breaking?.durationSeconds,
+            Number(curCfg.breaking?.durationSec) || DEFAULT_LOCAL_CONFIG.breaking.durationSec
+          ),
+        },
+        live: {
+          enabled:
+            (incoming as any).live?.enabled === undefined ? Boolean(curCfg.live?.enabled) : Boolean((incoming as any).live.enabled),
+          durationSec: clampDurationSec(
+            (incoming as any).live?.durationSec ?? (incoming as any).live?.durationSeconds,
+            Number(curCfg.live?.durationSec) || DEFAULT_LOCAL_CONFIG.live.durationSec
+          ),
+        },
+      };
+
+      await writeLocalConfig(next);
+      return res.status(200).json(normalizeConfig({ ok: true, config: next }));
+    }
+
+    const local = await readLocalConfig();
+    return res.status(200).json(normalizeConfig(local));
+  }
+
+  // Writes are never proxied here (public route). Only support local dev file-backed writes.
+  if (req.method === 'PUT') {
+    res.setHeader('Allow', 'GET,OPTIONS');
+    return res.status(405).json({ ok: false, message: 'METHOD_NOT_ALLOWED' });
   }
 
   const fetchUpstream = async (path: string) => {
