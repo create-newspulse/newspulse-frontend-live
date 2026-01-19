@@ -28,14 +28,7 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  const cookieValue =
-    req.cookies.get(COOKIE_KEY)?.value ??
-    req.cookies.get(LEGACY_COOKIE_KEY)?.value ??
-    req.cookies.get(NEXT_LOCALE_COOKIE)?.value;
-  const preferred = normalizeLocale(cookieValue);
-
   // Respect explicit locale routes (shareable URLs).
-  // Only redirect when the request is for the default locale (unprefixed routes like '/').
   const pathnameLower = pathname.toLowerCase();
   const localeInPath: Locale | null =
     pathnameLower === '/hi' || pathnameLower.startsWith('/hi/')
@@ -56,16 +49,12 @@ export function middleware(req: NextRequest) {
     return res;
   }
 
-  if (!preferred) return NextResponse.next();
-
-  const current = normalizeLocale(url.locale) ?? 'en';
-  if (preferred === current) return NextResponse.next();
-  if (current !== 'en') return NextResponse.next();
-
-  const next = url.clone();
-  next.locale = preferred;
-  const res = NextResponse.redirect(next);
-  res.cookies.set(NEXT_LOCALE_COOKIE, preferred, { path: '/', maxAge: 60 * 60 * 24 * 365 });
+  // IMPORTANT: Do not auto-redirect based on stored preference.
+  // URL is the single source of truth. For unprefixed routes like '/', force the
+  // Next.js locale cookie to the default locale so stale NEXT_LOCALE=hi won't make
+  // '/' appear as Hindi.
+  const res = NextResponse.next();
+  res.cookies.set(NEXT_LOCALE_COOKIE, 'en', { path: '/', maxAge: 60 * 60 * 24 * 365 });
   return res;
 }
 
