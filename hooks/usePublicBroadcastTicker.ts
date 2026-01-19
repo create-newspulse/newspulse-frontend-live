@@ -43,17 +43,21 @@ export function usePublicBroadcastTicker(options: {
 }): PublicBroadcastTickerState {
   const { lang, pollMs = 10_000, enableSse = true } = options;
 
-  const [broadcast, setBroadcast] = useState<PublicBroadcast>(() =>
-    normalizePublicBroadcast({
-      ok: false,
-      _meta: { hasSettings: false },
-      settings: {
-        breaking: { enabled: true, mode: 'AUTO', speedSec: 18 },
-        live: { enabled: true, mode: 'AUTO', speedSec: 24 },
-      },
-      items: { breaking: [], live: [] },
-    })
+  const emptyBroadcast = useMemo(
+    () =>
+      normalizePublicBroadcast({
+        ok: false,
+        _meta: { hasSettings: false },
+        settings: {
+          breaking: { enabled: true, mode: 'AUTO', speedSec: 18 },
+          live: { enabled: true, mode: 'AUTO', speedSec: 24 },
+        },
+        items: { breaking: [], live: [] },
+      }),
+    []
   );
+
+  const [broadcast, setBroadcast] = useState<PublicBroadcast>(() => emptyBroadcast);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
@@ -65,6 +69,18 @@ export function usePublicBroadcastTicker(options: {
   const sseRef = useRef<EventSource | null>(null);
   const sseFailedRef = useRef(false);
   const focusCooldownRef = useRef<number>(0);
+
+  // When the language changes, stop showing the previous language ticker
+  // while the next fetch/SSE reconnect happens.
+  useEffect(() => {
+    inFlightRef.current?.abort();
+    fpRef.current = '';
+    setBroadcast(emptyBroadcast);
+    setError(null);
+    setLastUpdatedAt(null);
+    setSource(null);
+    setIsLoading(true);
+  }, [emptyBroadcast, lang]);
 
   const applyBroadcast = useCallback(
     (raw: unknown, nextSource: 'poll' | 'sse') => {

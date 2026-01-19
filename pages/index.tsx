@@ -2211,6 +2211,7 @@ export default function UiPreviewV145() {
       node: (
         <div className="w-full min-w-0">
           <TickerBar
+            key={`ticker-breaking-${lang}`}
             theme={theme}
             kind="breaking"
             items={breakingItemsToShow}
@@ -2230,6 +2231,7 @@ export default function UiPreviewV145() {
       node: (
         <div className="w-full min-w-0">
           <TickerBar
+            key={`ticker-live-${lang}`}
             theme={theme}
             kind="live"
             items={liveItemsToShow}
