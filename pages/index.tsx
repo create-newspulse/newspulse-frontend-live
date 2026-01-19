@@ -2221,10 +2221,11 @@ export default function UiPreviewV145() {
       node: (
         <div className="w-full min-w-0">
           <TickerBar
+            key={`breaking-${breakingDurationSec}-${breakingItemsToShow.length}`}
             theme={theme}
             kind="breaking"
             items={breakingItemsToShow}
-              durationSec={breakingDurationSec}
+            durationSec={breakingDurationSec}
             onViewAll={() => {
               setViewAllKind("breaking");
               setViewAllOpen(true);
@@ -2240,10 +2241,11 @@ export default function UiPreviewV145() {
       node: (
         <div className="w-full min-w-0">
           <TickerBar
+            key={`live-${liveDurationSec}-${liveItemsToShow.length}`}
             theme={theme}
             kind="live"
             items={liveItemsToShow}
-              durationSec={liveDurationSec}
+            durationSec={liveDurationSec}
             onViewAll={() => {
               setViewAllKind("live");
               setViewAllOpen(true);
