@@ -2,7 +2,7 @@ import React from 'react';
 import { useRouter } from 'next/router';
 import Script from 'next/script';
 import * as gtag from '../lib/gtag';
-import { LanguageProvider, getMessagesForLang, normalizeLang, useI18n } from '../src/i18n/LanguageProvider';
+import { LanguageProvider, getMessagesForLang, getSelectedLanguage, normalizeLang, useI18n } from '../src/i18n/LanguageProvider';
 import { PublicSettingsProvider } from '../src/context/PublicSettingsContext';
 import { ThemeProvider } from '../utils/ThemeContext';
 import { FeatureFlagProvider } from '../utils/FeatureFlagProvider';
@@ -83,33 +83,44 @@ function RouteLanguageSync() {
     if (!router.isReady) return;
 
     const defaultLocale = router.defaultLocale ? normalizeLang(router.defaultLocale) : 'en';
-    const routeLocale = router.locale ? normalizeLang(router.locale) : null;
+    const routeLocale = normalizeLang(router.locale || router.defaultLocale || 'en');
 
     const rawQueryLang = (router.query?.lang ?? '') as string | string[];
     const queryLangValue = Array.isArray(rawQueryLang) ? rawQueryLang[0] : rawQueryLang;
     const queryLang = queryLangValue ? normalizeLang(queryLangValue) : null;
 
-    // Only let route locale override user preference when it's non-default,
-    // or when a shared link explicitly includes ?lang=.
-    const shouldRespectRouteLocale = !!routeLocale && routeLocale !== defaultLocale;
-    const desired = queryLang ?? (shouldRespectRouteLocale ? routeLocale : null);
-    if (!desired) return;
-
-    const key = `${desired}|${router.asPath}`;
-    if (lastAppliedRef.current === key) return;
-    lastAppliedRef.current = key;
-
-    if (desired !== lang) {
-      setLang(desired, { persist: true });
-    }
-
-    // Normalize shared links: if someone uses ?lang=hi, convert it into a locale route.
+    // 1) Shared links: normalize ?lang= to real locale routes.
     if (queryLang) {
+      const key = `q:${queryLang}|${router.asPath}`;
+      if (lastAppliedRef.current === key) return;
+      lastAppliedRef.current = key;
+
+      if (queryLang !== lang) setLang(queryLang, { persist: true });
+
       const nextQuery = { ...router.query } as Record<string, any>;
       delete nextQuery.lang;
-      router.replace({ pathname: router.pathname, query: nextQuery }, undefined, { shallow: true, locale: desired }).catch(() => {});
+      router.replace({ pathname: router.pathname, query: nextQuery }, undefined, { shallow: false, locale: queryLang }).catch(() => {});
+      return;
     }
-  }, [router.isReady, router.asPath, router.locale, router.defaultLocale, router.pathname, (router.query as any)?.lang, lang, setLang]);
+
+    // 2) Preferred locale (cookie/localStorage): ensure URL locale matches so
+    //    locale-dependent pages (getStaticProps/getServerSideProps) update immediately.
+    //    This also helps prevent hydration mismatches after a user changes language.
+    const preferred = getSelectedLanguage();
+    if (preferred && preferred !== routeLocale) {
+      const key = `p:${preferred}|${router.asPath}`;
+      if (lastAppliedRef.current === key) return;
+      lastAppliedRef.current = key;
+
+      // Avoid overriding URLs that intentionally use default locale without a prefix
+      // unless the user has a non-default preference.
+      const shouldEnforce = preferred !== defaultLocale;
+      if (shouldEnforce) {
+        if (preferred !== lang) setLang(preferred, { persist: true });
+        router.replace({ pathname: router.pathname, query: router.query }, undefined, { shallow: false, locale: preferred }).catch(() => {});
+      }
+    }
+  }, [router.isReady, router.asPath, router.locale, router.defaultLocale, router.pathname, router.query, lang, setLang]);
 
   return null;
 }
@@ -130,6 +141,8 @@ function I18nBridge({ Component, pageProps }: { Component: any; pageProps: any }
 
 function MyApp({ Component, pageProps }) {
   const router = useRouter();
+
+  const routeLang = React.useMemo(() => normalizeLang(router.locale || router.defaultLocale || 'en'), [router.locale, router.defaultLocale]);
 
   React.useEffect(() => {
     const handleRouteChange = (url: string) => {
@@ -176,7 +189,7 @@ function MyApp({ Component, pageProps }) {
         <PublicSettingsProvider>
           <PublicModeProvider initialMode={pageProps?.publicMode}>
             <FeatureFlagProvider initialFlags={pageProps?.featureFlags}>
-              <LanguageProvider>
+              <LanguageProvider initialLang={routeLang}>
                 <PublishedThemeApplier />
                 <RouteLanguageSync />
                 <I18nBridge Component={Component} pageProps={pageProps} />

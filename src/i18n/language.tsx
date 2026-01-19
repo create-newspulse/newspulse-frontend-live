@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo } from 'react';
+import { useRouter } from 'next/router';
 
 import en from './en.json';
 import hi from './hi.json';
@@ -60,16 +61,22 @@ const LANGS: Array<{ code: Lang; label: string; flag: string }> = [
 ];
 
 export const LanguageDropdown: React.FC<{ compact?: boolean }> = ({ compact = false }) => {
+  const router = useRouter();
   const { language, setLanguage, t } = useLanguage();
   const currentLocale = language || 'en';
 
   const change = useCallback(
     (lng: string) => {
       if (lng === 'en' || lng === 'hi' || lng === 'gu') {
+        // Update global UI language + persist.
         setLanguage(lng);
+        // Also switch Next.js locale route so locale-dependent pages/data update immediately.
+        router
+          .push({ pathname: router.pathname, query: router.query }, undefined, { locale: lng })
+          .catch(() => {});
       }
     },
-    [setLanguage]
+    [router, setLanguage]
   );
 
   if (compact) {

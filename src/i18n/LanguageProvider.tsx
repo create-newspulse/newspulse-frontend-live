@@ -84,12 +84,26 @@ type I18nContextType = {
 
 const I18nContext = createContext<I18nContextType | undefined>(undefined);
 
-export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLangState] = useState<Lang>('en');
+export function LanguageProvider({
+  children,
+  initialLang,
+}: {
+  children: React.ReactNode;
+  initialLang?: Lang;
+}) {
+  // Important for hydration:
+  // - On SSR, prefer the route locale (provided by _app.tsx) so server+client match.
+  // - Only fall back to storage/cookie on the client when initialLang isn't provided.
+  const [lang, setLangState] = useState<Lang>(() => (initialLang ? normalizeLang(initialLang) : 'en'));
 
   React.useEffect(() => {
+    if (initialLang) {
+      const next = normalizeLang(initialLang);
+      setLangState((prev) => (prev === next ? prev : next));
+      return;
+    }
     setLangState(getSelectedLanguage());
-  }, []);
+  }, [initialLang]);
 
   const setLang = useCallback((next: Lang, options?: { persist?: boolean }) => {
     setLangState(next);
