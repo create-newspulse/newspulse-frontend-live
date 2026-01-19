@@ -111,7 +111,7 @@ export default function BreakingTicker({
     <div className={`bg-royal-blue text-white py-2 ${fontClass} ${className}`}>
       <div className="flex items-center gap-3 px-3">
         <span
-          className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-extrabold text-white border"
+          className="tickerLabel inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-extrabold text-white border"
           style={{ borderColor: 'rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.10)' }}
         >
           <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse" aria-hidden="true"></span>
@@ -128,7 +128,7 @@ export default function BreakingTicker({
           className="relative min-w-0 flex-1 overflow-hidden"
           style={{ WebkitMaskImage: 'linear-gradient(to right, black 0%, black 90%, transparent)', maskImage: 'linear-gradient(to right, black 0%, black 90%, transparent)' }}
         >
-          <div className="whitespace-nowrap font-semibold animate-marquee" style={{ animationDuration: `${durationSec}s` }}>
+          <div className="whitespace-nowrap tickerText animate-marquee" style={{ animationDuration: `${durationSec}s` }}>
             <span className="pr-10">{marqueeText}</span>
             <span className="pr-10">{marqueeText}</span>
           </div>

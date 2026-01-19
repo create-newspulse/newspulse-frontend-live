@@ -16,21 +16,21 @@ import SeoAlternates from '../components/SeoAlternates';
 
 const inter = Inter({
   subsets: ['latin'],
-  weight: ['400', '500', '600'],
+  weight: ['400', '500', '600', '700'],
   variable: '--font-inter',
   display: 'swap',
 });
 
 const gujarati = Noto_Sans_Gujarati({
   subsets: ['gujarati'],
-  weight: ['400', '500', '600'],
+  weight: ['400', '500', '600', '700'],
   variable: '--font-gujarati',
   display: 'swap',
 });
 
 const devanagari = Noto_Sans_Devanagari({
   subsets: ['devanagari'],
-  weight: ['400', '500', '600'],
+  weight: ['400', '500', '600', '700'],
   variable: '--font-devanagari',
   display: 'swap',
 });
