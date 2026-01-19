@@ -1,6 +1,6 @@
 /* simple, safe SW for Next.js */
-const STATIC_CACHE = "np-static-v2";
-const RUNTIME_CACHE = "np-runtime-v2";
+const STATIC_CACHE = "np-static-v1";
+const RUNTIME_CACHE = "np-runtime-v1";
 const STATIC_ASSETS = ["/", "/offline", "/favicon.ico", "/manifest.webmanifest"];
 
 self.addEventListener("install", (e) => {
@@ -19,36 +19,9 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
   const { request } = e;
   const url = new URL(request.url);
-  const accept = request.headers.get("accept") || "";
 
   // only GET
   if (request.method !== "GET") return;
-
-  // Never cache EventSource/SSE streams.
-  if (accept.includes("text/event-stream")) {
-    e.respondWith(fetch(request));
-    return;
-  }
-
-  // JSON/API/data requests should be network-first so language/cookie changes take effect immediately.
-  // (Cache-first / SWR can keep serving the previous language until a hard refresh.)
-  const isSameOrigin = url.origin === location.origin;
-  const isJson = accept.includes("application/json") || url.pathname.endsWith(".json");
-  const isApiOrData =
-    isSameOrigin &&
-    (url.pathname.startsWith("/api/") || url.pathname.startsWith("/public/") || url.pathname.startsWith("/_next/data/"));
-  if (isApiOrData || isJson) {
-    e.respondWith(
-      fetch(request)
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(RUNTIME_CACHE).then((c) => c.put(request, copy));
-          return res;
-        })
-        .catch(() => caches.match(request))
-    );
-    return;
-  }
 
   // HTML pages → network first, fallback offline
   if (request.headers.get("accept")?.includes("text/html")) {
