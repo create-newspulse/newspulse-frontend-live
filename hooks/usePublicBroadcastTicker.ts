@@ -29,11 +29,19 @@ function clampSpeedSec(raw: unknown, fallback: number): number {
 }
 
 function fingerprint(b: PublicBroadcast): string {
-  const bItems = (b.items?.breaking || []).map((it: any) => String(it?._id || it?.id || it?.updatedAt || it?.createdAt || it?.text || it?.title || '')).join('|');
-  const lItems = (b.items?.live || []).map((it: any) => String(it?._id || it?.id || it?.updatedAt || it?.createdAt || it?.text || it?.title || '')).join('|');
+  // Back-compat wrapper for older call sites.
+  return fingerprintWithLang(b, 'en');
+}
+
+function fingerprintWithLang(b: PublicBroadcast, lang: BroadcastLang): string {
+  // Important: include the *language-specific* derived texts in the fingerprint.
+  // Some backends return a stable item id + a translation map that changes per lang.
+  // If the fingerprint ignores translations, switching language may appear to “do nothing”.
+  const bTexts = toTickerTexts((b.items?.breaking || []) as any, { lang }).slice(0, 50).join('|');
+  const lTexts = toTickerTexts((b.items?.live || []) as any, { lang }).slice(0, 50).join('|');
   const s = b.settings || ({} as any);
   const sKey = `${s?.breaking?.enabled}:${s?.breaking?.mode}:${s?.breaking?.speedSec}|${s?.live?.enabled}:${s?.live?.mode}:${s?.live?.speedSec}`;
-  return `${bItems}#${lItems}#${sKey}`;
+  return `${lang}#${bTexts}#${lTexts}#${sKey}`;
 }
 
 export function usePublicBroadcastTicker(options: {
@@ -69,14 +77,14 @@ export function usePublicBroadcastTicker(options: {
   const applyBroadcast = useCallback(
     (raw: unknown, nextSource: 'poll' | 'sse') => {
       const normalized = normalizePublicBroadcast(raw);
-      const fp = fingerprint(normalized);
+      const fp = fingerprintWithLang(normalized, lang);
       if (fp && fp === fpRef.current) return;
       fpRef.current = fp;
       setBroadcast(normalized);
       setLastUpdatedAt(Date.now());
       setSource(nextSource);
     },
-    []
+    [lang]
   );
 
   const refetch = useCallback(

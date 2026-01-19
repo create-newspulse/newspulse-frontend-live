@@ -233,12 +233,19 @@ export function itemToTickerText(item: unknown, opts?: { lang?: BroadcastLang })
   }
 
   const it = item as any;
-  const direct = pickFirstNonEmpty([it?.text, it?.title, it?.headline]);
-  if (direct) return direct;
-
   const wanted = normalizeLang(opts?.lang);
   const source = normalizeLang(it?.sourceLang ?? it?.sourceLanguage ?? it?.lang);
   const rec = getTranslationsRecord(it);
+
+  // If a per-language map exists, prefer the requested language.
+  // This keeps tickers reactive when switching languages (even if `text` is present).
+  if (wanted && rec?.[wanted]) {
+    const s = String(rec[wanted] ?? '').trim();
+    if (s) return s;
+  }
+
+  const direct = pickFirstNonEmpty([it?.text, it?.title, it?.headline]);
+  if (direct) return direct;
 
   if (rec) {
     const candidates: unknown[] = [];

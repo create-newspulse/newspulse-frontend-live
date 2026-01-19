@@ -62,21 +62,47 @@ const LANGS: Array<{ code: Lang; label: string; flag: string }> = [
 
 export const LanguageDropdown: React.FC<{ compact?: boolean }> = ({ compact = false }) => {
   const router = useRouter();
-  const { language, setLanguage, t } = useLanguage();
-  const currentLocale = language || 'en';
+  const { setLanguage, t } = useLanguage();
+
+  const currentLocale = useMemo(() => {
+    const asPath = String(router.asPath || '/');
+    const pathOnly = (asPath.split('?')[0] || '/').toLowerCase();
+    if (pathOnly === '/hi' || pathOnly.startsWith('/hi/')) return 'hi' as Lang;
+    if (pathOnly === '/gu' || pathOnly.startsWith('/gu/')) return 'gu' as Lang;
+    if (pathOnly === '/en' || pathOnly.startsWith('/en/')) return 'en' as Lang;
+    const fromRouter = String(router.locale || router.defaultLocale || 'en').toLowerCase();
+    return (fromRouter === 'hi' || fromRouter === 'gu' ? fromRouter : 'en') as Lang;
+  }, [router.asPath, router.locale, router.defaultLocale]);
+
+  const getUnprefixedPath = useCallback((asPath: string): string => {
+    const raw = String(asPath || '/');
+    const hashSplit = raw.split('#');
+    const beforeHash = hashSplit[0] || '/';
+    const hash = hashSplit.length > 1 ? `#${hashSplit.slice(1).join('#')}` : '';
+
+    const qSplit = beforeHash.split('?');
+    const pathPart = qSplit[0] || '/';
+    const query = qSplit.length > 1 ? `?${qSplit.slice(1).join('?')}` : '';
+
+    const p = pathPart.startsWith('/') ? pathPart : `/${pathPart}`;
+    const withoutPrefix = p.replace(/^\/(en|hi|gu)(?=\/|$)/i, '');
+    const rest = withoutPrefix.startsWith('/') ? withoutPrefix : `/${withoutPrefix}`;
+    const normalizedRest = rest === '/' ? '/' : rest;
+
+    return `${normalizedRest}${query}${hash}`;
+  }, []);
 
   const change = useCallback(
     (lng: string) => {
       if (lng === 'en' || lng === 'hi' || lng === 'gu') {
-        // Update global UI language + persist.
+        // Persist preference for future visits.
         setLanguage(lng);
-        // Also switch Next.js locale route so locale-dependent pages/data update immediately.
-        router
-          .push({ pathname: router.pathname, query: router.query }, undefined, { locale: lng })
-          .catch(() => {});
+        // Route is source of truth: switch Next locale (avoid double-prefix like /hi/gu).
+        const unprefixed = getUnprefixedPath(String(router.asPath || '/'));
+        router.replace(unprefixed, undefined, { locale: lng, shallow: false, scroll: false }).catch(() => {});
       }
     },
-    [router, setLanguage]
+    [getUnprefixedPath, router, setLanguage]
   );
 
   if (compact) {

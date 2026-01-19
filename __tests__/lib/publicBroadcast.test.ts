@@ -35,6 +35,19 @@ describe('publicBroadcast', () => {
     expect(toTickerTexts(res.items.live)).toEqual(['L1']);
   });
 
+  test('prefers per-language translations when lang is provided', () => {
+    const items = [
+      {
+        text: 'EN fallback',
+        texts: { en: 'English', hi: 'हिन्दी', gu: 'ગુજરાતી' },
+      },
+    ];
+
+    expect(toTickerTexts(items, { lang: 'hi' })).toEqual(['हिन्दी']);
+    expect(toTickerTexts(items, { lang: 'gu' })).toEqual(['ગુજરાતી']);
+    expect(toTickerTexts(items, { lang: 'en' })).toEqual(['English']);
+  });
+
   test('exposes meta.hasSettings based on payload', () => {
     const withSettings = normalizePublicBroadcast({
       ok: true,

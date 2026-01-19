@@ -33,11 +33,9 @@ describe('LanguageProvider', () => {
     });
   });
 
-  it('initializes from localStorage np_lang=hi', async () => {
-    window.localStorage.setItem('np_lang', 'hi');
-
+  it('initializes from initialLang=hi', async () => {
     render(
-      <LanguageProvider>
+      <LanguageProvider initialLang="hi">
         <Probe />
       </LanguageProvider>
     );
@@ -49,10 +47,8 @@ describe('LanguageProvider', () => {
   });
 
   it('returns key for unknown translation keys', async () => {
-    window.localStorage.setItem('np_lang', 'hi');
-
     render(
-      <LanguageProvider>
+      <LanguageProvider initialLang="hi">
         <Probe />
       </LanguageProvider>
     );

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const COOKIE_KEY = 'np_lang';
+const COOKIE_KEY = 'np_locale';
+const LEGACY_COOKIE_KEY = 'np_lang';
 const NEXT_LOCALE_COOKIE = 'NEXT_LOCALE';
 
 const LOCALES = ['en', 'hi', 'gu'] as const;
@@ -27,21 +28,35 @@ export function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  const cookieValue = req.cookies.get(COOKIE_KEY)?.value ?? req.cookies.get(NEXT_LOCALE_COOKIE)?.value;
+  const cookieValue =
+    req.cookies.get(COOKIE_KEY)?.value ??
+    req.cookies.get(LEGACY_COOKIE_KEY)?.value ??
+    req.cookies.get(NEXT_LOCALE_COOKIE)?.value;
   const preferred = normalizeLocale(cookieValue);
-  if (!preferred) return NextResponse.next();
 
   // Respect explicit locale routes (shareable URLs).
   // Only redirect when the request is for the default locale (unprefixed routes like '/').
   const pathnameLower = pathname.toLowerCase();
-  const hasExplicitLocalePrefix =
-    pathnameLower === '/hi' ||
-    pathnameLower.startsWith('/hi/') ||
-    pathnameLower === '/gu' ||
-    pathnameLower.startsWith('/gu/') ||
-    pathnameLower === '/en' ||
-    pathnameLower.startsWith('/en/');
-  if (hasExplicitLocalePrefix) return NextResponse.next();
+  const localeInPath: Locale | null =
+    pathnameLower === '/hi' || pathnameLower.startsWith('/hi/')
+      ? 'hi'
+      : pathnameLower === '/gu' || pathnameLower.startsWith('/gu/')
+        ? 'gu'
+        : pathnameLower === '/en' || pathnameLower.startsWith('/en/')
+          ? 'en'
+          : null;
+
+  // When URL explicitly sets locale, keep NEXT_LOCALE aligned so Next doesn't mis-detect.
+  if (localeInPath) {
+    const res = NextResponse.next();
+    res.cookies.set(NEXT_LOCALE_COOKIE, localeInPath, { path: '/', maxAge: 60 * 60 * 24 * 365 });
+    // Also persist our app preference cookies for consistency.
+    res.cookies.set(COOKIE_KEY, localeInPath, { path: '/', maxAge: 60 * 60 * 24 * 365 });
+    res.cookies.set(LEGACY_COOKIE_KEY, localeInPath, { path: '/', maxAge: 60 * 60 * 24 * 365 });
+    return res;
+  }
+
+  if (!preferred) return NextResponse.next();
 
   const current = normalizeLocale(url.locale) ?? 'en';
   if (preferred === current) return NextResponse.next();
@@ -49,7 +64,9 @@ export function middleware(req: NextRequest) {
 
   const next = url.clone();
   next.locale = preferred;
-  return NextResponse.redirect(next);
+  const res = NextResponse.redirect(next);
+  res.cookies.set(NEXT_LOCALE_COOKIE, preferred, { path: '/', maxAge: 60 * 60 * 24 * 365 });
+  return res;
 }
 
 export const config = {

@@ -17,6 +17,23 @@ export default function LanguageToggle() {
   const { t } = useI18n();
   const { settings } = usePublicSettings();
 
+  const getUnprefixedPath = React.useCallback((asPath: string): string => {
+    const raw = String(asPath || '/');
+    const hashSplit = raw.split('#');
+    const beforeHash = hashSplit[0] || '/';
+    const hash = hashSplit.length > 1 ? `#${hashSplit.slice(1).join('#')}` : '';
+
+    const qSplit = beforeHash.split('?');
+    const pathPart = qSplit[0] || '/';
+    const query = qSplit.length > 1 ? `?${qSplit.slice(1).join('?')}` : '';
+
+    const p = pathPart.startsWith('/') ? pathPart : `/${pathPart}`;
+    const withoutPrefix = p.replace(/^\/(en|hi|gu)(?=\/|$)/i, '');
+    const rest = withoutPrefix.startsWith('/') ? withoutPrefix : `/${withoutPrefix}`;
+    const normalizedRest = rest === '/' ? '/' : rest;
+    return `${normalizedRest}${query}${hash}`;
+  }, []);
+
   const options = React.useMemo(() => {
     const raw = (settings as any)?.languageTheme?.languages;
     if (Array.isArray(raw) && raw.length) {
@@ -34,12 +51,13 @@ export default function LanguageToggle() {
     const selected = e.target.value as 'en' | 'hi' | 'gu';
     if (!options.includes(selected)) return;
     setLanguage(selected);
-    router.push({ pathname: router.pathname, query: router.query }, undefined, { locale: selected }).catch(() => {});
+    const unprefixed = getUnprefixedPath(String(router.asPath || '/'));
+    router.replace(unprefixed, undefined, { locale: selected, shallow: false, scroll: false }).catch(() => {});
   };
 
   return (
     <select
-      value={language}
+      value={language || 'en'}
       onChange={handleChange}
       aria-label={t('common.language')}
       className="border rounded-lg px-3 py-2 font-medium bg-white shadow text-gray-800"

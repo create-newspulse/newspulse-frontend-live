@@ -2,7 +2,7 @@ import React from 'react';
 import { useRouter } from 'next/router';
 import Script from 'next/script';
 import * as gtag from '../lib/gtag';
-import { LanguageProvider, getMessagesForLang, getSelectedLanguage, normalizeLang, useI18n } from '../src/i18n/LanguageProvider';
+import { LanguageProvider, getMessagesForLang, normalizeLang, useI18n } from '../src/i18n/LanguageProvider';
 import { PublicSettingsProvider } from '../src/context/PublicSettingsContext';
 import { ThemeProvider } from '../utils/ThemeContext';
 import { FeatureFlagProvider } from '../utils/FeatureFlagProvider';
@@ -82,7 +82,6 @@ function RouteLanguageSync() {
   React.useEffect(() => {
     if (!router.isReady) return;
 
-    const defaultLocale = router.defaultLocale ? normalizeLang(router.defaultLocale) : 'en';
     const routeLocale = normalizeLang(router.locale || router.defaultLocale || 'en');
 
     const asPath = String(router.asPath || '');
@@ -103,7 +102,8 @@ function RouteLanguageSync() {
       if (lastAppliedRef.current === key) return;
       lastAppliedRef.current = key;
 
-      if (queryLang !== lang) setLang(queryLang, { persist: true });
+      // Persist preference; route remains the source of truth.
+      setLang(queryLang, { persist: true });
 
       const nextQuery = { ...router.query } as Record<string, any>;
       delete nextQuery.lang;
@@ -111,29 +111,13 @@ function RouteLanguageSync() {
       return;
     }
 
-    // 2) Explicit locale route should win (shareable URLs).
-    //    Persist it so subsequent visits to '/' keep the user's chosen language.
-    if (hasExplicitLocalePrefix || routeLocale !== defaultLocale) {
-      if (routeLocale !== lang) {
-        const key = `r:${routeLocale}|${router.asPath}`;
-        if (lastAppliedRef.current === key) return;
-        lastAppliedRef.current = key;
-        setLang(routeLocale, { persist: true });
-      }
-      return;
-    }
-
-    // 3) Default-locale route ('/') with a non-default preference: redirect to preferred.
-    const preferred = getSelectedLanguage();
-    const shouldEnforce = preferred !== defaultLocale;
-    if (shouldEnforce && preferred !== routeLocale) {
-      const key = `p:${preferred}|${router.asPath}`;
+    // 2) Persist the current route locale as the user's preference.
+    if (routeLocale !== lang) {
+      const key = `r:${routeLocale}|${router.asPath}`;
       if (lastAppliedRef.current === key) return;
       lastAppliedRef.current = key;
-
-      if (preferred !== lang) setLang(preferred, { persist: true });
-      router.replace({ pathname: router.pathname, query: router.query }, undefined, { shallow: false, locale: preferred }).catch(() => {});
     }
+    setLang(routeLocale, { persist: true });
   }, [router.isReady, router.asPath, router.locale, router.defaultLocale, router.pathname, router.query, lang, setLang]);
 
   return null;
@@ -144,7 +128,7 @@ function I18nBridge({ Component, pageProps }: { Component: any; pageProps: any }
   const messages = getMessagesForLang(lang);
   const langClass = lang === 'hi' ? 'np-lang-hi' : lang === 'gu' ? 'np-lang-gu' : 'np-lang-en';
   return (
-    <SafeIntlProvider messages={messages} locale={lang} onError={() => {}}>
+    <SafeIntlProvider key={lang} messages={messages} locale={lang} onError={() => {}}>
       <SeoAlternates />
       <div className={`${inter.variable} ${gujarati.variable} ${devanagari.variable} ${langClass} relative overflow-x-hidden`}>
         <Component {...pageProps} />
@@ -156,7 +140,14 @@ function I18nBridge({ Component, pageProps }: { Component: any; pageProps: any }
 function MyApp({ Component, pageProps }) {
   const router = useRouter();
 
-  const routeLang = React.useMemo(() => normalizeLang(router.locale || router.defaultLocale || 'en'), [router.locale, router.defaultLocale]);
+  const routeLang = React.useMemo(() => {
+    const asPath = String(router.asPath || '/');
+    const pathOnly = (asPath.split('?')[0] || '/').toLowerCase();
+    if (pathOnly === '/hi' || pathOnly.startsWith('/hi/')) return 'hi';
+    if (pathOnly === '/gu' || pathOnly.startsWith('/gu/')) return 'gu';
+    if (pathOnly === '/en' || pathOnly.startsWith('/en/')) return 'en';
+    return normalizeLang(router.locale || router.defaultLocale || 'en');
+  }, [router.asPath, router.locale, router.defaultLocale]);
 
   React.useEffect(() => {
     const handleRouteChange = (url: string) => {

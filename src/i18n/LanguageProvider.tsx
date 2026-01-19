@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useMemo } from 'react';
 
 import en from './en.json';
 import hi from './hi.json';
@@ -8,8 +8,13 @@ export type Lang = 'gu' | 'hi' | 'en';
 
 type Dict = Record<string, any>;
 
-const STORAGE_KEY = 'np_lang';
-const COOKIE_KEY = 'np_lang';
+// Route (URL locale segment) is the single source of truth.
+// We persist the user's preference for future visits via cookie/localStorage,
+// but we do NOT read it to decide the current language during render.
+const STORAGE_KEY = 'np_locale';
+const COOKIE_KEY = 'np_locale';
+const LEGACY_COOKIE_KEY = 'np_lang';
+const NEXT_LOCALE_COOKIE = 'NEXT_LOCALE';
 
 function readCookie(name: string): string | undefined {
   if (typeof document === 'undefined') return undefined;
@@ -32,6 +37,15 @@ function writeCookie(name: string, value: string) {
     const v = encodeURIComponent(value);
     const maxAge = 60 * 60 * 24 * 365; // 1 year
     document.cookie = `${name}=${v}; path=/; max-age=${maxAge}; samesite=lax`;
+  } catch {
+    // ignore
+  }
+}
+
+function deleteCookie(name: string) {
+  if (typeof document === 'undefined') return;
+  try {
+    document.cookie = `${name}=; path=/; max-age=0; samesite=lax`;
   } catch {
     // ignore
   }
@@ -70,7 +84,7 @@ export function getSelectedLanguage(): Lang {
     // ignore
   }
 
-  const fromCookie = readCookie(COOKIE_KEY);
+  const fromCookie = readCookie(COOKIE_KEY) || readCookie(LEGACY_COOKIE_KEY);
   if (fromCookie) return normalizeLang(fromCookie);
 
   return 'en';
@@ -91,23 +105,11 @@ export function LanguageProvider({
   children: React.ReactNode;
   initialLang?: Lang;
 }) {
-  // Important for hydration:
-  // - On SSR, prefer the route locale (provided by _app.tsx) so server+client match.
-  // - Only fall back to storage/cookie on the client when initialLang isn't provided.
-  const [lang, setLangState] = useState<Lang>(() => (initialLang ? normalizeLang(initialLang) : 'en'));
-
-  React.useEffect(() => {
-    if (initialLang) {
-      const next = normalizeLang(initialLang);
-      setLangState((prev) => (prev === next ? prev : next));
-      return;
-    }
-    setLangState(getSelectedLanguage());
-  }, [initialLang]);
+  // IMPORTANT (hydration-safe): lang is derived from the route locale passed by _app.tsx.
+  // No localStorage/cookie reads here.
+  const lang = useMemo(() => normalizeLang(initialLang ?? 'en'), [initialLang]);
 
   const setLang = useCallback((next: Lang, options?: { persist?: boolean }) => {
-    setLangState(next);
-
     const persist = options?.persist !== false;
     if (!persist) {
       // Ephemeral language change (backend-controlled defaults) without touching user storage.
@@ -119,7 +121,12 @@ export function LanguageProvider({
       // ignore
     }
 
+    // Persist preference for future visits (middleware / Next can use this).
     writeCookie(COOKIE_KEY, next);
+    writeCookie(LEGACY_COOKIE_KEY, next);
+    // Avoid client-writing NEXT_LOCALE (can conflict with explicit locale routes).
+    // Middleware will keep NEXT_LOCALE aligned with the active route locale.
+    deleteCookie(NEXT_LOCALE_COOKIE);
   }, []);
 
   React.useEffect(() => {

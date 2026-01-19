@@ -1941,9 +1941,27 @@ function SiteFooter({ theme, onToast, footerTextOverride }: any) {
 
 export default function UiPreviewV145() {
   const { t, lang, setLang } = useI18n();
+  const router = useRouter();
   const [prefs, setPrefs] = useState<any>(DEFAULT_PREFS);
   const theme = useMemo(() => getTheme(prefs.themeId), [prefs.themeId]);
   usePublicMode();
+
+  const getUnprefixedPath = React.useCallback((asPath: string): string => {
+    const raw = String(asPath || '/');
+    const hashSplit = raw.split('#');
+    const beforeHash = hashSplit[0] || '/';
+    const hash = hashSplit.length > 1 ? `#${hashSplit.slice(1).join('#')}` : '';
+
+    const qSplit = beforeHash.split('?');
+    const pathPart = qSplit[0] || '/';
+    const query = qSplit.length > 1 ? `?${qSplit.slice(1).join('?')}` : '';
+
+    const p = pathPart.startsWith('/') ? pathPart : `/${pathPart}`;
+    const withoutPrefix = p.replace(/^\/(en|hi|gu)(?=\/|$)/i, '');
+    const rest = withoutPrefix.startsWith('/') ? withoutPrefix : `/${withoutPrefix}`;
+    const normalizedRest = rest === '/' ? '/' : rest;
+    return `${normalizedRest}${query}${hash}`;
+  }, []);
 
   // Public settings drawer must be explicitly enabled (developer/founder mode).
   // Default is OFF so public users can't toggle live site modules.
@@ -2052,15 +2070,7 @@ export default function UiPreviewV145() {
     if (appliedPublishedDefaultsRef.current) return;
     if (!effectiveSettings || settingsError) return;
 
-    const langs = (effectiveSettings as any)?.languageTheme?.languages;
     const themePreset = (effectiveSettings as any)?.languageTheme?.themePreset;
-
-    if (Array.isArray(langs) && langs.length) {
-      const first = String(langs[0]).toLowerCase();
-      if (first === 'en' || first === 'hi' || first === 'gu') {
-        setLang(first as any, { persist: false } as any);
-      }
-    }
 
     if (typeof themePreset === 'string') {
       const next = themePreset.toLowerCase().trim();
@@ -2079,7 +2089,7 @@ export default function UiPreviewV145() {
     }
 
     appliedPublishedDefaultsRef.current = true;
-  }, [enablePublicSettingsDrawer, effectiveSettings, settingsError, setLang]);
+  }, [enablePublicSettingsDrawer, effectiveSettings, settingsError]);
 
   const publishedLanguageOptions = useMemo(() => {
     const raw = (effectiveSettings as any)?.languageTheme?.languages;
@@ -2355,6 +2365,11 @@ export default function UiPreviewV145() {
                 options={publishedLanguageOptions}
                 onChange={(nextCode: UiLangCode) => {
                   setLang(nextCode as any);
+                  const next = String(nextCode).toLowerCase();
+                  if (next === 'en' || next === 'hi' || next === 'gu') {
+                    const unprefixed = getUnprefixedPath(String(router.asPath || '/'));
+                    router.replace(unprefixed, undefined, { locale: next, shallow: false, scroll: false }).catch(() => {});
+                  }
                   setPrefs((p: any) => ({ ...p, lang: UI_LANG_LABEL[nextCode] }));
                 }}
               />

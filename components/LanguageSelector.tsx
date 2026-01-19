@@ -23,6 +23,23 @@ export const LanguageSelector: React.FC<{ compact?: boolean }> = ({ compact = fa
   const { settings } = usePublicSettings();
   const currentLocale = language || 'en';
 
+  const getUnprefixedPath = useCallback((asPath: string): string => {
+    const raw = String(asPath || '/');
+    const hashSplit = raw.split('#');
+    const beforeHash = hashSplit[0] || '/';
+    const hash = hashSplit.length > 1 ? `#${hashSplit.slice(1).join('#')}` : '';
+
+    const qSplit = beforeHash.split('?');
+    const pathPart = qSplit[0] || '/';
+    const query = qSplit.length > 1 ? `?${qSplit.slice(1).join('?')}` : '';
+
+    const p = pathPart.startsWith('/') ? pathPart : `/${pathPart}`;
+    const withoutPrefix = p.replace(/^\/(en|hi|gu)(?=\/|$)/i, '');
+    const rest = withoutPrefix.startsWith('/') ? withoutPrefix : `/${withoutPrefix}`;
+    const normalizedRest = rest === '/' ? '/' : rest;
+    return `${normalizedRest}${query}${hash}`;
+  }, []);
+
   const available = useMemo(() => {
     const raw = (settings as any)?.languageTheme?.languages;
     if (Array.isArray(raw) && raw.length) {
@@ -41,10 +58,11 @@ export const LanguageSelector: React.FC<{ compact?: boolean }> = ({ compact = fa
     if (!allowed.has(lng)) return;
     if (lng === 'en' || lng === 'hi' || lng === 'gu') {
       setLanguage(lng);
-      // Keep URL in sync for SEO/shareability.
-      router.push({ pathname: router.pathname, query: router.query }, undefined, { locale: lng }).catch(() => {});
+      // Route is source of truth.
+      const unprefixed = getUnprefixedPath(String(router.asPath || '/'));
+      router.replace(unprefixed, undefined, { locale: lng, shallow: false, scroll: false }).catch(() => {});
     }
-  }, [available, router, setLanguage]);
+  }, [available, getUnprefixedPath, router, setLanguage]);
 
   if (compact) {
     return (
