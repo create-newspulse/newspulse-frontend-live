@@ -49,7 +49,7 @@ export function usePublicBroadcastTicker(options: {
   pollMs?: number;
   enableSse?: boolean;
 }): PublicBroadcastTickerState {
-  const { lang, pollMs = 10_000, enableSse = true } = options;
+  const { lang, pollMs = 5_000, enableSse = true } = options;
 
   const [broadcast, setBroadcast] = useState<PublicBroadcast>(() =>
     normalizePublicBroadcast({

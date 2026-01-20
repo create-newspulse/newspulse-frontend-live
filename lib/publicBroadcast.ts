@@ -127,10 +127,18 @@ export function normalizePublicBroadcast(raw: unknown): PublicBroadcast {
     const liveEnabledRaw = isRecord(liveBundle) ? (liveBundle as any).enabled : undefined;
 
     const breakingDurationRaw = isRecord(breakingBundle)
-      ? (breakingBundle as any).durationSeconds ?? (breakingBundle as any).durationSec ?? (breakingBundle as any).speedSec ?? (breakingBundle as any).speedSeconds
+      ? (breakingBundle as any).durationSeconds ??
+        (breakingBundle as any).durationSec ??
+        (breakingBundle as any).tickerSpeedSeconds ??
+        (breakingBundle as any).speedSec ??
+        (breakingBundle as any).speedSeconds
       : undefined;
     const liveDurationRaw = isRecord(liveBundle)
-      ? (liveBundle as any).durationSeconds ?? (liveBundle as any).durationSec ?? (liveBundle as any).speedSec ?? (liveBundle as any).speedSeconds
+      ? (liveBundle as any).durationSeconds ??
+        (liveBundle as any).durationSec ??
+        (liveBundle as any).tickerSpeedSeconds ??
+        (liveBundle as any).speedSec ??
+        (liveBundle as any).speedSeconds
       : undefined;
 
     const breakingItemsRaw = isRecord(breakingBundle)
@@ -184,12 +192,18 @@ export function normalizePublicBroadcast(raw: unknown): PublicBroadcast {
     breaking: {
       enabled: Boolean(breakingSettingsRaw?.enabled ?? DEFAULT_BREAKING_SETTINGS.enabled),
       mode: normalizeMode(breakingSettingsRaw?.mode ?? DEFAULT_BREAKING_SETTINGS.mode),
-      speedSec: clampTickerSpeedSeconds(breakingSettingsRaw?.speedSec ?? breakingSettingsRaw?.speedSeconds, DEFAULT_BREAKING_SETTINGS.speedSec),
+      speedSec: clampTickerSpeedSeconds(
+        breakingSettingsRaw?.tickerSpeedSeconds ?? breakingSettingsRaw?.speedSec ?? breakingSettingsRaw?.speedSeconds,
+        DEFAULT_BREAKING_SETTINGS.speedSec
+      ),
     },
     live: {
       enabled: Boolean(liveSettingsRaw?.enabled ?? DEFAULT_LIVE_SETTINGS.enabled),
       mode: normalizeMode(liveSettingsRaw?.mode ?? DEFAULT_LIVE_SETTINGS.mode),
-      speedSec: clampTickerSpeedSeconds(liveSettingsRaw?.speedSec ?? liveSettingsRaw?.speedSeconds, DEFAULT_LIVE_SETTINGS.speedSec),
+      speedSec: clampTickerSpeedSeconds(
+        liveSettingsRaw?.tickerSpeedSeconds ?? liveSettingsRaw?.speedSec ?? liveSettingsRaw?.speedSeconds,
+        DEFAULT_LIVE_SETTINGS.speedSec
+      ),
     },
   };
 

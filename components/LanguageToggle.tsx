@@ -52,7 +52,10 @@ export default function LanguageToggle() {
     if (!options.includes(selected)) return;
     setLanguage(selected);
     const unprefixed = getUnprefixedPath(String(router.asPath || '/'));
-    router.replace(unprefixed, undefined, { locale: selected, shallow: false, scroll: false }).catch(() => {});
+    const nextAs = selected === 'en' ? unprefixed : `/${selected}${unprefixed === '/' ? '' : unprefixed}`;
+    router
+      .replace({ pathname: router.pathname, query: router.query }, nextAs, { locale: selected, shallow: false, scroll: false })
+      .catch(() => {});
   };
 
   return (

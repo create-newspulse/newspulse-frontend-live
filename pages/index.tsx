@@ -944,7 +944,11 @@ function TickerBar({ theme, kind, items, onViewAll, durationSec }: any) {
                   maskSize: "100% 100%",
                 }}
               >
-                <div className="np-tickerTrack" style={{ animationDuration: `${safeDurationSec}s` }}>
+                <div
+                  key={`${kind}-${safeDurationSec}`}
+                  className="np-tickerTrack"
+                  style={{ animationDuration: `${safeDurationSec}s` }}
+                >
                   <div className="np-tickerSeq whitespace-nowrap text-sm font-medium text-white">
                     <span className="tickerText pr-10" lang={tickerLang}>{text}</span>
                   </div>
@@ -1989,7 +1993,7 @@ export default function UiPreviewV145() {
     return (code === 'en' ? 'en' : code === 'hi' ? 'hi' : 'gu') as 'en' | 'hi' | 'gu';
   }, [lang]);
 
-  const broadcastTickers = usePublicBroadcastTicker({ lang: apiLang, pollMs: 10_000, enableSse: true });
+  const broadcastTickers = usePublicBroadcastTicker({ lang: apiLang, pollMs: 5_000, enableSse: true });
 
   const [activeCatKey, setActiveCatKey] = useState<string>("breaking");
   const [toast, setToast] = useState<string>("");
@@ -2370,7 +2374,14 @@ export default function UiPreviewV145() {
                   const next = String(nextCode).toLowerCase();
                   if (next === 'en' || next === 'hi' || next === 'gu') {
                     const unprefixed = getUnprefixedPath(String(router.asPath || '/'));
-                    router.replace(unprefixed, undefined, { locale: next, shallow: false, scroll: false }).catch(() => {});
+                    const nextAs = next === 'en' ? unprefixed : `/${next}${unprefixed === '/' ? '' : unprefixed}`;
+                    router
+                      .replace({ pathname: router.pathname, query: router.query }, nextAs, {
+                        locale: next,
+                        shallow: false,
+                        scroll: false,
+                      })
+                      .catch(() => {});
                   }
                   setPrefs((p: any) => ({ ...p, lang: UI_LANG_LABEL[nextCode] }));
                 }}

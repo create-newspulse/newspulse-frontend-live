@@ -99,7 +99,10 @@ export const LanguageDropdown: React.FC<{ compact?: boolean }> = ({ compact = fa
         setLanguage(lng);
         // Route is source of truth: switch Next locale (avoid double-prefix like /hi/gu).
         const unprefixed = getUnprefixedPath(String(router.asPath || '/'));
-        router.replace(unprefixed, undefined, { locale: lng, shallow: false, scroll: false }).catch(() => {});
+        const nextAs = lng === 'en' ? unprefixed : `/${lng}${unprefixed === '/' ? '' : unprefixed}`;
+        router
+          .replace({ pathname: router.pathname, query: router.query }, nextAs, { locale: lng, shallow: false, scroll: false })
+          .catch(() => {});
       }
     },
     [getUnprefixedPath, router, setLanguage]

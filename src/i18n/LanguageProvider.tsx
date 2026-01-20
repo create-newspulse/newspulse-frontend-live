@@ -124,9 +124,8 @@ export function LanguageProvider({
     // Persist preference for future visits (middleware / Next can use this).
     writeCookie(COOKIE_KEY, next);
     writeCookie(LEGACY_COOKIE_KEY, next);
-    // Avoid client-writing NEXT_LOCALE (can conflict with explicit locale routes).
-    // Middleware will keep NEXT_LOCALE aligned with the active route locale.
-    deleteCookie(NEXT_LOCALE_COOKIE);
+    // Keep Next.js locale cookie aligned so SSR + client match immediately.
+    writeCookie(NEXT_LOCALE_COOKIE, next);
   }, []);
 
   React.useEffect(() => {
