@@ -23,6 +23,35 @@ export function useLanguage(): LanguageContextType {
   const router = useRouter();
   const { lang, setLang } = useI18n();
 
+  const LOCALES = useMemo(() => ['hi', 'gu', 'en'] as const, []);
+
+  const stripLocale = useCallback(
+    (path: string): string => {
+      const p = String(path || '/').startsWith('/') ? String(path || '/') : `/${path}`;
+      return p.replace(/^\/(hi|gu|en)(?=\/|$)/i, '');
+    },
+    []
+  );
+
+  const buildPath = useCallback(
+    (locale: NewsPulseLanguage, currentAsPath: string): string => {
+      const raw = String(currentAsPath || '/');
+      const hashSplit = raw.split('#');
+      const beforeHash = hashSplit[0] || '/';
+      const hash = hashSplit.length > 1 ? `#${hashSplit.slice(1).join('#')}` : '';
+
+      const qSplit = beforeHash.split('?');
+      const pathPart = qSplit[0] || '/';
+      const query = qSplit.length > 1 ? `?${qSplit.slice(1).join('?')}` : '';
+
+      const clean = stripLocale(pathPart) || '/';
+      const normalized = clean === '' ? '/' : clean;
+      const out = locale === 'en' ? normalized : `/${locale}${normalized === '/' ? '' : normalized}`;
+      return `${out}${query}${hash}`;
+    },
+    [stripLocale]
+  );
+
   const routeLanguage = useMemo((): NewsPulseLanguage => {
     const asPath = String(router.asPath || '/');
     const pathOnly = (asPath.split('?')[0] || '/').toLowerCase();
@@ -34,26 +63,11 @@ export function useLanguage(): LanguageContextType {
     return (fromRouter === 'hi' || fromRouter === 'gu' ? fromRouter : 'en') as NewsPulseLanguage;
   }, [router.asPath, router.locale, router.defaultLocale]);
 
-  const getUnprefixedPath = useCallback((asPath: string): string => {
-    const raw = String(asPath || '/');
-    const hashSplit = raw.split('#');
-    const beforeHash = hashSplit[0] || '/';
-    const hash = hashSplit.length > 1 ? `#${hashSplit.slice(1).join('#')}` : '';
-
-    const qSplit = beforeHash.split('?');
-    const pathPart = qSplit[0] || '/';
-    const query = qSplit.length > 1 ? `?${qSplit.slice(1).join('?')}` : '';
-
-    const p = pathPart.startsWith('/') ? pathPart : `/${pathPart}`;
-    const withoutPrefix = p.replace(/^\/(en|hi|gu)(?=\/|$)/i, '');
-    const rest = withoutPrefix.startsWith('/') ? withoutPrefix : `/${withoutPrefix}`;
-    const normalizedRest = rest === '/' ? '/' : rest;
-    return `${normalizedRest}${query}${hash}`;
-  }, []);
-
   const setLanguage = useCallback(
     (next: NewsPulseLanguage) => {
       const target = normalizeLang(next) as NewsPulseLanguage;
+
+      if (!LOCALES.includes(target as any)) return;
 
       // Persist preference (must NOT affect SSR language selection).
       setLang(target as Lang, { persist: true });
@@ -61,18 +75,10 @@ export function useLanguage(): LanguageContextType {
       if (!router.isReady) return;
 
       // Route is the single source of truth.
-      const unprefixed = getUnprefixedPath(String(router.asPath || '/'));
-      const nextAs = target === 'en' ? unprefixed : `/${target}${unprefixed === '/' ? '' : unprefixed}`;
-
-      router
-        .push({ pathname: router.pathname, query: router.query }, nextAs, {
-          locale: target,
-          shallow: false,
-          scroll: false,
-        })
-        .catch(() => {});
+      const nextAs = buildPath(target, String(router.asPath || '/'));
+      router.replace(nextAs, nextAs, { locale: target, shallow: false, scroll: false }).catch(() => {});
     },
-    [getUnprefixedPath, router, setLang]
+    [LOCALES, buildPath, router, setLang]
   );
 
   return useMemo(

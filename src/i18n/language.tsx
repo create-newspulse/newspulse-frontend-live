@@ -76,6 +76,29 @@ export const LanguageDropdown: React.FC<{ compact?: boolean }> = ({ compact = fa
   const router = useRouter();
   const { setLanguage, t } = useLanguage();
 
+  const stripLocale = useCallback((path: string): string => {
+    return String(path || '/').replace(/^\/(hi|gu|en)(?=\/|$)/i, '');
+  }, []);
+
+  const buildPath = useCallback(
+    (locale: Lang, currentAsPath: string): string => {
+      const raw = String(currentAsPath || '/');
+      const hashSplit = raw.split('#');
+      const beforeHash = hashSplit[0] || '/';
+      const hash = hashSplit.length > 1 ? `#${hashSplit.slice(1).join('#')}` : '';
+
+      const qSplit = beforeHash.split('?');
+      const pathPart = qSplit[0] || '/';
+      const query = qSplit.length > 1 ? `?${qSplit.slice(1).join('?')}` : '';
+
+      const clean = stripLocale(pathPart) || '/';
+      const normalized = clean === '' ? '/' : clean;
+      const out = locale === 'en' ? normalized : `/${locale}${normalized === '/' ? '' : normalized}`;
+      return `${out}${query}${hash}`;
+    },
+    [stripLocale]
+  );
+
   const currentLocale = useMemo(() => {
     const asPath = String(router.asPath || '/');
     const pathOnly = (asPath.split('?')[0] || '/').toLowerCase();
@@ -86,38 +109,17 @@ export const LanguageDropdown: React.FC<{ compact?: boolean }> = ({ compact = fa
     return (fromRouter === 'hi' || fromRouter === 'gu' ? fromRouter : 'en') as Lang;
   }, [router.asPath, router.locale, router.defaultLocale]);
 
-  const getUnprefixedPath = useCallback((asPath: string): string => {
-    const raw = String(asPath || '/');
-    const hashSplit = raw.split('#');
-    const beforeHash = hashSplit[0] || '/';
-    const hash = hashSplit.length > 1 ? `#${hashSplit.slice(1).join('#')}` : '';
-
-    const qSplit = beforeHash.split('?');
-    const pathPart = qSplit[0] || '/';
-    const query = qSplit.length > 1 ? `?${qSplit.slice(1).join('?')}` : '';
-
-    const p = pathPart.startsWith('/') ? pathPart : `/${pathPart}`;
-    const withoutPrefix = p.replace(/^\/(en|hi|gu)(?=\/|$)/i, '');
-    const rest = withoutPrefix.startsWith('/') ? withoutPrefix : `/${withoutPrefix}`;
-    const normalizedRest = rest === '/' ? '/' : rest;
-
-    return `${normalizedRest}${query}${hash}`;
-  }, []);
-
   const change = useCallback(
     (lng: string) => {
       if (lng === 'en' || lng === 'hi' || lng === 'gu') {
         // Persist preference for future visits.
         setLanguage(lng);
-        // Route is source of truth: switch Next locale (avoid double-prefix like /hi/gu).
-        const unprefixed = getUnprefixedPath(String(router.asPath || '/'));
-        const nextAs = lng === 'en' ? unprefixed : `/${lng}${unprefixed === '/' ? '' : unprefixed}`;
-        router
-          .push({ pathname: router.pathname, query: router.query }, nextAs, { locale: lng, shallow: false, scroll: false })
-          .catch(() => {});
+        // URL is the source of truth.
+        const nextAs = buildPath(lng, String(router.asPath || '/'));
+        router.replace(nextAs, nextAs, { locale: lng, shallow: false, scroll: false }).catch(() => {});
       }
     },
-    [getUnprefixedPath, router, setLanguage]
+    [buildPath, router, setLanguage]
   );
 
   if (compact) {

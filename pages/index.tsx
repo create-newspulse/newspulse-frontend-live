@@ -2387,15 +2387,22 @@ export default function UiPreviewV145() {
                   if (next === 'en' || next === 'hi' || next === 'gu') {
                     // Persist preference, but route locale remains the single source of truth.
                     setLang(next as any, { persist: true });
-                    const unprefixed = getUnprefixedPath(String(router.asPath || '/'));
-                    const nextAs = next === 'en' ? unprefixed : `/${next}${unprefixed === '/' ? '' : unprefixed}`;
-                    router
-                      .push({ pathname: router.pathname, query: router.query }, nextAs, {
-                        locale: next,
-                        shallow: false,
-                        scroll: false,
-                      })
-                      .catch(() => {});
+
+                    const raw = String(router.asPath || '/');
+                    const hashSplit = raw.split('#');
+                    const beforeHash = hashSplit[0] || '/';
+                    const hash = hashSplit.length > 1 ? `#${hashSplit.slice(1).join('#')}` : '';
+
+                    const qSplit = beforeHash.split('?');
+                    const pathPart = qSplit[0] || '/';
+                    const query = qSplit.length > 1 ? `?${qSplit.slice(1).join('?')}` : '';
+
+                    const stripped = String(pathPart || '/').replace(/^\/(hi|gu|en)(?=\/|$)/i, '') || '/';
+                    const normalized = stripped === '' ? '/' : stripped;
+                    const nextAs = next === 'en' ? normalized : `/${next}${normalized === '/' ? '' : normalized}`;
+                    const out = `${nextAs}${query}${hash}`;
+
+                    router.replace(out, out, { locale: next, shallow: false, scroll: false }).catch(() => {});
                   }
                   setPrefs((p: any) => ({ ...p, lang: UI_LANG_LABEL[nextCode] }));
                 }}
