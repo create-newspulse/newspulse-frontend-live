@@ -1,5 +1,4 @@
 import React, { useCallback, useMemo } from 'react';
-import { useRouter } from 'next/router';
 import { useLanguage } from '../utils/LanguageContext';
 import { useI18n } from '../src/i18n/LanguageProvider';
 import { usePublicSettings } from '../src/context/PublicSettingsContext';
@@ -17,28 +16,10 @@ function normalizeLangCode(raw: unknown): 'en' | 'hi' | 'gu' | null {
 }
 
 export const LanguageSelector: React.FC<{ compact?: boolean }> = ({ compact = false }) => {
-  const router = useRouter();
   const { language, setLanguage } = useLanguage();
   const { t } = useI18n();
   const { settings } = usePublicSettings();
   const currentLocale = language || 'en';
-
-  const getUnprefixedPath = useCallback((asPath: string): string => {
-    const raw = String(asPath || '/');
-    const hashSplit = raw.split('#');
-    const beforeHash = hashSplit[0] || '/';
-    const hash = hashSplit.length > 1 ? `#${hashSplit.slice(1).join('#')}` : '';
-
-    const qSplit = beforeHash.split('?');
-    const pathPart = qSplit[0] || '/';
-    const query = qSplit.length > 1 ? `?${qSplit.slice(1).join('?')}` : '';
-
-    const p = pathPart.startsWith('/') ? pathPart : `/${pathPart}`;
-    const withoutPrefix = p.replace(/^\/(en|hi|gu)(?=\/|$)/i, '');
-    const rest = withoutPrefix.startsWith('/') ? withoutPrefix : `/${withoutPrefix}`;
-    const normalizedRest = rest === '/' ? '/' : rest;
-    return `${normalizedRest}${query}${hash}`;
-  }, []);
 
   const available = useMemo(() => {
     const raw = (settings as any)?.languageTheme?.languages;
@@ -57,15 +38,10 @@ export const LanguageSelector: React.FC<{ compact?: boolean }> = ({ compact = fa
     const allowed = new Set(available.map((x) => x.code));
     if (!allowed.has(lng)) return;
     if (lng === 'en' || lng === 'hi' || lng === 'gu') {
+      // URL/route is source of truth; useLanguage().setLanguage performs navigation + persistence.
       setLanguage(lng);
-      // Route is source of truth.
-      const unprefixed = getUnprefixedPath(String(router.asPath || '/'));
-      const nextAs = lng === 'en' ? unprefixed : `/${lng}${unprefixed === '/' ? '' : unprefixed}`;
-      router
-        .replace({ pathname: router.pathname, query: router.query }, nextAs, { locale: lng, shallow: false, scroll: false })
-        .catch(() => {});
     }
-  }, [available, getUnprefixedPath, router, setLanguage]);
+  }, [available, setLanguage]);
 
   if (compact) {
     return (

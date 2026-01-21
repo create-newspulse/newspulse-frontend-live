@@ -1,5 +1,4 @@
 import React from 'react';
-import { useRouter } from 'next/router';
 
 import { useLanguage } from '../utils/LanguageContext';
 import { useI18n } from '../src/i18n/LanguageProvider';
@@ -12,27 +11,9 @@ function normalizeLangCode(raw: unknown): 'en' | 'hi' | 'gu' | null {
 }
 
 export default function LanguageToggle() {
-  const router = useRouter();
   const { language, setLanguage } = useLanguage();
   const { t } = useI18n();
   const { settings } = usePublicSettings();
-
-  const getUnprefixedPath = React.useCallback((asPath: string): string => {
-    const raw = String(asPath || '/');
-    const hashSplit = raw.split('#');
-    const beforeHash = hashSplit[0] || '/';
-    const hash = hashSplit.length > 1 ? `#${hashSplit.slice(1).join('#')}` : '';
-
-    const qSplit = beforeHash.split('?');
-    const pathPart = qSplit[0] || '/';
-    const query = qSplit.length > 1 ? `?${qSplit.slice(1).join('?')}` : '';
-
-    const p = pathPart.startsWith('/') ? pathPart : `/${pathPart}`;
-    const withoutPrefix = p.replace(/^\/(en|hi|gu)(?=\/|$)/i, '');
-    const rest = withoutPrefix.startsWith('/') ? withoutPrefix : `/${withoutPrefix}`;
-    const normalizedRest = rest === '/' ? '/' : rest;
-    return `${normalizedRest}${query}${hash}`;
-  }, []);
 
   const options = React.useMemo(() => {
     const raw = (settings as any)?.languageTheme?.languages;
@@ -50,12 +31,8 @@ export default function LanguageToggle() {
   const handleChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selected = e.target.value as 'en' | 'hi' | 'gu';
     if (!options.includes(selected)) return;
+    // URL/route is source of truth; useLanguage().setLanguage performs navigation + persistence.
     setLanguage(selected);
-    const unprefixed = getUnprefixedPath(String(router.asPath || '/'));
-    const nextAs = selected === 'en' ? unprefixed : `/${selected}${unprefixed === '/' ? '' : unprefixed}`;
-    router
-      .replace({ pathname: router.pathname, query: router.query }, nextAs, { locale: selected, shallow: false, scroll: false })
-      .catch(() => {});
   };
 
   return (

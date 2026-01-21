@@ -35,7 +35,19 @@ export function translate(lang: Lang, key: string): string {
 }
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  return <BaseLanguageProvider>{children}</BaseLanguageProvider>;
+  const router = useRouter();
+
+  const initialLang = useMemo(() => {
+    const asPath = String(router.asPath || '/');
+    const pathOnly = (asPath.split('?')[0] || '/').toLowerCase();
+    if (pathOnly === '/hi' || pathOnly.startsWith('/hi/')) return 'hi' as Lang;
+    if (pathOnly === '/gu' || pathOnly.startsWith('/gu/')) return 'gu' as Lang;
+    if (pathOnly === '/en' || pathOnly.startsWith('/en/')) return 'en' as Lang;
+    const fromRouter = String(router.locale || router.defaultLocale || 'en').toLowerCase();
+    return (fromRouter === 'hi' || fromRouter === 'gu' ? fromRouter : 'en') as Lang;
+  }, [router.asPath, router.locale, router.defaultLocale]);
+
+  return <BaseLanguageProvider initialLang={initialLang}>{children}</BaseLanguageProvider>;
 }
 
 export function useLanguage(): {
@@ -101,7 +113,7 @@ export const LanguageDropdown: React.FC<{ compact?: boolean }> = ({ compact = fa
         const unprefixed = getUnprefixedPath(String(router.asPath || '/'));
         const nextAs = lng === 'en' ? unprefixed : `/${lng}${unprefixed === '/' ? '' : unprefixed}`;
         router
-          .replace({ pathname: router.pathname, query: router.query }, nextAs, { locale: lng, shallow: false, scroll: false })
+          .push({ pathname: router.pathname, query: router.query }, nextAs, { locale: lng, shallow: false, scroll: false })
           .catch(() => {});
       }
     },

@@ -510,7 +510,12 @@ function articleToFeedItem(a: Article, requestedLang: 'en' | 'hi' | 'gu') {
   let time = '';
   if (iso) {
     try {
-      time = new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      // Hydration-safe: use a fixed timezone so SSR and client match.
+      time = new Intl.DateTimeFormat('en-IN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'Asia/Kolkata',
+      }).format(new Date(iso));
     } catch {
       time = '';
     }
@@ -914,6 +919,14 @@ function TickerBar({ theme, kind, items, onViewAll, durationSec }: any) {
 
   const text = (safeItems?.length ? safeItems : [""]).join("  •  ");
 
+  // Force restart of marquee when duration/lang/items change (some browsers won't re-time an in-flight animation).
+  const restartKey = (() => {
+    const s = `${kind}|${tickerLang}|${safeDurationSec}|${text}`;
+    let h = 5381;
+    for (let i = 0; i < s.length; i += 1) h = (h * 33) ^ s.charCodeAt(i);
+    return `${kind}-${tickerLang}-${safeDurationSec}-${(h >>> 0).toString(16)}`;
+  })();
+
   const bg =
     kind === "breaking"
       ? `linear-gradient(90deg, ${theme.breaking} 0%, ${theme.live} 55%, ${theme.breaking} 100%)`
@@ -945,7 +958,7 @@ function TickerBar({ theme, kind, items, onViewAll, durationSec }: any) {
                 }}
               >
                 <div
-                  key={`${kind}-${safeDurationSec}`}
+                  key={restartKey}
                   className="np-tickerTrack"
                   style={{ animationDuration: `${safeDurationSec}s` }}
                 >
@@ -1993,7 +2006,7 @@ export default function UiPreviewV145() {
     return (code === 'en' ? 'en' : code === 'hi' ? 'hi' : 'gu') as 'en' | 'hi' | 'gu';
   }, [lang]);
 
-  const broadcastTickers = usePublicBroadcastTicker({ lang: apiLang, pollMs: 5_000, enableSse: true });
+  const broadcastTickers = usePublicBroadcastTicker({ lang: apiLang, pollMs: 10_000, enableSse: true });
 
   const [activeCatKey, setActiveCatKey] = useState<string>("breaking");
   const [toast, setToast] = useState<string>("");
@@ -2370,13 +2383,14 @@ export default function UiPreviewV145() {
                 value={toUiLangCode(lang)}
                 options={publishedLanguageOptions}
                 onChange={(nextCode: UiLangCode) => {
-                  setLang(nextCode as any);
                   const next = String(nextCode).toLowerCase();
                   if (next === 'en' || next === 'hi' || next === 'gu') {
+                    // Persist preference, but route locale remains the single source of truth.
+                    setLang(next as any, { persist: true });
                     const unprefixed = getUnprefixedPath(String(router.asPath || '/'));
                     const nextAs = next === 'en' ? unprefixed : `/${next}${unprefixed === '/' ? '' : unprefixed}`;
                     router
-                      .replace({ pathname: router.pathname, query: router.query }, nextAs, {
+                      .push({ pathname: router.pathname, query: router.query }, nextAs, {
                         locale: next,
                         shallow: false,
                         scroll: false,
