@@ -82,16 +82,15 @@ function RouteLanguageSync() {
   React.useEffect(() => {
     if (!router.isReady) return;
 
-    const asPath = String(router.asPath || '');
-    const pathOnly = (asPath.split('?')[0] || '/').toLowerCase();
+    const routeLocale = normalizeLang(router.locale || router.defaultLocale || 'en');
 
-    // URL prefix is the single source of truth.
-    // Unprefixed routes are English by contract.
-    const routeLocale = (pathOnly === '/hi' || pathOnly.startsWith('/hi/'))
-      ? 'hi'
-      : (pathOnly === '/gu' || pathOnly.startsWith('/gu/'))
-        ? 'gu'
-        : 'en';
+    const asPath = String(router.asPath || '');
+    const pathOnly = asPath.split('?')[0] || '/';
+    const hasExplicitLocalePrefix =
+      pathOnly === '/hi' ||
+      pathOnly.startsWith('/hi/') ||
+      pathOnly === '/gu' ||
+      pathOnly.startsWith('/gu/');
 
     const rawQueryLang = (router.query?.lang ?? '') as string | string[];
     const queryLangValue = Array.isArray(rawQueryLang) ? rawQueryLang[0] : rawQueryLang;
@@ -106,32 +105,9 @@ function RouteLanguageSync() {
       // Persist preference; route remains the source of truth.
       setLang(queryLang, { persist: true });
 
-      // Build the same URL but with a locale prefix (or none for English).
-      const hashSplit = asPath.split('#');
-      const beforeHash = hashSplit[0] || '/';
-      const hash = hashSplit.length > 1 ? `#${hashSplit.slice(1).join('#')}` : '';
-      const qSplit = beforeHash.split('?');
-      const rawPath = qSplit[0] || '/';
-      const currentQuery = qSplit.length > 1 ? `?${qSplit.slice(1).join('?')}` : '';
-
-      const stripped = String(rawPath || '/').replace(/^\/(hi|gu|en)(?=\/|$)/i, '') || '/';
-      const normalized = stripped === '' ? '/' : stripped;
-      const nextPath = queryLang === 'en' ? normalized : `/${queryLang}${normalized === '/' ? '' : normalized}`;
-
-      // Preserve existing query string except the consumed ?lang=.
-      // If router.query contained only `lang`, this ends up as the same query as currentQuery without lang.
-      const qs = (() => {
-        try {
-          const params = new URLSearchParams(currentQuery.startsWith('?') ? currentQuery.slice(1) : currentQuery);
-          params.delete('lang');
-          const s = params.toString();
-          return s ? `?${s}` : '';
-        } catch {
-          return '';
-        }
-      })();
-
-      router.replace(`${nextPath}${qs}${hash}`, undefined, { locale: queryLang, shallow: false, scroll: false }).catch(() => {});
+      const nextQuery = { ...router.query } as Record<string, any>;
+      delete nextQuery.lang;
+      router.replace({ pathname: router.pathname, query: nextQuery }, undefined, { shallow: false, locale: queryLang }).catch(() => {});
       return;
     }
 
@@ -140,13 +116,9 @@ function RouteLanguageSync() {
       const key = `r:${routeLocale}|${router.asPath}`;
       if (lastAppliedRef.current === key) return;
       lastAppliedRef.current = key;
-      setLang(routeLocale, { persist: true });
-      return;
     }
-
-    // Ensure the cookie/storage stays aligned even when lang doesn't change.
     setLang(routeLocale, { persist: true });
-  }, [router.isReady, router.asPath, router.query, lang, setLang]);
+  }, [router.isReady, router.asPath, router.locale, router.defaultLocale, router.pathname, router.query, lang, setLang]);
 
   return null;
 }
@@ -169,17 +141,13 @@ function MyApp({ Component, pageProps }) {
   const router = useRouter();
 
   const routeLang = React.useMemo(() => {
-    // Contract:
-    // - English => /
-    // - Hindi   => /hi
-    // - Gujarati=> /gu
-    // So URL prefix is the source of truth; unprefixed is always English.
     const asPath = String(router.asPath || '/');
     const pathOnly = (asPath.split('?')[0] || '/').toLowerCase();
     if (pathOnly === '/hi' || pathOnly.startsWith('/hi/')) return 'hi';
     if (pathOnly === '/gu' || pathOnly.startsWith('/gu/')) return 'gu';
-    return 'en';
-  }, [router.asPath]);
+    if (pathOnly === '/en' || pathOnly.startsWith('/en/')) return 'en';
+    return normalizeLang(router.locale || router.defaultLocale || 'en');
+  }, [router.asPath, router.locale, router.defaultLocale]);
 
   React.useEffect(() => {
     const handleRouteChange = (url: string) => {

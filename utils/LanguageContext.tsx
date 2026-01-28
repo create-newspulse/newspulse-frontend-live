@@ -21,7 +21,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
 
 export function useLanguage(): LanguageContextType {
   const router = useRouter();
-  const { setLang } = useI18n();
+  const { lang, setLang } = useI18n();
 
   const LOCALES = useMemo(() => ['hi', 'gu', 'en'] as const, []);
 
@@ -53,14 +53,15 @@ export function useLanguage(): LanguageContextType {
   );
 
   const routeLanguage = useMemo((): NewsPulseLanguage => {
-    // IMPORTANT: path prefix is the single source of truth.
-    // Unprefixed routes are English by contract.
     const asPath = String(router.asPath || '/');
     const pathOnly = (asPath.split('?')[0] || '/').toLowerCase();
     if (pathOnly === '/hi' || pathOnly.startsWith('/hi/')) return 'hi';
     if (pathOnly === '/gu' || pathOnly.startsWith('/gu/')) return 'gu';
-    return 'en';
-  }, [router.asPath]);
+    if (pathOnly === '/en' || pathOnly.startsWith('/en/')) return 'en';
+
+    const fromRouter = normalizeLang(router.locale || router.defaultLocale || 'en');
+    return (fromRouter === 'hi' || fromRouter === 'gu' ? fromRouter : 'en') as NewsPulseLanguage;
+  }, [router.asPath, router.locale, router.defaultLocale]);
 
   const setLanguage = useCallback(
     (next: NewsPulseLanguage) => {
@@ -75,9 +76,6 @@ export function useLanguage(): LanguageContextType {
 
       // Route is the single source of truth.
       const nextAs = buildPath(target, String(router.asPath || '/'));
-      // IMPORTANT: also set Next's locale so it matches the URL prefix.
-      // Otherwise Next may keep the previous locale (e.g. 'hi') while navigating to '/gu',
-      // causing locale/data mismatches and even 404s in dev.
       router.replace(nextAs, nextAs, { locale: target, shallow: false, scroll: false }).catch(() => {});
     },
     [LOCALES, buildPath, router, setLang]
