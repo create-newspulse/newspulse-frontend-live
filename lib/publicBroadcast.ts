@@ -89,23 +89,45 @@ function normalizeLang(raw: unknown): BroadcastLang | null {
 
 function pickFirstNonEmpty(candidates: unknown[]): string | null {
   for (const c of candidates) {
-    const s = String(c ?? '').trim();
+    if (typeof c !== 'string') continue;
+    const s = c.trim();
     if (s) return s;
   }
   return null;
 }
 
 function getTranslationsRecord(item: any): Record<string, string> | null {
-  const rec =
-    (item && typeof item === 'object' && (item.texts || item.translations || item.i18n || item.textByLang || item.byLang)) ||
-    null;
-  const r = rec && typeof rec === 'object' ? (rec as Record<string, any>) : null;
-  if (!r) return null;
+  if (!item || typeof item !== 'object') return null;
+
   const out: Record<string, string> = {};
-  for (const k of Object.keys(r)) {
-    const v = String((r as any)[k] ?? '').trim();
-    if (v) out[String(k).toLowerCase().trim()] = v;
+
+  const add = (k: unknown, v: unknown) => {
+    const key = String(k || '').toLowerCase().trim();
+    if (!key) return;
+    if (key !== 'en' && key !== 'hi' && key !== 'gu') return;
+    if (typeof v !== 'string') return;
+    const s = v.trim();
+    if (!s) return;
+    out[key] = s;
+  };
+
+  // Common translation map shapes.
+  const mapCandidate = (item as any).texts || (item as any).translations || (item as any).i18n || (item as any).textByLang || (item as any).byLang;
+  if (mapCandidate && typeof mapCandidate === 'object') {
+    for (const k of Object.keys(mapCandidate)) add(k, (mapCandidate as any)[k]);
   }
+
+  // Some backends return `text: { en, hi, gu }`.
+  const textObj = (item as any).text;
+  if (textObj && typeof textObj === 'object' && !Array.isArray(textObj)) {
+    for (const k of Object.keys(textObj)) add(k, (textObj as any)[k]);
+  }
+
+  // Some backends return flat per-language fields.
+  add('en', (item as any).textEn ?? (item as any).textEN ?? (item as any).englishText);
+  add('hi', (item as any).textHi ?? (item as any).textHI ?? (item as any).hindiText);
+  add('gu', (item as any).textGu ?? (item as any).textGU ?? (item as any).gujaratiText);
+
   return Object.keys(out).length ? out : null;
 }
 
@@ -258,7 +280,11 @@ export function itemToTickerText(item: unknown, opts?: { lang?: BroadcastLang })
     if (s) return s;
   }
 
-  const direct = pickFirstNonEmpty([it?.text, it?.title, it?.headline]);
+  const direct = pickFirstNonEmpty([
+    typeof it?.text === 'string' ? it.text : null,
+    typeof it?.title === 'string' ? it.title : null,
+    typeof it?.headline === 'string' ? it.headline : null,
+  ]);
   if (direct) return direct;
 
   if (rec) {
@@ -301,6 +327,10 @@ export async function fetchPublicBroadcast(options?: { signal?: AbortSignal; lan
   // - Items: GET /public/broadcast/items?type=breaking&lang=xx and ...type=live&lang=xx
   // - No caching
   // - durationSec used directly as animation duration seconds (clamped).
+
+  // Preferred contract (current production):
+  // - GET /public-api/broadcast?lang=xx
+  //   (Next rewrites /public-api/* to backend /admin-api/public/*)
 
   if (!isBrowser && !origin) {
     return normalizePublicBroadcast({
@@ -349,6 +379,21 @@ export async function fetchPublicBroadcast(options?: { signal?: AbortSignal; lan
       return null;
     }
   };
+
+  // Preferred: single endpoint which returns translated items per lang.
+  const broadcastEndpoint = (() => {
+    const qs = lang ? `?lang=${encodeURIComponent(lang)}` : '';
+    if (isBrowser) return `/public-api/broadcast${qs}`;
+    if (!origin) return null;
+    return `${origin}/admin-api/public/broadcast${qs}`;
+  })();
+
+  if (broadcastEndpoint) {
+    const broadcastJson = await fetchNoStore(broadcastEndpoint);
+    if (broadcastJson) {
+      return normalizePublicBroadcast(broadcastJson);
+    }
+  }
 
   const configEndpoint = isBrowser ? '/public/broadcast/config' : `${origin}/api/public/broadcast/config`;
   const itemsBase = isBrowser ? '/public/broadcast/items' : `${origin}/api/public/broadcast/items`;
