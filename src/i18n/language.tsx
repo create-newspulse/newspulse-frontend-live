@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router';
+import { buildPathWithLocale, getLocaleFromPathname, splitAsPath } from '../../utils/localeRouting';
 
 import en from './en.json';
 import hi from './hi.json';
@@ -38,14 +39,9 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   const initialLang = useMemo(() => {
-    const asPath = String(router.asPath || '/');
-    const pathOnly = (asPath.split('?')[0] || '/').toLowerCase();
-    if (pathOnly === '/hi' || pathOnly.startsWith('/hi/')) return 'hi' as Lang;
-    if (pathOnly === '/gu' || pathOnly.startsWith('/gu/')) return 'gu' as Lang;
-    if (pathOnly === '/en' || pathOnly.startsWith('/en/')) return 'en' as Lang;
-    const fromRouter = String(router.locale || router.defaultLocale || 'en').toLowerCase();
-    return (fromRouter === 'hi' || fromRouter === 'gu' ? fromRouter : 'en') as Lang;
-  }, [router.asPath, router.locale, router.defaultLocale]);
+    const { pathname } = splitAsPath(String(router.asPath || '/'));
+    return (getLocaleFromPathname(pathname) || 'en') as Lang;
+  }, [router.asPath]);
 
   return <BaseLanguageProvider initialLang={initialLang}>{children}</BaseLanguageProvider>;
 }
@@ -76,50 +72,23 @@ export const LanguageDropdown: React.FC<{ compact?: boolean }> = ({ compact = fa
   const router = useRouter();
   const { setLanguage, t } = useLanguage();
 
-  const stripLocale = useCallback((path: string): string => {
-    return String(path || '/').replace(/^\/(hi|gu|en)(?=\/|$)/i, '');
-  }, []);
-
-  const buildPath = useCallback(
-    (locale: Lang, currentAsPath: string): string => {
-      const raw = String(currentAsPath || '/');
-      const hashSplit = raw.split('#');
-      const beforeHash = hashSplit[0] || '/';
-      const hash = hashSplit.length > 1 ? `#${hashSplit.slice(1).join('#')}` : '';
-
-      const qSplit = beforeHash.split('?');
-      const pathPart = qSplit[0] || '/';
-      const query = qSplit.length > 1 ? `?${qSplit.slice(1).join('?')}` : '';
-
-      const clean = stripLocale(pathPart) || '/';
-      const normalized = clean === '' ? '/' : clean;
-      const out = locale === 'en' ? normalized : `/${locale}${normalized === '/' ? '' : normalized}`;
-      return `${out}${query}${hash}`;
-    },
-    [stripLocale]
-  );
-
   const currentLocale = useMemo(() => {
-    const asPath = String(router.asPath || '/');
-    const pathOnly = (asPath.split('?')[0] || '/').toLowerCase();
-    if (pathOnly === '/hi' || pathOnly.startsWith('/hi/')) return 'hi' as Lang;
-    if (pathOnly === '/gu' || pathOnly.startsWith('/gu/')) return 'gu' as Lang;
-    if (pathOnly === '/en' || pathOnly.startsWith('/en/')) return 'en' as Lang;
-    const fromRouter = String(router.locale || router.defaultLocale || 'en').toLowerCase();
-    return (fromRouter === 'hi' || fromRouter === 'gu' ? fromRouter : 'en') as Lang;
-  }, [router.asPath, router.locale, router.defaultLocale]);
+    const { pathname } = splitAsPath(String(router.asPath || '/'));
+    return (getLocaleFromPathname(pathname) || 'en') as Lang;
+  }, [router.asPath]);
 
   const change = useCallback(
     (lng: string) => {
       if (lng === 'en' || lng === 'hi' || lng === 'gu') {
         // Persist preference for future visits.
         setLanguage(lng);
-        // URL is the source of truth.
-        const nextAs = buildPath(lng, String(router.asPath || '/'));
-        router.replace(nextAs, nextAs, { locale: lng, shallow: false, scroll: false }).catch(() => {});
+        // URL is the source of truth: /hi|/gu prefix (English is unprefixed) + rest of current path (keep query/hash)
+        const { pathname, search, hash } = splitAsPath(String(router.asPath || '/'));
+        const nextAs = buildPathWithLocale(lng, pathname, search, hash);
+        router.replace(nextAs, undefined, { shallow: false, scroll: false }).catch(() => {});
       }
     },
-    [buildPath, router, setLanguage]
+    [router, setLanguage]
   );
 
   if (compact) {

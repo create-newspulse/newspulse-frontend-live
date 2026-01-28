@@ -107,6 +107,8 @@ export default function BreakingTicker({
     ? headlines.map(h => h?.text).filter(Boolean)
     : []).join('  •  ');
 
+  const restartKey = `breaking-${language}-${durationSec}`;
+
   return (
     <div className={`bg-royal-blue text-white py-2 ${fontClass} ${className}`}>
       <div className="flex items-center gap-3 px-3">
@@ -128,7 +130,7 @@ export default function BreakingTicker({
           className="relative min-w-0 flex-1 overflow-hidden"
           style={{ WebkitMaskImage: 'linear-gradient(to right, black 0%, black 90%, transparent)', maskImage: 'linear-gradient(to right, black 0%, black 90%, transparent)' }}
         >
-          <div className="whitespace-nowrap tickerText animate-marquee" style={{ animationDuration: `${durationSec}s` }}>
+          <div key={restartKey} className="whitespace-nowrap tickerText animate-marquee" style={{ animationDuration: `${durationSec}s` }}>
             <span className="pr-10">{marqueeText}</span>
             <span className="pr-10">{marqueeText}</span>
           </div>

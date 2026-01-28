@@ -13,6 +13,7 @@ import SafeIntlProvider from '../lib/SafeIntlProvider';
 import { usePublicSettings } from '../src/context/PublicSettingsContext';
 import { useTheme, type ThemeMode } from '../utils/ThemeContext';
 import SeoAlternates from '../components/SeoAlternates';
+import { buildPathWithLocale, getLocaleFromPathname, splitAsPath, type NewsPulseLocale } from '../utils/localeRouting';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -82,19 +83,50 @@ function RouteLanguageSync() {
   React.useEffect(() => {
     if (!router.isReady) return;
 
-    const routeLocale = normalizeLang(router.locale || router.defaultLocale || 'en');
-
-    const asPath = String(router.asPath || '');
-    const pathOnly = asPath.split('?')[0] || '/';
-    const hasExplicitLocalePrefix =
-      pathOnly === '/hi' ||
-      pathOnly.startsWith('/hi/') ||
-      pathOnly === '/gu' ||
-      pathOnly.startsWith('/gu/');
+    const { pathname, search, hash } = splitAsPath(String(router.asPath || '/'));
+    const localeFromPath = getLocaleFromPathname(pathname);
+    const routeLocale = (localeFromPath || 'en') as NewsPulseLocale;
 
     const rawQueryLang = (router.query?.lang ?? '') as string | string[];
     const queryLangValue = Array.isArray(rawQueryLang) ? rawQueryLang[0] : rawQueryLang;
     const queryLang = queryLangValue ? normalizeLang(queryLangValue) : null;
+
+    // 0) Unprefixed routes are valid and represent English.
+    // If the user has a saved preference of hi/gu and navigates to an unprefixed route
+    // (usually via an unlocalized link), normalize client-side by prefixing.
+    // IMPORTANT: read cookie (which is updated by the language switcher) to avoid
+    // redirecting back to the old locale and causing a “stuck /hi or /gu” URL.
+    if (!localeFromPath) {
+      const cookiePref = (() => {
+        if (typeof document === 'undefined') return null;
+        try {
+          const raw = document.cookie || '';
+          const parts = raw.split(';').map((p) => p.trim());
+          const find = (name: string): string | null => {
+            const prefix = `${name}=`;
+            const hit = parts.find((p) => p.startsWith(prefix));
+            if (!hit) return null;
+            const v = hit.slice(prefix.length);
+            return decodeURIComponent(v || '');
+          };
+          const v = find('np_locale') || find('np_lang') || find('NEXT_LOCALE');
+          const n = v ? normalizeLang(v) : null;
+          return n === 'hi' || n === 'gu' ? (n as NewsPulseLocale) : null;
+        } catch {
+          return null;
+        }
+      })();
+
+      if (cookiePref) {
+        const key = `p:${cookiePref}|${router.asPath}`;
+        if (lastAppliedRef.current === key) return;
+        lastAppliedRef.current = key;
+
+        const nextAs = buildPathWithLocale(cookiePref, pathname, search, hash);
+        router.replace(nextAs, undefined, { shallow: false, scroll: false }).catch(() => {});
+        return;
+      }
+    }
 
     // 1) Shared links: normalize ?lang= to real locale routes.
     if (queryLang) {
@@ -105,9 +137,22 @@ function RouteLanguageSync() {
       // Persist preference; route remains the source of truth.
       setLang(queryLang, { persist: true });
 
+      // Normalize to /<locale>/<rest> while preserving other query params.
       const nextQuery = { ...router.query } as Record<string, any>;
       delete nextQuery.lang;
-      router.replace({ pathname: router.pathname, query: nextQuery }, undefined, { shallow: false, locale: queryLang }).catch(() => {});
+      const { pathname: currentPathname, hash } = splitAsPath(String(router.asPath || '/'));
+      const search = (() => {
+        const sp = new URLSearchParams();
+        for (const [k, v] of Object.entries(nextQuery)) {
+          if (v === undefined || v === null) continue;
+          if (Array.isArray(v)) v.forEach((x) => sp.append(k, String(x)));
+          else sp.set(k, String(v));
+        }
+        const s = sp.toString();
+        return s ? `?${s}` : '';
+      })();
+      const nextAs = buildPathWithLocale(queryLang as NewsPulseLocale, currentPathname, search, hash);
+      router.replace(nextAs, undefined, { shallow: false, scroll: false }).catch(() => {});
       return;
     }
 
@@ -118,7 +163,7 @@ function RouteLanguageSync() {
       lastAppliedRef.current = key;
     }
     setLang(routeLocale, { persist: true });
-  }, [router.isReady, router.asPath, router.locale, router.defaultLocale, router.pathname, router.query, lang, setLang]);
+  }, [router.isReady, router.asPath, router.query, lang, setLang]);
 
   return null;
 }
@@ -141,13 +186,9 @@ function MyApp({ Component, pageProps }) {
   const router = useRouter();
 
   const routeLang = React.useMemo(() => {
-    const asPath = String(router.asPath || '/');
-    const pathOnly = (asPath.split('?')[0] || '/').toLowerCase();
-    if (pathOnly === '/hi' || pathOnly.startsWith('/hi/')) return 'hi';
-    if (pathOnly === '/gu' || pathOnly.startsWith('/gu/')) return 'gu';
-    if (pathOnly === '/en' || pathOnly.startsWith('/en/')) return 'en';
-    return normalizeLang(router.locale || router.defaultLocale || 'en');
-  }, [router.asPath, router.locale, router.defaultLocale]);
+    const { pathname } = splitAsPath(String(router.asPath || '/'));
+    return (getLocaleFromPathname(pathname) || 'en') as any;
+  }, [router.asPath]);
 
   React.useEffect(() => {
     const handleRouteChange = (url: string) => {

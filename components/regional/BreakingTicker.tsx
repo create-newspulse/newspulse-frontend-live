@@ -90,6 +90,7 @@ export default function BreakingTicker({
     return rawTicker?.speedSec ?? rawTicker?.speedSeconds;
   })();
   const durationSec = clampSeconds(speedSeconds ?? settingsSpeed, fallbackSpeed);
+  const restartKey = `${variant}-${tickerLang}-${durationSec}`;
 
   return (
     <div
@@ -106,7 +107,9 @@ export default function BreakingTicker({
         </div>
 
         <div className="relative flex-1 overflow-hidden">
-          <div className={classNames(`np-marquee-${id}`, 'flex gap-10 text-sm font-medium')}
+          <div
+            key={restartKey}
+            className={classNames(`np-marquee-${id}`, 'flex gap-10 text-sm font-medium')}
           >
             {loop.map((t, i) => (
               <span key={`${id}-${i}`} className="tickerText whitespace-nowrap" lang={tickerLang}>
