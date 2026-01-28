@@ -12,7 +12,6 @@ import { getTrendingTopics } from "../lib/getTrendingTopics";
 import { fetchPublicNews, type Article } from "../lib/publicNewsApi";
 import { toTickerTexts } from "../lib/publicBroadcast";
 import { usePublicBroadcastTicker } from "../hooks/usePublicBroadcastTicker";
-import { useLanguage } from "../utils/LanguageContext";
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle } from "../lib/contentFallback";
 import OriginalTag from "../components/OriginalTag";
 import { DEFAULT_NORMALIZED_PUBLIC_SETTINGS, sanitizeEmbedUrl } from "../src/lib/publicSettings";
@@ -1958,9 +1957,8 @@ function SiteFooter({ theme, onToast, footerTextOverride }: any) {
 }
 
 export default function UiPreviewV145() {
-  const { t, lang } = useI18n();
+  const { t, lang, setLang } = useI18n();
   const router = useRouter();
-  const { setLanguage } = useLanguage();
   const [prefs, setPrefs] = useState<any>(DEFAULT_PREFS);
   const theme = useMemo(() => getTheme(prefs.themeId), [prefs.themeId]);
   usePublicMode();
@@ -2240,7 +2238,7 @@ export default function UiPreviewV145() {
       node: (
         <div className="w-full min-w-0">
           <TickerBar
-            key={`breaking-${apiLang}-${breakingDurationSec}-${breakingItemsToShow.length}`}
+            key={`breaking-${breakingDurationSec}-${breakingItemsToShow.length}`}
             theme={theme}
             kind="breaking"
             items={breakingItemsToShow}
@@ -2260,7 +2258,7 @@ export default function UiPreviewV145() {
       node: (
         <div className="w-full min-w-0">
           <TickerBar
-            key={`live-${apiLang}-${liveDurationSec}-${liveItemsToShow.length}`}
+            key={`live-${liveDurationSec}-${liveItemsToShow.length}`}
             theme={theme}
             kind="live"
             items={liveItemsToShow}
@@ -2387,8 +2385,24 @@ export default function UiPreviewV145() {
                 onChange={(nextCode: UiLangCode) => {
                   const next = String(nextCode).toLowerCase();
                   if (next === 'en' || next === 'hi' || next === 'gu') {
-                    // URL/route is the single source of truth; this performs navigation + persistence.
-                    setLanguage(next as any);
+                    // Persist preference, but route locale remains the single source of truth.
+                    setLang(next as any, { persist: true });
+
+                    const raw = String(router.asPath || '/');
+                    const hashSplit = raw.split('#');
+                    const beforeHash = hashSplit[0] || '/';
+                    const hash = hashSplit.length > 1 ? `#${hashSplit.slice(1).join('#')}` : '';
+
+                    const qSplit = beforeHash.split('?');
+                    const pathPart = qSplit[0] || '/';
+                    const query = qSplit.length > 1 ? `?${qSplit.slice(1).join('?')}` : '';
+
+                    const stripped = String(pathPart || '/').replace(/^\/(hi|gu|en)(?=\/|$)/i, '') || '/';
+                    const normalized = stripped === '' ? '/' : stripped;
+                    const nextAs = next === 'en' ? normalized : `/${next}${normalized === '/' ? '' : normalized}`;
+                    const out = `${nextAs}${query}${hash}`;
+
+                    router.replace(out, out, { locale: next, shallow: false, scroll: false }).catch(() => {});
                   }
                   setPrefs((p: any) => ({ ...p, lang: UI_LANG_LABEL[nextCode] }));
                 }}

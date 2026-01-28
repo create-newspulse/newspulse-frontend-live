@@ -330,16 +330,6 @@ export async function fetchPublicBroadcast(options?: { signal?: AbortSignal; lan
     return [];
   };
 
-  const langFallbackChain = (requested: BroadcastLang | null): BroadcastLang[] => {
-    const ordered: Array<BroadcastLang | null> = [requested, 'en', 'hi', 'gu'];
-    const out: BroadcastLang[] = [];
-    for (const l of ordered) {
-      if (!l) continue;
-      if (!out.includes(l)) out.push(l);
-    }
-    return out;
-  };
-
   const fetchNoStore = async (url: string): Promise<any | null> => {
     try {
       const res = await fetch(withTs(url), {
@@ -360,39 +350,16 @@ export async function fetchPublicBroadcast(options?: { signal?: AbortSignal; lan
     }
   };
 
-  // Preferred contract (requested): single endpoint returning language-resolved tickers.
-  // - Browser uses same-origin /public-api/* so Next rewrites can forward to backend.
-  // - Server uses direct backend origin.
-  const broadcastEndpoint = (() => {
-    const qs = lang ? `?lang=${encodeURIComponent(lang)}` : '';
-    if (isBrowser) return `/public-api/broadcast${qs}`;
-    return `${origin}/admin-api/public/broadcast${qs}`;
-  })();
-
-  const combined = await fetchNoStore(broadcastEndpoint);
-  if (combined && typeof combined === 'object') {
-    return normalizePublicBroadcast(combined);
-  }
-
   const configEndpoint = isBrowser ? '/public/broadcast/config' : `${origin}/api/public/broadcast/config`;
   const itemsBase = isBrowser ? '/public/broadcast/items' : `${origin}/api/public/broadcast/items`;
 
-  const fetchItemsWithFallback = async (type: BroadcastType): Promise<BroadcastItem[]> => {
-    const chain = langFallbackChain(lang);
-    for (const candidate of chain) {
-      const qs = `?type=${encodeURIComponent(type)}&lang=${encodeURIComponent(candidate)}`;
-      const json = await fetchNoStore(`${itemsBase}${qs}`);
-      const items = unwrapItems(json);
-      if (items.length) return items;
-    }
-    return [];
-  };
+  const langParam = lang ? `&lang=${encodeURIComponent(lang)}` : '';
 
   try {
     const [configJson, breakingJson, liveJson] = await Promise.all([
       fetchNoStore(configEndpoint),
-      fetchItemsWithFallback('breaking'),
-      fetchItemsWithFallback('live'),
+      fetchNoStore(`${itemsBase}?type=breaking${langParam}`),
+      fetchNoStore(`${itemsBase}?type=live${langParam}`),
     ]);
 
     const cfgRoot = configJson && typeof configJson === 'object' ? (configJson as any) : null;
