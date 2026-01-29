@@ -49,18 +49,13 @@ export function middleware(req: NextRequest) {
     return res;
   }
 
-  // IMPORTANT: Do not auto-redirect based on stored preference.
-  // But do keep NEXT_LOCALE aligned with the user's last choice so SSR + client agree.
-  const pref =
-    normalizeLocale(req.cookies.get(COOKIE_KEY)?.value) ||
-    normalizeLocale(req.cookies.get(LEGACY_COOKIE_KEY)?.value) ||
-    normalizeLocale(req.cookies.get(NEXT_LOCALE_COOKIE)?.value) ||
-    null;
-
+  // URL routing contract:
+  // - /     => English
+  // - /hi/* => Hindi
+  // - /gu/* => Gujarati
+  // Do not let stored preference override unprefixed routes.
   const res = NextResponse.next();
-  if (pref) {
-    res.cookies.set(NEXT_LOCALE_COOKIE, pref, { path: '/', maxAge: 60 * 60 * 24 * 365 });
-  }
+  res.cookies.set(NEXT_LOCALE_COOKIE, 'en', { path: '/', maxAge: 60 * 60 * 24 * 365 });
   return res;
 }
 

@@ -99,6 +99,10 @@ export function usePublicBroadcastTicker(options: {
       setIsLoading((prev) => prev);
 
       try {
+        if (process.env.NODE_ENV !== 'production') {
+          // eslint-disable-next-line no-console
+          console.log(`Ticker fetch lang = ${lang}${reason ? ` (${reason})` : ''}`);
+        }
         const res = await fetchPublicBroadcast({ signal: controller.signal, lang });
         if (controller.signal.aborted) return;
         applyBroadcast(res, 'poll');

@@ -43,9 +43,8 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     if (pathOnly === '/hi' || pathOnly.startsWith('/hi/')) return 'hi' as Lang;
     if (pathOnly === '/gu' || pathOnly.startsWith('/gu/')) return 'gu' as Lang;
     if (pathOnly === '/en' || pathOnly.startsWith('/en/')) return 'en' as Lang;
-    const fromRouter = String(router.locale || router.defaultLocale || 'en').toLowerCase();
-    return (fromRouter === 'hi' || fromRouter === 'gu' ? fromRouter : 'en') as Lang;
-  }, [router.asPath, router.locale, router.defaultLocale]);
+    return 'en' as Lang;
+  }, [router.asPath]);
 
   return <BaseLanguageProvider initialLang={initialLang}>{children}</BaseLanguageProvider>;
 }
@@ -105,9 +104,8 @@ export const LanguageDropdown: React.FC<{ compact?: boolean }> = ({ compact = fa
     if (pathOnly === '/hi' || pathOnly.startsWith('/hi/')) return 'hi' as Lang;
     if (pathOnly === '/gu' || pathOnly.startsWith('/gu/')) return 'gu' as Lang;
     if (pathOnly === '/en' || pathOnly.startsWith('/en/')) return 'en' as Lang;
-    const fromRouter = String(router.locale || router.defaultLocale || 'en').toLowerCase();
-    return (fromRouter === 'hi' || fromRouter === 'gu' ? fromRouter : 'en') as Lang;
-  }, [router.asPath, router.locale, router.defaultLocale]);
+    return 'en' as Lang;
+  }, [router.asPath]);
 
   const change = useCallback(
     (lng: string) => {

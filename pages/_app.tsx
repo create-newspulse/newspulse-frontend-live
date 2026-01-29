@@ -82,15 +82,17 @@ function RouteLanguageSync() {
   React.useEffect(() => {
     if (!router.isReady) return;
 
-    const routeLocale = normalizeLang(router.locale || router.defaultLocale || 'en');
-
     const asPath = String(router.asPath || '');
     const pathOnly = asPath.split('?')[0] || '/';
-    const hasExplicitLocalePrefix =
-      pathOnly === '/hi' ||
-      pathOnly.startsWith('/hi/') ||
-      pathOnly === '/gu' ||
-      pathOnly.startsWith('/gu/');
+
+    // URL contract: / => en, /hi => hi, /gu => gu
+    const routeLocale = (() => {
+      const p = pathOnly.toLowerCase();
+      if (p === '/hi' || p.startsWith('/hi/')) return 'hi';
+      if (p === '/gu' || p.startsWith('/gu/')) return 'gu';
+      if (p === '/en' || p.startsWith('/en/')) return 'en';
+      return 'en';
+    })();
 
     const rawQueryLang = (router.query?.lang ?? '') as string | string[];
     const queryLangValue = Array.isArray(rawQueryLang) ? rawQueryLang[0] : rawQueryLang;
@@ -118,7 +120,7 @@ function RouteLanguageSync() {
       lastAppliedRef.current = key;
     }
     setLang(routeLocale, { persist: true });
-  }, [router.isReady, router.asPath, router.locale, router.defaultLocale, router.pathname, router.query, lang, setLang]);
+  }, [router.isReady, router.asPath, router.pathname, router.query, lang, setLang]);
 
   return null;
 }
@@ -146,8 +148,8 @@ function MyApp({ Component, pageProps }) {
     if (pathOnly === '/hi' || pathOnly.startsWith('/hi/')) return 'hi';
     if (pathOnly === '/gu' || pathOnly.startsWith('/gu/')) return 'gu';
     if (pathOnly === '/en' || pathOnly.startsWith('/en/')) return 'en';
-    return normalizeLang(router.locale || router.defaultLocale || 'en');
-  }, [router.asPath, router.locale, router.defaultLocale]);
+    return 'en';
+  }, [router.asPath]);
 
   React.useEffect(() => {
     const handleRouteChange = (url: string) => {

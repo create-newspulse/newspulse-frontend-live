@@ -290,10 +290,63 @@ export async function fetchPublicBroadcast(options?: { signal?: AbortSignal; lan
     .replace(/\/+$/, '')
     .replace(/\/api\/?$/, '');
 
-  const withTs = (url: string): string => {
-    if (!isBrowser) return url;
-    const sep = url.includes('?') ? '&' : '?';
-    return `${url}${sep}_ts=${Date.now()}`;
+  const appendQuery = (url: string, params: Record<string, string | number | boolean | null | undefined>): string => {
+    const u = new URL(url, isBrowser ? window.location.origin : 'http://localhost');
+    for (const [k, v] of Object.entries(params)) {
+      if (v === null || v === undefined) continue;
+      u.searchParams.set(k, String(v));
+    }
+    // Preserve relative URL formatting in the browser.
+    if (isBrowser) return `${u.pathname}${u.search}${u.hash}`;
+    return u.toString();
+  };
+
+  const warnLangMismatch = (endpoint: string, json: any, normalized?: PublicBroadcast) => {
+    try {
+      if (!isBrowser) return;
+      if (!lang) return;
+      const rawReturned =
+        json?.lang ??
+        json?.language ??
+        json?.locale ??
+        json?.meta?.lang ??
+        json?._meta?.lang ??
+        json?.settings?.lang;
+      const returned = normalizeLang(rawReturned);
+      if (returned && returned !== lang) {
+        console.warn('[broadcast] lang mismatch', {
+          requested: lang,
+          returned,
+          endpoint,
+          sample: {
+            ok: json?.ok,
+            keys: json && typeof json === 'object' ? Object.keys(json).slice(0, 20) : null,
+          },
+        });
+      }
+
+      // Heuristic: if English is requested but the resulting ticker text appears to be Gujarati/Hindi,
+      // log a warning even when the payload doesn't include an explicit `lang` field.
+      if (lang === 'en' && normalized) {
+        const sampleTexts = [
+          ...toTickerTexts((normalized.items?.breaking || []) as any, { lang: 'en' }).slice(0, 3),
+          ...toTickerTexts((normalized.items?.live || []) as any, { lang: 'en' }).slice(0, 3),
+        ];
+        const sampleJoined = sampleTexts.join(' | ');
+        const hasGujarati = /[\u0A80-\u0AFF]/.test(sampleJoined);
+        const hasDevanagari = /[\u0900-\u097F]/.test(sampleJoined);
+        if (hasGujarati || hasDevanagari) {
+          console.warn('[broadcast] unexpected script for en', {
+            requested: 'en',
+            endpoint,
+            detected: hasGujarati ? 'gu' : hasDevanagari ? 'hi' : 'unknown',
+            sampleTexts,
+          });
+        }
+      }
+    } catch {
+      // ignore
+    }
   };
 
   // Phase 1 contract:
@@ -332,11 +385,11 @@ export async function fetchPublicBroadcast(options?: { signal?: AbortSignal; lan
 
   const fetchNoStore = async (url: string): Promise<any | null> => {
     try {
-      const res = await fetch(withTs(url), {
+      const res = await fetch(url, {
         method: 'GET',
         headers: {
           Accept: 'application/json',
-          'Cache-Control': 'no-store',
+          'Cache-Control': 'no-cache, no-store, max-age=0',
           Pragma: 'no-cache',
         },
         cache: 'no-store',
@@ -350,6 +403,26 @@ export async function fetchPublicBroadcast(options?: { signal?: AbortSignal; lan
     }
   };
 
+  // Preferred production contract:
+  // GET /public-api/broadcast?lang=${selectedLang}&nocache=1
+  // (rewritten by Next to backend /admin-api/public/broadcast)
+  const preferredEndpoint = (() => {
+    if (isBrowser) {
+      return appendQuery('/public-api/broadcast', { lang: lang || 'en', nocache: 1 });
+    }
+    if (!origin) return null;
+    return appendQuery(`${origin}/admin-api/public/broadcast`, { lang: lang || 'en', nocache: 1 });
+  })();
+
+  if (preferredEndpoint) {
+    const broadcastJson = await fetchNoStore(preferredEndpoint);
+    if (broadcastJson) {
+      const normalized = normalizePublicBroadcast(broadcastJson);
+      warnLangMismatch(preferredEndpoint, broadcastJson, normalized);
+      return normalized;
+    }
+  }
+
   const configEndpoint = isBrowser ? '/public/broadcast/config' : `${origin}/api/public/broadcast/config`;
   const itemsBase = isBrowser ? '/public/broadcast/items' : `${origin}/api/public/broadcast/items`;
 
@@ -357,9 +430,9 @@ export async function fetchPublicBroadcast(options?: { signal?: AbortSignal; lan
 
   try {
     const [configJson, breakingJson, liveJson] = await Promise.all([
-      fetchNoStore(configEndpoint),
-      fetchNoStore(`${itemsBase}?type=breaking${langParam}`),
-      fetchNoStore(`${itemsBase}?type=live${langParam}`),
+      fetchNoStore(appendQuery(configEndpoint, { nocache: 1 })),
+      fetchNoStore(appendQuery(`${itemsBase}?type=breaking${langParam}`, { nocache: 1 })),
+      fetchNoStore(appendQuery(`${itemsBase}?type=live${langParam}`, { nocache: 1 })),
     ]);
 
     const cfgRoot = configJson && typeof configJson === 'object' ? (configJson as any) : null;
