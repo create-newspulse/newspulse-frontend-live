@@ -39,18 +39,6 @@ export function middleware(req: NextRequest) {
           ? 'en'
           : null;
 
-  // Canonicalize English: /en/* -> /*
-  if (localeInPath === 'en') {
-    const out = url.clone();
-    out.pathname = pathname.replace(/^\/(en)(?=\/|$)/i, '') || '/';
-    const res = NextResponse.redirect(out);
-    res.cookies.set(NEXT_LOCALE_COOKIE, 'en', { path: '/', maxAge: 60 * 60 * 24 * 365 });
-    // Keep app cookies consistent as well.
-    res.cookies.set(COOKIE_KEY, 'en', { path: '/', maxAge: 60 * 60 * 24 * 365 });
-    res.cookies.set(LEGACY_COOKIE_KEY, 'en', { path: '/', maxAge: 60 * 60 * 24 * 365 });
-    return res;
-  }
-
   // When URL explicitly sets locale, keep NEXT_LOCALE aligned so Next doesn't mis-detect.
   if (localeInPath) {
     const res = NextResponse.next();
@@ -61,10 +49,18 @@ export function middleware(req: NextRequest) {
     return res;
   }
 
-  // IMPORTANT: URL prefix is the source of truth.
-  // Unprefixed routes must always be English (/) regardless of stored preference.
+  // IMPORTANT: Do not auto-redirect based on stored preference.
+  // But do keep NEXT_LOCALE aligned with the user's last choice so SSR + client agree.
+  const pref =
+    normalizeLocale(req.cookies.get(COOKIE_KEY)?.value) ||
+    normalizeLocale(req.cookies.get(LEGACY_COOKIE_KEY)?.value) ||
+    normalizeLocale(req.cookies.get(NEXT_LOCALE_COOKIE)?.value) ||
+    null;
+
   const res = NextResponse.next();
-  res.cookies.set(NEXT_LOCALE_COOKIE, 'en', { path: '/', maxAge: 60 * 60 * 24 * 365 });
+  if (pref) {
+    res.cookies.set(NEXT_LOCALE_COOKIE, pref, { path: '/', maxAge: 60 * 60 * 24 * 365 });
+  }
   return res;
 }
 

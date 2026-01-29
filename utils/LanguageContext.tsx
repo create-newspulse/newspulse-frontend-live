@@ -57,8 +57,11 @@ export function useLanguage(): LanguageContextType {
     const pathOnly = (asPath.split('?')[0] || '/').toLowerCase();
     if (pathOnly === '/hi' || pathOnly.startsWith('/hi/')) return 'hi';
     if (pathOnly === '/gu' || pathOnly.startsWith('/gu/')) return 'gu';
-    return 'en';
-  }, [router.asPath]);
+    if (pathOnly === '/en' || pathOnly.startsWith('/en/')) return 'en';
+
+    const fromRouter = normalizeLang(router.locale || router.defaultLocale || 'en');
+    return (fromRouter === 'hi' || fromRouter === 'gu' ? fromRouter : 'en') as NewsPulseLanguage;
+  }, [router.asPath, router.locale, router.defaultLocale]);
 
   const setLanguage = useCallback(
     (next: NewsPulseLanguage) => {
