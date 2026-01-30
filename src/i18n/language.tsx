@@ -114,8 +114,8 @@ export const LanguageDropdown: React.FC<{ compact?: boolean }> = ({ compact = fa
       if (lng === 'en' || lng === 'hi' || lng === 'gu') {
         // Persist preference for future visits.
         setLanguage(lng);
-        // URL is the source of truth.
-        const nextAs = buildPath(lng, String(router.asPath || '/'));
+        // Requirement: on dropdown change, route to /, /hi, /gu.
+        const nextAs = buildPath(lng, '/');
         router.replace(nextAs, nextAs, { locale: lng, shallow: false, scroll: false }).catch(() => {});
       }
     },

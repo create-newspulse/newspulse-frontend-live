@@ -31,8 +31,9 @@ export default function LanguageToggle() {
   const handleChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selected = e.target.value as 'en' | 'hi' | 'gu';
     if (!options.includes(selected)) return;
+    // Requirement: on dropdown change, route to /, /hi, /gu.
     // URL/route is source of truth; useLanguage().setLanguage performs navigation + persistence.
-    setLanguage(selected);
+    setLanguage(selected, { path: '/' });
   };
 
   return (

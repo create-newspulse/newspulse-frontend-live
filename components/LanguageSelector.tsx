@@ -38,8 +38,9 @@ export const LanguageSelector: React.FC<{ compact?: boolean }> = ({ compact = fa
     const allowed = new Set(available.map((x) => x.code));
     if (!allowed.has(lng)) return;
     if (lng === 'en' || lng === 'hi' || lng === 'gu') {
+      // Requirement: on dropdown change, route to /, /hi, /gu.
       // URL/route is source of truth; useLanguage().setLanguage performs navigation + persistence.
-      setLanguage(lng);
+      setLanguage(lng, { path: '/' });
     }
   }, [available, setLanguage]);
 

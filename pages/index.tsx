@@ -2388,20 +2388,8 @@ export default function UiPreviewV145() {
                     // Persist preference, but route locale remains the single source of truth.
                     setLang(next as any, { persist: true });
 
-                    const raw = String(router.asPath || '/');
-                    const hashSplit = raw.split('#');
-                    const beforeHash = hashSplit[0] || '/';
-                    const hash = hashSplit.length > 1 ? `#${hashSplit.slice(1).join('#')}` : '';
-
-                    const qSplit = beforeHash.split('?');
-                    const pathPart = qSplit[0] || '/';
-                    const query = qSplit.length > 1 ? `?${qSplit.slice(1).join('?')}` : '';
-
-                    const stripped = String(pathPart || '/').replace(/^\/(hi|gu|en)(?=\/|$)/i, '') || '/';
-                    const normalized = stripped === '' ? '/' : stripped;
-                    const nextAs = next === 'en' ? normalized : `/${next}${normalized === '/' ? '' : normalized}`;
-                    const out = `${nextAs}${query}${hash}`;
-
+                    // Requirement: on dropdown change, route to /, /hi, /gu.
+                    const out = next === 'en' ? '/' : `/${next}`;
                     router.replace(out, out, { locale: next, shallow: false, scroll: false }).catch(() => {});
                   }
                   setPrefs((p: any) => ({ ...p, lang: UI_LANG_LABEL[nextCode] }));

@@ -6,7 +6,7 @@ export type NewsPulseLanguage = 'en' | 'hi' | 'gu';
 
 interface LanguageContextType {
   language: NewsPulseLanguage;
-  setLanguage: (lang: NewsPulseLanguage) => void;
+  setLanguage: (lang: NewsPulseLanguage, options?: { path?: string }) => void;
 }
 
 // Compatibility wrapper:
@@ -64,7 +64,7 @@ export function useLanguage(): LanguageContextType {
   }, [router.asPath, router.locale, router.defaultLocale]);
 
   const setLanguage = useCallback(
-    (next: NewsPulseLanguage) => {
+    (next: NewsPulseLanguage, options?: { path?: string }) => {
       const target = normalizeLang(next) as NewsPulseLanguage;
 
       if (!LOCALES.includes(target as any)) return;
@@ -75,7 +75,9 @@ export function useLanguage(): LanguageContextType {
       if (!router.isReady) return;
 
       // Route is the single source of truth.
-      const nextAs = buildPath(target, String(router.asPath || '/'));
+      // By default, preserve current route; callers can override to force a specific path (e.g. home).
+      const basePath = typeof options?.path === 'string' ? String(options.path || '/') : String(router.asPath || '/');
+      const nextAs = buildPath(target, basePath);
       router.replace(nextAs, nextAs, { locale: target, shallow: false, scroll: false }).catch(() => {});
     },
     [LOCALES, buildPath, router, setLang]

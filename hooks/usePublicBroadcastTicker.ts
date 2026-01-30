@@ -185,6 +185,11 @@ export function usePublicBroadcastTicker(options: {
     close();
 
     const url = `/public/broadcast/stream?lang=${encodeURIComponent(lang)}`;
+    if (process.env.NODE_ENV !== 'production') {
+      // Temporary debug log: selected language + exact URL being fetched.
+      // eslint-disable-next-line no-console
+      console.debug(`[broadcast] lang=${lang} url=${url}`);
+    }
     const es = new EventSource(url);
     sseRef.current = es;
 

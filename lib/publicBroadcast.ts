@@ -112,13 +112,22 @@ function getTranslationsRecord(item: any): Record<string, string> | null {
 export function normalizePublicBroadcast(raw: unknown): PublicBroadcast {
   const root = raw && typeof raw === 'object' ? (raw as any) : null;
 
+  // Some backends wrap payload as { success, data }. Support both.
+  const rootData = isRecord(root?.data) ? (root.data as any) : null;
+
+  const okFromRoot = typeof root?.ok === 'boolean' ? root.ok : undefined;
+  const okFromSuccess = typeof root?.success === 'boolean' ? root.success : undefined;
+  const ok = okFromRoot !== undefined ? okFromRoot : okFromSuccess !== undefined ? okFromSuccess : true;
+
   // New backend shape (single-call):
   // {
   //   breaking: { enabled, durationSeconds, items },
   //   live: { enabled, durationSeconds, items }
   // }
-  const breakingBundle = root?.breaking;
-  const liveBundle = root?.live;
+  // Bundle shape can be top-level OR nested under data.
+  const bundleRoot = (root && (root.breaking != null || root.live != null)) ? root : rootData;
+  const breakingBundle = bundleRoot?.breaking;
+  const liveBundle = bundleRoot?.live;
   const isBundleShape =
     (isRecord(breakingBundle) || Array.isArray(breakingBundle)) && (isRecord(liveBundle) || Array.isArray(liveBundle));
 
@@ -151,7 +160,7 @@ export function normalizePublicBroadcast(raw: unknown): PublicBroadcast {
       (isRecord(liveBundle) && ('enabled' in (liveBundle as any) || 'durationSeconds' in (liveBundle as any) || 'durationSec' in (liveBundle as any)));
 
     return {
-      ok: root?.ok !== false,
+      ok: ok !== false,
       meta: { hasSettings: Boolean(hasSettings) },
       settings: {
         breaking: {
@@ -172,8 +181,8 @@ export function normalizePublicBroadcast(raw: unknown): PublicBroadcast {
     };
   }
 
-  const settingsRaw = root?.settings ?? root?.data?.settings ?? null;
-  const itemsRaw = root?.items ?? root?.data?.items ?? root?.data ?? null;
+  const settingsRaw = root?.settings ?? rootData?.settings ?? null;
+  const itemsRaw = root?.items ?? rootData?.items ?? rootData ?? null;
 
   const breakingSettingsRaw = settingsRaw?.breaking ?? settingsRaw?.tickers?.breaking ?? settingsRaw?.breakingTicker ?? null;
   const liveSettingsRaw = settingsRaw?.live ?? settingsRaw?.tickers?.live ?? settingsRaw?.liveTicker ?? null;
@@ -220,7 +229,7 @@ export function normalizePublicBroadcast(raw: unknown): PublicBroadcast {
   }
 
   return {
-    ok: root?.ok !== false,
+    ok: ok !== false,
     meta: { hasSettings },
     settings,
     items: {
@@ -296,6 +305,14 @@ export async function fetchPublicBroadcast(options?: { signal?: AbortSignal; lan
     return `${url}${sep}_ts=${Date.now()}`;
   };
 
+  const devLog = (url: string) => {
+    if (!isBrowser) return;
+    if (process.env.NODE_ENV === 'production') return;
+    // Temporary debug log: selected language + exact URL fetched.
+    // eslint-disable-next-line no-console
+    console.debug(`[broadcast] lang=${lang || 'none'} url=${url}`);
+  };
+
   // Phase 1 contract:
   // - Config: GET /public/broadcast/config
   // - Items: GET /public/broadcast/items?type=breaking&lang=xx and ...type=live&lang=xx
@@ -332,7 +349,9 @@ export async function fetchPublicBroadcast(options?: { signal?: AbortSignal; lan
 
   const fetchNoStore = async (url: string): Promise<any | null> => {
     try {
-      const res = await fetch(withTs(url), {
+      const finalUrl = withTs(url);
+      devLog(finalUrl);
+      const res = await fetch(finalUrl, {
         method: 'GET',
         headers: {
           Accept: 'application/json',
