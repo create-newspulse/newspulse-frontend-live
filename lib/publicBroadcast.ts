@@ -292,7 +292,8 @@ export function toTickerTexts(items: unknown[], opts?: { lang?: BroadcastLang })
 export async function fetchPublicBroadcast(options?: { signal?: AbortSignal; lang?: BroadcastLang }): Promise<PublicBroadcast> {
   const isBrowser = typeof window !== 'undefined';
   const base = getPublicApiBaseUrl();
-  const lang = normalizeLang(options?.lang);
+  // Always send an explicit language; production backend may default to non-English if omitted.
+  const lang = (normalizeLang(options?.lang) || 'en') as BroadcastLang;
 
   const origin = String(base || '')
     .trim()
@@ -310,7 +311,7 @@ export async function fetchPublicBroadcast(options?: { signal?: AbortSignal; lan
     if (process.env.NODE_ENV === 'production') return;
     // Temporary debug log: selected language + exact URL fetched.
     // eslint-disable-next-line no-console
-    console.debug(`[broadcast] lang=${lang || 'none'} url=${url}`);
+    console.debug(`[broadcast] lang=${lang} url=${url}`);
   };
 
   // Phase 1 contract:
@@ -369,10 +370,30 @@ export async function fetchPublicBroadcast(options?: { signal?: AbortSignal; lan
     }
   };
 
-  const configEndpoint = isBrowser ? '/public/broadcast/config' : `${origin}/api/public/broadcast/config`;
+  // Preferred (legacy) single-call endpoint used by production via Vercel rewrite:
+  // /public-api/broadcast?lang=xx  ->  backend /admin-api/public/broadcast?lang=xx
+  // Try this first since it matches deployed contract and ensures lang is forwarded.
+  try {
+    const singleEndpoint = isBrowser
+      ? `/public-api/broadcast?lang=${encodeURIComponent(lang)}`
+      : origin
+        ? `${origin}/admin-api/public/broadcast?lang=${encodeURIComponent(lang)}`
+        : '';
+
+    if (singleEndpoint) {
+      const json = await fetchNoStore(singleEndpoint);
+      if (json) return normalizePublicBroadcast(json);
+    }
+  } catch {
+    // fall through to Phase 1 fallback
+  }
+
+  const configEndpoint = isBrowser
+    ? `/public/broadcast/config?lang=${encodeURIComponent(lang)}`
+    : `${origin}/api/public/broadcast/config?lang=${encodeURIComponent(lang)}`;
   const itemsBase = isBrowser ? '/public/broadcast/items' : `${origin}/api/public/broadcast/items`;
 
-  const langParam = lang ? `&lang=${encodeURIComponent(lang)}` : '';
+  const langParam = `&lang=${encodeURIComponent(lang)}`;
 
   try {
     const [configJson, breakingJson, liveJson] = await Promise.all([
