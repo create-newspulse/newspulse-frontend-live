@@ -49,7 +49,8 @@ function StoryCard({
   fallbackCategoryLabel: string;
   requestedLang: UiLang;
 }) {
-  const href = story?._id ? `/story/${story._id}` : story?.slug ? `/story/${story.slug}` : '#';
+  const idOrSlug = story?.slug || story?._id;
+  const href = idOrSlug ? `/story/${encodeURIComponent(String(idOrSlug))}` : '#';
   const categoryLabel = getStoryCategoryLabel(story?.category) || story?.category || fallbackCategoryLabel;
   const dateIso = getStoryDateIso(story);
   const dateText = dateIso ? new Date(dateIso).toLocaleString() : '';

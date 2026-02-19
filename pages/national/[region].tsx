@@ -63,8 +63,11 @@ export default function RegionPage() {
                     <div key={i} className="p-6 rounded-2xl border shadow-sm animate-pulse bg-gray-50" />
                   ))
                 ) : display.length ? (
-                  display.map((article: any, idx: number) => (
-                    <a key={idx} href={article._id ? `/story/${article._id}` : '#'} className="block p-6 rounded-2xl border shadow-sm hover:shadow-md bg-white dark:bg-gray-800 transition">
+                  display.map((article: any, idx: number) => {
+                    const idOrSlug = article?.slug || article?._id;
+                    const href = idOrSlug ? `/story/${encodeURIComponent(String(idOrSlug))}` : '#';
+                    return (
+                    <a key={idx} href={href} className="block p-6 rounded-2xl border shadow-sm hover:shadow-md bg-white dark:bg-gray-800 transition">
                       <div className="text-xs text-gray-500 mb-2">{new Date(article.publishedAt).toLocaleString()}</div>
                       {(() => {
                         const titleRes = resolveArticleTitle(article, uiLang);
@@ -85,7 +88,8 @@ export default function RegionPage() {
                       })()}
                       <div className="mt-3 text-xs text-gray-400">{t('common.source')}: {article.source || t('brand.name')}</div>
                     </a>
-                  ))
+                  );
+                  })
                 ) : (
                     <div className="col-span-2 text-gray-600">{t('regionalUI.noStoriesFoundForYet', { name: displayName })}</div>
                 )}

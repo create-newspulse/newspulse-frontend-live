@@ -1,4 +1,4 @@
-import type { GetServerSideProps } from 'next';
+import type { GetStaticPaths, GetStaticProps } from 'next';
 import Head from 'next/head';
 import sanitizeHtml from 'sanitize-html';
 
@@ -98,6 +98,14 @@ function toUiLang(value: unknown): UiLang {
   return 'en';
 }
 
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 export default function StoryDetailPage({ story, safeHtml, publishedAtLabel, resolvedTitle, resolvedSummary, titleIsOriginal, summaryIsOriginal }: Props) {
   const { t } = useI18n();
   const title = resolvedTitle || story.title || 'Story';
@@ -156,18 +164,35 @@ export default function StoryDetailPage({ story, safeHtml, publishedAtLabel, res
   );
 }
 
-export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
-  const idOrSlug = String(ctx.params?.idOrSlug || '').trim();
-  if (!idOrSlug) return { notFound: true };
+export const getStaticPaths: GetStaticPaths = async () => {
+  return {
+    paths: [],
+    fallback: 'blocking',
+  };
+};
+
+export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
+  const raw = String((ctx.params as any)?.idOrSlug || '').trim();
+  if (!raw) return { notFound: true, revalidate: 10 };
+
+  const idOrSlug = safeDecodeURIComponent(raw).trim();
+  if (!idOrSlug) return { notFound: true, revalidate: 10 };
 
   const locale = (ctx.locale || 'en') as string;
   const { getMessages } = await import('../../lib/getMessages');
   const messages = await getMessages(locale);
 
   const baseUrl = getApiBaseUrl();
-  const requestedLang = toUiLang(ctx.req.cookies?.np_lang || ctx.query?.lang || locale);
-  const story = await fetchPublicStoryByIdOrSlug(idOrSlug, baseUrl, { language: requestedLang });
-  if (!story) return { notFound: true };
+  const requestedLang = toUiLang(locale);
+
+  let story: PublicStory | null = null;
+  try {
+    story = await fetchPublicStoryByIdOrSlug(idOrSlug, baseUrl, { language: requestedLang });
+  } catch {
+    story = null;
+  }
+
+  if (!story) return { notFound: true, revalidate: 10 };
 
   const titleRes = resolveArticleTitle(story, requestedLang);
   const summaryRes = resolveArticleSummaryOrExcerpt(story, requestedLang);
@@ -194,5 +219,6 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
       messages,
       locale,
     },
+    revalidate: 10,
   };
 };
