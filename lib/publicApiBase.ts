@@ -44,6 +44,10 @@ function resolveConfiguredBase(): string {
       process.env.NEXT_PUBLIC_API_URL ||
         process.env.NEXT_PUBLIC_BACKEND_URL ||
         process.env.NEXT_PUBLIC_API_BASE_URL ||
+        process.env.NEXT_PUBLIC_BACKEND_API_BASE_URL ||
+        process.env.BACKEND_API_BASE_URL ||
+        process.env.NEWS_PULSE_BACKEND_URL ||
+        process.env.API_BASE_URL ||
         ''
     )
   );

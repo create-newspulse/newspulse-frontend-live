@@ -1,11 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 
-// Resolve backend origin strictly from env (no localhost default)
-const RAW_API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE ||
-  process.env.NEWS_PULSE_BACKEND_URL ||
-  process.env.API_BASE_URL ||
-  ''
+import { getPublicApiBaseUrl } from '../../../lib/publicApiBase'
 
 // Server-side proxy: /api/community-reporter/submit  →  backend
 export default async function submitHandler(
@@ -18,19 +13,28 @@ export default async function submitHandler(
     return res.status(405).json({ error: 'Method Not Allowed' })
   }
 
-  // Validate required env vars used by this route
-  const base = (RAW_API_BASE_URL || '').toString().trim()
+  // Match the env var resolution used by working settings proxies.
+  // This supports `NEXT_PUBLIC_API_BASE` and the split `NEXT_PUBLIC_API_BASE_PROD/DEV`.
+  const base = getPublicApiBaseUrl()
   if (!base) {
-    console.error('[community-reporter/submit]', new Error('Missing env var: NEXT_PUBLIC_API_BASE'))
-    return res.status(500).json({ error: 'Missing env var: NEXT_PUBLIC_API_BASE' })
+    console.error('[community-reporter/submit]', new Error('Backend base URL not configured'))
+    return res.status(500).json({ ok: false, message: 'Backend URL not configured' })
   }
 
   const targetUrl = `${base.replace(/\/+$/, '')}/api/community-reporter/submit`
 
   try {
     // Pages Router: body is available on req.body when Content-Type: application/json
-    const body =
-      req.body && typeof req.body === 'object' ? (req.body as Record<string, any>) : {}
+    let body: Record<string, any> = {}
+    if (req.body && typeof req.body === 'object') {
+      body = req.body as Record<string, any>
+    } else if (typeof req.body === 'string' && req.body.trim()) {
+      try {
+        body = JSON.parse(req.body)
+      } catch {
+        body = {}
+      }
+    }
 
     const upstream = await fetch(targetUrl, {
       method: 'POST',
