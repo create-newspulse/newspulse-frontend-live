@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
@@ -96,6 +96,7 @@ type FeatureToggleProps = {
 const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporterClosed, reporterPortalClosed }) => {
   const router = useRouter();
   const { readOnly } = usePublicMode();
+  const submitInFlightRef = useRef(false);
   const [step, setStep] = useState<1 | 2>(1);
   const [reporterType, setReporterType] = useState<ReporterType>('community');
   const [signUpData, setSignUpData] = useState<ReporterSignUpState>(initialSignUp);
@@ -191,10 +192,12 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
 
   const handleSubmitStep2: React.FormEventHandler<HTMLFormElement> = async (e) => {
     e.preventDefault();
+    if (submitInFlightRef.current) return;
     setSubmitError(null);
     setSubmitResult(null);
     setSubmitStatus('idle');
     if (!validateStep2()) return;
+    submitInFlightRef.current = true;
     setSubmitStatus('submitting');
     try {
       let uploadedIdFileId: string | undefined = undefined;
@@ -218,49 +221,44 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
         }
       }
 
+      const locationCity = ((story.storyCity || '').trim() || signUpData.city.trim());
+      const locationState = ((story.storyState || '').trim() || signUpData.state.trim());
+      const location = [locationCity, locationState].filter(Boolean).join(', ');
+
       const payload = {
-        reporter: {
-          fullName: signUpData.fullName.trim(),
-          email: signUpData.email.trim(),
-          phone: signUpData.phone.trim(),
-          city: signUpData.city.trim(),
-          state: signUpData.state.trim(),
-          country: signUpData.country.trim(),
-          preferredLanguages: signUpData.preferredLanguages,
-          heardAbout: signUpData.heardAbout?.trim() || '',
-          reporterType: reporterType === 'journalist' ? 'journalist' : 'community',
-          beats: signUpData.beatsProfessional || [],
-          agreesToEthics: signUpData.generalEthicsAccepted === true,
-        },
-        story: {
-          category: story.category,
-          headline: story.headline.trim(),
-          body: story.story.trim(),
-          ageGroup: story.ageGroup,
-          locationCity: signUpData.city.trim(),
-          locationState: signUpData.state.trim(),
-          storyCity: (story.storyCity || '').trim(),
-          storyState: (story.storyState || '').trim(),
-          urgency: (story.priority === 'high' ? 'high' : 'normal'),
-          canContact: true,
-        },
-        // Additional reporter fields for verification of professional journalists
-        isProfessional: reporterType === 'journalist',
-        organisation: (signUpData.organisationName || '').trim(),
-        roleOrTitle: (signUpData.positionTitle || '').trim(),
-        yearsExperience: (signUpData.yearsExperience || '').trim(),
-        professionalJournalistId: signUpData.professionalJournalistId?.trim() || undefined,
-        idProofFileId: uploadedIdFileId,
-        agreedToJournalistCharter: signUpData.journalistCharterAccepted === true,
+        name: signUpData.fullName.trim(),
+        email: signUpData.email.trim(),
+        location,
+        headline: story.headline.trim(),
+        story: story.story.trim(),
+        ageGroup: story.ageGroup,
       };
       const res = await fetch('/api/community-reporter/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      const data: any = await res.json().catch(() => ({}));
-      const ok = res.ok && (data?.ok === true);
-      if (ok) {
+
+      if (!res.ok) {
+        let data: any = null;
+        try {
+          data = await res.json();
+        } catch (e) {}
+        console.error('Community Reporter submit failed:', res.status, data);
+        const msg = data?.message || 'We couldn’t submit your story right now. Please try again in a few minutes.';
+        setSubmitError(msg);
+        setSubmitStatus('error');
+        return;
+      }
+
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch (e) {
+        data = {};
+      }
+
+      if (res.ok) {
         // Extract and persist reporter identity for My Stories
         const storyId = data?.storyId || data?.id || data?.reference || data?.referenceId || '';
         const reporterId = data?.reporterId || data?.reporter?.id || '';
@@ -281,15 +279,13 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
         setSubmitResult(mapped);
         setSubmitStatus('success');
         // Optional link at bottom already present; main nav handled by user action
-      } else {
-        const msg = data?.message || 'We couldn’t submit your story right now. Please try again in a few minutes.';
-        setSubmitError(msg);
-        setSubmitStatus('error');
       }
     } catch (err) {
+      console.error('[community-reporter submit] exception', err);
       setSubmitError('We couldn’t submit your story right now. Please try again in a few minutes.');
       setSubmitStatus('error');
     } finally {
+      submitInFlightRef.current = false;
       // Status already set; no extra action here
     }
   };
