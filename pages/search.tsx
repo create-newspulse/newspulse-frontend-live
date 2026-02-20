@@ -16,6 +16,7 @@ import { useI18n } from '../src/i18n/LanguageProvider';
 
 type SearchItem = {
   id: string;
+  slug?: string;
   title: string;
   titleIsOriginal?: boolean;
   summary?: string;
@@ -61,7 +62,8 @@ function toSearchItem(a: Article, requestedLang: UiLang): SearchItem | null {
   const title = String(titleRes.text || '').trim();
   if (!title) return null;
 
-  const id = String(a?._id || a?.slug || '').trim();
+  const slug = typeof a?.slug === 'string' ? a.slug.trim() : '';
+  const id = String(a?._id || slug || '').trim();
   if (!id) return null;
 
   const summaryRes = resolveArticleSummaryOrExcerpt(a as any, requestedLang);
@@ -72,6 +74,7 @@ function toSearchItem(a: Article, requestedLang: UiLang): SearchItem | null {
 
   return {
     id,
+    slug: slug || undefined,
     title,
     titleIsOriginal: titleRes.isOriginal,
     summary,
@@ -249,6 +252,7 @@ function SuggestionChips({
 
 function ResultCard({ item }: { item: SearchItem }) {
   const { t } = useI18n();
+  const slugOrId = item.slug || item.id;
   return (
     <div className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm hover:shadow-md transition">
       <div className="flex items-start justify-between gap-3">
@@ -278,7 +282,7 @@ function ResultCard({ item }: { item: SearchItem }) {
 
       <div className="mt-3 flex items-center gap-2">
         <Link
-          href={`/news/${encodeURIComponent(item.id)}`}
+          href={`/news/${encodeURIComponent(slugOrId)}`}
           className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:opacity-90 transition"
         >
           {t('common.read')}

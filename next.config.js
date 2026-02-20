@@ -1,5 +1,52 @@
 // next.config.js
 
+function normalizeBase(raw) {
+  return String(raw || '')
+    .toString()
+    .trim()
+    .replace(/\/+$/, '')
+    .replace(/\/api\/?$/, '');
+}
+
+function isProdDeployment() {
+  if (String(process.env.VERCEL_ENV || '').toLowerCase() === 'production') return true;
+  const explicit = String(process.env.NEWS_PULSE_DEPLOYMENT || process.env.NEWS_PULSE_ENV || '').toLowerCase();
+  return explicit === 'production' || explicit === 'prod';
+}
+
+function resolveBackendBase() {
+  const explicit = normalizeBase(process.env.NEXT_PUBLIC_API_BASE);
+  if (explicit) return explicit;
+
+  const split = normalizeBase(
+    (isProdDeployment() ? process.env.NEXT_PUBLIC_API_BASE_PROD : process.env.NEXT_PUBLIC_API_BASE_DEV) || ''
+  );
+  if (split) return split;
+
+  const legacy = normalizeBase(
+    process.env.NEXT_PUBLIC_API_URL ||
+      process.env.NEXT_PUBLIC_BACKEND_URL ||
+      process.env.NEXT_PUBLIC_API_BASE_URL ||
+      process.env.NEXT_PUBLIC_BACKEND_API_BASE_URL ||
+      process.env.BACKEND_API_BASE_URL ||
+      process.env.NEWS_PULSE_BACKEND_URL ||
+      process.env.API_BASE_URL ||
+      ''
+  );
+  return legacy;
+}
+
+function getBackendHostname() {
+  const base = resolveBackendBase();
+  if (!base) return '';
+  try {
+    return new URL(base).hostname;
+  } catch {
+    // If base is an origin-ish string without protocol, skip.
+    return '';
+  }
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -20,6 +67,12 @@ const nextConfig = {
       { protocol: 'https', hostname: 'static.toiimg.com', pathname: '/**' },
       { protocol: 'https', hostname: 'gnews.io', pathname: '/**' },
       { protocol: 'https', hostname: 'cdn.gulte.com', pathname: '/**' },
+      ...(getBackendHostname()
+        ? [
+            { protocol: 'https', hostname: getBackendHostname(), pathname: '/**' },
+            { protocol: 'http', hostname: getBackendHostname(), pathname: '/**' },
+          ]
+        : []),
     ],
   },
 

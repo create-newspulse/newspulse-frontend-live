@@ -60,7 +60,7 @@ function articleToBreakingItem(raw: Article, requestedLang: 'en' | 'hi' | 'gu'):
   const title = String(titleRes.text || '').trim();
   if (!title) return null;
 
-  const slugOrId = (raw as any)?._id || (raw as any)?.id || (raw as any)?.slug;
+  const slugOrId = (raw as any)?.slug || (raw as any)?._id || (raw as any)?.id;
   const id = String(slugOrId || '').trim();
   if (!id) return null;
 

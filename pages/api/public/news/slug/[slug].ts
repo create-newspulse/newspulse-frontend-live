@@ -1,10 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
-import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
+import { getPublicApiBaseUrl } from '../../../../../lib/publicApiBase';
 
 function getApiBase(): string {
-  // Use the same env resolution as the rest of the app.
-  // Supports NEXT_PUBLIC_API_BASE and the split NEXT_PUBLIC_API_BASE_PROD/DEV.
   return String(getPublicApiBaseUrl() || '').trim().replace(/\/+$/, '');
 }
 
@@ -14,16 +12,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ ok: false, message: 'METHOD_NOT_ALLOWED' });
   }
 
+  const slug = String(req.query.slug || '').trim();
+  if (!slug) return res.status(400).json({ ok: false, message: 'MISSING_SLUG' });
+
   const base = getApiBase();
   if (!base) {
-    // Keep UI alive even if env not configured.
     res.setHeader('Cache-Control', 'no-store');
-    return res.status(200).json({ items: [], total: 0, page: 1, totalPages: 1, limit: 0 });
+    return res.status(200).json({ article: null });
   }
 
   const qsIndex = (req.url || '').indexOf('?');
   const qs = qsIndex >= 0 ? (req.url || '').slice(qsIndex) : '';
-  const targetUrl = `${base}/api/public/news${qs}`;
+
+  // Backend contract: /api/public/news/slug/:slug?lang=...
+  const targetUrl = `${base}/api/public/news/slug/${encodeURIComponent(slug)}${qs}`;
 
   try {
     const upstream = await fetch(targetUrl, {
@@ -36,29 +38,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
 
     const text = await upstream.text().catch(() => '');
-    // If backend is missing the route (or temporarily down), fail open.
+
     if (upstream.status === 404) {
       res.setHeader('Cache-Control', 'no-store');
-      return res.status(200).json({ items: [] });
+      return res.status(200).json({ article: null });
     }
 
     if (!upstream.ok) {
       res.setHeader('Cache-Control', 'no-store');
-      return res.status(200).json({ items: [] });
+      return res.status(200).json({ article: null });
     }
 
     try {
-      const json = text ? JSON.parse(text) : { items: [] };
-      // Cache article lists briefly; ticker/broadcast remains no-store elsewhere.
-      // Vercel/edge caching varies by full URL (including query string like lang/category/q).
+      const json = text ? JSON.parse(text) : { article: null };
       res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=30');
       return res.status(200).json(json);
     } catch {
       res.setHeader('Cache-Control', 'no-store');
-      return res.status(200).json({ items: [] });
+      return res.status(200).json({ article: null });
     }
   } catch {
     res.setHeader('Cache-Control', 'no-store');
-    return res.status(200).json({ items: [] });
+    return res.status(200).json({ article: null });
   }
 }

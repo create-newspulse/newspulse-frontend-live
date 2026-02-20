@@ -140,9 +140,8 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
             <section className="mt-8">
               <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 {items.map((a) => {
-                  // Prefer stable backend identifier; some backends don't support slug lookup
-                  // (or may not support non-Latin slugs reliably).
-                  const slugOrId = a._id || a.slug;
+                  // Prefer slug for human-readable routes; fall back to id.
+                  const slugOrId = a.slug || a._id;
                   const href = `/news/${encodeURIComponent(String(slugOrId))}`;
                   const when = formatWhenLabel(a.publishedAt || a.createdAt);
                   const titleRes = resolveArticleTitle(a as any, language);

@@ -3,7 +3,6 @@ import Head from 'next/head';
 import Link from 'next/link';
 import sanitizeHtml from 'sanitize-html';
 
-import { fetchArticleBySlugOrId } from '../../lib/publicNewsApi';
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../../lib/contentFallback';
 import OriginalTag from '../../components/OriginalTag';
 import { useI18n } from '../../src/i18n/LanguageProvider';
@@ -40,6 +39,23 @@ type Props = {
 function getApiOrigin() {
   const origin = process.env.NEXT_PUBLIC_API_BASE || '';
   return String(origin).trim().replace(/\/+$/, '');
+}
+
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function getRequestOrigin(req: any): string {
+  const proto = String(req?.headers?.['x-forwarded-proto'] || 'http')
+    .split(',')[0]
+    .trim();
+  const host = String(req?.headers?.['x-forwarded-host'] || req?.headers?.host || '').trim();
+  if (!host) return '';
+  return `${proto}://${host}`;
 }
 
 function unwrapArticle(payload: any): Article | null {
@@ -121,21 +137,41 @@ function toUiLang(value: unknown): UiLang {
 }
 
 export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
-  const slug = String(ctx.params?.slug || '').trim();
-  if (!slug) return { notFound: true };
+  const rawSlug = String(ctx.params?.slug || '').trim();
+  if (!rawSlug) return { notFound: true };
+
+  // Next.js gives decoded params in many cases, but be defensive.
+  const decodedSlug = safeDecodeURIComponent(rawSlug).trim();
+  if (!decodedSlug) return { notFound: true };
 
   const locale = (ctx.locale || 'en') as string;
   const { getMessages } = await import('../../lib/getMessages');
   const messages = await getMessages(locale);
 
-  const requestedLang = toUiLang(ctx.req.cookies?.np_lang || ctx.query?.lang || locale);
+  // Route prefix is the source of truth (en/hi/gu).
+  const requestedLang = toUiLang(locale);
 
   try {
-    const { article, error, status } = await fetchArticleBySlugOrId({ slugOrId: slug, language: requestedLang });
+    const origin = getRequestOrigin(ctx.req);
+    const langParam = `?lang=${encodeURIComponent(requestedLang)}`;
+    const encodedSlug = encodeURIComponent(decodedSlug);
+
+    const endpoint = origin
+      ? `${origin}/api/public/news/slug/${encodedSlug}${langParam}`
+      : `${getApiOrigin()}/api/public/news/slug/${encodedSlug}${langParam}`;
+
+    const upstream = await fetch(endpoint, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+
+    const payload = await upstream.json().catch(() => null);
+    const article = unwrapArticle(payload);
+
     if (!article?._id) {
       return {
         props: {
-          error: error || (status === 404 ? 'newsDetail.articleNotFound' : 'newsDetail.unableToLoadTitle'),
+          error: upstream.status === 404 ? 'newsDetail.articleNotFound' : 'newsDetail.unableToLoadTitle',
           messages,
           locale,
         },

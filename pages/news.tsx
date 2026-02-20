@@ -55,7 +55,7 @@ export default function News() {
             const title = String(titleRes.text || '').trim();
             if (!title) return null;
 
-            const slugOrId = raw?._id || raw?.id || raw?.slug;
+            const slugOrId = raw?.slug || raw?._id || raw?.id;
             const href = slugOrId ? `/news/${encodeURIComponent(String(slugOrId))}` : undefined;
 
             const summaryRes = resolveArticleSummaryOrExcerpt(raw, uiLang);
