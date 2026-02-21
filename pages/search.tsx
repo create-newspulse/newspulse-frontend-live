@@ -7,6 +7,7 @@ import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from
 import OriginalTag from '../components/OriginalTag';
 import { useLanguage } from '../utils/LanguageContext';
 import { useI18n } from '../src/i18n/LanguageProvider';
+import { buildNewsUrl } from '../lib/newsRoutes';
 
 // Preview-only component you can paste into:
 // - Next.js App Router: /app/search/page.tsx (export default)
@@ -250,9 +251,9 @@ function SuggestionChips({
   );
 }
 
-function ResultCard({ item }: { item: SearchItem }) {
+function ResultCard({ item, language }: { item: SearchItem; language: 'en' | 'hi' | 'gu' }) {
   const { t } = useI18n();
-  const slugOrId = item.slug || item.id;
+  const href = buildNewsUrl({ id: item.id, slug: item.slug || item.id, lang: language });
   return (
     <div className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm hover:shadow-md transition">
       <div className="flex items-start justify-between gap-3">
@@ -282,7 +283,7 @@ function ResultCard({ item }: { item: SearchItem }) {
 
       <div className="mt-3 flex items-center gap-2">
         <Link
-          href={`/news/${encodeURIComponent(slugOrId)}`}
+          href={href}
           className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:opacity-90 transition"
         >
           {t('common.read')}
@@ -436,7 +437,7 @@ export default function SearchPagePreview() {
           {!loading && results.length > 0 && (
             <div className="space-y-3">
               {results.map((r) => (
-                <ResultCard key={r.id} item={r} />
+                <ResultCard key={r.id} item={r} language={language} />
               ))}
             </div>
           )}

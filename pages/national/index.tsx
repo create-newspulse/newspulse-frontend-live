@@ -1,5 +1,6 @@
 import Head from 'next/head';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 import React from 'react';
 import type { GetStaticProps } from 'next';
 
@@ -11,6 +12,7 @@ import { getRegionName, tHeading, toLanguageKey } from '../../utils/localizedNam
 
 import { fetchPublicNews } from '../../lib/publicNewsApi';
 import { useI18n } from '../../src/i18n/LanguageProvider';
+import { buildNewsUrl } from '../../lib/newsRoutes';
 
 type AnyStory = any;
 
@@ -47,11 +49,11 @@ function storyDateIso(story: AnyStory): string {
   return String(story?.publishedAt || story?.createdAt || story?.updatedAt || '').trim();
 }
 
-function storyHref(story: AnyStory): string {
-  // National uses the public news feed (articles), whose detail page is /news/[slug].
-  const key = story?.slug || story?._id || story?.id;
-  if (key) return `/news/${encodeURIComponent(String(key))}`;
-  return '#';
+function storyHref(story: AnyStory, lang: unknown): string {
+  const id = String(story?._id || story?.id || '').trim();
+  const slug = String(story?.slug || id).trim();
+  if (!id) return '#';
+  return buildNewsUrl({ id, slug, lang });
 }
 
 function storyImage(story: AnyStory): string {
@@ -186,7 +188,8 @@ function ClientTime({ iso }: { iso?: string }) {
 
 function CompactFeedRow({ story }: { story: AnyStory }) {
   const { t } = useI18n();
-  const href = storyHref(story);
+  const { language } = useLanguage();
+  const href = storyHref(story, language);
   const title = String(story?.title || t('common.untitled')).trim();
   const img = storyImage(story);
   const when = storyDateIso(story);
@@ -236,6 +239,7 @@ function CompactFeedRow({ story }: { story: AnyStory }) {
 }
 
 export default function NationalFeedPage() {
+  const router = useRouter();
   const { language } = useLanguage();
   const { t } = useI18n();
   const voice = useVoiceReader();
@@ -256,6 +260,48 @@ export default function NationalFeedPage() {
   const [error, setError] = React.useState<string | null>(null);
 
   const sentinelRef = React.useRef<HTMLDivElement | null>(null);
+
+  // URL <-> filter state (shareable links)
+  React.useEffect(() => {
+    if (!router.isReady) return;
+
+    const topicParam = typeof router.query.topic === 'string' ? router.query.topic : '';
+    const stateParam = typeof router.query.state === 'string' ? router.query.state : '';
+
+    if (topicParam) {
+      const normalized = normalize(topicParam);
+      const found = (TOPIC_CHIPS as readonly string[]).find((c) => normalize(c) === normalized) as TopicChip | undefined;
+      if (found) setSelectedTopic(found);
+    }
+
+    if (stateParam) {
+      setSelectedRegion(stateParam);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router.isReady]);
+
+  React.useEffect(() => {
+    if (!router.isReady) return;
+
+    const nextQuery: Record<string, any> = { ...router.query };
+
+    const topicValue = selectedTopic === 'All' ? '' : normalize(selectedTopic);
+    if (topicValue) nextQuery.topic = topicValue;
+    else delete nextQuery.topic;
+
+    const stateValue = !selectedRegion || selectedRegion === 'all' ? '' : String(selectedRegion);
+    if (stateValue) nextQuery.state = stateValue;
+    else delete nextQuery.state;
+
+    const curTopic = typeof router.query.topic === 'string' ? router.query.topic : '';
+    const curState = typeof router.query.state === 'string' ? router.query.state : '';
+
+    if (String(curTopic || '') === String(nextQuery.topic || '') && String(curState || '') === String(nextQuery.state || '')) {
+      return;
+    }
+
+    router.replace({ pathname: router.pathname, query: nextQuery }, undefined, { shallow: true, scroll: false }).catch(() => {});
+  }, [router, selectedRegion, selectedTopic]);
 
   const tTopicChip = (chip: TopicChip) => {
     switch (chip) {
@@ -464,7 +510,7 @@ export default function NationalFeedPage() {
 
   const shareHero = async () => {
     if (!hero) return;
-    const url = typeof window !== 'undefined' ? window.location.origin + storyHref(hero) : storyHref(hero);
+    const url = typeof window !== 'undefined' ? window.location.origin + storyHref(hero, language) : storyHref(hero, language);
     const title = String(hero?.title || 'News Pulse').trim();
     try {
       if (typeof navigator !== 'undefined' && 'share' in navigator) {
@@ -597,7 +643,7 @@ export default function NationalFeedPage() {
                 </div>
               ) : hero ? (
                 <div className="p-4">
-                  <a href={storyHref(hero)} className="block">
+                  <a href={storyHref(hero, language)} className="block">
                     <img
                       src={storyImage(hero)}
                       alt=""
@@ -630,7 +676,7 @@ export default function NationalFeedPage() {
 
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <a
-                      href={storyHref(hero)}
+                      href={storyHref(hero, language)}
                       className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
                     >
                       {t('common.read')}
@@ -723,6 +769,7 @@ export default function NationalFeedPage() {
 }
 
 function NationalSidebar({
+  language,
   topStories,
   trendingTopics,
   videoStory,
@@ -752,7 +799,7 @@ function NationalSidebar({
             topStories.slice(0, 8).map((s, i) => (
               <a
                 key={String(s?._id || s?.id || s?.slug || i)}
-                href={storyHref(s)}
+                href={storyHref(s, language)}
                 className="flex items-start gap-3 rounded-xl px-2 py-2 hover:bg-slate-50 dark:hover:bg-gray-900/60"
               >
                 <div className="shrink-0 text-xs font-black text-slate-500 w-5 text-right dark:text-gray-400">{i + 1}</div>
@@ -793,7 +840,7 @@ function NationalSidebar({
         </div>
         <div className="p-4">
           {videoStory ? (
-            <a href={storyHref(videoStory)} className="block group">
+            <a href={storyHref(videoStory, language)} className="block group">
               <div className="relative">
                 <img
                   src={storyImage(videoStory)}

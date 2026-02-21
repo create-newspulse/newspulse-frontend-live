@@ -2,6 +2,7 @@ import React from 'react';
 import { getStoryCategoryLabel, getStoryDateIso } from '../../lib/publicStories';
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../../lib/contentFallback';
 import OriginalTag from '../OriginalTag';
+import { buildNewsUrl } from '../../lib/newsRoutes';
 
 function classNames(...s: Array<string | false | null | undefined>) {
   return s.filter(Boolean).join(' ');
@@ -49,8 +50,9 @@ function StoryCard({
   fallbackCategoryLabel: string;
   requestedLang: UiLang;
 }) {
-  const idOrSlug = story?.slug || story?._id;
-  const href = idOrSlug ? `/story/${encodeURIComponent(String(idOrSlug))}` : '#';
+  const id = String(story?._id || story?.id || '').trim();
+  const slug = String(story?.slug || id).trim();
+  const href = id ? buildNewsUrl({ id, slug, lang: requestedLang }) : '#';
   const categoryLabel = getStoryCategoryLabel(story?.category) || story?.category || fallbackCategoryLabel;
   const dateIso = getStoryDateIso(story);
   const dateText = dateIso ? new Date(dateIso).toLocaleString() : '';

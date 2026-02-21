@@ -5,6 +5,7 @@ import { resolveArticleSummaryOrExcerpt, resolveArticleTitle } from "../lib/cont
 import LanguageToggle from "../components/LanguageToggle";
 import OriginalTag from "../components/OriginalTag";
 import { useI18n } from "../src/i18n/LanguageProvider";
+import { buildNewsUrl } from "../lib/newsRoutes";
 
 type BreakingItem = {
   id: string;
@@ -60,8 +61,8 @@ function articleToBreakingItem(raw: Article, requestedLang: 'en' | 'hi' | 'gu'):
   const title = String(titleRes.text || '').trim();
   if (!title) return null;
 
-  const slugOrId = (raw as any)?.slug || (raw as any)?._id || (raw as any)?.id;
-  const id = String(slugOrId || '').trim();
+  const id = String((raw as any)?._id || (raw as any)?.id || '').trim();
+  const slug = String((raw as any)?.slug || id).trim();
   if (!id) return null;
 
   const summaryRes = resolveArticleSummaryOrExcerpt(raw as any, requestedLang);
@@ -69,7 +70,7 @@ function articleToBreakingItem(raw: Article, requestedLang: 'en' | 'hi' | 'gu'):
   const publishedAt = String((raw as any)?.publishedAt || (raw as any)?.createdAt || '').trim() || undefined;
   const source = String((raw as any)?.source?.name || (raw as any)?.source || '').trim() || undefined;
   const desk = String((raw as any)?.desk || '').trim() || undefined;
-  const url = `/news/${encodeURIComponent(id)}`;
+  const url = buildNewsUrl({ id, slug, lang: requestedLang });
 
   return {
     id,

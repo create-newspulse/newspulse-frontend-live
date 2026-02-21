@@ -33,7 +33,9 @@ function resolveBackendBase() {
       process.env.API_BASE_URL ||
       ''
   );
-  return legacy;
+
+  // Keep parity with rewrites() default so image hosts work out-of-the-box.
+  return legacy || normalizeBase('https://newspulse-backend-real.onrender.com');
 }
 
 function getBackendHostname() {

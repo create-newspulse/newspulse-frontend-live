@@ -8,6 +8,7 @@ import type { GetStaticProps } from 'next';
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../../../../lib/contentFallback';
 import OriginalTag from '../../../../components/OriginalTag';
 import { useI18n } from '../../../../src/i18n/LanguageProvider';
+import { buildNewsUrl } from '../../../../lib/newsRoutes';
 
 function normalize(s: string) {
   return (s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -61,8 +62,9 @@ export default function GujaratCityPage() {
                 ))
               ) : filtered.length ? (
                 filtered.map((article: any, idx: number) => {
-                  const idOrSlug = article?.slug || article?._id;
-                  const href = idOrSlug ? `/story/${encodeURIComponent(String(idOrSlug))}` : '#';
+                  const id = String(article?._id || article?.id || '').trim();
+                  const slug = String(article?.slug || id).trim();
+                  const href = id ? buildNewsUrl({ id, slug, lang: language }) : '#';
                   return (
                   <a key={idx} href={href} className="block p-6 rounded-2xl border shadow-sm hover:shadow-md bg-white dark:bg-gray-800 transition">
                     <div className="text-xs text-gray-500 mb-2">{article.publishedAt ? new Date(article.publishedAt).toLocaleString() : ''}</div>

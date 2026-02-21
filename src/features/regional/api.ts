@@ -1,6 +1,7 @@
 import type { NewsItem } from "./types";
 import { FALLBACK_NEWS } from "./fallback";
 import { fetchPublicNews, type Article } from '../../../lib/publicNewsApi';
+import { buildNewsUrl } from '../../../lib/newsRoutes';
 
 function asString(value: unknown): string {
   return typeof value === 'string' ? value : String(value || '');
@@ -17,12 +18,12 @@ function coerceCategory(raw: unknown): NewsItem['category'] {
   return 'Civic';
 }
 
-function articleToNewsItem(raw: Article): NewsItem | null {
+function articleToNewsItem(raw: Article, language?: string): NewsItem | null {
   const title = asString((raw as any)?.title).trim();
   if (!title) return null;
 
-  const slugOrId = (raw as any)?._id || (raw as any)?.id || (raw as any)?.slug;
-  const id = asString(slugOrId).trim();
+  const id = asString((raw as any)?._id || (raw as any)?.id || '').trim();
+  const slug = asString((raw as any)?.slug || id).trim();
   if (!id) return null;
 
   const source = asString((raw as any)?.source?.name || (raw as any)?.source || 'News Pulse').trim();
@@ -32,7 +33,7 @@ function articleToNewsItem(raw: Article): NewsItem | null {
     asString((raw as any)?.district || (raw as any)?.city || (raw as any)?.location || (raw as any)?.region || '').trim() ||
     undefined;
   const category = coerceCategory((raw as any)?.category);
-  const url = `/news/${encodeURIComponent(id)}`;
+  const url = buildNewsUrl({ id, slug, lang: language });
 
   return { id, title, source, url, category, district, summary, publishedAt };
 }
@@ -45,7 +46,7 @@ export async function fetchRegionalNews(state: string, language?: string): Promi
       limit: 30,
       extraQuery: { state },
     });
-    const mapped = (resp.items || []).map(articleToNewsItem).filter(Boolean) as NewsItem[];
+    const mapped = (resp.items || []).map((a) => articleToNewsItem(a, language)).filter(Boolean) as NewsItem[];
     return mapped.length ? mapped : FALLBACK_NEWS;
   } catch {
     return FALLBACK_NEWS;
@@ -61,7 +62,7 @@ export async function fetchYouthVoices(state: string, language?: string): Promis
       extraQuery: { state },
     });
     const mapped = (resp.items || [])
-      .map(articleToNewsItem)
+      .map((a) => articleToNewsItem(a, language))
       .filter(Boolean)
       .map((n) => ({ ...n, category: 'Education' as const })) as NewsItem[];
 

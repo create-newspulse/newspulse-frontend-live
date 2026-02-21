@@ -9,6 +9,7 @@ import { resolveArticleSummaryOrExcerpt, resolveArticleTitle } from '../../lib/c
 import OriginalTag from '../../components/OriginalTag';
 import { useLanguage } from '../../utils/LanguageContext';
 import { useI18n } from '../../src/i18n/LanguageProvider';
+import { buildNewsUrl } from '../../lib/newsRoutes';
 
 function formatWhenLabel(iso?: string) {
   if (!iso) return '';
@@ -111,8 +112,9 @@ export default function TopicPage() {
             <section className="mt-8">
               <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 {items.map((a) => {
-                  const slugOrId = a.slug || a._id;
-                  const href = `/news/${encodeURIComponent(String(slugOrId))}`;
+                  const id = String(a._id || '').trim();
+                  const slug = String(a.slug || a._id || '').trim();
+                  const href = id ? buildNewsUrl({ id, slug, lang: language }) : '#';
                   const when = formatWhenLabel(a.publishedAt || a.createdAt);
                   const titleRes = resolveArticleTitle(a as any, language);
                   const summaryRes = resolveArticleSummaryOrExcerpt(a as any, language);

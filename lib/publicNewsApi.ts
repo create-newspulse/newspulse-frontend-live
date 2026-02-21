@@ -4,6 +4,7 @@ export type Article = {
   _id: string;
   title?: string;
   slug?: string;
+  translationGroupId?: string;
   summary?: string;
   excerpt?: string;
   content?: string;
@@ -11,6 +12,7 @@ export type Article = {
   body?: string;
   image?: string;
   imageUrl?: string;
+  coverImageUrl?: string;
   createdAt?: string;
   publishedAt?: string;
   category?: string;
@@ -217,4 +219,87 @@ export async function fetchArticleBySlugOrId(options: {
   }
 
   return { article: null, status: 404, endpointTried: endpoints };
+}
+
+export async function fetchPublicNewsById(options: {
+  id: string;
+  language?: string;
+  signal?: AbortSignal;
+}): Promise<{ article: Article | null; error?: string; status?: number; endpoint: string }> {
+  const base = getApiOrigin();
+  if (!base && typeof window === 'undefined') {
+    return { article: null, error: 'NEXT_PUBLIC_API_BASE not set', endpoint: '' };
+  }
+
+  const id = String(options.id || '').trim();
+  if (!id) return { article: null, error: 'Missing id', endpoint: '' };
+
+  const lang = options.language ? String(options.language).toLowerCase().trim() : '';
+  const langQuery = lang ? `?lang=${encodeURIComponent(lang)}&language=${encodeURIComponent(lang)}` : '';
+
+  const endpoint = `${base}/api/public/news/${encodeURIComponent(id)}${langQuery}`;
+
+  try {
+    const res = await fetch(endpoint, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: options.signal,
+    });
+
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok) {
+      const msg =
+        (data && typeof data === 'object' && (data.message || data.error || data.code))
+          ? String(data.message || data.error || data.code)
+          : '';
+      return { article: null, status: res.status, endpoint, error: msg ? `API ${res.status} (${msg})` : `API ${res.status}` };
+    }
+
+    const article = unwrapArticle(data);
+    if (!article?._id) return { article: null, endpoint, status: 404, error: 'Article not found' };
+    return { article, endpoint };
+  } catch {
+    return { article: null, endpoint, error: 'Fetch failed' };
+  }
+}
+
+export async function fetchPublicNewsGroup(options: {
+  translationGroupId: string;
+  language?: string;
+  signal?: AbortSignal;
+}): Promise<{ items: Article[]; error?: string; status?: number; endpoint: string }> {
+  const base = getApiOrigin();
+  if (!base && typeof window === 'undefined') {
+    return { items: [], error: 'NEXT_PUBLIC_API_BASE not set', endpoint: '' };
+  }
+
+  const groupId = String(options.translationGroupId || '').trim();
+  if (!groupId) return { items: [], error: 'Missing translationGroupId', endpoint: '' };
+
+  const lang = options.language ? String(options.language).toLowerCase().trim() : '';
+  const langQuery = lang ? `?lang=${encodeURIComponent(lang)}&language=${encodeURIComponent(lang)}` : '';
+  const endpoint = `${base}/api/public/news/group/${encodeURIComponent(groupId)}${langQuery}`;
+
+  try {
+    const res = await fetch(endpoint, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: options.signal,
+    });
+
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok) {
+      const msg =
+        (data && typeof data === 'object' && (data.message || data.error || data.code))
+          ? String(data.message || data.error || data.code)
+          : '';
+      return { items: [], status: res.status, endpoint, error: msg ? `API ${res.status} (${msg})` : `API ${res.status}` };
+    }
+
+    return { items: unwrapArticles(data), endpoint };
+  } catch {
+    return { items: [], endpoint, error: 'Fetch failed' };
+  }
 }

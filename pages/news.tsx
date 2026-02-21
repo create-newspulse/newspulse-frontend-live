@@ -6,6 +6,7 @@ import { getApiOrigin } from '../lib/publicNewsApi';
 import { useLanguage } from '../utils/LanguageContext';
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../lib/contentFallback';
 import OriginalTag from '../components/OriginalTag';
+import { buildNewsUrl } from '../lib/newsRoutes';
 
 type NewsApiArticle = {
   title: string;
@@ -55,8 +56,9 @@ export default function News() {
             const title = String(titleRes.text || '').trim();
             if (!title) return null;
 
-            const slugOrId = raw?.slug || raw?._id || raw?.id;
-            const href = slugOrId ? `/news/${encodeURIComponent(String(slugOrId))}` : undefined;
+            const id = String(raw?._id || raw?.id || '').trim();
+            const slug = String(raw?.slug || id).trim();
+            const href = id ? buildNewsUrl({ id, slug, lang: language }) : undefined;
 
             const summaryRes = resolveArticleSummaryOrExcerpt(raw, uiLang);
             const description = String(summaryRes.text || '').trim() || undefined;
