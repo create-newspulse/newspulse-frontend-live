@@ -266,7 +266,7 @@ export default function NationalFeedPage() {
     if (!router.isReady) return;
 
     const topicParam = typeof router.query.topic === 'string' ? router.query.topic : '';
-    const stateParam = typeof router.query.state === 'string' ? router.query.state : '';
+    const stateParam = typeof (router.query as any)['location.state'] === 'string' ? String((router.query as any)['location.state']) : '';
 
     if (topicParam) {
       const normalized = normalize(topicParam);
@@ -290,13 +290,16 @@ export default function NationalFeedPage() {
     else delete nextQuery.topic;
 
     const stateValue = !selectedRegion || selectedRegion === 'all' ? '' : String(selectedRegion);
-    if (stateValue) nextQuery.state = stateValue;
-    else delete nextQuery.state;
+    if (stateValue) (nextQuery as any)['location.state'] = stateValue;
+    else delete (nextQuery as any)['location.state'];
 
     const curTopic = typeof router.query.topic === 'string' ? router.query.topic : '';
-    const curState = typeof router.query.state === 'string' ? router.query.state : '';
+    const curState = typeof (router.query as any)['location.state'] === 'string' ? String((router.query as any)['location.state']) : '';
 
-    if (String(curTopic || '') === String(nextQuery.topic || '') && String(curState || '') === String(nextQuery.state || '')) {
+    if (
+      String(curTopic || '') === String((nextQuery as any).topic || '') &&
+      String(curState || '') === String((nextQuery as any)['location.state'] || '')
+    ) {
       return;
     }
 

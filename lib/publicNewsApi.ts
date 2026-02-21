@@ -5,6 +5,7 @@ export type Article = {
   title?: string;
   slug?: string;
   translationGroupId?: string;
+  translationKey?: string;
   summary?: string;
   excerpt?: string;
   content?: string;
@@ -301,5 +302,51 @@ export async function fetchPublicNewsGroup(options: {
     return { items: unwrapArticles(data), endpoint };
   } catch {
     return { items: [], endpoint, error: 'Fetch failed' };
+  }
+}
+
+export async function fetchPublicNewsTranslation(options: {
+  translationKey: string;
+  language: string;
+  signal?: AbortSignal;
+}): Promise<{ article: Article | null; error?: string; status?: number; endpoint: string }> {
+  const base = getApiOrigin();
+  if (!base && typeof window === 'undefined') {
+    return { article: null, error: 'NEXT_PUBLIC_API_BASE not set', endpoint: '' };
+  }
+
+  const translationKey = String(options.translationKey || '').trim();
+  const language = String(options.language || '').toLowerCase().trim();
+  if (!translationKey || !language) return { article: null, error: 'Missing translationKey/lang', endpoint: '' };
+
+  const params = new URLSearchParams();
+  params.set('translationKey', translationKey);
+  params.set('lang', language);
+  params.set('language', language);
+
+  const endpoint = `${base}/api/public/news/translation?${params.toString()}`;
+
+  try {
+    const res = await fetch(endpoint, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: options.signal,
+    });
+
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok) {
+      const msg =
+        (data && typeof data === 'object' && (data.message || data.error || data.code))
+          ? String(data.message || data.error || data.code)
+          : '';
+      return { article: null, status: res.status, endpoint, error: msg ? `API ${res.status} (${msg})` : `API ${res.status}` };
+    }
+
+    const article = unwrapArticle(data);
+    if (!article?._id) return { article: null, endpoint, status: 404, error: 'Article not found' };
+    return { article, endpoint };
+  } catch {
+    return { article: null, endpoint, error: 'Fetch failed' };
   }
 }

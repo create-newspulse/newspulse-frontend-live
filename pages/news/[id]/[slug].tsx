@@ -3,12 +3,14 @@ import Head from 'next/head';
 import Image from 'next/image';
 import React from 'react';
 import sanitizeHtml from 'sanitize-html';
+import { useRouter } from 'next/router';
 
 import OriginalTag from '../../../components/OriginalTag';
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../../../lib/contentFallback';
-import { fetchPublicNewsById, fetchPublicNewsGroup, type Article } from '../../../lib/publicNewsApi';
+import { fetchPublicNewsById, fetchPublicNewsTranslation, type Article } from '../../../lib/publicNewsApi';
 import { useI18n } from '../../../src/i18n/LanguageProvider';
 import { useLanguage } from '../../../utils/LanguageContext';
+import { buildNewsUrl } from '../../../lib/newsRoutes';
 
 type Props = {
   article: Article;
@@ -102,37 +104,95 @@ function safeDecodeURIComponent(value: string): string {
 
 export default function NewsDetailPage({ article, safeHtml, publishedAtLabel, resolvedTitle, resolvedSummary, titleIsOriginal, summaryIsOriginal }: Props) {
   const { t } = useI18n();
-  const { language, setLanguage } = useLanguage();
+  const router = useRouter();
+  const { language } = useLanguage();
 
-  const title = resolvedTitle || article.title || 'News';
-  const summary = resolvedSummary || article.summary || article.excerpt || '';
-  const publishedAt = publishedAtLabel;
+  const [activeLang, setActiveLang] = React.useState<'en' | 'hi' | 'gu'>(() => {
+    const v = String(language || '').toLowerCase().trim();
+    if (v === 'hi' || v === 'gu' || v === 'en') return v as any;
+    return 'en';
+  });
+  const [activeArticle, setActiveArticle] = React.useState<Article>(article);
+  const [activeSafeHtml, setActiveSafeHtml] = React.useState<string>(safeHtml);
+  const [activePublishedAtLabel, setActivePublishedAtLabel] = React.useState<string>(publishedAtLabel);
+  const [activeResolvedTitle, setActiveResolvedTitle] = React.useState<string>(resolvedTitle);
+  const [activeResolvedSummary, setActiveResolvedSummary] = React.useState<string>(resolvedSummary);
+  const [activeTitleIsOriginal, setActiveTitleIsOriginal] = React.useState<boolean>(titleIsOriginal);
+  const [activeSummaryIsOriginal, setActiveSummaryIsOriginal] = React.useState<boolean>(summaryIsOriginal);
+
+  React.useEffect(() => {
+    setActiveArticle(article);
+    setActiveSafeHtml(safeHtml);
+    setActivePublishedAtLabel(publishedAtLabel);
+    setActiveResolvedTitle(resolvedTitle);
+    setActiveResolvedSummary(resolvedSummary);
+    setActiveTitleIsOriginal(titleIsOriginal);
+    setActiveSummaryIsOriginal(summaryIsOriginal);
+  }, [article, publishedAtLabel, resolvedSummary, resolvedTitle, safeHtml, summaryIsOriginal, titleIsOriginal]);
+
+  const title = activeResolvedTitle || activeArticle.title || 'News';
+  const summary = activeResolvedSummary || activeArticle.summary || activeArticle.excerpt || '';
+  const publishedAt = activePublishedAtLabel;
 
   const coverImageUrl =
-    String(article.coverImageUrl || '').trim() ||
-    String(article.imageUrl || '').trim() ||
-    String(article.image || '').trim() ||
+    String(activeArticle.coverImageUrl || '').trim() ||
+    String(activeArticle.imageUrl || '').trim() ||
+    String(activeArticle.image || '').trim() ||
     '';
 
-  const translationGroupId = String(article.translationGroupId || '').trim();
+  const translationKey = String(activeArticle.translationKey || activeArticle.translationGroupId || '').trim();
 
   const onSwitchLanguage = async (nextLang: 'en' | 'hi' | 'gu') => {
-    if (!translationGroupId) {
-      // No translation group: just switch locale for UI strings.
-      setLanguage(nextLang, { path: `/news/${encodeURIComponent(String(article._id))}/${encodeURIComponent(String(article.slug || article._id))}` });
-      return;
+    setActiveLang(nextLang);
+
+    // Keep URL locale in sync for UI strings/SEO, but do it shallowly so we don't refetch SSR props.
+    // Default behavior: stay on the same article id/slug.
+    try {
+      const destination = buildNewsUrl({
+        id: String(activeArticle._id || '').trim(),
+        slug: String(activeArticle.slug || activeArticle._id || '').trim(),
+        lang: nextLang,
+      });
+      await router.replace(destination, destination, { locale: nextLang, shallow: true, scroll: false });
+    } catch {
+      // ignore
     }
 
+    if (!translationKey) return;
+
     try {
-      const { items } = await fetchPublicNewsGroup({ translationGroupId, language: nextLang });
-      const match = items.find((x) => String(x?.language || '').toLowerCase().trim() === nextLang) || items[0];
-      if (!match?._id) return;
+      const { article: translated } = await fetchPublicNewsTranslation({ translationKey, language: nextLang });
+      if (!translated?._id) return;
 
-      const id = String(match._id);
-      const slug = String(match.slug || match._id);
+      // Update URL to match the translated article (still shallow).
+      try {
+        const destination = buildNewsUrl({
+          id: String(translated._id || '').trim(),
+          slug: String(translated.slug || translated._id || '').trim(),
+          lang: nextLang,
+        });
+        await router.replace(destination, destination, { locale: nextLang, shallow: true, scroll: false });
+      } catch {
+        // ignore
+      }
 
-      // Route to the translated article URL.
-      setLanguage(nextLang, { path: `/news/${encodeURIComponent(id)}/${encodeURIComponent(slug)}` });
+      const langForText = toUiLang(nextLang);
+      const titleRes = resolveArticleTitle(translated, langForText);
+      const summaryRes = resolveArticleSummaryOrExcerpt(translated, langForText);
+
+      const html =
+        (typeof translated.content === 'string' && translated.content) ||
+        ((translated as any).html as string) ||
+        ((translated as any).body as string) ||
+        '';
+
+      setActiveArticle(translated);
+      setActiveResolvedTitle(titleRes.text);
+      setActiveResolvedSummary(summaryRes.text);
+      setActiveTitleIsOriginal(titleRes.isOriginal);
+      setActiveSummaryIsOriginal(summaryRes.isOriginal);
+      setActiveSafeHtml(sanitizeContent(html));
+      setActivePublishedAtLabel(formatPublishedAtLabel(String(translated.publishedAt || translated.createdAt || '').trim()));
     } catch {
       // ignore
     }
@@ -154,7 +214,7 @@ export default function NewsDetailPage({ article, safeHtml, publishedAtLabel, re
 
               <div className="shrink-0">
                 <select
-                  value={language || 'en'}
+                  value={activeLang}
                   onChange={(e) => onSwitchLanguage(e.target.value as any)}
                   aria-label={t('common.language')}
                   className="border rounded-lg px-3 py-2 font-medium bg-white shadow text-gray-800"
@@ -167,9 +227,9 @@ export default function NewsDetailPage({ article, safeHtml, publishedAtLabel, re
             </div>
 
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
-              {String(article.language || '').trim() ? (
+              {String(activeArticle.language || '').trim() ? (
                 <span>
-                  <span className="font-semibold">{t('newsDetail.languageLabel')}</span> {String(article.language || '').trim()}
+                  <span className="font-semibold">{t('newsDetail.languageLabel')}</span> {String(activeArticle.language || '').trim()}
                 </span>
               ) : null}
               {publishedAt ? (
@@ -202,7 +262,7 @@ export default function NewsDetailPage({ article, safeHtml, publishedAtLabel, re
           <hr className="my-8" />
 
           <article className="prose prose-slate max-w-none">
-            <div dangerouslySetInnerHTML={{ __html: safeHtml }} />
+            <div dangerouslySetInnerHTML={{ __html: activeSafeHtml }} />
           </article>
         </div>
       </main>
