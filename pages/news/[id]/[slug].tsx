@@ -7,7 +7,7 @@ import { useRouter } from 'next/router';
 
 import OriginalTag from '../../../components/OriginalTag';
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../../../lib/contentFallback';
-import { fetchPublicNewsById, fetchPublicNewsTranslation, type Article } from '../../../lib/publicNewsApi';
+import { fetchPublicNewsById, type Article } from '../../../lib/publicNewsApi';
 import { useI18n } from '../../../src/i18n/LanguageProvider';
 import { useLanguage } from '../../../utils/LanguageContext';
 import { buildNewsUrl } from '../../../lib/newsRoutes';
@@ -113,34 +113,72 @@ export default function NewsDetailPage({ article, safeHtml, publishedAtLabel, re
     return 'en';
   });
   const [activeArticle, setActiveArticle] = React.useState<Article>(article);
-  const [activeSafeHtml, setActiveSafeHtml] = React.useState<string>(safeHtml);
-  const [activePublishedAtLabel, setActivePublishedAtLabel] = React.useState<string>(publishedAtLabel);
-  const [activeResolvedTitle, setActiveResolvedTitle] = React.useState<string>(resolvedTitle);
-  const [activeResolvedSummary, setActiveResolvedSummary] = React.useState<string>(resolvedSummary);
-  const [activeTitleIsOriginal, setActiveTitleIsOriginal] = React.useState<boolean>(titleIsOriginal);
-  const [activeSummaryIsOriginal, setActiveSummaryIsOriginal] = React.useState<boolean>(summaryIsOriginal);
+
+  const translation = React.useMemo(() => {
+    const translations = (activeArticle as any)?.translations as Record<string, any> | undefined;
+    const t = translations?.[activeLang];
+    return t && typeof t === 'object' ? t : null;
+  }, [activeArticle, activeLang]);
+
+  const title =
+    String(translation?.title || '').trim() ||
+    String(resolvedTitle || '').trim() ||
+    String(activeArticle.title || '').trim() ||
+    'News';
+
+  const summary =
+    String(translation?.summary || '').trim() ||
+    String(translation?.excerpt || '').trim() ||
+    String(resolvedSummary || '').trim() ||
+    String(activeArticle.summary || '').trim() ||
+    String(activeArticle.excerpt || '').trim() ||
+    '';
+
+  const rawHtml =
+    (typeof translation?.content === 'string' && translation.content) ||
+    (typeof translation?.html === 'string' && translation.html) ||
+    (typeof translation?.body === 'string' && translation.body) ||
+    (typeof activeArticle.content === 'string' && activeArticle.content) ||
+    ((activeArticle as any).html as string) ||
+    ((activeArticle as any).body as string) ||
+    '';
+
+  const activeSafeHtml = React.useMemo(() => {
+    if (!rawHtml) return safeHtml;
+    return sanitizeContent(rawHtml);
+  }, [rawHtml, safeHtml]);
+
+  const activePublishedAtLabel = React.useMemo(() => {
+    return publishedAtLabel || formatPublishedAtLabel(String(activeArticle.publishedAt || activeArticle.createdAt || '').trim());
+  }, [activeArticle.createdAt, activeArticle.publishedAt, publishedAtLabel]);
+
+  const langForText = toUiLang(activeLang);
+  const titleRes = React.useMemo(() => resolveArticleTitle(activeArticle, langForText), [activeArticle, langForText]);
+  const summaryRes = React.useMemo(() => resolveArticleSummaryOrExcerpt(activeArticle, langForText), [activeArticle, langForText]);
+
+  const effectiveTitleIsOriginal = titleIsOriginal || titleRes.isOriginal;
+  const effectiveSummaryIsOriginal = summaryIsOriginal || summaryRes.isOriginal;
 
   React.useEffect(() => {
     setActiveArticle(article);
-    setActiveSafeHtml(safeHtml);
-    setActivePublishedAtLabel(publishedAtLabel);
-    setActiveResolvedTitle(resolvedTitle);
-    setActiveResolvedSummary(resolvedSummary);
-    setActiveTitleIsOriginal(titleIsOriginal);
-    setActiveSummaryIsOriginal(summaryIsOriginal);
   }, [article, publishedAtLabel, resolvedSummary, resolvedTitle, safeHtml, summaryIsOriginal, titleIsOriginal]);
 
-  const title = activeResolvedTitle || activeArticle.title || 'News';
-  const summary = activeResolvedSummary || activeArticle.summary || activeArticle.excerpt || '';
   const publishedAt = activePublishedAtLabel;
 
   const coverImageUrl =
+    String(translation?.coverImageUrl || '').trim() ||
+    String(translation?.imageUrl || '').trim() ||
+    String(translation?.image || '').trim() ||
     String(activeArticle.coverImageUrl || '').trim() ||
     String(activeArticle.imageUrl || '').trim() ||
     String(activeArticle.image || '').trim() ||
     '';
 
-  const translationKey = String(activeArticle.translationKey || activeArticle.translationGroupId || '').trim();
+  const languageLabel = React.useMemo(() => {
+    if (activeLang === 'gu') return 'Gujarati';
+    if (activeLang === 'hi') return 'Hindi';
+    return 'English';
+  }, [activeLang]);
 
   const onSwitchLanguage = async (nextLang: 'en' | 'hi' | 'gu') => {
     setActiveLang(nextLang);
@@ -158,41 +196,24 @@ export default function NewsDetailPage({ article, safeHtml, publishedAtLabel, re
       // ignore
     }
 
-    if (!translationKey) return;
+    const id = String(activeArticle._id || '').trim();
+    if (!id) return;
 
     try {
-      const { article: translated } = await fetchPublicNewsTranslation({ translationKey, language: nextLang });
-      if (!translated?._id) return;
+      const res = await fetch(`/api/public/news/${encodeURIComponent(id)}/translate`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ lang: nextLang }),
+      });
 
-      // Update URL to match the translated article (still shallow).
-      try {
-        const destination = buildNewsUrl({
-          id: String(translated._id || '').trim(),
-          slug: String(translated.slug || translated._id || '').trim(),
-          lang: nextLang,
-        });
-        await router.replace(destination, destination, { locale: nextLang, shallow: true, scroll: false });
-      } catch {
-        // ignore
-      }
+      const json = await res.json().catch(() => null);
+      const nextArticle = json && typeof json === 'object' ? (json as any).data : null;
+      if (!nextArticle || typeof nextArticle !== 'object') return;
 
-      const langForText = toUiLang(nextLang);
-      const titleRes = resolveArticleTitle(translated, langForText);
-      const summaryRes = resolveArticleSummaryOrExcerpt(translated, langForText);
-
-      const html =
-        (typeof translated.content === 'string' && translated.content) ||
-        ((translated as any).html as string) ||
-        ((translated as any).body as string) ||
-        '';
-
-      setActiveArticle(translated);
-      setActiveResolvedTitle(titleRes.text);
-      setActiveResolvedSummary(summaryRes.text);
-      setActiveTitleIsOriginal(titleRes.isOriginal);
-      setActiveSummaryIsOriginal(summaryRes.isOriginal);
-      setActiveSafeHtml(sanitizeContent(html));
-      setActivePublishedAtLabel(formatPublishedAtLabel(String(translated.publishedAt || translated.createdAt || '').trim()));
+      setActiveArticle(nextArticle as Article);
     } catch {
       // ignore
     }
@@ -209,7 +230,7 @@ export default function NewsDetailPage({ article, safeHtml, publishedAtLabel, re
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h1 className="text-3xl font-extrabold text-slate-900 leading-tight">
-                {title} {titleIsOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
+                {title} {effectiveTitleIsOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
               </h1>
 
               <div className="shrink-0">
@@ -227,11 +248,9 @@ export default function NewsDetailPage({ article, safeHtml, publishedAtLabel, re
             </div>
 
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
-              {String(activeArticle.language || '').trim() ? (
-                <span>
-                  <span className="font-semibold">{t('newsDetail.languageLabel')}</span> {String(activeArticle.language || '').trim()}
-                </span>
-              ) : null}
+              <span>
+                <span className="font-semibold">{t('newsDetail.languageLabel')}</span> {languageLabel}
+              </span>
               {publishedAt ? (
                 <span>
                   <span className="font-semibold">{t('newsDetail.publishedLabel')}</span> {publishedAt}
@@ -241,7 +260,7 @@ export default function NewsDetailPage({ article, safeHtml, publishedAtLabel, re
 
             {summary ? (
               <p className="text-lg text-slate-700">
-                {summary} {summaryIsOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
+                {summary} {effectiveSummaryIsOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
               </p>
             ) : null}
 

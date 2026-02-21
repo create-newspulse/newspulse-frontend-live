@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
-import { getPublicApiBaseUrl } from '../../../../lib/publicApiBase';
+import { getPublicApiBaseUrl } from '../../../../../lib/publicApiBase';
 
 function getApiBase(): string {
   return String(getPublicApiBaseUrl() || '').trim().replace(/\/+$/, '');

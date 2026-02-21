@@ -1,6 +1,6 @@
 import { getPublicApiBaseUrl } from './publicApiBase';
 
-export type Article = {
+export type ArticleBase = {
   _id: string;
   title?: string;
   slug?: string;
@@ -18,6 +18,10 @@ export type Article = {
   publishedAt?: string;
   category?: string;
   language?: string;
+};
+
+export type Article = ArticleBase & {
+  translations?: Record<string, Partial<ArticleBase> | undefined>;
 };
 
 export function getApiOrigin() {
