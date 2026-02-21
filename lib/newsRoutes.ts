@@ -17,7 +17,10 @@ export function buildNewsUrl(options: { id: string; slug?: string; lang?: unknow
 
   // Default locale should NOT be prefixed.
   const prefix = lang !== 'en' ? `/${lang}` : '';
-  return `${prefix}/news/${id}/${slug}`;
+
+  // Preserve active language in URL so client-side pages can refetch
+  // and language selection can survive reload/sharing.
+  return `${prefix}/news/${id}/${slug}?lang=${encodeURIComponent(lang)}`;
 }
 
 export function splitNewsParams(value: unknown): { id: string; slug: string } | null {
