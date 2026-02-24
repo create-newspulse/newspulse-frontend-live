@@ -9,6 +9,18 @@ import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from
 import OriginalTag from '../../components/OriginalTag';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../../lib/newsRoutes';
+import { localizeArticle } from '../../lib/localizeArticle';
+
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE_URL ||
+  'https://newspulse-backend-real.onrender.com';
+
+function normalizeLang(locale: unknown): 'en' | 'hi' | 'gu' {
+  const v = String(locale || '').toLowerCase().trim();
+  if (v === 'hi' || v === 'hindi' || v === 'in') return 'hi';
+  if (v === 'gu' || v === 'gujarati') return 'gu';
+  return 'en';
+}
 
 function normalize(s: string) {
   return (s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -21,19 +33,15 @@ function matchRegion(article: any, regionName: string) {
   return new RegExp(`(^|\n|\r|\s)${n}(\s|\n|\r|$)`).test(text) || text.includes(n);
 }
 
-export default function RegionPage() {
+export default function RegionPage(props: { lang: 'en' | 'hi' | 'gu'; data?: any[] | null }) {
   const router = useRouter();
   const { region } = router.query as { region?: string };
   const { language } = useLanguage();
   const { t } = useI18n();
-  const langKey = toLanguageKey(language);
+  const effectiveLang = normalizeLang(router.locale || language || props.lang);
+  const langKey = toLanguageKey(effectiveLang);
 
-  const uiLang: UiLang = (() => {
-    const v = String(language || '').toLowerCase().trim();
-    if (v === 'hi' || v === 'hindi') return 'hi';
-    if (v === 'gu' || v === 'gujarati') return 'gu';
-    return 'en';
-  })();
+  const uiLang: UiLang = effectiveLang;
 
   const entry = ALL_REGIONS.find((r) => r.slug === region);
   const displayName = entry ? getRegionName(langKey, entry.type, entry.slug, entry.name) : 'Region';
@@ -67,18 +75,20 @@ export default function RegionPage() {
                   display.map((article: any, idx: number) => {
                     const id = String(article?._id || article?.id || '').trim();
                     const slug = String(article?.slug || id).trim();
-                    const href = id ? buildNewsUrl({ id, slug, lang: language }) : '#';
+                    const href = id ? buildNewsUrl({ id, slug, lang: effectiveLang }) : '#';
                     return (
                     <a key={idx} href={href} className="block p-6 rounded-2xl border shadow-sm hover:shadow-md bg-white dark:bg-gray-800 transition">
                       <div className="text-xs text-gray-500 mb-2">{new Date(article.publishedAt).toLocaleString()}</div>
                       {(() => {
                         const titleRes = resolveArticleTitle(article, uiLang);
                         const summaryRes = resolveArticleSummaryOrExcerpt(article, uiLang);
+                        const localized = localizeArticle(article, effectiveLang);
                         const desc = summaryRes.text || (article.excerpt || (article.content ? String(article.content).slice(0, 160) + '...' : ''));
+                        const safeTitle = localized.title || titleRes.text || article.title || t('common.untitled');
                         return (
                           <>
                             <h3 className="font-bold text-lg mb-2">
-                              {titleRes.text || article.title}{' '}
+                              {safeTitle}{' '}
                               {titleRes.isOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
                             </h3>
                             <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3">
@@ -105,12 +115,27 @@ export default function RegionPage() {
 }
 
 export const getStaticProps: GetStaticProps = async ({ locale }) => {
-  const { getMessages } = await import('../../lib/getMessages');
-  return {
-    props: {
-      messages: await getMessages(locale as string),
-    },
-  };
+  const lang = normalizeLang(locale);
+  try {
+    const { getMessages } = await import('../../lib/getMessages');
+    return {
+      props: {
+        lang,
+        data: null,
+        messages: await getMessages(lang),
+      },
+    };
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('SSR national error', err);
+    return {
+      props: {
+        lang,
+        data: null,
+        messages: {},
+      },
+    };
+  }
 };
 
 export async function getStaticPaths() {

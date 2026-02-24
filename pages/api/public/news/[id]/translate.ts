@@ -6,6 +6,33 @@ function getApiBase(): string {
   return String(getPublicApiBaseUrl() || '').trim().replace(/\/+$/, '');
 }
 
+function safeJsonParse(raw: string): any {
+  try {
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeTranslateBody(body: unknown): string {
+  const asObj = (() => {
+    if (typeof body === 'string') return safeJsonParse(body) ?? {};
+    if (body && typeof body === 'object') return body as any;
+    return {};
+  })();
+
+  const lang = String((asObj as any)?.lang || (asObj as any)?.language || (asObj as any)?.targetLang || '').toLowerCase().trim();
+
+  // Backend compatibility: support both `lang` and `language`.
+  const out: Record<string, any> = { ...(asObj as any) };
+  if (lang) {
+    if (!out.lang) out.lang = lang;
+    if (!out.language) out.language = lang;
+  }
+
+  return JSON.stringify(out);
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
@@ -25,6 +52,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
+    const body = normalizeTranslateBody(req.body);
+
     const upstream = await fetch(`${base}/api/public/news/${encodeURIComponent(id)}/translate`, {
       method: 'POST',
       headers: {
@@ -33,14 +62,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         cookie: String(req.headers.cookie || ''),
         authorization: String(req.headers.authorization || ''),
       },
-      body: typeof req.body === 'string' ? req.body : JSON.stringify(req.body ?? {}),
+      body,
     });
 
     const text = await upstream.text().catch(() => '');
 
     if (!upstream.ok) {
       res.setHeader('Cache-Control', 'no-store');
-      return res.status(upstream.status).json({ ok: false, message: 'UPSTREAM_ERROR' });
+      // Never bubble upstream failures as 5xx to the browser.
+      // This keeps UI flows stable even if the backend translation service is down.
+      const upstreamJson = safeJsonParse(text);
+      const upstreamMsg = upstreamJson && typeof upstreamJson === 'object' ? String((upstreamJson as any).message || (upstreamJson as any).error || '') : '';
+      return res.status(200).json({ ok: false, message: 'UPSTREAM_ERROR', status: upstream.status, upstreamMessage: upstreamMsg || undefined });
     }
 
     try {
@@ -51,7 +84,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       res.setHeader('Cache-Control', 'no-store');
       return res.status(200).json({});
     }
-  } catch {
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('translate proxy error', err);
     res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json({ ok: false, message: 'NETWORK_ERROR' });
   }

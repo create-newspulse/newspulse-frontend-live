@@ -8,6 +8,7 @@ import { useRouter } from 'next/router';
 import OriginalTag from '../../../components/OriginalTag';
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../../../lib/contentFallback';
 import { fetchPublicNewsById, type Article } from '../../../lib/publicNewsApi';
+import { localizeArticle } from '../../../lib/localizeArticle';
 import { useI18n } from '../../../src/i18n/LanguageProvider';
 import { useLanguage } from '../../../utils/LanguageContext';
 import { buildNewsUrl } from '../../../lib/newsRoutes';
@@ -120,7 +121,10 @@ export default function NewsDetailPage({ article, safeHtml, publishedAtLabel, re
     return t && typeof t === 'object' ? t : null;
   }, [activeArticle, activeLang]);
 
+  const localized = React.useMemo(() => localizeArticle(activeArticle, activeLang), [activeArticle, activeLang]);
+
   const title =
+    String(localized.title || '').trim() ||
     String(translation?.title || '').trim() ||
     String(resolvedTitle || '').trim() ||
     String(activeArticle.title || '').trim() ||

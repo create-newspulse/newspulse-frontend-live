@@ -13,8 +13,20 @@ import { getRegionName, tHeading, toLanguageKey } from '../../utils/localizedNam
 import { fetchPublicNews } from '../../lib/publicNewsApi';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../../lib/newsRoutes';
+import { localizeArticle } from '../../lib/localizeArticle';
 
 type AnyStory = any;
+
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE_URL ||
+  'https://newspulse-backend-real.onrender.com';
+
+function normalizeLang(locale: unknown): 'en' | 'hi' | 'gu' {
+  const v = String(locale || '').toLowerCase().trim();
+  if (v === 'hi' || v === 'hindi' || v === 'in') return 'hi';
+  if (v === 'gu' || v === 'gujarati') return 'gu';
+  return 'en';
+}
 
 const TOPIC_CHIPS = ['All', 'Politics', 'Crime', 'Business', 'Education', 'Health', 'Tech', 'Defence'] as const;
 type TopicChip = (typeof TOPIC_CHIPS)[number];
@@ -186,11 +198,11 @@ function ClientTime({ iso }: { iso?: string }) {
   );
 }
 
-function CompactFeedRow({ story }: { story: AnyStory }) {
+function CompactFeedRow({ story, lang }: { story: AnyStory; lang: 'en' | 'hi' | 'gu' }) {
   const { t } = useI18n();
-  const { language } = useLanguage();
-  const href = storyHref(story, language);
-  const title = String(story?.title || t('common.untitled')).trim();
+  const href = storyHref(story, lang);
+  const { title } = localizeArticle(story, lang);
+  const safeTitle = String(title || story?.title || t('common.untitled')).trim();
   const img = storyImage(story);
   const when = storyDateIso(story);
   const where = storyLocation(story);
@@ -216,7 +228,7 @@ function CompactFeedRow({ story }: { story: AnyStory }) {
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <div className="line-clamp-2 text-sm font-semibold leading-snug text-slate-900 group-hover:underline dark:text-gray-100">
-              {title}
+              {safeTitle}
             </div>
           </div>
           <div className="shrink-0">
@@ -238,28 +250,33 @@ function CompactFeedRow({ story }: { story: AnyStory }) {
   );
 }
 
-export default function NationalFeedPage() {
+export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data: AnyStory[] | null; breaking?: AnyStory[] | null }) {
   const router = useRouter();
   const { language } = useLanguage();
   const { t } = useI18n();
   const voice = useVoiceReader();
-  const langKey = React.useMemo(() => toLanguageKey(language), [language]);
+  const effectiveLang = React.useMemo(() => normalizeLang(router.locale || language || props.lang), [language, props.lang, router.locale]);
+  const langKey = React.useMemo(() => toLanguageKey(effectiveLang), [effectiveLang]);
 
   const [selectedTopic, setSelectedTopic] = React.useState<TopicChip>('All');
   const [selectedRegion, setSelectedRegion] = React.useState<string>('all');
   const [sortKey, setSortKey] = React.useState<SortKey>('latest');
   const [searchQuery, setSearchQuery] = React.useState('');
 
-  const [stories, setStories] = React.useState<AnyStory[]>([]);
-  const [breaking, setBreaking] = React.useState<any[]>([]);
+  const initialStories = React.useMemo(() => (Array.isArray(props.data) ? props.data : []), [props.data]);
+  const initialBreaking = React.useMemo(() => (Array.isArray(props.breaking) ? props.breaking : []), [props.breaking]);
+
+  const [stories, setStories] = React.useState<AnyStory[]>(initialStories);
+  const [breaking, setBreaking] = React.useState<any[]>(initialBreaking);
 
   const [page, setPage] = React.useState(1);
-  const [loading, setLoading] = React.useState(true);
+  const [loading, setLoading] = React.useState(!initialStories.length);
   const [loadingMore, setLoadingMore] = React.useState(false);
   const [hasMore, setHasMore] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
   const sentinelRef = React.useRef<HTMLDivElement | null>(null);
+  const didInitRef = React.useRef(false);
 
   // URL <-> filter state (shareable links)
   React.useEffect(() => {
@@ -342,7 +359,7 @@ export default function NationalFeedPage() {
 
         // Public API does not currently support pagination params; emulate paging by increasing limit.
         const requested = pageToLoad * limit;
-        const resp = await fetchPublicNews({ category: 'national', language, limit: requested });
+        const resp = await fetchPublicNews({ category: 'national', language: effectiveLang, limit: requested });
         if (resp?.error) {
           setError(resp.error);
           setHasMore(false);
@@ -365,19 +382,28 @@ export default function NationalFeedPage() {
         setLoadingMore(false);
       }
     },
-    [language, t]
+    [effectiveLang, t]
   );
 
   // Initial fetch + refetch when language changes
   React.useEffect(() => {
     let cancelled = false;
 
+    const isFirstRun = !didInitRef.current;
+    didInitRef.current = true;
+
+    // If we already have SSR-provided items, avoid a forced refetch only on first paint.
+    // Always refetch when language changes (effect reruns).
+    const shouldFetchFirstPage = !isFirstRun || !initialStories.length;
+
     (async () => {
-      await loadPage(1);
+      if (shouldFetchFirstPage) {
+        await loadPage(1);
+      }
       if (cancelled) return;
       try {
         // Best-effort: treat breaking as its own public category if backend supports it.
-        const resp = await fetchPublicNews({ category: 'breaking', language, limit: 10 });
+        const resp = await fetchPublicNews({ category: 'breaking', language: effectiveLang, limit: 10 });
         if (resp?.error) {
           setBreaking([]);
         } else {
@@ -391,7 +417,7 @@ export default function NationalFeedPage() {
     return () => {
       cancelled = true;
     };
-  }, [loadPage]);
+  }, [effectiveLang, initialStories.length, loadPage]);
 
   // Infinite scroll
   React.useEffect(() => {
@@ -469,6 +495,12 @@ export default function NationalFeedPage() {
   const hero = sortedStories[0] || null;
   const feed = hero ? sortedStories.slice(1) : sortedStories;
 
+  const heroLocalizedTitle = React.useMemo(() => {
+    if (!hero) return '';
+    const { title } = localizeArticle(hero, effectiveLang);
+    return String(title || hero?.title || '').trim();
+  }, [effectiveLang, hero]);
+
   const topStories = React.useMemo(() => {
     const base = [...sortedStories];
     base.sort((a, b) => (Number(b?.reads || 0) || 0) - (Number(a?.reads || 0) || 0));
@@ -507,14 +539,14 @@ export default function NationalFeedPage() {
 
   const heroListenText = React.useMemo(() => {
     if (!hero) return '';
-    const parts = [String(hero?.title || '').trim(), storyExcerpt(hero)].filter(Boolean);
+    const parts = [heroLocalizedTitle, storyExcerpt(hero)].filter(Boolean);
     return parts.join('. ');
-  }, [hero]);
+  }, [hero, heroLocalizedTitle]);
 
   const shareHero = async () => {
     if (!hero) return;
-    const url = typeof window !== 'undefined' ? window.location.origin + storyHref(hero, language) : storyHref(hero, language);
-    const title = String(hero?.title || 'News Pulse').trim();
+    const url = typeof window !== 'undefined' ? window.location.origin + storyHref(hero, effectiveLang) : storyHref(hero, effectiveLang);
+    const title = String(heroLocalizedTitle || 'News Pulse').trim();
     try {
       if (typeof navigator !== 'undefined' && 'share' in navigator) {
         const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> };
@@ -646,7 +678,7 @@ export default function NationalFeedPage() {
                 </div>
               ) : hero ? (
                 <div className="p-4">
-                  <a href={storyHref(hero, language)} className="block">
+                  <a href={storyHref(hero, effectiveLang)} className="block">
                     <img
                       src={storyImage(hero)}
                       alt=""
@@ -660,7 +692,7 @@ export default function NationalFeedPage() {
                             {t('nationalPage.topStory')}
                           </div>
                           <h2 className="mt-1 line-clamp-2 text-xl md:text-2xl font-extrabold leading-tight">
-                            {String(hero?.title || '').trim()}
+                            {heroLocalizedTitle}
                           </h2>
                         </div>
                         <div className="shrink-0 text-right">
@@ -679,7 +711,7 @@ export default function NationalFeedPage() {
 
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <a
-                      href={storyHref(hero, language)}
+                      href={storyHref(hero, effectiveLang)}
                       className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
                     >
                       {t('common.read')}
@@ -702,7 +734,7 @@ export default function NationalFeedPage() {
                   </div>
                 </div>
               ) : (
-                <div className="p-6 text-sm text-slate-600 dark:text-gray-300">{t('nationalPage.noStoriesYet')}</div>
+                <div className="p-6 text-sm text-slate-600 dark:text-gray-300">No news found</div>
               )}
             </div>
 
@@ -719,11 +751,11 @@ export default function NationalFeedPage() {
 
               <div>
                 {feed.length === 0 && !loading ? (
-                  <div className="p-6 text-sm text-slate-600 dark:text-gray-300">{t('nationalPage.noStoriesMatchFilters')}</div>
+                  <div className="p-6 text-sm text-slate-600 dark:text-gray-300">No news found</div>
                 ) : null}
 
                 {feed.map((s, idx) => {
-                  const row = <CompactFeedRow key={String(s?._id || s?.id || s?.slug || idx)} story={s} />;
+                  const row = <CompactFeedRow key={String(s?._id || s?.id || s?.slug || idx)} story={s} lang={effectiveLang} />;
                   // Mobile: insert sidebar blocks after 8 stories
                   if (idx === 7) {
                     return (
@@ -732,7 +764,8 @@ export default function NationalFeedPage() {
                         <div className="lg:hidden border-t border-slate-200">
                           <div className="p-4">
                             <NationalSidebar
-                              language={language}
+                              language={effectiveLang}
+                              lang={effectiveLang}
                               topStories={topStories}
                               trendingTopics={trendingTopics}
                               videoStory={videoStory}
@@ -758,7 +791,8 @@ export default function NationalFeedPage() {
           <aside className="hidden lg:block lg:col-span-3">
             <div className="sticky top-4">
               <NationalSidebar
-                language={language}
+                language={effectiveLang}
+                lang={effectiveLang}
                 topStories={topStories}
                 trendingTopics={trendingTopics}
                 videoStory={videoStory}
@@ -773,11 +807,13 @@ export default function NationalFeedPage() {
 
 function NationalSidebar({
   language,
+  lang,
   topStories,
   trendingTopics,
   videoStory,
 }: {
   language: any;
+  lang: 'en' | 'hi' | 'gu';
   topStories: AnyStory[];
   trendingTopics: string[];
   videoStory: AnyStory | null;
@@ -808,7 +844,10 @@ function NationalSidebar({
                 <div className="shrink-0 text-xs font-black text-slate-500 w-5 text-right dark:text-gray-400">{i + 1}</div>
                 <div className="min-w-0">
                   <div className="line-clamp-2 text-sm font-semibold text-slate-900 dark:text-gray-100">
-                    {String(s?.title || t('common.untitled'))}
+                    {(() => {
+                      const { title } = localizeArticle(s, lang);
+                      return String(title || s?.title || t('common.untitled'));
+                    })()}
                   </div>
                   <div className="mt-1 text-xs text-slate-500 dark:text-gray-400">📍 {storyLocation(s)}</div>
                 </div>
@@ -857,7 +896,10 @@ function NationalSidebar({
                 </div>
               </div>
               <div className="mt-2 line-clamp-2 text-sm font-semibold text-slate-900 group-hover:underline dark:text-gray-100">
-                {String(videoStory?.title || t('nationalPage.watchFallback'))}
+                {(() => {
+                  const { title } = localizeArticle(videoStory, lang);
+                  return String(title || videoStory?.title || t('nationalPage.watchFallback'));
+                })()}
               </div>
               <div className="mt-1 text-xs text-slate-500 dark:text-gray-400">📍 {storyLocation(videoStory)}</div>
             </a>
@@ -871,10 +913,65 @@ function NationalSidebar({
 }
 
 export const getStaticProps: GetStaticProps = async ({ locale }) => {
-  const { getMessages } = await import('../../lib/getMessages');
-  return {
-    props: {
-      messages: await getMessages(locale as string),
-    },
-  };
+  const lang = normalizeLang(locale);
+
+  const messages = await (async () => {
+    try {
+      const { getMessages } = await import('../../lib/getMessages');
+      return await getMessages(lang);
+    } catch {
+      return {};
+    }
+  })();
+
+  try {
+    const limit = 40;
+    const params = new URLSearchParams();
+    params.set('category', 'national');
+    params.set('lang', lang);
+    params.set('language', lang);
+    params.set('limit', String(limit));
+
+    const endpoint = `${API_BASE}/api/public/news?${params.toString()}`;
+    const res = await fetch(endpoint, { headers: { Accept: 'application/json' } });
+    const json = await res.json().catch(() => null);
+    const items = Array.isArray(json?.items) ? json.items : Array.isArray(json?.articles) ? json.articles : Array.isArray(json?.data) ? json.data : [];
+
+    // Breaking (best-effort)
+    const breaking = await (async () => {
+      try {
+        const bp = new URLSearchParams();
+        bp.set('category', 'breaking');
+        bp.set('lang', lang);
+        bp.set('language', lang);
+        bp.set('limit', '10');
+        const bRes = await fetch(`${API_BASE}/api/public/news?${bp.toString()}`, { headers: { Accept: 'application/json' } });
+        const bJson = await bRes.json().catch(() => null);
+        const bItems = Array.isArray(bJson?.items) ? bJson.items : Array.isArray(bJson?.articles) ? bJson.articles : Array.isArray(bJson?.data) ? bJson.data : [];
+        return Array.isArray(bItems) ? bItems : [];
+      } catch {
+        return [];
+      }
+    })();
+
+    return {
+      props: {
+        lang,
+        data: Array.isArray(items) ? items : [],
+        breaking,
+        messages,
+      },
+    };
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('SSR national error', err);
+    return {
+      props: {
+        lang,
+        data: null,
+        breaking: [],
+        messages,
+      },
+    };
+  }
 };

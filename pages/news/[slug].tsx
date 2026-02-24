@@ -8,6 +8,7 @@ import { useRouter } from 'next/router';
 import OriginalTag from '../../components/OriginalTag';
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../../lib/contentFallback';
 import { unwrapArticle, type Article } from '../../lib/publicNewsApi';
+import { localizeArticle } from '../../lib/localizeArticle';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 
 function sanitizeContent(html: string) {
@@ -148,7 +149,8 @@ export default function NewsSlugDetailPage() {
   const uiLang = toUiLang(lang);
   const titleRes = resolveArticleTitle(article || {}, uiLang);
   const summaryRes = resolveArticleSummaryOrExcerpt(article || {}, uiLang);
-  const title = String(titleRes.text || article?.title || 'News').trim();
+  const localized = React.useMemo(() => localizeArticle(article || {}, lang), [article, lang]);
+  const title = String(localized.title || titleRes.text || article?.title || 'News').trim();
   const summary = String(summaryRes.text || article?.summary || article?.excerpt || '').trim();
 
   const coverImageUrl =
