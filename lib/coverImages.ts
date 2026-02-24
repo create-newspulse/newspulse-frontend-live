@@ -24,11 +24,20 @@ function isBadCoverUrl(url: string): boolean {
   }
 }
 
-// Standard source of truth: ONLY article.coverImage?.url
 export function resolveCoverImageUrl(article: any): string {
-  const raw = typeof article?.coverImage?.url === 'string' ? article.coverImage.url : '';
-  const url = String(raw || '').trim();
-  return isBadCoverUrl(url) ? '' : url;
+  const candidates = [
+    typeof article?.coverImage?.url === 'string' ? article.coverImage.url : '',
+    typeof article?.coverImageUrl === 'string' ? article.coverImageUrl : '',
+    typeof article?.imageUrl === 'string' ? article.imageUrl : '',
+    typeof article?.thumbnailUrl === 'string' ? article.thumbnailUrl : '',
+  ];
+
+  for (const raw of candidates) {
+    const url = String(raw || '').trim();
+    if (!url) continue;
+    if (!isBadCoverUrl(url)) return url;
+  }
+  return '';
 }
 
 export function getCoverImageSrc(article: any): string {
