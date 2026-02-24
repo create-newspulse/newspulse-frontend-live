@@ -3,7 +3,7 @@
   <rect width="1200" height="675" fill="#f1f5f9"/>
   <rect x="36" y="36" width="1128" height="603" rx="32" fill="#ffffff" stroke="#cbd5e1" stroke-width="4"/>
   <g fill="#0f172a" font-family="system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" text-anchor="middle">
-    <text x="600" y="330" font-size="44" font-weight="700">NewsPulse</text>
+    <text x="600" y="330" font-size="44" font-weight="700">News Pulse</text>
     <text x="600" y="385" font-size="26" font-weight="500" fill="#334155">Image not available</text>
   </g>
   <g fill="#94a3b8">
