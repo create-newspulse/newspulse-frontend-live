@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675" role="img" aria-label="NewsPulse – Image not available">
+  <rect width="1200" height="675" fill="#f1f5f9"/>
+  <rect x="36" y="36" width="1128" height="603" rx="32" fill="#ffffff" stroke="#cbd5e1" stroke-width="4"/>
+  <g fill="#0f172a" font-family="system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif" text-anchor="middle">
+    <text x="600" y="330" font-size="44" font-weight="700">NewsPulse</text>
+    <text x="600" y="385" font-size="26" font-weight="500" fill="#334155">Image not available</text>
+  </g>
+  <g fill="#94a3b8">
+    <path d="M420 470c0-18 14-32 32-32h296c18 0 32 14 32 32v34c0 18-14 32-32 32H452c-18 0-32-14-32-32v-34zm55-16a16 16 0 1 0 0 32 16 16 0 0 0 0-32zm61 8 38 44 56-68 74 92H508l28-32z"/>
+  </g>
+</svg>

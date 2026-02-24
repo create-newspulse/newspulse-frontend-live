@@ -1,5 +1,4 @@
 import React from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
 import type { YouthStory } from '../../utils/youthData';
 
@@ -44,8 +43,8 @@ export default function FeaturedStories({ stories, error }: Props) {
                 className="h-full w-full object-cover"
                 onError={(e) => {
                   const target = e.currentTarget as HTMLImageElement;
-                  if (target.src.includes('/images/placeholder-16x9.svg')) return;
-                  target.src = '/images/placeholder-16x9.svg';
+                  if (target.src.includes('/fallback.svg')) return;
+                  target.src = '/fallback.svg';
                 }}
               />
             </div>

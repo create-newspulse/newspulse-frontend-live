@@ -1,8 +1,11 @@
-export const COVER_PLACEHOLDER_SRC = '/images/placeholder.jpg';
+export const COVER_PLACEHOLDER_SRC = '/fallback.svg';
 
 function isBadCoverUrl(url: string): boolean {
   const u = String(url || '').trim();
   if (!u) return true;
+
+  // Allow same-origin absolute paths.
+  if (u.startsWith('/')) return false;
 
   // Guard against file input values accidentally saved by admin UI.
   if (/fakepath/i.test(u)) return true;

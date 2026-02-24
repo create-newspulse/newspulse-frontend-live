@@ -58,8 +58,8 @@ export default function YouthCategoryPage() {
                   loading="lazy"
                   onError={(e) => {
                     const target = e.currentTarget as HTMLImageElement;
-                    if (target.src.includes('/images/placeholder-16x9.svg')) return;
-                    target.src = '/images/placeholder-16x9.svg';
+                    if (target.src.includes('/fallback.svg')) return;
+                    target.src = '/fallback.svg';
                   }}
                 />
                 <div className="p-5">

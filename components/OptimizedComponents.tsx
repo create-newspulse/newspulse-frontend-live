@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import Image from 'next/image';
 
 interface LazyImageProps {
   src: string;
@@ -18,7 +17,7 @@ export const LazyImage: React.FC<LazyImageProps> = ({
   height = 300,
   className = '',
   priority = false,
-  fallback = '/images/placeholder.jpg'
+  fallback = '/fallback.svg'
 }) => {
   const [imageSrc, setImageSrc] = useState(fallback);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -73,16 +72,19 @@ export const LazyImage: React.FC<LazyImageProps> = ({
       style={{ aspectRatio: `${width}/${height}` }}
     >
       {isInView && (
-        <Image
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
           src={imageSrc}
           alt={alt}
-          fill
-          className={`object-cover transition-opacity duration-500 ${
+          onError={(e) => {
+            const img = e.currentTarget;
+            img.onerror = null;
+            img.src = fallback;
+          }}
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-500 ${
             isLoaded ? 'opacity-100' : 'opacity-0'
           }`}
-          priority={priority}
-          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-          quality={85}
+          loading={priority ? 'eager' : 'lazy'}
         />
       )}
       

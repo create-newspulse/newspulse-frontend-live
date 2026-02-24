@@ -1,6 +1,5 @@
 import type { GetServerSideProps } from 'next';
 import Head from 'next/head';
-import Image from 'next/image';
 import React from 'react';
 import sanitizeHtml from 'sanitize-html';
 import { useRouter } from 'next/router';
@@ -101,9 +100,7 @@ export default function NewsSlugDetailPage({ lang, article, safeHtml, error }: P
   const title = String(localizedTitle || titleRes.text || article?.title || 'News').trim();
   const summary = String(summaryRes.text || article?.summary || article?.excerpt || '').trim();
 
-  const initialCoverSrc = resolveCoverImageUrl(article) || COVER_PLACEHOLDER_SRC;
-  const [heroSrc, setHeroSrc] = React.useState(initialCoverSrc);
-  React.useEffect(() => setHeroSrc(initialCoverSrc), [initialCoverSrc]);
+  const heroSrc = resolveCoverImageUrl(article) || COVER_PLACEHOLDER_SRC;
 
   return (
     <>
@@ -129,14 +126,17 @@ export default function NewsSlugDetailPage({ lang, article, safeHtml, error }: P
             ) : null}
 
             <div className="relative mt-4 h-64 w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
-              <Image
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
                 src={heroSrc}
                 alt={title}
-                fill
-                priority
-                sizes="(max-width: 768px) 100vw, 768px"
-                className="object-cover"
-                onError={() => setHeroSrc(COVER_PLACEHOLDER_SRC)}
+                onError={(e) => {
+                  const img = e.currentTarget;
+                  img.onerror = null;
+                  img.src = COVER_PLACEHOLDER_SRC;
+                }}
+                className="absolute inset-0 h-full w-full object-cover"
+                loading="eager"
               />
             </div>
           </div>
