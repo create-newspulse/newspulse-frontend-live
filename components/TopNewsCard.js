@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { COVER_PLACEHOLDER_SRC, onCoverImageError, resolveCoverImageUrl } from '../lib/coverImages';
 
 const TopNewsCard = ({ article }) => {
   const [saved, setSaved] = useState(false);
@@ -24,8 +25,9 @@ const TopNewsCard = ({ article }) => {
   return (
     <div className="bg-white rounded-xl shadow-md p-4 hover:shadow-lg transition-all duration-300 relative">
       <img
-        src={article.urlToImage || '/fallback.jpg'}
+        src={resolveCoverImageUrl(article) || COVER_PLACEHOLDER_SRC}
         alt={article.title}
+        onError={onCoverImageError}
         className="w-full h-48 object-cover rounded-md"
       />
       <h3 className="text-lg font-semibold mt-3 mb-2">{article.title}</h3>

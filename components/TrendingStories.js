@@ -1,6 +1,6 @@
 // components/TrendingStories.js
-import Image from 'next/image';
 import {useTranslations} from 'next-intl';
+import { COVER_PLACEHOLDER_SRC, onCoverImageError, resolveCoverImageUrl } from '../lib/coverImages';
 
 const TrendingStories = ({ articles }) => {
   const t = useTranslations();
@@ -16,11 +16,13 @@ const TrendingStories = ({ articles }) => {
             className="min-w-[200px] max-w-[200px] bg-white rounded-xl shadow-md overflow-hidden snap-start"
           >
             <div className="w-full h-28 relative">
-              <Image
-                src={article.urlToImage || '/fallback.jpg'}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={resolveCoverImageUrl(article) || COVER_PLACEHOLDER_SRC}
                 alt={article.title}
-                fill
-                className="object-cover"
+                onError={onCoverImageError}
+                className="h-full w-full object-cover"
+                loading="lazy"
               />
             </div>
             <div className="p-2">

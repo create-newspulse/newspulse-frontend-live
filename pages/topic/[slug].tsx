@@ -11,7 +11,7 @@ import { useLanguage } from '../../utils/LanguageContext';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../../lib/newsRoutes';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
-import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
+import { COVER_PLACEHOLDER_SRC, onCoverImageError, resolveCoverImageUrl } from '../../lib/coverImages';
 
 function formatWhenLabel(iso?: string) {
   if (!iso) return '';
@@ -121,31 +121,20 @@ export default function TopicPage() {
                   const titleRes = resolveArticleTitle(a as any, language);
                   const summaryRes = resolveArticleSummaryOrExcerpt(a as any, language);
                   const summary = summaryRes.text;
-                  const image = resolveCoverImageUrl(a);
+                  const image = resolveCoverImageUrl(a) || COVER_PLACEHOLDER_SRC;
 
                   return (
                     <li key={a._id} className="group rounded-2xl border border-slate-200 bg-white overflow-hidden">
-                      {image ? ( 
-                        <div className="aspect-[16/9] bg-slate-100">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={image}
-                            alt={titleRes.text || t('categoryPage.articleImageAlt')}
-                            loading="lazy"
-                            className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
-                          />
-                        </div>
-                      ) : (
-                        <div className="p-4 pb-0">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={COVER_PLACEHOLDER_SRC}
-                            alt=""
-                            loading="lazy"
-                            className="h-12 w-16 rounded-lg border border-slate-200 bg-slate-100 object-cover"
-                          />
-                        </div>
-                      )}
+                      <div className="aspect-[16/9] bg-slate-100">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={image}
+                          alt={titleRes.text || t('categoryPage.articleImageAlt')}
+                          loading="lazy"
+                          onError={onCoverImageError}
+                          className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
+                        />
+                      </div>
 
                       <div className="p-4">
                         <Link href={href} className="block text-lg font-bold text-slate-900 hover:underline">

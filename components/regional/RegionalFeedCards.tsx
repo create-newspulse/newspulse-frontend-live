@@ -4,7 +4,7 @@ import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from
 import OriginalTag from '../OriginalTag';
 import { buildNewsUrl } from '../../lib/newsRoutes';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
-import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
+import { COVER_PLACEHOLDER_SRC, onCoverImageError, resolveCoverImageUrl } from '../../lib/coverImages';
 
 function classNames(...s: Array<string | false | null | undefined>) {
   return s.filter(Boolean).join(' ');
@@ -98,6 +98,7 @@ function StoryCard({
                     src={coverUrl || COVER_PLACEHOLDER_SRC}
                     alt=""
                     loading="lazy"
+                    onError={onCoverImageError}
                     className="h-16 w-24 rounded-xl border border-slate-200 bg-slate-100 object-cover"
                   />
 

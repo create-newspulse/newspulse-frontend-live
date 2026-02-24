@@ -15,7 +15,7 @@ import { useI18n } from '../../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../../lib/newsRoutes';
 import { localizeArticle } from '../../lib/localizeArticle';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
-import { resolveCoverImageUrl } from '../../lib/coverImages';
+import { COVER_PLACEHOLDER_SRC, onCoverImageError, resolveCoverImageUrl } from '../../lib/coverImages';
 
 type AnyStory = any;
 
@@ -71,21 +71,11 @@ function storyHref(story: AnyStory, lang: unknown): string {
 }
 
 function storyImage(story: AnyStory): string {
-  return (
-    resolveCoverImageUrl(story) ||
-    story?.image ||
-    story?.imageUrl ||
-    story?.thumbnail ||
-    story?.urlToImage ||
-    '/fallback.jpg'
-  );
+  return resolveCoverImageUrl(story) || COVER_PLACEHOLDER_SRC;
 }
 
 function onImgErrorFallback(e: React.SyntheticEvent<HTMLImageElement>) {
-  const img = e.currentTarget;
-  // Prevent infinite loop if fallback is also missing.
-  img.onerror = null;
-  img.src = '/fallback.jpg';
+  onCoverImageError(e);
 }
 
 function storyExcerpt(story: AnyStory): string {

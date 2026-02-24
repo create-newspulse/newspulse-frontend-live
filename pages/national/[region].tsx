@@ -11,7 +11,7 @@ import { useI18n } from '../../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../../lib/newsRoutes';
 import { localizeArticle } from '../../lib/localizeArticle';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
-import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
+import { COVER_PLACEHOLDER_SRC, onCoverImageError, resolveCoverImageUrl } from '../../lib/coverImages';
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ||
@@ -87,6 +87,7 @@ export default function RegionPage(props: { lang: 'en' | 'hi' | 'gu'; data?: any
                           src={coverUrl || COVER_PLACEHOLDER_SRC}
                           alt=""
                           loading="lazy"
+                          onError={onCoverImageError}
                           className="h-16 w-24 shrink-0 rounded-xl border border-gray-200 bg-gray-100 object-cover dark:border-gray-700 dark:bg-gray-900"
                         />
                         <div className="min-w-0 flex-1">

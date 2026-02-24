@@ -9,7 +9,7 @@ import { useLanguage } from '../utils/LanguageContext';
 import { useI18n } from '../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../lib/newsRoutes';
 import { resolveArticleSlug } from '../lib/articleSlugs';
-import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../lib/coverImages';
+import { COVER_PLACEHOLDER_SRC, onCoverImageError, resolveCoverImageUrl } from '../lib/coverImages';
 
 // Preview-only component you can paste into:
 // - Next.js App Router: /app/search/page.tsx (export default)
@@ -267,6 +267,7 @@ function ResultCard({ item, language }: { item: SearchItem; language: 'en' | 'hi
             src={item.coverImageUrl || COVER_PLACEHOLDER_SRC}
             alt=""
             loading="lazy"
+            onError={onCoverImageError}
             className="h-16 w-24 shrink-0 rounded-xl border border-black/10 bg-black/5 object-cover"
           />
 

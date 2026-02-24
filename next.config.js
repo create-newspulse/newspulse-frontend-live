@@ -62,6 +62,11 @@ const nextConfig = {
   outputFileTracingRoot: __dirname,
 
   images: {
+    domains: Array.from(
+      new Set(
+        ['res.cloudinary.com', 'newspulse-backend-real.onrender.com', getBackendHostname()].filter(Boolean)
+      )
+    ),
     remotePatterns: [
       { protocol: 'https', hostname: 'res.cloudinary.com', pathname: '/**' },
       { protocol: 'https', hostname: 'cdn.newsapi.org', pathname: '/**' },
@@ -180,7 +185,7 @@ const nextConfig = {
       "style-src 'self' 'unsafe-inline'",
 
       // Images (ads + analytics + your image sources)
-      "img-src 'self' data: blob: https://*.googleusercontent.com https://*.gstatic.com https://tpc.googlesyndication.com https://pagead2.googlesyndication.com https://images.unsplash.com https://media.licdn.com https://static.toiimg.com https://gnews.io https://cdn.gulte.com https://www.googletagmanager.com https://www.google-analytics.com",
+      `img-src 'self' data: blob: https://*.googleusercontent.com https://*.gstatic.com https://tpc.googlesyndication.com https://pagead2.googlesyndication.com https://images.unsplash.com https://media.licdn.com https://static.toiimg.com https://gnews.io https://cdn.gulte.com https://res.cloudinary.com https://newspulse-backend-real.onrender.com${backend ? ` ${backend}` : ''} https://www.googletagmanager.com https://www.google-analytics.com`,
 
       // Fonts
       "font-src 'self' data: https://*.gstatic.com",

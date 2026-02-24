@@ -101,7 +101,9 @@ export default function NewsSlugDetailPage({ lang, article, safeHtml, error }: P
   const title = String(localizedTitle || titleRes.text || article?.title || 'News').trim();
   const summary = String(summaryRes.text || article?.summary || article?.excerpt || '').trim();
 
-  const coverImageUrl = resolveCoverImageUrl(article);
+  const initialCoverSrc = resolveCoverImageUrl(article) || COVER_PLACEHOLDER_SRC;
+  const [heroSrc, setHeroSrc] = React.useState(initialCoverSrc);
+  React.useEffect(() => setHeroSrc(initialCoverSrc), [initialCoverSrc]);
 
   return (
     <>
@@ -126,29 +128,17 @@ export default function NewsSlugDetailPage({ lang, article, safeHtml, error }: P
               </p>
             ) : null}
 
-            {coverImageUrl ? (
-              <div className="relative mt-4 h-64 w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
-                <Image
-                  src={coverImageUrl}
-                  alt={title}
-                  fill
-                  priority
-                  sizes="(max-width: 768px) 100vw, 768px"
-                  className="object-cover"
-                />
-              </div>
-            ) : (
-              <div className="mt-4">
-                {/* Small placeholder so the header area is never blank */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={COVER_PLACEHOLDER_SRC}
-                  alt=""
-                  className="h-16 w-24 rounded-xl border border-slate-200 bg-slate-100 object-cover"
-                  loading="lazy"
-                />
-              </div>
-            )}
+            <div className="relative mt-4 h-64 w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
+              <Image
+                src={heroSrc}
+                alt={title}
+                fill
+                priority
+                sizes="(max-width: 768px) 100vw, 768px"
+                className="object-cover"
+                onError={() => setHeroSrc(COVER_PLACEHOLDER_SRC)}
+              />
+            </div>
           </div>
 
           <hr className="my-8" />

@@ -10,7 +10,7 @@ import OriginalTag from '../../../../components/OriginalTag';
 import { useI18n } from '../../../../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../../../../lib/newsRoutes';
 import { resolveArticleSlug } from '../../../../lib/articleSlugs';
-import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../../../lib/coverImages';
+import { COVER_PLACEHOLDER_SRC, onCoverImageError, resolveCoverImageUrl } from '../../../../lib/coverImages';
 
 function normalize(s: string) {
   return (s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -76,6 +76,7 @@ export default function GujaratCityPage() {
                         src={coverUrl || COVER_PLACEHOLDER_SRC}
                         alt=""
                         loading="lazy"
+                        onError={onCoverImageError}
                         className="h-16 w-24 shrink-0 rounded-xl border border-gray-200 bg-gray-100 object-cover dark:border-gray-700 dark:bg-gray-900"
                       />
 
