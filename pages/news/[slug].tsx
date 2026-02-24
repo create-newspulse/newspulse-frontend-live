@@ -61,14 +61,16 @@ function sanitizeContent(html: string) {
 
 function toUiLang(value: unknown): UiLang {
   const v = String(value || '').toLowerCase().trim();
-  if (v === 'hi' || v === 'hindi') return 'hi';
+  if (v === 'hi' || v === 'hindi' || v === 'in') return 'hi';
   if (v === 'gu' || v === 'gujarati') return 'gu';
   return 'en';
 }
 
 function normalizeLang(value: unknown): 'en' | 'hi' | 'gu' {
   const v = String(value || '').toLowerCase().trim();
-  if (v === 'hi' || v === 'gu' || v === 'en') return v as any;
+  if (v === 'hi' || v === 'hindi' || v === 'in') return 'hi';
+  if (v === 'gu' || v === 'gujarati') return 'gu';
+  if (v === 'en' || v === 'english') return 'en';
   return 'en';
 }
 
@@ -87,7 +89,7 @@ export default function NewsSlugDetailPage() {
     return String(raw || '').trim();
   }, [router.query.slug]);
 
-  const lang = React.useMemo(() => normalizeLang(router.query.lang), [router.query.lang]);
+  const lang = React.useMemo(() => normalizeLang(router.locale), [router.locale]);
 
   const [loading, setLoading] = React.useState(false);
   const [article, setArticle] = React.useState<Article | null>(null);
@@ -140,17 +142,14 @@ export default function NewsSlugDetailPage() {
     };
   }, [router.isReady, slug, lang]);
 
-  const onSwitchLanguage = async (nextLang: 'en' | 'hi' | 'gu') => {
-    if (!slug) return;
-    const nextQuery = { ...router.query, lang: nextLang };
-    await router.replace({ pathname: router.pathname, query: nextQuery }, undefined, { shallow: true, scroll: false });
-  };
-
   const uiLang = toUiLang(lang);
   const titleRes = resolveArticleTitle(article || {}, uiLang);
   const summaryRes = resolveArticleSummaryOrExcerpt(article || {}, uiLang);
-  const localized = React.useMemo(() => localizeArticle(article || {}, lang), [article, lang]);
-  const title = String(localized.title || titleRes.text || article?.title || 'News').trim();
+  const { title: localizedTitle, content: localizedContent } = React.useMemo(
+    () => localizeArticle(article || {}, lang),
+    [article, lang]
+  );
+  const title = String(localizedTitle || titleRes.text || article?.title || 'News').trim();
   const summary = String(summaryRes.text || article?.summary || article?.excerpt || '').trim();
 
   const coverImageUrl =
@@ -172,19 +171,6 @@ export default function NewsSlugDetailPage() {
               <h1 className="text-3xl font-extrabold text-slate-900 leading-tight">
                 {title} {titleRes.isOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
               </h1>
-
-              <div className="shrink-0">
-                <select
-                  value={lang}
-                  onChange={(e) => onSwitchLanguage(normalizeLang(e.target.value) as any)}
-                  aria-label={t('common.language')}
-                  className="border rounded-lg px-3 py-2 font-medium bg-white shadow text-gray-800"
-                >
-                  <option value="gu">📰 ગુજરાતી</option>
-                  <option value="hi">🇮🇳 हिन्दी</option>
-                  <option value="en">🌐 English</option>
-                </select>
-              </div>
             </div>
 
             {loading ? <div className="text-sm text-slate-500">Loading…</div> : null}
@@ -222,11 +208,21 @@ export default function NewsSlugDetailPage() {
 }
 
 export const getStaticProps: GetStaticProps<Props> = async ({ locale }) => {
-  const { getMessages } = await import('../../lib/getMessages');
-  return {
-    props: {
-      messages: await getMessages(locale as string),
-      locale: String(locale || 'en'),
-    },
-  };
+  const lang = normalizeLang(locale);
+  try {
+    const { getMessages } = await import('../../lib/getMessages');
+    return {
+      props: {
+        messages: await getMessages(lang),
+        locale: String(locale || lang),
+      },
+    };
+  } catch {
+    return {
+      props: {
+        messages: {},
+        locale: String(locale || lang),
+      },
+    };
+  }
 };

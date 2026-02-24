@@ -8,13 +8,16 @@ import { useRouter } from 'next/router';
 import OriginalTag from '../../../components/OriginalTag';
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../../../lib/contentFallback';
 import { localizeArticle } from '../../../lib/localizeArticle';
-import { fetchPublicNewsById, type Article } from '../../../lib/publicNewsApi';
+import { unwrapArticle, type Article } from '../../../lib/publicNewsApi';
 import { useI18n } from '../../../src/i18n/LanguageProvider';
-import { useLanguage } from '../../../utils/LanguageContext';
-import { buildNewsUrl } from '../../../lib/newsRoutes';
+
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE_URL ||
+  'https://newspulse-backend-real.onrender.com';
 
 type Props = {
-  article: Article;
+  lang: 'en' | 'hi' | 'gu';
+  article: Article | null;
   safeHtml: string;
   publishedAtLabel: string;
   resolvedTitle: string;
@@ -90,7 +93,14 @@ function sanitizeContent(html: string) {
 
 function toUiLang(value: unknown): UiLang {
   const v = String(value || '').toLowerCase().trim();
-  if (v === 'hi' || v === 'hindi') return 'hi';
+  if (v === 'hi' || v === 'hindi' || v === 'in') return 'hi';
+  if (v === 'gu' || v === 'gujarati') return 'gu';
+  return 'en';
+}
+
+function normalizeLang(value: unknown): 'en' | 'hi' | 'gu' {
+  const v = String(value || '').toLowerCase().trim();
+  if (v === 'hi' || v === 'hindi' || v === 'in') return 'hi';
   if (v === 'gu' || v === 'gujarati') return 'gu';
   return 'en';
 }
@@ -104,6 +114,7 @@ function safeDecodeURIComponent(value: string): string {
 }
 
 export default function NewsDetailPage({
+  lang,
   article,
   safeHtml,
   publishedAtLabel,
@@ -113,121 +124,46 @@ export default function NewsDetailPage({
   summaryIsOriginal,
 }: Props) {
   const { t } = useI18n();
-  const router = useRouter();
-  const { language } = useLanguage();
+  const langForText = toUiLang(lang);
 
-  const [activeLang, setActiveLang] = React.useState<'en' | 'hi' | 'gu'>(() => {
-    const v = String(language || '').toLowerCase().trim();
-    if (v === 'hi' || v === 'gu' || v === 'en') return v as any;
-    return 'en';
-  });
-  const [activeArticle, setActiveArticle] = React.useState<Article>(article);
+  const { title: localizedTitle, content: localizedContent } = React.useMemo(
+    () => localizeArticle(article || {}, lang),
+    [article, lang]
+  );
 
-  const translation = React.useMemo(() => {
-    const translations = (activeArticle as any)?.translations as Record<string, any> | undefined;
-    const tr = translations?.[activeLang];
-    return tr && typeof tr === 'object' ? tr : null;
-  }, [activeArticle, activeLang]);
-
-  const localized = React.useMemo(() => localizeArticle(activeArticle, activeLang), [activeArticle, activeLang]);
+  const titleRes = React.useMemo(() => resolveArticleTitle(article || {}, langForText), [article, langForText]);
+  const summaryRes = React.useMemo(() => resolveArticleSummaryOrExcerpt(article || {}, langForText), [article, langForText]);
 
   const title =
-    String(localized.title || '').trim() ||
-    String(translation?.title || '').trim() ||
+    String(localizedTitle || '').trim() ||
     String(resolvedTitle || '').trim() ||
-    String(activeArticle.title || '').trim() ||
+    String(titleRes.text || '').trim() ||
+    String(article?.title || '').trim() ||
     'News';
 
   const summary =
-    String(translation?.summary || '').trim() ||
-    String(translation?.excerpt || '').trim() ||
     String(resolvedSummary || '').trim() ||
-    String(activeArticle.summary || '').trim() ||
-    String(activeArticle.excerpt || '').trim() ||
+    String(summaryRes.text || '').trim() ||
+    String(article?.summary || '').trim() ||
+    String(article?.excerpt || '').trim() ||
     '';
-
-  const rawHtml =
-    (typeof translation?.content === 'string' && translation.content) ||
-    (typeof translation?.html === 'string' && translation.html) ||
-    (typeof translation?.body === 'string' && translation.body) ||
-    (typeof activeArticle.content === 'string' && activeArticle.content) ||
-    ((activeArticle as any).html as string) ||
-    ((activeArticle as any).body as string) ||
-    '';
-
-  const activeSafeHtml = React.useMemo(() => {
-    if (!rawHtml) return safeHtml;
-    return sanitizeContent(rawHtml);
-  }, [rawHtml, safeHtml]);
-
-  const activePublishedAtLabel = React.useMemo(() => {
-    return publishedAtLabel || formatPublishedAtLabel(String(activeArticle.publishedAt || activeArticle.createdAt || '').trim());
-  }, [activeArticle.createdAt, activeArticle.publishedAt, publishedAtLabel]);
-
-  const langForText = toUiLang(activeLang);
-  const titleRes = React.useMemo(() => resolveArticleTitle(activeArticle, langForText), [activeArticle, langForText]);
-  const summaryRes = React.useMemo(() => resolveArticleSummaryOrExcerpt(activeArticle, langForText), [activeArticle, langForText]);
 
   const effectiveTitleIsOriginal = titleIsOriginal || titleRes.isOriginal;
   const effectiveSummaryIsOriginal = summaryIsOriginal || summaryRes.isOriginal;
 
-  React.useEffect(() => {
-    setActiveArticle(article);
-  }, [article, publishedAtLabel, resolvedSummary, resolvedTitle, safeHtml, summaryIsOriginal, titleIsOriginal]);
-
-  const publishedAt = activePublishedAtLabel;
+  const publishedAt = publishedAtLabel || formatPublishedAtLabel(String(article?.publishedAt || article?.createdAt || '').trim());
 
   const coverImageUrl =
-    String(translation?.coverImageUrl || '').trim() ||
-    String(translation?.imageUrl || '').trim() ||
-    String(translation?.image || '').trim() ||
-    String(activeArticle.coverImageUrl || '').trim() ||
-    String(activeArticle.imageUrl || '').trim() ||
-    String(activeArticle.image || '').trim() ||
+    String(article?.coverImageUrl || '').trim() ||
+    String(article?.imageUrl || '').trim() ||
+    String(article?.image || '').trim() ||
     '';
 
   const languageLabel = React.useMemo(() => {
-    if (activeLang === 'gu') return 'Gujarati';
-    if (activeLang === 'hi') return 'Hindi';
+    if (lang === 'gu') return 'Gujarati';
+    if (lang === 'hi') return 'Hindi';
     return 'English';
-  }, [activeLang]);
-
-  const onSwitchLanguage = async (nextLang: 'en' | 'hi' | 'gu') => {
-    setActiveLang(nextLang);
-
-    try {
-      const destination = buildNewsUrl({
-        id: String(activeArticle._id || '').trim(),
-        slug: String(activeArticle.slug || activeArticle._id || '').trim(),
-        lang: nextLang,
-      });
-      await router.replace(destination, destination, { locale: nextLang, shallow: true, scroll: false });
-    } catch {
-      // ignore
-    }
-
-    const id = String(activeArticle._id || '').trim();
-    if (!id) return;
-
-    try {
-      const res = await fetch(`/api/public/news/${encodeURIComponent(id)}/translate`, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ lang: nextLang }),
-      });
-
-      const json = await res.json().catch(() => null);
-      const nextArticle = json && typeof json === 'object' ? (json as any).data : null;
-      if (!nextArticle || typeof nextArticle !== 'object') return;
-
-      setActiveArticle(nextArticle as Article);
-    } catch {
-      // ignore
-    }
-  };
+  }, [lang]);
 
   return (
     <>
@@ -237,24 +173,15 @@ export default function NewsDetailPage({
 
       <main className="min-h-screen bg-white">
         <div className="max-w-3xl mx-auto px-4 py-10">
+          {!article ? (
+            <div className="text-sm text-slate-600">Not found</div>
+          ) : null}
+
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h1 className="text-3xl font-extrabold text-slate-900 leading-tight">
                 {title} {effectiveTitleIsOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
               </h1>
-
-              <div className="shrink-0">
-                <select
-                  value={activeLang}
-                  onChange={(e) => onSwitchLanguage(e.target.value as any)}
-                  aria-label={t('common.language')}
-                  className="border rounded-lg px-3 py-2 font-medium bg-white shadow text-gray-800"
-                >
-                  <option value="gu">📰 ગુજરાતી</option>
-                  <option value="hi">🇮🇳 हिन्दी</option>
-                  <option value="en">🌐 English</option>
-                </select>
-              </div>
             </div>
 
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
@@ -291,7 +218,7 @@ export default function NewsDetailPage({
           <hr className="my-8" />
 
           <article className="prose prose-slate max-w-none">
-            <div dangerouslySetInnerHTML={{ __html: activeSafeHtml }} />
+            <div dangerouslySetInnerHTML={{ __html: safeHtml }} />
           </article>
         </div>
       </main>
@@ -317,38 +244,90 @@ export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
   if (!id) return { notFound: true as const, revalidate: 10 };
 
   const locale = (ctx.locale || 'en') as string;
-  const { getMessages } = await import('../../../lib/getMessages');
-  const messages = await getMessages(locale);
+  const lang = normalizeLang(locale);
 
-  const requestedLang = toUiLang(locale);
+  const messages = await (async () => {
+    try {
+      const { getMessages } = await import('../../../lib/getMessages');
+      return await getMessages(lang);
+    } catch {
+      return {};
+    }
+  })();
 
-  const { article } = await fetchPublicNewsById({ id, language: requestedLang });
-  if (!article) return { notFound: true as const, revalidate: 10 };
+  try {
+    const params = new URLSearchParams();
+    params.set('lang', lang);
+    params.set('language', lang);
 
-  const titleRes = resolveArticleTitle(article, requestedLang);
-  const summaryRes = resolveArticleSummaryOrExcerpt(article, requestedLang);
+    const endpoint = `${API_BASE}/api/public/news/${encodeURIComponent(id)}?${params.toString()}`;
+    const res = await fetch(endpoint, { method: 'GET', headers: { Accept: 'application/json' } });
+    const data = await res.json().catch(() => null);
+    const article = unwrapArticle(data);
 
-  const html =
-    (typeof article.content === 'string' && article.content) ||
-    ((article as any).html as string) ||
-    ((article as any).body as string) ||
-    '';
+    if (!res.ok || !article?._id) {
+      return {
+        props: {
+          lang,
+          article: null,
+          safeHtml: '',
+          publishedAtLabel: '',
+          resolvedTitle: '',
+          resolvedSummary: '',
+          titleIsOriginal: false,
+          summaryIsOriginal: false,
+          messages,
+          locale,
+        },
+        revalidate: 10,
+      };
+    }
 
-  const safeHtml = sanitizeContent(html);
-  const publishedAtLabel = formatPublishedAtLabel(String(article.publishedAt || article.createdAt || '').trim());
+    const requestedLang = toUiLang(lang);
+    const titleRes = resolveArticleTitle(article, requestedLang);
+    const summaryRes = resolveArticleSummaryOrExcerpt(article, requestedLang);
 
-  return {
-    props: {
-      article,
-      safeHtml,
-      publishedAtLabel,
-      resolvedTitle: titleRes.text,
-      resolvedSummary: summaryRes.text,
-      titleIsOriginal: titleRes.isOriginal,
-      summaryIsOriginal: summaryRes.isOriginal,
-      messages,
-      locale,
-    },
-    revalidate: 10,
-  };
+    const { content } = localizeArticle(article, lang);
+    const html =
+      (typeof content === 'string' && content) ||
+      (typeof article.content === 'string' && article.content) ||
+      ((article as any).html as string) ||
+      ((article as any).body as string) ||
+      '';
+
+    const safeHtml = sanitizeContent(html);
+    const publishedAtLabel = formatPublishedAtLabel(String(article.publishedAt || article.createdAt || '').trim());
+
+    return {
+      props: {
+        lang,
+        article,
+        safeHtml,
+        publishedAtLabel,
+        resolvedTitle: titleRes.text,
+        resolvedSummary: summaryRes.text,
+        titleIsOriginal: titleRes.isOriginal,
+        summaryIsOriginal: summaryRes.isOriginal,
+        messages,
+        locale,
+      },
+      revalidate: 10,
+    };
+  } catch {
+    return {
+      props: {
+        lang,
+        article: null,
+        safeHtml: '',
+        publishedAtLabel: '',
+        resolvedTitle: '',
+        resolvedSummary: '',
+        titleIsOriginal: false,
+        summaryIsOriginal: false,
+        messages,
+        locale,
+      },
+      revalidate: 10,
+    };
+  }
 };

@@ -201,7 +201,7 @@ function ClientTime({ iso }: { iso?: string }) {
 function CompactFeedRow({ story, lang }: { story: AnyStory; lang: 'en' | 'hi' | 'gu' }) {
   const { t } = useI18n();
   const href = storyHref(story, lang);
-  const { title } = localizeArticle(story, lang);
+  const { title, content } = localizeArticle(story, lang);
   const safeTitle = String(title || story?.title || t('common.untitled')).trim();
   const img = storyImage(story);
   const when = storyDateIso(story);
@@ -497,7 +497,7 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
 
   const heroLocalizedTitle = React.useMemo(() => {
     if (!hero) return '';
-    const { title } = localizeArticle(hero, effectiveLang);
+    const { title, content } = localizeArticle(hero, effectiveLang);
     return String(title || hero?.title || '').trim();
   }, [effectiveLang, hero]);
 
@@ -897,7 +897,7 @@ function NationalSidebar({
               </div>
               <div className="mt-2 line-clamp-2 text-sm font-semibold text-slate-900 group-hover:underline dark:text-gray-100">
                 {(() => {
-                  const { title } = localizeArticle(videoStory, lang);
+                  const { title, content } = localizeArticle(videoStory, lang);
                   return String(title || videoStory?.title || t('nationalPage.watchFallback'));
                 })()}
               </div>

@@ -82,9 +82,9 @@ export default function RegionPage(props: { lang: 'en' | 'hi' | 'gu'; data?: any
                       {(() => {
                         const titleRes = resolveArticleTitle(article, uiLang);
                         const summaryRes = resolveArticleSummaryOrExcerpt(article, uiLang);
-                        const localized = localizeArticle(article, effectiveLang);
+                        const { title, content } = localizeArticle(article, effectiveLang);
                         const desc = summaryRes.text || (article.excerpt || (article.content ? String(article.content).slice(0, 160) + '...' : ''));
-                        const safeTitle = localized.title || titleRes.text || article.title || t('common.untitled');
+                        const safeTitle = title || titleRes.text || article.title || t('common.untitled');
                         return (
                           <>
                             <h3 className="font-bold text-lg mb-2">
