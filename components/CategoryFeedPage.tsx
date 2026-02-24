@@ -7,6 +7,7 @@ import { useLanguage } from '../utils/LanguageContext';
 import { useI18n } from '../src/i18n/LanguageProvider';
 import OriginalTag from './OriginalTag';
 import { buildNewsUrl } from '../lib/newsRoutes';
+import { resolveArticleSlug } from '../lib/articleSlugs';
 
 export type CategoryFeedPageProps = {
   title: string;
@@ -142,7 +143,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
               <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 {items.map((a) => {
                   const id = String(a._id || '').trim();
-                  const slug = String(a.slug || a._id || '').trim();
+                  const slug = resolveArticleSlug(a, language);
                   const href = id ? buildNewsUrl({ id, slug, lang: language }) : '#';
                   const when = formatWhenLabel(a.publishedAt || a.createdAt);
                   const titleRes = resolveArticleTitle(a as any, language);

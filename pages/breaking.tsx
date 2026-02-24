@@ -6,6 +6,7 @@ import LanguageToggle from "../components/LanguageToggle";
 import OriginalTag from "../components/OriginalTag";
 import { useI18n } from "../src/i18n/LanguageProvider";
 import { buildNewsUrl } from "../lib/newsRoutes";
+import { resolveArticleSlug } from "../lib/articleSlugs";
 
 type BreakingItem = {
   id: string;
@@ -62,7 +63,7 @@ function articleToBreakingItem(raw: Article, requestedLang: 'en' | 'hi' | 'gu'):
   if (!title) return null;
 
   const id = String((raw as any)?._id || (raw as any)?.id || '').trim();
-  const slug = String((raw as any)?.slug || id).trim();
+  const slug = resolveArticleSlug(raw, requestedLang);
   if (!id) return null;
 
   const summaryRes = resolveArticleSummaryOrExcerpt(raw as any, requestedLang);

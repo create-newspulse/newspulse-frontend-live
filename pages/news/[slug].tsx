@@ -10,6 +10,12 @@ import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from
 import { unwrapArticle, type Article } from '../../lib/publicNewsApi';
 import { localizeArticle } from '../../lib/localizeArticle';
 import { useI18n } from '../../src/i18n/LanguageProvider';
+import { resolveArticleSlug } from '../../lib/articleSlugs';
+import { buildNewsUrl } from '../../lib/newsRoutes';
+
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE_URL ||
+  'https://newspulse-backend-real.onrender.com';
 
 function sanitizeContent(html: string) {
   return sanitizeHtml(html || '', {
@@ -77,78 +83,20 @@ function normalizeLang(value: unknown): 'en' | 'hi' | 'gu' {
 type Props = {
   messages: any;
   locale: string;
+  lang: 'en' | 'hi' | 'gu';
+  article: Article | null;
+  safeHtml: string;
+  error?: string | null;
 };
 
-export default function NewsSlugDetailPage() {
+export default function NewsSlugDetailPage({ lang, article, safeHtml, error }: Props) {
   const { t } = useI18n();
   const router = useRouter();
-
-  const slug = React.useMemo(() => {
-    const raw = router.query.slug;
-    if (Array.isArray(raw)) return String(raw[0] || '').trim();
-    return String(raw || '').trim();
-  }, [router.query.slug]);
-
-  const lang = React.useMemo(() => normalizeLang(router.locale), [router.locale]);
-
-  const [loading, setLoading] = React.useState(false);
-  const [article, setArticle] = React.useState<Article | null>(null);
-  const [safeHtml, setSafeHtml] = React.useState('');
-  const [error, setError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    if (!router.isReady) return;
-    if (!slug) return;
-
-    let cancelled = false;
-    const run = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const endpoint = `/api/public/news/slug/${encodeURIComponent(slug)}?lang=${encodeURIComponent(lang)}`;
-        const res = await fetch(endpoint, { method: 'GET', headers: { Accept: 'application/json' } });
-        const json = await res.json().catch(() => null);
-        const next = unwrapArticle(json);
-        if (cancelled) return;
-        if (!next?._id) {
-          setArticle(null);
-          setSafeHtml('');
-          setError('Not found');
-          return;
-        }
-
-        const html =
-          (typeof next.content === 'string' && next.content) ||
-          ((next as any).html as string) ||
-          ((next as any).body as string) ||
-          '';
-
-        setArticle(next);
-        setSafeHtml(sanitizeContent(html));
-      } catch {
-        if (!cancelled) {
-          setError('Fetch failed');
-          setArticle(null);
-          setSafeHtml('');
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
-    run();
-    return () => {
-      cancelled = true;
-    };
-  }, [router.isReady, slug, lang]);
 
   const uiLang = toUiLang(lang);
   const titleRes = resolveArticleTitle(article || {}, uiLang);
   const summaryRes = resolveArticleSummaryOrExcerpt(article || {}, uiLang);
-  const { title: localizedTitle, content: localizedContent } = React.useMemo(
-    () => localizeArticle(article || {}, lang),
-    [article, lang]
-  );
+  const { title: localizedTitle, content: localizedContent } = React.useMemo(() => localizeArticle(article || {}, lang), [article, lang]);
   const title = String(localizedTitle || titleRes.text || article?.title || 'News').trim();
   const summary = String(summaryRes.text || article?.summary || article?.excerpt || '').trim();
 
@@ -173,8 +121,7 @@ export default function NewsSlugDetailPage() {
               </h1>
             </div>
 
-            {loading ? <div className="text-sm text-slate-500">Loading…</div> : null}
-            {error && !loading ? <div className="text-sm text-red-600">{error}</div> : null}
+            {error ? <div className="text-sm text-red-600">{error}</div> : null}
 
             {summary ? (
               <p className="text-lg text-slate-700">
@@ -209,20 +156,86 @@ export default function NewsSlugDetailPage() {
 
 export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   const lang = normalizeLang(ctx.locale);
+  const locale = String(ctx.locale || lang);
+
+  const messages = await (async () => {
+    try {
+      const { getMessages } = await import('../../lib/getMessages');
+      return await getMessages(lang);
+    } catch {
+      return {};
+    }
+  })();
+
+  const rawSlug = String((ctx.params as any)?.slug || '').trim();
+  if (!rawSlug) {
+    return {
+      props: { messages, locale, lang, article: null, safeHtml: '', error: 'Not found' },
+    };
+  }
+
   try {
-    const { getMessages } = await import('../../lib/getMessages');
+    const fetchBySlug = async (requestedLang: 'en' | 'hi' | 'gu'): Promise<{ resOk: boolean; article: any | null }> => {
+      const params = new URLSearchParams();
+      params.set('lang', requestedLang);
+      params.set('language', requestedLang);
+
+      const endpoint = `${API_BASE}/api/public/news/slug/${encodeURIComponent(rawSlug)}?${params.toString()}`;
+      const res = await fetch(endpoint, { method: 'GET', headers: { Accept: 'application/json' } });
+      const data = await res.json().catch(() => null);
+      const article = unwrapArticle(data);
+      return { resOk: res.ok, article };
+    };
+
+    // First try the requested locale; if backend doesn't recognize the slug for that lang,
+    // try other langs to support redirects from historical wrong-language slugs.
+    const attempts: Array<'en' | 'hi' | 'gu'> = [lang, 'en', 'hi', 'gu'].filter(
+      (v, idx, arr) => arr.indexOf(v) === idx
+    ) as Array<'en' | 'hi' | 'gu'>;
+
+    let article: any | null = null;
+    for (const attemptLang of attempts) {
+      const out = await fetchBySlug(attemptLang);
+      if (out.resOk && out.article?._id) {
+        article = out.article;
+        break;
+      }
+    }
+
+    if (!article?._id) {
+      return {
+        props: { messages, locale, lang, article: null, safeHtml: '', error: 'Not found' },
+      };
+    }
+
+    // Canonicalize slug per language
+    const canonicalSlug = resolveArticleSlug(article, lang);
+    if (canonicalSlug && canonicalSlug !== rawSlug) {
+      const destination = buildNewsUrl({ id: String(article._id || '').trim(), slug: canonicalSlug, lang });
+      return { redirect: { destination, permanent: true } };
+    }
+
+    const { content } = localizeArticle(article, lang);
+    const html =
+      (typeof content === 'string' && content) ||
+      (typeof (article as any).content === 'string' && (article as any).content) ||
+      ((article as any).html as string) ||
+      ((article as any).body as string) ||
+      '';
+
     return {
       props: {
-        messages: await getMessages(lang),
-        locale: String(ctx.locale || lang),
+        messages,
+        locale,
+        lang,
+        article,
+        safeHtml: sanitizeContent(html),
+        error: null,
       },
     };
   } catch {
     return {
-      props: {
-        messages: {},
-        locale: String(ctx.locale || lang),
-      },
+      props: { messages, locale, lang, article: null, safeHtml: '', error: 'Fetch failed' },
     };
   }
 };

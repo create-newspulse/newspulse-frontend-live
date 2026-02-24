@@ -7,6 +7,7 @@ import { useLanguage } from '../utils/LanguageContext';
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../lib/contentFallback';
 import OriginalTag from '../components/OriginalTag';
 import { buildNewsUrl } from '../lib/newsRoutes';
+import { resolveArticleSlug } from '../lib/articleSlugs';
 
 type NewsApiArticle = {
   title: string;
@@ -57,7 +58,7 @@ export default function News() {
             if (!title) return null;
 
             const id = String(raw?._id || raw?.id || '').trim();
-            const slug = String(raw?.slug || id).trim();
+            const slug = resolveArticleSlug(raw, language);
             const href = id ? buildNewsUrl({ id, slug, lang: language }) : undefined;
 
             const summaryRes = resolveArticleSummaryOrExcerpt(raw, uiLang);

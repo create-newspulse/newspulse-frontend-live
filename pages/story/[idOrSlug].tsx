@@ -2,6 +2,7 @@ import type { GetStaticPaths, GetStaticProps } from 'next';
 
 import { fetchArticleBySlugOrId } from '../../lib/publicNewsApi';
 import { buildNewsUrl } from '../../lib/newsRoutes';
+import { resolveArticleSlug } from '../../lib/articleSlugs';
 
 function safeDecodeURIComponent(value: string): string {
   try {
@@ -36,7 +37,7 @@ export const getStaticProps: GetStaticProps = async (ctx) => {
   const { article } = await fetchArticleBySlugOrId({ slugOrId: idOrSlug, language: requestedLang });
   if (!article?._id) return { notFound: true, revalidate: 10 };
 
-  const destination = buildNewsUrl({ id: article._id, slug: article.slug || article._id, lang: requestedLang });
+  const destination = buildNewsUrl({ id: article._id, slug: resolveArticleSlug(article, requestedLang), lang: requestedLang });
   return {
     redirect: {
       destination,

@@ -8,6 +8,7 @@ import OriginalTag from '../components/OriginalTag';
 import { useLanguage } from '../utils/LanguageContext';
 import { useI18n } from '../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../lib/newsRoutes';
+import { resolveArticleSlug } from '../lib/articleSlugs';
 
 // Preview-only component you can paste into:
 // - Next.js App Router: /app/search/page.tsx (export default)
@@ -253,7 +254,7 @@ function SuggestionChips({
 
 function ResultCard({ item, language }: { item: SearchItem; language: 'en' | 'hi' | 'gu' }) {
   const { t } = useI18n();
-  const href = buildNewsUrl({ id: item.id, slug: item.slug || item.id, lang: language });
+  const href = buildNewsUrl({ id: item.id, slug: resolveArticleSlug(item, language), lang: language });
   return (
     <div className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm hover:shadow-md transition">
       <div className="flex items-start justify-between gap-3">

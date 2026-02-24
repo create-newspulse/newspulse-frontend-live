@@ -10,6 +10,7 @@ import OriginalTag from '../../components/OriginalTag';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../../lib/newsRoutes';
 import { localizeArticle } from '../../lib/localizeArticle';
+import { resolveArticleSlug } from '../../lib/articleSlugs';
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ||
@@ -74,7 +75,7 @@ export default function RegionPage(props: { lang: 'en' | 'hi' | 'gu'; data?: any
                 ) : display.length ? (
                   display.map((article: any, idx: number) => {
                     const id = String(article?._id || article?.id || '').trim();
-                    const slug = String(article?.slug || id).trim();
+                    const slug = resolveArticleSlug(article, effectiveLang);
                     const href = id ? buildNewsUrl({ id, slug, lang: effectiveLang }) : '#';
                     return (
                     <a key={idx} href={href} className="block p-6 rounded-2xl border shadow-sm hover:shadow-md bg-white dark:bg-gray-800 transition">

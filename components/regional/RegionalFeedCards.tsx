@@ -3,6 +3,7 @@ import { getStoryCategoryLabel, getStoryDateIso } from '../../lib/publicStories'
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../../lib/contentFallback';
 import OriginalTag from '../OriginalTag';
 import { buildNewsUrl } from '../../lib/newsRoutes';
+import { resolveArticleSlug } from '../../lib/articleSlugs';
 
 function classNames(...s: Array<string | false | null | undefined>) {
   return s.filter(Boolean).join(' ');
@@ -51,7 +52,7 @@ function StoryCard({
   requestedLang: UiLang;
 }) {
   const id = String(story?._id || story?.id || '').trim();
-  const slug = String(story?.slug || id).trim();
+  const slug = resolveArticleSlug(story, requestedLang);
   const href = id ? buildNewsUrl({ id, slug, lang: requestedLang }) : '#';
   const categoryLabel = getStoryCategoryLabel(story?.category) || story?.category || fallbackCategoryLabel;
   const dateIso = getStoryDateIso(story);

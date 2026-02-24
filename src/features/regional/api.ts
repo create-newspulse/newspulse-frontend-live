@@ -2,6 +2,8 @@ import type { NewsItem } from "./types";
 import { FALLBACK_NEWS } from "./fallback";
 import { fetchPublicNews, type Article } from '../../../lib/publicNewsApi';
 import { buildNewsUrl } from '../../../lib/newsRoutes';
+import { resolveArticleSlug } from '../../../lib/articleSlugs';
+import { resolveArticleTitle, type UiLang } from '../../../lib/contentFallback';
 
 function asString(value: unknown): string {
   return typeof value === 'string' ? value : String(value || '');
@@ -18,12 +20,20 @@ function coerceCategory(raw: unknown): NewsItem['category'] {
   return 'Civic';
 }
 
+function toUiLang(value: unknown): UiLang {
+  const v = asString(value).toLowerCase().trim();
+  if (v === 'hi' || v === 'hindi' || v === 'in') return 'hi';
+  if (v === 'gu' || v === 'gujarati') return 'gu';
+  return 'en';
+}
+
 function articleToNewsItem(raw: Article, language?: string): NewsItem | null {
-  const title = asString((raw as any)?.title).trim();
+  const titleRes = resolveArticleTitle(raw as any, toUiLang(language));
+  const title = asString(titleRes.text || (raw as any)?.title).trim();
   if (!title) return null;
 
   const id = asString((raw as any)?._id || (raw as any)?.id || '').trim();
-  const slug = asString((raw as any)?.slug || id).trim();
+  const slug = resolveArticleSlug(raw, language);
   if (!id) return null;
 
   const source = asString((raw as any)?.source?.name || (raw as any)?.source || 'News Pulse').trim();

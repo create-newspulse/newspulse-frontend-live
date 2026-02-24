@@ -14,6 +14,7 @@ import { fetchPublicNews } from '../../lib/publicNewsApi';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../../lib/newsRoutes';
 import { localizeArticle } from '../../lib/localizeArticle';
+import { resolveArticleSlug } from '../../lib/articleSlugs';
 
 type AnyStory = any;
 
@@ -63,7 +64,7 @@ function storyDateIso(story: AnyStory): string {
 
 function storyHref(story: AnyStory, lang: unknown): string {
   const id = String(story?._id || story?.id || '').trim();
-  const slug = String(story?.slug || id).trim();
+  const slug = resolveArticleSlug(story, lang);
   if (!id) return '#';
   return buildNewsUrl({ id, slug, lang });
 }
