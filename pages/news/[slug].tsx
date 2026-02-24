@@ -1,4 +1,4 @@
-import type { GetStaticProps } from 'next';
+import type { GetServerSideProps } from 'next';
 import Head from 'next/head';
 import Image from 'next/image';
 import React from 'react';
@@ -207,21 +207,21 @@ export default function NewsSlugDetailPage() {
   );
 }
 
-export const getStaticProps: GetStaticProps<Props> = async ({ locale }) => {
-  const lang = normalizeLang(locale);
+export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
+  const lang = normalizeLang(ctx.locale);
   try {
     const { getMessages } = await import('../../lib/getMessages');
     return {
       props: {
         messages: await getMessages(lang),
-        locale: String(locale || lang),
+        locale: String(ctx.locale || lang),
       },
     };
   } catch {
     return {
       props: {
         messages: {},
-        locale: String(locale || lang),
+        locale: String(ctx.locale || lang),
       },
     };
   }

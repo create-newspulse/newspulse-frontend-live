@@ -2,25 +2,24 @@ export type NewsLang = 'en' | 'hi' | 'gu';
 
 function normalizeLang(value: unknown): NewsLang {
   const v = String(value || '').toLowerCase().trim();
-  if (v === 'hi' || v === 'hindi') return 'hi';
+  if (v === 'hi' || v === 'hindi' || v === 'in') return 'hi';
   if (v === 'gu' || v === 'gujarati') return 'gu';
   return 'en';
 }
 
 export function buildNewsUrl(options: { id: string; slug?: string; lang?: unknown }): string {
-  const id = encodeURIComponent(String(options.id || '').trim());
-  const slugRaw = String(options.slug || '').trim();
-  const slug = encodeURIComponent(slugRaw || String(options.id || '').trim());
+  const rawSlug = String(options.slug || '').trim();
+  const rawId = String(options.id || '').trim();
+  const slug = encodeURIComponent(rawSlug || rawId);
   const lang = normalizeLang(options.lang);
 
-  if (!id) return '#';
+  if (!slug) return '#';
 
   // Default locale should NOT be prefixed.
   const prefix = lang !== 'en' ? `/${lang}` : '';
 
-  // Preserve active language in URL so client-side pages can refetch
-  // and language selection can survive reload/sharing.
-  return `${prefix}/news/${id}/${slug}?lang=${encodeURIComponent(lang)}`;
+  // Canonical single-segment news URLs: /news/<slug>
+  return `${prefix}/news/${slug}`;
 }
 
 export function splitNewsParams(value: unknown): { id: string; slug: string } | null {
