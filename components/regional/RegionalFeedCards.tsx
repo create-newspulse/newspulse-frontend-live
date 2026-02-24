@@ -4,6 +4,7 @@ import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from
 import OriginalTag from '../OriginalTag';
 import { buildNewsUrl } from '../../lib/newsRoutes';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
+import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
 
 function classNames(...s: Array<string | false | null | undefined>) {
   return s.filter(Boolean).join(' ');
@@ -71,6 +72,8 @@ function StoryCard({
     story?.excerpt ||
     (story?.content ? String(story.content).slice(0, 160) + '…' : '');
 
+  const coverUrl = resolveCoverImageUrl(story);
+
   return (
     <a
       href={href}
@@ -89,28 +92,39 @@ function StoryCard({
         </div>
         <span className="shrink-0 text-xs text-slate-400">{dateText}</span>
       </div>
+                <div className="mb-3 flex items-start gap-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={coverUrl || COVER_PLACEHOLDER_SRC}
+                    alt=""
+                    loading="lazy"
+                    className="h-16 w-24 rounded-xl border border-slate-200 bg-slate-100 object-cover"
+                  />
 
-      <div className="mt-3 text-base font-semibold leading-snug">{title}</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
+                          {categoryLabel || fallbackCategoryLabel}
+                        </span>
+                        {!!districtLabel && (
+                          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">
+                            {districtLabel}
+                          </span>
+                        )}
+                      </div>
+                      <span className="shrink-0 text-xs text-slate-400">{dateText}</span>
+                    </div>
 
-      {titleRes.isOriginal ? (
-        <div className="mt-1">
-          <OriginalTag />
-        </div>
-      ) : null}
+                    <div className="mt-2 text-base font-semibold leading-snug">{title}</div>
 
-      {!!excerpt && (
-        <div className="mt-2 line-clamp-3 text-sm text-slate-600">
-          {excerpt}
-          {summaryRes.isOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
-        </div>
-      )}
-
-      <div className="mt-3 flex items-center justify-between">
-        <span className="text-sm text-slate-500">{story?.location || ''}</span>
-        <span className="text-sm font-medium text-blue-600 hover:underline">{readMoreLabel}</span>
-      </div>
-
-      {/* Placeholder area for media (no embeds). */}
+                    {titleRes.isOriginal ? (
+                      <div className="mt-1">
+                        <OriginalTag />
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
       {!!story?.videoUrl && (
         <div className="mt-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-slate-500">
           {videoPreviewHiddenLabel}

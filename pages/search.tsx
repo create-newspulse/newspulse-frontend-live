@@ -9,6 +9,7 @@ import { useLanguage } from '../utils/LanguageContext';
 import { useI18n } from '../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../lib/newsRoutes';
 import { resolveArticleSlug } from '../lib/articleSlugs';
+import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../lib/coverImages';
 
 // Preview-only component you can paste into:
 // - Next.js App Router: /app/search/page.tsx (export default)
@@ -25,6 +26,7 @@ type SearchItem = {
   summaryIsOriginal?: boolean;
   category?: string;
   publishedAt?: string;
+  coverImageUrl?: string;
 };
 
 const SUGGESTIONS = [
@@ -83,6 +85,7 @@ function toSearchItem(a: Article, requestedLang: UiLang): SearchItem | null {
     summaryIsOriginal: summaryRes.isOriginal,
     category,
     publishedAt,
+    coverImageUrl: resolveCoverImageUrl(a) || undefined,
   };
 }
 
@@ -258,7 +261,16 @@ function ResultCard({ item, language }: { item: SearchItem; language: 'en' | 'hi
   return (
     <div className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm hover:shadow-md transition">
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="flex min-w-0 gap-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={item.coverImageUrl || COVER_PLACEHOLDER_SRC}
+            alt=""
+            loading="lazy"
+            className="h-16 w-24 shrink-0 rounded-xl border border-black/10 bg-black/5 object-cover"
+          />
+
+          <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2 text-base font-semibold leading-snug">
             <span>{item.title}</span>
             {item.titleIsOriginal ? <OriginalTag /> : null}
@@ -269,6 +281,7 @@ function ResultCard({ item, language }: { item: SearchItem; language: 'en' | 'hi
               {item.summaryIsOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
             </div>
           )}
+          </div>
         </div>
         <div className="flex flex-col items-end gap-2">
           {item.category && (

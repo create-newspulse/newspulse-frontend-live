@@ -10,6 +10,7 @@ import OriginalTag from '../../../../components/OriginalTag';
 import { useI18n } from '../../../../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../../../../lib/newsRoutes';
 import { resolveArticleSlug } from '../../../../lib/articleSlugs';
+import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../../../lib/coverImages';
 
 function normalize(s: string) {
   return (s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -66,9 +67,20 @@ export default function GujaratCityPage() {
                   const id = String(article?._id || article?.id || '').trim();
                   const slug = resolveArticleSlug(article, language);
                   const href = id ? buildNewsUrl({ id, slug, lang: language }) : '#';
+                  const coverUrl = resolveCoverImageUrl(article);
                   return (
                   <a key={idx} href={href} className="block p-6 rounded-2xl border shadow-sm hover:shadow-md bg-white dark:bg-gray-800 transition">
-                    <div className="text-xs text-gray-500 mb-2">{article.publishedAt ? new Date(article.publishedAt).toLocaleString() : ''}</div>
+                    <div className="mb-3 flex items-start gap-3">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={coverUrl || COVER_PLACEHOLDER_SRC}
+                        alt=""
+                        loading="lazy"
+                        className="h-16 w-24 shrink-0 rounded-xl border border-gray-200 bg-gray-100 object-cover dark:border-gray-700 dark:bg-gray-900"
+                      />
+
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs text-gray-500 mb-2">{article.publishedAt ? new Date(article.publishedAt).toLocaleString() : ''}</div>
                     {(() => {
                       const titleRes = resolveArticleTitle(article, uiLang);
                       const summaryRes = resolveArticleSummaryOrExcerpt(article, uiLang);
@@ -91,6 +103,8 @@ export default function GujaratCityPage() {
                       );
                     })()}
                     <div className="mt-3 text-xs text-gray-400">{t('common.source')}: {article.source || t('brand.name')}</div>
+                      </div>
+                    </div>
                   </a>
                 );
                 })

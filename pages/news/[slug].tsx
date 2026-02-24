@@ -12,6 +12,7 @@ import { localizeArticle } from '../../lib/localizeArticle';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
 import { buildNewsUrl } from '../../lib/newsRoutes';
+import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ||
@@ -100,11 +101,7 @@ export default function NewsSlugDetailPage({ lang, article, safeHtml, error }: P
   const title = String(localizedTitle || titleRes.text || article?.title || 'News').trim();
   const summary = String(summaryRes.text || article?.summary || article?.excerpt || '').trim();
 
-  const coverImageUrl =
-    String(article?.coverImageUrl || '').trim() ||
-    String(article?.imageUrl || '').trim() ||
-    String(article?.image || '').trim() ||
-    '';
+  const coverImageUrl = resolveCoverImageUrl(article);
 
   return (
     <>
@@ -140,7 +137,18 @@ export default function NewsSlugDetailPage({ lang, article, safeHtml, error }: P
                   className="object-cover"
                 />
               </div>
-            ) : null}
+            ) : (
+              <div className="mt-4">
+                {/* Small placeholder so the header area is never blank */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={COVER_PLACEHOLDER_SRC}
+                  alt=""
+                  className="h-16 w-24 rounded-xl border border-slate-200 bg-slate-100 object-cover"
+                  loading="lazy"
+                />
+              </div>
+            )}
           </div>
 
           <hr className="my-8" />

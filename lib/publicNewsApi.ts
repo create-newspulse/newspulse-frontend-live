@@ -14,6 +14,10 @@ export type ArticleBase = {
   image?: string;
   imageUrl?: string;
   coverImageUrl?: string;
+  coverImage?: {
+    url?: string;
+    publicId?: string;
+  };
   createdAt?: string;
   publishedAt?: string;
   category?: string;

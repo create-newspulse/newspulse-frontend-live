@@ -8,6 +8,7 @@ import { useI18n } from '../src/i18n/LanguageProvider';
 import OriginalTag from './OriginalTag';
 import { buildNewsUrl } from '../lib/newsRoutes';
 import { resolveArticleSlug } from '../lib/articleSlugs';
+import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../lib/coverImages';
 
 export type CategoryFeedPageProps = {
   title: string;
@@ -149,7 +150,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
                   const titleRes = resolveArticleTitle(a as any, language);
                   const summaryRes = resolveArticleSummaryOrExcerpt(a as any, language);
                   const summary = summaryRes.text;
-                  const image = a.imageUrl || a.image || '';
+                  const image = resolveCoverImageUrl(a);
 
                   return (
                     <li key={a._id} className="group rounded-2xl border border-slate-200 bg-white overflow-hidden">
@@ -162,7 +163,17 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
                             className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
                           />
                         </div>
-                      ) : null}
+                      ) : (
+                        <div className="p-4 pb-0">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={COVER_PLACEHOLDER_SRC}
+                            alt=""
+                            loading="lazy"
+                            className="h-12 w-16 rounded-lg border border-slate-200 bg-slate-100 object-cover"
+                          />
+                        </div>
+                      )}
 
                       <div className="p-4">
                         <Link href={href} className="block text-lg font-bold text-slate-900 hover:underline">

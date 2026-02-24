@@ -11,6 +11,7 @@ import { useI18n } from '../../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../../lib/newsRoutes';
 import { localizeArticle } from '../../lib/localizeArticle';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
+import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ||
@@ -77,8 +78,18 @@ export default function RegionPage(props: { lang: 'en' | 'hi' | 'gu'; data?: any
                     const id = String(article?._id || article?.id || '').trim();
                     const slug = resolveArticleSlug(article, effectiveLang);
                     const href = id ? buildNewsUrl({ id, slug, lang: effectiveLang }) : '#';
+                    const coverUrl = resolveCoverImageUrl(article);
                     return (
                     <a key={idx} href={href} className="block p-6 rounded-2xl border shadow-sm hover:shadow-md bg-white dark:bg-gray-800 transition">
+                      <div className="mb-3 flex items-start gap-3">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={coverUrl || COVER_PLACEHOLDER_SRC}
+                          alt=""
+                          loading="lazy"
+                          className="h-16 w-24 shrink-0 rounded-xl border border-gray-200 bg-gray-100 object-cover dark:border-gray-700 dark:bg-gray-900"
+                        />
+                        <div className="min-w-0 flex-1">
                       <div className="text-xs text-gray-500 mb-2">{new Date(article.publishedAt).toLocaleString()}</div>
                       {(() => {
                         const titleRes = resolveArticleTitle(article, uiLang);
@@ -100,6 +111,8 @@ export default function RegionPage(props: { lang: 'en' | 'hi' | 'gu'; data?: any
                         );
                       })()}
                       <div className="mt-3 text-xs text-gray-400">{t('common.source')}: {article.source || t('brand.name')}</div>
+                        </div>
+                      </div>
                     </a>
                   );
                   })

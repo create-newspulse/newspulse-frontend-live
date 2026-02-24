@@ -15,6 +15,7 @@ import { useI18n } from '../../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../../lib/newsRoutes';
 import { localizeArticle } from '../../lib/localizeArticle';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
+import { resolveCoverImageUrl } from '../../lib/coverImages';
 
 type AnyStory = any;
 
@@ -71,6 +72,7 @@ function storyHref(story: AnyStory, lang: unknown): string {
 
 function storyImage(story: AnyStory): string {
   return (
+    resolveCoverImageUrl(story) ||
     story?.image ||
     story?.imageUrl ||
     story?.thumbnail ||
