@@ -7,8 +7,8 @@ import { useRouter } from 'next/router';
 
 import OriginalTag from '../../../components/OriginalTag';
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../../../lib/contentFallback';
-import { fetchPublicNewsById, type Article } from '../../../lib/publicNewsApi';
 import { localizeArticle } from '../../../lib/localizeArticle';
+import { fetchPublicNewsById, type Article } from '../../../lib/publicNewsApi';
 import { useI18n } from '../../../src/i18n/LanguageProvider';
 import { useLanguage } from '../../../utils/LanguageContext';
 import { buildNewsUrl } from '../../../lib/newsRoutes';
@@ -103,7 +103,15 @@ function safeDecodeURIComponent(value: string): string {
   }
 }
 
-export default function NewsDetailPage({ article, safeHtml, publishedAtLabel, resolvedTitle, resolvedSummary, titleIsOriginal, summaryIsOriginal }: Props) {
+export default function NewsDetailPage({
+  article,
+  safeHtml,
+  publishedAtLabel,
+  resolvedTitle,
+  resolvedSummary,
+  titleIsOriginal,
+  summaryIsOriginal,
+}: Props) {
   const { t } = useI18n();
   const router = useRouter();
   const { language } = useLanguage();
@@ -117,8 +125,8 @@ export default function NewsDetailPage({ article, safeHtml, publishedAtLabel, re
 
   const translation = React.useMemo(() => {
     const translations = (activeArticle as any)?.translations as Record<string, any> | undefined;
-    const t = translations?.[activeLang];
-    return t && typeof t === 'object' ? t : null;
+    const tr = translations?.[activeLang];
+    return tr && typeof tr === 'object' ? tr : null;
   }, [activeArticle, activeLang]);
 
   const localized = React.useMemo(() => localizeArticle(activeArticle, activeLang), [activeArticle, activeLang]);
@@ -187,8 +195,6 @@ export default function NewsDetailPage({ article, safeHtml, publishedAtLabel, re
   const onSwitchLanguage = async (nextLang: 'en' | 'hi' | 'gu') => {
     setActiveLang(nextLang);
 
-    // Keep URL locale in sync for UI strings/SEO, but do it shallowly so we don't refetch SSR props.
-    // Default behavior: stay on the same article id/slug.
     try {
       const destination = buildNewsUrl({
         id: String(activeArticle._id || '').trim(),
@@ -301,7 +307,10 @@ export const getStaticPaths: GetStaticPaths = async () => {
 };
 
 export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
-  const rawId = String((ctx.params as any)?.id || '').trim();
+  // IMPORTANT: This route is /news/:id/:slug, but the first param name must match
+  // the sibling /news/[slug].tsx to satisfy Next.js routing rules.
+  // Treat `params.slug` as the article id.
+  const rawId = String((ctx.params as any)?.slug || '').trim();
   if (!rawId) return { notFound: true as const, revalidate: 10 };
 
   const id = safeDecodeURIComponent(rawId).trim();
