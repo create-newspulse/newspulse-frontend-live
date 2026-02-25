@@ -75,9 +75,10 @@ function PublishedThemeApplier() {
 
 function RouteLanguageSync() {
   const router = useRouter();
-  const { lang, setLang } = useI18n();
+  const { setLang } = useI18n();
 
   const lastAppliedRef = React.useRef<string>('');
+  const lastPersistedLocaleRef = React.useRef<string>('');
 
   React.useEffect(() => {
     if (!router.isReady) return;
@@ -92,9 +93,18 @@ function RouteLanguageSync() {
       pathOnly === '/gu' ||
       pathOnly.startsWith('/gu/');
 
-    const rawQueryLang = (router.query?.lang ?? '') as string | string[];
-    const queryLangValue = Array.isArray(rawQueryLang) ? rawQueryLang[0] : rawQueryLang;
-    const queryLang = queryLangValue ? normalizeLang(queryLangValue) : null;
+    // Parse ?lang= from asPath instead of router.query to avoid dependency churn.
+    const queryLang = (() => {
+      try {
+        const q = (asPath.split('?')[1] || '').split('#')[0] || '';
+        if (!q) return null;
+        const params = new URLSearchParams(q);
+        const v = params.get('lang');
+        return v ? normalizeLang(v) : null;
+      } catch {
+        return null;
+      }
+    })();
 
     // 1) Shared links: normalize ?lang= to real locale routes.
     if (queryLang) {
@@ -105,20 +115,37 @@ function RouteLanguageSync() {
       // Persist preference; route remains the source of truth.
       setLang(queryLang, { persist: true });
 
-      const nextQuery = { ...router.query } as Record<string, any>;
-      delete nextQuery.lang;
-      router.replace({ pathname: router.pathname, query: nextQuery }, undefined, { shallow: false, locale: queryLang }).catch(() => {});
+      // Avoid persisting again on the next effect pass.
+      lastPersistedLocaleRef.current = queryLang;
+
+      const nextQuery = (() => {
+        try {
+          const params = new URLSearchParams((asPath.split('?')[1] || '').split('#')[0] || '');
+          params.delete('lang');
+          return params.toString();
+        } catch {
+          return '';
+        }
+      })();
+
+      const hash = asPath.includes('#') ? `#${asPath.split('#').slice(1).join('#')}` : '';
+      const pathnameOnly = (asPath.split('?')[0] || '/').split('#')[0] || '/';
+      const nextAs = `${pathnameOnly}${nextQuery ? `?${nextQuery}` : ''}${hash}`;
+
+      router.replace(nextAs, nextAs, { shallow: false, locale: queryLang }).catch(() => {});
       return;
     }
 
-    // 2) Persist the current route locale as the user's preference.
-    if (routeLocale !== lang) {
-      const key = `r:${routeLocale}|${router.asPath}`;
-      if (lastAppliedRef.current === key) return;
-      lastAppliedRef.current = key;
+    // 2) Persist the current route locale as the user's preference (only when it changes).
+    const key = `r:${routeLocale}|${router.asPath}`;
+    if (lastAppliedRef.current === key) return;
+    lastAppliedRef.current = key;
+
+    if (lastPersistedLocaleRef.current !== routeLocale) {
+      lastPersistedLocaleRef.current = routeLocale;
+      setLang(routeLocale, { persist: true });
     }
-    setLang(routeLocale, { persist: true });
-  }, [router.isReady, router.asPath, router.locale, router.defaultLocale, router.pathname, router.query, lang, setLang]);
+  }, [router.isReady, router.asPath, router.locale, router.defaultLocale, setLang]);
 
   return null;
 }

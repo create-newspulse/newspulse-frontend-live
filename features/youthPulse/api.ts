@@ -2,6 +2,10 @@ import { youthCategories, youthStories } from "../../utils/youthData";
 import type { YouthCategory, YouthStory } from "./types";
 import { getApiOrigin } from '../../lib/publicNewsApi';
 
+type FetchOpts = {
+  signal?: AbortSignal;
+};
+
 function normalizeText(value: unknown): string {
   return String(value || '')
     .toLowerCase()
@@ -44,7 +48,7 @@ function formatDateLabel(iso?: string): string {
   }
 }
 
-async function fetchYouthPulseArticles(limit: number, language?: string): Promise<any[]> {
+async function fetchYouthPulseArticles(limit: number, language?: string, opts: FetchOpts = {}): Promise<any[]> {
   const isBrowser = typeof window !== 'undefined';
   const base = getApiOrigin();
   if (!isBrowser && !base) return [];
@@ -56,14 +60,15 @@ async function fetchYouthPulseArticles(limit: number, language?: string): Promis
   const url = `${base}/api/public/news?${params.toString()}`;
 
   try {
-    const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' } });
+    const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' }, signal: opts.signal });
     if (!res.ok) return [];
 
     const data = await res.json().catch(() => null);
     const list: unknown =
       (data && (data.items || data.articles || data.news || data.data)) ?? (Array.isArray(data) ? data : []);
     return Array.isArray(list) ? (list as any[]) : [];
-  } catch {
+  } catch (e: any) {
+    if (e && e.name === 'AbortError') throw e;
     return [];
   }
 }
@@ -110,27 +115,31 @@ export async function getYouthTrending(limit = 12): Promise<YouthStory[]> {
   return list.slice(0, limit);
 }
 
-export async function getYouthTrendingByLanguage(limit = 12, language?: string): Promise<YouthStory[]> {
-  const items = await fetchYouthPulseArticles(limit, language);
+export async function getYouthTrendingByLanguage(
+  limit = 12,
+  language?: string,
+  opts: FetchOpts = {}
+): Promise<YouthStory[]> {
+  const items = await fetchYouthPulseArticles(limit, language, opts);
   if (items.length) return items.map((raw) => toYouthStory(raw));
 
   const list = youthStories.filter((s) => String(s.category || '').toLowerCase() !== 'inspiration hub');
   return list.slice(0, limit);
 }
 
-export async function getYouthByCategory(slug: string, language?: string): Promise<YouthStory[]> {
+export async function getYouthByCategory(slug: string, language?: string, opts: FetchOpts = {}): Promise<YouthStory[]> {
   // Best-effort client-side filtering on fetched youth-pulse feed.
   const display = humanizeSlug(slug);
   const needles = [normalizeText(slug), normalizeText(display)].filter(Boolean);
 
   // If asking for the main category, just return the latest youth-pulse feed.
   if (normalizeText(slug) === 'youth pulse' || normalizeText(slug) === 'youth-pulse') {
-    const items = await fetchYouthPulseArticles(30, language);
+    const items = await fetchYouthPulseArticles(30, language, opts);
     if (items.length) return items.map((raw) => toYouthStory(raw, 'Youth Pulse'));
     return youthStories.filter((s) => String(s.category || '').toLowerCase() !== 'inspiration hub');
   }
 
-  const items = await fetchYouthPulseArticles(30, language);
+  const items = await fetchYouthPulseArticles(30, language, opts);
   const filtered = items.filter((raw) => {
     const tags = extractTags(raw);
     const cat = normalizeText(raw?.category);

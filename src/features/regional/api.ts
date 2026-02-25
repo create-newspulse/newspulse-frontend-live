@@ -5,6 +5,36 @@ import { buildNewsUrl } from '../../../lib/newsRoutes';
 import { resolveArticleSlug } from '../../../lib/articleSlugs';
 import { resolveArticleTitle, type UiLang } from '../../../lib/contentFallback';
 
+type FetchOpts = {
+  signal?: AbortSignal;
+};
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('Aborted', 'AbortError'));
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+
+    const onAbort = () => {
+      cleanup();
+      clearTimeout(timeoutId);
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
+
+    const cleanup = () => {
+      if (signal) signal.removeEventListener('abort', onAbort);
+    };
+
+    if (signal) signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 function asString(value: unknown): string {
   return typeof value === 'string' ? value : String(value || '');
 }
@@ -48,13 +78,14 @@ function articleToNewsItem(raw: Article, language?: string): NewsItem | null {
   return { id, title, source, url, category, district, summary, publishedAt };
 }
 
-export async function fetchRegionalNews(state: string, language?: string): Promise<NewsItem[]> {
+export async function fetchRegionalNews(state: string, language?: string, opts: FetchOpts = {}): Promise<NewsItem[]> {
   try {
     const resp = await fetchPublicNews({
       category: 'regional',
       language: language as any,
       limit: 30,
       extraQuery: { state },
+      signal: opts.signal,
     });
     const mapped = (resp.items || []).map((a) => articleToNewsItem(a, language)).filter(Boolean) as NewsItem[];
     return mapped.length ? mapped : FALLBACK_NEWS;
@@ -63,13 +94,14 @@ export async function fetchRegionalNews(state: string, language?: string): Promi
   }
 }
 
-export async function fetchYouthVoices(state: string, language?: string): Promise<NewsItem[]> {
+export async function fetchYouthVoices(state: string, language?: string, opts: FetchOpts = {}): Promise<NewsItem[]> {
   try {
     const resp = await fetchPublicNews({
       category: 'youth-pulse',
       language: language as any,
       limit: 10,
       extraQuery: { state },
+      signal: opts.signal,
     });
     const mapped = (resp.items || [])
       .map((a) => articleToNewsItem(a, language))
@@ -94,9 +126,9 @@ export async function fetchYouthVoices(state: string, language?: string): Promis
   }
 }
 
-export async function fetchCivicMetrics(state: string) {
+export async function fetchCivicMetrics(state: string, opts: FetchOpts = {}) {
   try {
-    await new Promise((r) => setTimeout(r, 250));
+    await sleep(250, opts.signal);
     return {
       rainfallAlertDistricts: 3,
       waterSupplyOK: 28,

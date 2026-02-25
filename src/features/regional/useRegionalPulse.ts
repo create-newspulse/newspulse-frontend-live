@@ -17,12 +17,13 @@ export function useRegionalPulse(stateSlug: string, language?: string) {
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     setLoading(true);
     (async () => {
       const [n, y, m] = await Promise.all([
-        fetchRegionalNews(stateSlug, language),
-        fetchYouthVoices(stateSlug, language),
-        fetchCivicMetrics(stateSlug),
+        fetchRegionalNews(stateSlug, language, { signal: controller.signal }),
+        fetchYouthVoices(stateSlug, language, { signal: controller.signal }),
+        fetchCivicMetrics(stateSlug, { signal: controller.signal }),
       ]);
       if (cancelled) return;
       setNews(n);
@@ -30,7 +31,10 @@ export function useRegionalPulse(stateSlug: string, language?: string) {
       setMetrics(m);
       setLoading(false);
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, [stateSlug, language]);
 
   const filteredCities = useMemo(() => {

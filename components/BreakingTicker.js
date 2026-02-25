@@ -1,9 +1,9 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 
-const fetchHeadlines = async (category = '', language = 'english') => {
+const fetchHeadlines = async (category = '', language = 'english', opts = {}) => {
   try {
     const url = `/api/headlines?${category ? `category=${category}&` : ''}language=${language}`;
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: opts.signal });
     if (!response.ok) {
       throw new Error(`Failed to fetch headlines: ${response.statusText}`);
     }
@@ -13,6 +13,9 @@ const fetchHeadlines = async (category = '', language = 'english') => {
     }
     return data;
   } catch (error) {
+    if (error && (error.name === 'AbortError' || String(error.message || '').toLowerCase().includes('aborted'))) {
+      return [];
+    }
     console.error('Failed to fetch headlines:', error.message);
     return [];
   }
@@ -37,17 +40,33 @@ export default function BreakingTicker({
   const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
   const pollingRef = useRef(null);
+  const retryTimeoutRef = useRef(null);
+  const inFlightRef = useRef(null);
+  const mountedRef = useRef(false);
   const retryCount = useRef(0);
   const maxRetries = 3;
 
-  const loadHeadlines = useCallback(async () => {
-    setIsLoading(true);
-    const data = await fetchHeadlines(category, language);
+  const loadHeadlines = useCallback(async (opts = {}) => {
+    // Only show loading indicator on first load.
+    if (opts.foreground) setIsLoading(true);
+
+    if (inFlightRef.current) {
+      try { inFlightRef.current.abort(); } catch {}
+    }
+    const controller = new AbortController();
+    inFlightRef.current = controller;
+
+    const data = await fetchHeadlines(category, language, { signal: controller.signal });
+    if (!mountedRef.current || controller.signal.aborted) return;
 
     if (data.length === 0 && retryCount.current < maxRetries) {
       retryCount.current += 1;
       console.warn(`Retry attempt ${retryCount.current}/${maxRetries} for fetching headlines`);
-      setTimeout(loadHeadlines, 5000 * retryCount.current);
+
+      if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = setTimeout(() => {
+        loadHeadlines({ foreground: false });
+      }, 5000 * retryCount.current);
       return;
     }
 
@@ -76,11 +95,23 @@ export default function BreakingTicker({
   }, [category, language]);
 
   useEffect(() => {
-    loadHeadlines(); // Initial fetch
-    pollingRef.current = setInterval(loadHeadlines, pollingInterval); // Polling
+    mountedRef.current = true;
+
+    // Initial fetch
+    loadHeadlines({ foreground: true });
+
+    // Polling
+    pollingRef.current = setInterval(() => {
+      loadHeadlines({ foreground: false });
+    }, pollingInterval);
 
     return () => {
+      mountedRef.current = false;
       if (pollingRef.current) clearInterval(pollingRef.current);
+      if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
+      if (inFlightRef.current) {
+        try { inFlightRef.current.abort(); } catch {}
+      }
     };
   }, [loadHeadlines, pollingInterval]);
 
