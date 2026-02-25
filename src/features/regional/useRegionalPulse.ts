@@ -20,16 +20,27 @@ export function useRegionalPulse(stateSlug: string, language?: string) {
     const controller = new AbortController();
     setLoading(true);
     (async () => {
-      const [n, y, m] = await Promise.all([
-        fetchRegionalNews(stateSlug, language, { signal: controller.signal }),
-        fetchYouthVoices(stateSlug, language, { signal: controller.signal }),
-        fetchCivicMetrics(stateSlug, { signal: controller.signal }),
-      ]);
-      if (cancelled) return;
-      setNews(n);
-      setYouth(y);
-      setMetrics(m);
-      setLoading(false);
+      try {
+        const [n, y, m] = await Promise.all([
+          fetchRegionalNews(stateSlug, language, { signal: controller.signal }),
+          fetchYouthVoices(stateSlug, language, { signal: controller.signal }),
+          fetchCivicMetrics(stateSlug, { signal: controller.signal }),
+        ]);
+
+        if (cancelled || controller.signal.aborted) return;
+        setNews(n);
+        setYouth(y);
+        setMetrics(m);
+      } catch (e: any) {
+        if (cancelled || controller.signal.aborted) return;
+        if (e?.name === 'AbortError') return;
+        setNews([]);
+        setYouth([]);
+        setMetrics(null);
+      } finally {
+        if (cancelled || controller.signal.aborted) return;
+        setLoading(false);
+      }
     })();
     return () => {
       cancelled = true;

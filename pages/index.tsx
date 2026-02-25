@@ -1991,15 +1991,7 @@ export default function UiPreviewV145() {
   } = usePublicSettings();
 
   const effectiveSettings = settings ?? DEFAULT_NORMALIZED_PUBLIC_SETTINGS;
-
-  const [breakingFromBackend, setBreakingFromBackend] = useState<string[]>([]);
-  const [liveFromBackend, setLiveFromBackend] = useState<string[]>([]);
   const [latestFromBackend, setLatestFromBackend] = useState<any[]>([]);
-
-  const [broadcastBreakingEnabled, setBroadcastBreakingEnabled] = useState<boolean | null>(null);
-  const [broadcastLiveEnabled, setBroadcastLiveEnabled] = useState<boolean | null>(null);
-  const [broadcastBreakingSpeedSec, setBroadcastBreakingSpeedSec] = useState<number | null>(null);
-  const [broadcastLiveSpeedSec, setBroadcastLiveSpeedSec] = useState<number | null>(null);
 
   const apiLang = useMemo(() => {
     const code = toUiLangCode(lang);
@@ -2049,35 +2041,6 @@ export default function UiPreviewV145() {
 
     return () => controller.abort();
   }, [apiLang]);
-
-  // Apply broadcast-center tickers/settings live (polling + focus + SSE).
-  React.useEffect(() => {
-    const b = broadcastTickers.broadcast;
-
-    setBreakingFromBackend(broadcastTickers.breakingTexts);
-    setLiveFromBackend(broadcastTickers.liveTexts);
-
-    if (b?.meta?.hasSettings) {
-      setBroadcastBreakingEnabled(broadcastTickers.breakingEnabled);
-      setBroadcastLiveEnabled(broadcastTickers.liveEnabled);
-      setBroadcastBreakingSpeedSec(broadcastTickers.breakingSpeedSec);
-      setBroadcastLiveSpeedSec(broadcastTickers.liveSpeedSec);
-    } else {
-      // If backend doesn't provide broadcast settings, fall back to published public settings.
-      setBroadcastBreakingEnabled(null);
-      setBroadcastLiveEnabled(null);
-      setBroadcastBreakingSpeedSec(null);
-      setBroadcastLiveSpeedSec(null);
-    }
-  }, [
-    broadcastTickers.broadcast,
-    broadcastTickers.breakingTexts,
-    broadcastTickers.liveTexts,
-    broadcastTickers.breakingEnabled,
-    broadcastTickers.liveEnabled,
-    broadcastTickers.breakingSpeedSec,
-    broadcastTickers.liveSpeedSec,
-  ]);
 
 
   // Apply backend-controlled defaults (do not persist). Keep this one-shot.
@@ -2156,17 +2119,17 @@ export default function UiPreviewV145() {
   const liveTickerEnabled = liveModuleEnabled && effectiveSettings.tickers.live.enabled === true;
 
   // Broadcast config controls whether the ticker is active; it must not override module toggles.
-  const breakingTickerVisible = breakingTickerEnabled && (broadcastBreakingEnabled ?? true);
-  const liveTickerVisible = liveTickerEnabled && (broadcastLiveEnabled ?? true);
+  const breakingTickerVisible = breakingTickerEnabled && (broadcastTickers.breakingEnabled ?? true);
+  const liveTickerVisible = liveTickerEnabled && (broadcastTickers.liveEnabled ?? true);
 
-  const breakingDurationSec = clampNum(broadcastBreakingSpeedSec ?? effectiveSettings.tickers.breaking.speedSec, 10, 40, 18);
-  const liveDurationSec = clampNum(broadcastLiveSpeedSec ?? effectiveSettings.tickers.live.speedSec, 10, 40, 24);
+  const breakingDurationSec = clampNum(broadcastTickers.breakingSpeedSec ?? effectiveSettings.tickers.breaking.speedSec, 10, 40, 18);
+  const liveDurationSec = clampNum(broadcastTickers.liveSpeedSec ?? effectiveSettings.tickers.live.speedSec, 10, 40, 24);
 
-  const breakingItems = breakingFromBackend;
+  const breakingItems = broadcastTickers.breakingTexts;
   const showBreakingContent = breakingItems.length > 0;
   const breakingItemsToShow = showBreakingContent ? breakingItems : [t('home.noBreaking')];
 
-  const liveItemsToShow = liveFromBackend.length > 0 ? liveFromBackend : [t('home.noUpdates')];
+  const liveItemsToShow = broadcastTickers.liveTexts.length > 0 ? broadcastTickers.liveTexts : [t('home.noUpdates')];
 
   const onToast = (m: string) => setToast(m);
 
