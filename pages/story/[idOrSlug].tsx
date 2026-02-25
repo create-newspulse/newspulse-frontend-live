@@ -32,9 +32,8 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
     return { notFound: true };
   }
 
-  const locale = ctx.locale;
-  const defaultLocale = ctx.defaultLocale;
-  const localePrefix = locale && defaultLocale && locale !== defaultLocale ? `/${locale}` : '';
+  // Force Gujarati destination regardless of source locale.
+  const localePrefix = '/gu';
 
   const { idOrSlug: _omit, ...restQuery } = (ctx.query as any) || {};
   const qs = buildQueryString(restQuery);
