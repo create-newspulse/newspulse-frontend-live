@@ -1,48 +1,54 @@
-import type { GetStaticPaths, GetStaticProps } from 'next';
+import type { GetServerSideProps, NextPage } from 'next';
 
-import { fetchArticleBySlugOrId } from '../../lib/publicNewsApi';
-import { buildNewsUrl } from '../../lib/newsRoutes';
-import { resolveArticleSlug } from '../../lib/articleSlugs';
+type Props = Record<string, never>;
 
-function safeDecodeURIComponent(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
+function buildQueryString(query: Record<string, unknown>): string {
+  const params = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(query)) {
+    if (value === undefined) continue;
+    if (value === null) continue;
+
+    if (Array.isArray(value)) {
+      for (const v of value) {
+        if (v === undefined || v === null) continue;
+        params.append(key, String(v));
+      }
+      continue;
+    }
+
+    params.set(key, String(value));
   }
+
+  const s = params.toString();
+  return s ? `?${s}` : '';
 }
 
-export default function StoryDetailPage() {
-  // Legacy route: this page always redirects in getStaticProps.
-  return null;
-}
+export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
+  const slugParam = (ctx.params as any)?.idOrSlug;
+  const slug = Array.isArray(slugParam) ? slugParam[0] : slugParam;
 
-export const getStaticPaths: GetStaticPaths = async () => {
-  return {
-    paths: [],
-    fallback: 'blocking',
-  };
+  if (!slug || typeof slug !== 'string') {
+    return { notFound: true };
+  }
+
+  const locale = ctx.locale;
+  const defaultLocale = ctx.defaultLocale;
+  const localePrefix = locale && defaultLocale && locale !== defaultLocale ? `/${locale}` : '';
+
+  const { idOrSlug: _omit, ...restQuery } = (ctx.query as any) || {};
+  const qs = buildQueryString(restQuery);
+
+  const destination = `${localePrefix}/news/${encodeURIComponent(slug)}${qs}`;
+
+  // Force 301 (Next's redirect helper uses 308 for permanent redirects).
+  ctx.res.statusCode = 301;
+  ctx.res.setHeader('Location', destination);
+  ctx.res.end();
+
+  return { props: {} };
 };
 
-export const getStaticProps: GetStaticProps = async (ctx) => {
-  const raw = String((ctx.params as any)?.idOrSlug || '').trim();
-  if (!raw) return { notFound: true, revalidate: 10 };
+const StoryDetailPage: NextPage = () => null;
 
-  const idOrSlug = safeDecodeURIComponent(raw).trim();
-  if (!idOrSlug) return { notFound: true, revalidate: 10 };
-
-  const locale = (ctx.locale || 'en') as string;
-  const requestedLang = String(locale || 'en').toLowerCase().trim();
-
-  const { article } = await fetchArticleBySlugOrId({ slugOrId: idOrSlug, language: requestedLang });
-  if (!article?._id) return { notFound: true, revalidate: 10 };
-
-  const destination = buildNewsUrl({ id: article._id, slug: resolveArticleSlug(article, requestedLang), lang: requestedLang });
-  return {
-    redirect: {
-      destination,
-      permanent: false,
-    },
-    revalidate: 60,
-  };
-};
+export default StoryDetailPage;
