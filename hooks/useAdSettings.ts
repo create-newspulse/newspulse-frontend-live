@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { isSafeMode } from '../utils/safeMode';
 
 export type AdSlotName = 'HOME_728x90' | 'HOME_RIGHT_300x250';
 
@@ -92,6 +93,7 @@ export function useAdSettings() {
   const [slotEnabled, setSlotEnabled] = useState<Record<AdSlotName, boolean> | null>(cachedSlotEnabled);
   const inFlightRef = useRef<Promise<void> | null>(null);
   const pollSec = useMemo(() => getPollSec(), []);
+  const SAFE_MODE = isSafeMode();
 
   const doRefresh = () => {
     if (inFlightRef.current) return;
@@ -118,6 +120,7 @@ export function useAdSettings() {
   // Auto-refresh without a full page reload.
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (SAFE_MODE) return;
 
     const onMaybeRefresh = () => {
       try {
@@ -132,11 +135,12 @@ export function useAdSettings() {
       window.removeEventListener('focus', onMaybeRefresh);
       document.removeEventListener('visibilitychange', onMaybeRefresh);
     };
-  }, []);
+  }, [SAFE_MODE]);
 
   useEffect(() => {
     if (!pollSec) return;
     if (typeof window === 'undefined') return;
+    if (SAFE_MODE) return;
 
     const id = window.setInterval(() => {
       try {
@@ -146,7 +150,7 @@ export function useAdSettings() {
     }, pollSec * 1000);
 
     return () => window.clearInterval(id);
-  }, [pollSec]);
+  }, [SAFE_MODE, pollSec]);
 
   return { slotEnabled };
 }

@@ -1,5 +1,7 @@
 import React from 'react';
 
+import { isSafeMode } from '../../utils/safeMode';
+
 import {
   DEFAULT_NORMALIZED_PUBLIC_SETTINGS,
   fetchPublicSettings,
@@ -25,6 +27,8 @@ export function PublicSettingsProvider({ children }: { children: React.ReactNode
   const [settings, setSettings] = React.useState<NormalizedPublicSettings | null>(null);
   const [isLoading, setIsLoading] = React.useState<boolean>(true);
   const [error, setError] = React.useState<string | null>(null);
+
+  const SAFE_MODE = isSafeMode();
 
   const inFlightRef = React.useRef<Promise<void> | null>(null);
 
@@ -77,6 +81,7 @@ export function PublicSettingsProvider({ children }: { children: React.ReactNode
   // 1) When the tab becomes visible or window gets focus (common after publishing in Admin).
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (SAFE_MODE) return;
 
     const onMaybeRefresh = () => {
       try {
@@ -91,12 +96,13 @@ export function PublicSettingsProvider({ children }: { children: React.ReactNode
       window.removeEventListener('focus', onMaybeRefresh);
       document.removeEventListener('visibilitychange', onMaybeRefresh);
     };
-  }, [load]);
+  }, [SAFE_MODE, load]);
 
   // 2) Optional polling (disabled by default). Set NEXT_PUBLIC_PUBLIC_SETTINGS_POLL_SEC.
   React.useEffect(() => {
     if (!pollSec) return;
     if (typeof window === 'undefined') return;
+    if (SAFE_MODE) return;
 
     const id = window.setInterval(() => {
       try {
@@ -106,7 +112,7 @@ export function PublicSettingsProvider({ children }: { children: React.ReactNode
     }, pollSec * 1000);
 
     return () => window.clearInterval(id);
-  }, [pollSec, load]);
+  }, [SAFE_MODE, pollSec, load]);
 
   const value = React.useMemo<PublicSettingsContextValue>(
     () => ({

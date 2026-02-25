@@ -12,6 +12,7 @@ import { getTrendingTopics } from "../lib/getTrendingTopics";
 import { fetchPublicNews, type Article } from "../lib/publicNewsApi";
 import { toTickerTexts } from "../lib/publicBroadcast";
 import { usePublicBroadcastTicker } from "../hooks/usePublicBroadcastTicker";
+import { isSafeMode } from "../utils/safeMode";
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle } from "../lib/contentFallback";
 import OriginalTag from "../components/OriginalTag";
 import { DEFAULT_NORMALIZED_PUBLIC_SETTINGS, sanitizeEmbedUrl } from "../src/lib/publicSettings";
@@ -1959,6 +1960,7 @@ function SiteFooter({ theme, onToast, footerTextOverride }: any) {
 export default function UiPreviewV145() {
   const { t, lang, setLang } = useI18n();
   const router = useRouter();
+  const SAFE_MODE = isSafeMode();
   const [prefs, setPrefs] = useState<any>(DEFAULT_PREFS);
   const theme = useMemo(() => getTheme(prefs.themeId), [prefs.themeId]);
   usePublicMode();
@@ -1998,7 +2000,12 @@ export default function UiPreviewV145() {
     return (code === 'en' ? 'en' : code === 'hi' ? 'hi' : 'gu') as 'en' | 'hi' | 'gu';
   }, [lang]);
 
-  const broadcastTickers = usePublicBroadcastTicker({ lang: apiLang, pollMs: 10_000, enableSse: true });
+  const broadcastTickers = usePublicBroadcastTicker({
+    lang: apiLang,
+    pollMs: 10_000,
+    enableSse: true,
+    enabled: !SAFE_MODE,
+  });
 
   const [activeCatKey, setActiveCatKey] = useState<string>("breaking");
   const [toast, setToast] = useState<string>("");
@@ -2119,8 +2126,8 @@ export default function UiPreviewV145() {
   const liveTickerEnabled = liveModuleEnabled && effectiveSettings.tickers.live.enabled === true;
 
   // Broadcast config controls whether the ticker is active; it must not override module toggles.
-  const breakingTickerVisible = breakingTickerEnabled && (broadcastTickers.breakingEnabled ?? true);
-  const liveTickerVisible = liveTickerEnabled && (broadcastTickers.liveEnabled ?? true);
+  const breakingTickerVisible = !SAFE_MODE && breakingTickerEnabled && (broadcastTickers.breakingEnabled ?? true);
+  const liveTickerVisible = !SAFE_MODE && liveTickerEnabled && (broadcastTickers.liveEnabled ?? true);
 
   const breakingDurationSec = clampNum(broadcastTickers.breakingSpeedSec ?? effectiveSettings.tickers.breaking.speedSec, 10, 40, 18);
   const liveDurationSec = clampNum(broadcastTickers.liveSpeedSec ?? effectiveSettings.tickers.live.speedSec, 10, 40, 24);
@@ -2348,12 +2355,22 @@ export default function UiPreviewV145() {
                 onChange={(nextCode: UiLangCode) => {
                   const next = String(nextCode).toLowerCase();
                   if (next === 'en' || next === 'hi' || next === 'gu') {
+                    const currentLocale = String(router.locale || router.defaultLocale || 'en').toLowerCase();
+                    const currentPath = String(router.asPath || '/').split('?')[0] || '/';
+                    const targetPath = next === 'en' ? '/' : `/${next}`;
+
+                    // Guard: if already on desired locale/path, don't re-navigate.
+                    if (currentLocale === next && currentPath === targetPath) {
+                      setLang(next as any, { persist: true });
+                      setPrefs((p: any) => ({ ...p, lang: UI_LANG_LABEL[nextCode] }));
+                      return;
+                    }
+
                     // Persist preference, but route locale remains the single source of truth.
                     setLang(next as any, { persist: true });
 
                     // Requirement: on dropdown change, route to /, /hi, /gu.
-                    const out = next === 'en' ? '/' : `/${next}`;
-                    router.replace(out, out, { locale: next, shallow: false, scroll: false }).catch(() => {});
+                    router.replace(targetPath, targetPath, { locale: next, shallow: false, scroll: false }).catch(() => {});
                   }
                   setPrefs((p: any) => ({ ...p, lang: UI_LANG_LABEL[nextCode] }));
                 }}

@@ -6,6 +6,7 @@ import SpotlightFallback728 from "./SpotlightFallback728";
 import { useAdSettings } from "../../hooks/useAdSettings";
 import { useLanguage } from "../../src/i18n/language";
 import { getPublicApiBaseUrl } from "../../lib/publicApiBase";
+import { isSafeMode } from "../../utils/safeMode";
 
 export type AdSlotName = "HOME_728x90" | "HOME_RIGHT_300x250";
 
@@ -97,6 +98,7 @@ function AdBadge() {
 export default function AdSlot({ slot, className = "", fallback }: AdSlotProps) {
   const { slotEnabled } = useAdSettings();
   const isDisabled = slotEnabled?.[slot] === false;
+  const SAFE_MODE = isSafeMode();
 
   const pollSec = (() => {
     const raw = Number(process.env.NEXT_PUBLIC_PUBLIC_ADS_POLL_SEC || 0);
@@ -183,6 +185,7 @@ export default function AdSlot({ slot, className = "", fallback }: AdSlotProps) 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (isDisabled) return;
+    if (SAFE_MODE) return;
 
     const ac = new AbortController();
     const onMaybeRefresh = () => {
@@ -206,7 +209,7 @@ export default function AdSlot({ slot, className = "", fallback }: AdSlotProps) 
       if (intervalId != null) window.clearInterval(intervalId);
       ac.abort();
     };
-  }, [fetchAd, isDisabled, pollSec]);
+  }, [SAFE_MODE, fetchAd, isDisabled, pollSec]);
 
   useEffect(() => {
     if (isDisabled) return;

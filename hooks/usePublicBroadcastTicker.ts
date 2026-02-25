@@ -48,8 +48,16 @@ export function usePublicBroadcastTicker(options: {
   lang: BroadcastLang;
   pollMs?: number;
   enableSse?: boolean;
+  enabled?: boolean;
 }): PublicBroadcastTickerState {
-  const { lang, pollMs = 5_000, enableSse = true } = options;
+  const { lang, pollMs = 5_000, enableSse = true, enabled = true } = options;
+
+  const effectivePollMs = useMemo(() => {
+    const n = Number(pollMs);
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    // Requirement: throttle polling to at least 10s.
+    return Math.max(10_000, n);
+  }, [pollMs]);
 
   const [broadcast, setBroadcast] = useState<PublicBroadcast>(() =>
     normalizePublicBroadcast({
@@ -116,6 +124,8 @@ export function usePublicBroadcastTicker(options: {
   // Polling + focus/visibility refetch
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (!enabled) return;
+    if (!effectivePollMs) return;
 
     const stopPolling = () => {
       if (pollTimerRef.current) {
@@ -131,7 +141,7 @@ export function usePublicBroadcastTicker(options: {
         // If SSE is active, avoid double-fetch.
         if (sseRef.current && !sseFailedRef.current) return;
         refetch('poll');
-      }, pollMs);
+      }, effectivePollMs);
     };
 
     const onFocusLike = () => {
@@ -163,11 +173,12 @@ export function usePublicBroadcastTicker(options: {
       window.removeEventListener('focus', onFocusLike);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [pollMs, refetch]);
+  }, [effectivePollMs, enabled, refetch]);
 
   // SSE (Phase 2)
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (!enabled) return;
     if (!enableSse) return;
     if (typeof EventSource === 'undefined') return;
 
@@ -218,7 +229,7 @@ export function usePublicBroadcastTicker(options: {
     return () => {
       close();
     };
-  }, [applyBroadcast, enableSse, lang, refetch]);
+  }, [applyBroadcast, enableSse, enabled, lang, refetch]);
 
   const emptyText = useMemo(() => {
     if (lang === 'hi') return 'अभी कोई अपडेट नहीं — जुड़े रहें';
