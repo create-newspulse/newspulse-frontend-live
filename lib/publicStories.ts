@@ -37,11 +37,24 @@ function unwrapStory(payload: any): PublicStory | null {
   return null;
 }
 
-export async function fetchPublicStories(baseUrl?: string, options?: { language?: string }): Promise<PublicStory[]> {
+export async function fetchPublicStories(
+  baseUrl?: string,
+  options?: { language?: string; category?: string; state?: string; district?: string }
+): Promise<PublicStory[]> {
   const base = (baseUrl || getApiBaseUrl()).replace(/\/+$/, '');
   const lang = options?.language ? String(options.language).toLowerCase().trim() : '';
-  const langQuery = lang ? `?lang=${encodeURIComponent(lang)}&language=${encodeURIComponent(lang)}` : '';
-  const url = `${base}/api/public/stories${langQuery}`;
+
+  const params = new URLSearchParams();
+  if (lang) {
+    params.set('lang', lang);
+    params.set('language', lang);
+  }
+  if (options?.category) params.set('category', String(options.category));
+  if (options?.state) params.set('state', String(options.state));
+  if (options?.district) params.set('district', String(options.district));
+
+  const query = params.toString();
+  const url = `${base}/api/public/stories${query ? `?${query}` : ''}`;
 
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch stories (${res.status})`);

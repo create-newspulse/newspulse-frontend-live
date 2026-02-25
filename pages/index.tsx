@@ -2453,7 +2453,9 @@ export default function UiPreviewV145() {
               <div className="rounded-2xl border overflow-hidden" style={{ background: theme.surface2, borderColor: theme.border }}>
                 <div className="flex items-center justify-between px-3 py-2 border-b" style={{ borderColor: theme.border }}>
                   <div className="text-sm font-extrabold" style={{ color: theme.text }}>{t('home.regionalPreview')}</div>
-                  <a href="/regional" className="text-xs font-semibold" style={{ color: theme.accent }}>{t('common.viewAll')} →</a>
+                  <Link href="/regional" className="text-xs font-semibold" style={{ color: theme.accent }}>
+                    {t('common.viewAll')} →
+                  </Link>
                 </div>
                 <div className="p-3 grid gap-2">
                   {(regional.news.slice(0, 3)).map((a: any, idx: number) => (

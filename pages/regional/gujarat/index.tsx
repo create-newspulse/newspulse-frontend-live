@@ -32,11 +32,23 @@ const CATEGORIES = [
 type AnyStory = any;
 
 function normalize(s: string) {
-  return String(s || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const raw = String(s || '')
+    .normalize('NFKC')
+    .toLowerCase();
+
+  try {
+    const unicodeRe = new RegExp('[^\\p{L}\\p{N}\\s]', 'gu');
+
+    return raw
+      .replace(unicodeRe, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  } catch {
+    return raw
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
 }
 
 function toSlug(value: string) {
@@ -80,6 +92,29 @@ function tagList(tags: any): string[] {
   return [];
 }
 
+function extractDistrictSlugFromStory(story: AnyStory): string {
+  const direct =
+    story?.districtSlug ||
+    story?.district_slug ||
+    story?.districtCode ||
+    story?.district_code ||
+    story?.districtId ||
+    story?.district_id ||
+    '';
+
+  const directValue = String(direct || '').toLowerCase().trim();
+  if (directValue) return toSlug(directValue);
+
+  const tags = tagList(story?.tags);
+  for (const t of tags) {
+    if (t.startsWith('district:')) return toSlug(t.slice('district:'.length));
+    if (t.startsWith('district-')) return toSlug(t.slice('district-'.length));
+    if (t.startsWith('district=')) return toSlug(t.slice('district='.length));
+  }
+
+  return '';
+}
+
 function isPublished(story: AnyStory): boolean {
   return String(story?.status || '').toLowerCase() === 'published';
 }
@@ -113,6 +148,14 @@ export default function GujaratIndexPage() {
   const router = useRouter();
   const { language } = useLanguage();
   const { t } = useI18n();
+
+  const pushPath = React.useCallback(
+    (path: string) => {
+      const next = String(path || '/');
+      router.push(next, next, { locale: router.locale }).catch(() => {});
+    },
+    [router]
+  );
 
   const uiLang = React.useMemo(() => {
     const v = String(language || '').toLowerCase().trim();
@@ -152,7 +195,7 @@ export default function GujaratIndexPage() {
     setLoading(true);
     setError(null);
 
-    fetchPublicStories(undefined, { language: uiLang })
+    fetchPublicStories(undefined, { language: uiLang, category: 'regional', state: 'gujarat' })
       .then((items) => {
         if (cancelled) return;
         setStories(items as AnyStory[]);
@@ -171,7 +214,16 @@ export default function GujaratIndexPage() {
     };
   }, [t, uiLang]);
 
-  const districtFilteringEnabled = React.useMemo(() => stories.some((s) => !!extractDistrict(s)), [stories]);
+  const districtFilteringEnabled = React.useMemo(
+    () =>
+      stories.some((s) => {
+        if (extractDistrictSlugFromStory(s)) return true;
+        if (String(extractDistrict(s) || '').trim()) return true;
+        const tags = tagList(s?.tags);
+        return tags.some((t) => t.startsWith('district:') || t.startsWith('city:'));
+      }),
+    [stories]
+  );
 
   const effectiveCategory = React.useMemo(() => (tab === 'Civic' ? 'Civic' : selectedCategory), [tab, selectedCategory]);
 
@@ -241,7 +293,7 @@ export default function GujaratIndexPage() {
   const onSelectDistrict = (slug: string) => {
     setPickerOpen(false);
     setTab('Feed');
-    router.push(`/regional/gujarat/${slug}`);
+    pushPath(`/regional/gujarat/${slug}`);
     try {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch {
@@ -303,7 +355,7 @@ export default function GujaratIndexPage() {
               className="mt-3"
               districts={localizedDistricts}
               selectedDistrictSlug={null}
-              onSelectAll={() => router.push('/regional/gujarat')}
+              onSelectAll={() => pushPath('/regional/gujarat')}
               onSelectDistrict={onSelectDistrict}
               onMore={() => setPickerOpen(true)}
               allLabel={t('regionalUI.allGujarat')}
@@ -449,7 +501,7 @@ export default function GujaratIndexPage() {
         noResultsLabel={t('regionalUI.noDistrictsFound')}
         districts={localizedDistricts}
         onClose={() => setPickerOpen(false)}
-        onPickAll={() => router.push('/regional/gujarat')}
+        onPickAll={() => pushPath('/regional/gujarat')}
         onPickDistrict={onSelectDistrict}
       />
 

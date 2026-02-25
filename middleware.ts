@@ -50,12 +50,28 @@ export function middleware(req: NextRequest) {
   }
 
   // IMPORTANT: Do not auto-redirect based on stored preference.
+  // Exception: for legacy /regional/* URLs, we *do* redirect to the user's preferred locale
+  // to avoid mixing localized UI with non-localized paths.
   // But do keep NEXT_LOCALE aligned with the user's last choice so SSR + client agree.
   const pref =
     normalizeLocale(req.cookies.get(COOKIE_KEY)?.value) ||
     normalizeLocale(req.cookies.get(LEGACY_COOKIE_KEY)?.value) ||
     normalizeLocale(req.cookies.get(NEXT_LOCALE_COOKIE)?.value) ||
     null;
+
+  if (pref && (pref === 'hi' || pref === 'gu')) {
+    const pLower = pathnameLower;
+    if (pLower === '/regional' || pLower.startsWith('/regional/')) {
+      const redirectUrl = req.nextUrl.clone();
+      redirectUrl.pathname = `/${pref}${pathname}`;
+
+      const res = NextResponse.redirect(redirectUrl, 307);
+      res.cookies.set(NEXT_LOCALE_COOKIE, pref, { path: '/', maxAge: 60 * 60 * 24 * 365 });
+      res.cookies.set(COOKIE_KEY, pref, { path: '/', maxAge: 60 * 60 * 24 * 365 });
+      res.cookies.set(LEGACY_COOKIE_KEY, pref, { path: '/', maxAge: 60 * 60 * 24 * 365 });
+      return res;
+    }
+  }
 
   const res = NextResponse.next();
   if (pref) {

@@ -734,10 +734,13 @@ function MetricCard({ label, value, hint }: { label: string; value: number | str
   );
 }
 
-export const getServerSideProps: GetServerSideProps = async () => {
+export const getServerSideProps: GetServerSideProps = async (ctx) => {
+  const locale = String(ctx.locale || 'en').toLowerCase();
+  const prefix = locale && locale !== 'en' ? `/${locale}` : '';
+
   return {
     redirect: {
-      destination: '/regional/gujarat',
+      destination: `${prefix}/regional/gujarat`,
       permanent: false,
     },
   };
