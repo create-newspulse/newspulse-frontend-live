@@ -1,3 +1,4 @@
+import type { GetServerSideProps } from 'next';
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLanguage } from "../utils/LanguageContext";
 import { useRegionalPulse } from "../src/features/regional/useRegionalPulse";
@@ -299,7 +300,7 @@ function ClientTime({ iso }: { iso?: string }) {
 
 // ---------- Main Page Component
 
-export default function RegionalPage() {
+function RegionalGujaratPage() {
   const { language, setLanguage } = useLanguage();
   const { isEnabled } = useFeatureFlags();
   const { t } = useI18n();
@@ -731,5 +732,21 @@ function MetricCard({ label, value, hint }: { label: string; value: number | str
       {hint && <div className="text-xs text-slate-400 mt-1">{hint}</div>}
     </div>
   );
+}
+
+export const getServerSideProps: GetServerSideProps = async (ctx) => {
+  const locale = String(ctx.locale || 'en').toLowerCase();
+  const prefix = locale && locale !== 'en' ? `/${locale}` : '';
+
+  return {
+    redirect: {
+      destination: `${prefix}/regional/gujarat`,
+      permanent: false,
+    },
+  };
+};
+
+export default function RegionalPage() {
+  return null;
 }
  

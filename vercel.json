@@ -17,7 +17,7 @@
     }
   ],
   "env": {
-    "NEXT_PUBLIC_SITE_URL": "https://www.newspulse.co.in"
+    "NEXT_PUBLIC_SITE_URL": "https://news-pulse.vercel.app"
   },
   "functions": {
     "pages/api/**/*.ts": {
