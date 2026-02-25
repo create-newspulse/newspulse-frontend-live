@@ -1,5 +1,5 @@
 export default async function handler(req, res) {
-  const baseUrl = "https://newspulse.co.in";
+  const baseUrl = "https://www.newspulse.co.in";
 
   const staticPages = [
     "",
