@@ -53,6 +53,12 @@ function getBackendHostname() {
 const nextConfig = {
   reactStrictMode: true,
 
+  // Prevent permanent /path <-> /path/ normalization redirects.
+  // If any edge/cache layer has the opposite redirect cached, browsers can hit an
+  // infinite redirect loop on refresh (ERR_TOO_MANY_REDIRECTS). Serving both forms
+  // without redirect avoids this class of issue entirely.
+  skipTrailingSlashRedirect: true,
+
   // Unblock Vercel builds when ESLint crashes during next build (circular JSON bug)
   eslint: {
     ignoreDuringBuilds: true,
