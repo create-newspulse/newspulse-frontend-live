@@ -124,7 +124,7 @@ const CATEGORIES = [
 // Map categories to real routes where available
 const CATEGORY_ROUTES: Record<string, string> = {
   breaking: "/breaking",
-  regional: "/regional",
+  regional: "/regional/gujarat",
   national: "/national",
   international: "/international",
   business: "/business",
@@ -2433,7 +2433,7 @@ export default function UiPreviewV145() {
               <div className="rounded-2xl border overflow-hidden" style={{ background: theme.surface2, borderColor: theme.border }}>
                 <div className="flex items-center justify-between px-3 py-2 border-b" style={{ borderColor: theme.border }}>
                   <div className="text-sm font-extrabold" style={{ color: theme.text }}>{t('home.regionalPreview')}</div>
-                  <Link href="/regional" className="text-xs font-semibold" style={{ color: theme.accent }}>
+                  <Link href="/regional/gujarat" className="text-xs font-semibold" style={{ color: theme.accent }}>
                     {t('common.viewAll')} →
                   </Link>
                 </div>

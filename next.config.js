@@ -97,6 +97,29 @@ const nextConfig = {
 
   async redirects() {
     return [
+      // Canonical regional landing page.
+      // Avoids the redirect-only /regional (pages/regional.tsx), which can cause repeated
+      // `regional.json` Next data requests in some clients.
+      {
+        source: '/regional',
+        destination: '/regional/gujarat',
+        permanent: false,
+      },
+      {
+        source: '/hi/regional',
+        destination: '/hi/regional/gujarat',
+        permanent: false,
+      },
+      {
+        source: '/gu/regional',
+        destination: '/gu/regional/gujarat',
+        permanent: false,
+      },
+      {
+        source: '/en/regional',
+        destination: '/regional/gujarat',
+        permanent: false,
+      },
       {
         source: '/:path*',
         has: [{ type: 'host', value: 'newspulse.co.in' }],
@@ -127,19 +150,18 @@ const nextConfig = {
     const backend = backendRaw.replace(/\/+$/, '').replace(/\/api\/?$/, '');
 
     // Locale-stable regional routes:
-    // Production has intermittently failed to resolve `/hi/regional/*` and `/gu/regional/*`.
-    // These rewrites force those locale-prefixed URLs to render the canonical `/regional/*` pages
-    // and pass the intended language via `?lang=`.
+    // Some deployments have intermittently failed to resolve locale-prefixed regional routes.
+    // Keep a light rewrite to the canonical `/regional/*` page tree, but DO NOT disable locale
+    // handling or inject `?lang=`. Disabling locale can cause Next's data prefetch to request the
+    // wrong locale JSON and repeatedly hit 307 redirects (seen as `gujarat.json` 307 loops).
     const regionalLocaleRewrites = [
       {
         source: '/hi/regional/:path*',
-        destination: '/regional/:path*?lang=hi',
-        locale: false,
+        destination: '/regional/:path*',
       },
       {
         source: '/gu/regional/:path*',
-        destination: '/regional/:path*?lang=gu',
-        locale: false,
+        destination: '/regional/:path*',
       },
     ];
 

@@ -83,15 +83,22 @@ function RouteLanguageSync() {
   React.useEffect(() => {
     if (!router.isReady) return;
 
-    const routeLocale = normalizeLang(router.locale || router.defaultLocale || 'en');
-
     const asPath = String(router.asPath || '');
     const pathOnly = asPath.split('?')[0] || '/';
-    const hasExplicitLocalePrefix =
-      pathOnly === '/hi' ||
-      pathOnly.startsWith('/hi/') ||
-      pathOnly === '/gu' ||
-      pathOnly.startsWith('/gu/');
+
+    // IMPORTANT:
+    // Some production rewrites intentionally use `locale: false` for `/hi|gu/regional/*`.
+    // In those cases Next may report `router.locale` as the default locale even though the
+    // URL clearly contains an explicit locale prefix. The URL must win.
+    const explicitLocaleFromPath = (() => {
+      const p = String(pathOnly || '/').toLowerCase();
+      if (p === '/hi' || p.startsWith('/hi/')) return 'hi';
+      if (p === '/gu' || p.startsWith('/gu/')) return 'gu';
+      if (p === '/en' || p.startsWith('/en/')) return 'en';
+      return null;
+    })();
+
+    const routeLocale = normalizeLang(explicitLocaleFromPath || router.locale || router.defaultLocale || 'en');
 
     // Parse ?lang= from asPath instead of router.query to avoid dependency churn.
     const queryLang = (() => {

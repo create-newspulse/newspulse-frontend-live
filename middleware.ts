@@ -62,6 +62,23 @@ export function middleware(req: NextRequest) {
   if (pref && (pref === 'hi' || pref === 'gu')) {
     const pLower = pathnameLower;
     if (pLower === '/regional' || pLower.startsWith('/regional/')) {
+      // Only redirect for real navigations (HTML documents).
+      // Next.js prefetch/data requests can otherwise see repeated 307s (e.g. `gujarat.json`)
+      // and get stuck retrying, making the page appear unresponsive.
+      const isNextData = req.headers.get('x-nextjs-data') === '1';
+      const isNextPrefetch = req.headers.get('x-nextjs-prefetch') === '1';
+      const purpose = (req.headers.get('purpose') || req.headers.get('sec-purpose') || '').toLowerCase();
+      const isPrefetch = isNextPrefetch || purpose === 'prefetch';
+      const fetchDest = (req.headers.get('sec-fetch-dest') || '').toLowerCase();
+      const accept = (req.headers.get('accept') || '').toLowerCase();
+      const isDocument = fetchDest === 'document' || accept.includes('text/html');
+
+      if (!isDocument || isNextData || isPrefetch) {
+        const res = NextResponse.next();
+        res.cookies.set(NEXT_LOCALE_COOKIE, pref, { path: '/', maxAge: 60 * 60 * 24 * 365 });
+        return res;
+      }
+
       const redirectUrl = req.nextUrl.clone();
       redirectUrl.pathname = `/${pref}${pathname}`;
 

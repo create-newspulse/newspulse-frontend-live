@@ -165,9 +165,12 @@ export default function GujaratDistrictPage() {
   const pushPath = React.useCallback(
     (path: string) => {
       const next = String(path || '/');
-      router.push(next, next, { locale: router.locale }).catch(() => {});
+      // Use effective language instead of router.locale.
+      // Some production rewrites use `locale: false`, which can leave router.locale as "en"
+      // even when the URL is clearly /hi or /gu.
+      router.push(next, next, { locale: effectiveLang }).catch(() => {});
     },
-    [router]
+    [effectiveLang, router]
   );
 
   const langKey = React.useMemo(() => toLanguageKey(effectiveLang), [effectiveLang]);
