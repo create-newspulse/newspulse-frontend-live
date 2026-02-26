@@ -29,8 +29,11 @@ export function middleware(req: NextRequest) {
   }
 
   // Respect explicit locale routes (shareable URLs).
+  // IMPORTANT: with Next i18n enabled, middleware may receive `nextUrl.pathname`
+  // with the locale prefix stripped, while `nextUrl.locale` still reflects the
+  // requested locale. Rely on `nextUrl.locale` to avoid redirect loops.
   const pathnameLower = pathname.toLowerCase();
-  const localeInPath: Locale | null =
+  const localeFromPrefix: Locale | null =
     pathnameLower === '/hi' || pathnameLower.startsWith('/hi/')
       ? 'hi'
       : pathnameLower === '/gu' || pathnameLower.startsWith('/gu/')
@@ -38,6 +41,12 @@ export function middleware(req: NextRequest) {
         : pathnameLower === '/en' || pathnameLower.startsWith('/en/')
           ? 'en'
           : null;
+
+  const nextLocale = normalizeLocale(url.locale);
+  const nextDefaultLocale = normalizeLocale(url.defaultLocale) || 'en';
+
+  const localeInPath: Locale | null =
+    localeFromPrefix || (nextLocale && nextLocale !== nextDefaultLocale ? nextLocale : null);
 
   // When URL explicitly sets locale, keep NEXT_LOCALE aligned so Next doesn't mis-detect.
   if (localeInPath) {
