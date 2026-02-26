@@ -735,7 +735,9 @@ function MetricCard({ label, value, hint }: { label: string; value: number | str
 }
 
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
-  const locale = String(ctx.locale || 'en').toLowerCase();
+  const queryLangRaw = (ctx.query && (ctx.query as any).lang) || '';
+  const queryLang = Array.isArray(queryLangRaw) ? queryLangRaw[0] : queryLangRaw;
+  const locale = String(queryLang || ctx.locale || 'en').toLowerCase();
   const prefix = locale && locale !== 'en' ? `/${locale}` : '';
 
   return {

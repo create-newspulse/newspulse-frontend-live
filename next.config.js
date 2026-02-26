@@ -126,6 +126,23 @@ const nextConfig = {
         .trim();
     const backend = backendRaw.replace(/\/+$/, '').replace(/\/api\/?$/, '');
 
+    // Locale-stable regional routes:
+    // Production has intermittently failed to resolve `/hi/regional/*` and `/gu/regional/*`.
+    // These rewrites force those locale-prefixed URLs to render the canonical `/regional/*` pages
+    // and pass the intended language via `?lang=`.
+    const regionalLocaleRewrites = [
+      {
+        source: '/hi/regional/:path*',
+        destination: '/regional/:path*?lang=hi',
+        locale: false,
+      },
+      {
+        source: '/gu/regional/:path*',
+        destination: '/regional/:path*?lang=gu',
+        locale: false,
+      },
+    ];
+
     // Frontend-friendly alias (requested contract) for ticker endpoints.
     // These hit our Next API routes under /pages/api/public/broadcast/*.
     const localAliases = [
@@ -139,9 +156,10 @@ const nextConfig = {
       },
     ];
 
-    if (!backend) return localAliases;
+    if (!backend) return [...regionalLocaleRewrites, ...localAliases];
 
     return [
+      ...regionalLocaleRewrites,
       ...localAliases,
       {
         source: '/admin-api/public/:path*',

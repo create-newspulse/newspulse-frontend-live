@@ -7,7 +7,7 @@ import { getGujaratCityName, getStateName, tHeading } from '../../../../utils/lo
 import type { GetStaticProps } from 'next';
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../../../../lib/contentFallback';
 import OriginalTag from '../../../../components/OriginalTag';
-import { useI18n } from '../../../../src/i18n/LanguageProvider';
+import { normalizeLang, useI18n } from '../../../../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../../../../lib/newsRoutes';
 import { resolveArticleSlug } from '../../../../lib/articleSlugs';
 import { COVER_PLACEHOLDER_SRC, onCoverImageError, resolveCoverImageUrl } from '../../../../lib/coverImages';
@@ -30,16 +30,19 @@ export default function GujaratCityPage() {
   const { feed, loading } = useRegionalPulse();
   const { t } = useI18n();
 
-  const uiLang: UiLang = (() => {
-    const v = String(language || '').toLowerCase().trim();
-    if (v === 'hi' || v === 'hindi') return 'hi';
-    if (v === 'gu' || v === 'gujarati') return 'gu';
-    return 'en';
+  const queryLang = (() => {
+    const raw = (router.query as any)?.lang;
+    const value = Array.isArray(raw) ? raw[0] : raw;
+    return String(value || '').trim();
   })();
+
+  const effectiveLang = normalizeLang(queryLang || router.locale || language || 'en');
+
+  const uiLang: UiLang = effectiveLang;
   const slug = (city || '').toString();
   const displayNameFallback = (slug || '').replace(/-/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
-  const displayName = getGujaratCityName(language as any, slug, displayNameFallback || 'City');
-  const stateName = getStateName(language as any, 'gujarat', 'Gujarat');
+  const displayName = getGujaratCityName(effectiveLang as any, slug, displayNameFallback || 'City');
+  const stateName = getStateName(effectiveLang as any, 'gujarat', 'Gujarat');
 
   return (
     <div className="min-h-screen bg-white dark:bg-dark-primary text-black dark:text-dark-text">
@@ -65,8 +68,8 @@ export default function GujaratCityPage() {
               ) : filtered.length ? (
                 filtered.map((article: any, idx: number) => {
                   const id = String(article?._id || article?.id || '').trim();
-                  const slug = resolveArticleSlug(article, language);
-                  const href = id ? buildNewsUrl({ id, slug, lang: language }) : '#';
+                  const slug = resolveArticleSlug(article, effectiveLang);
+                  const href = id ? buildNewsUrl({ id, slug, lang: effectiveLang }) : '#';
                   const coverUrl = resolveCoverImageUrl(article);
                   return (
                   <a key={idx} href={href} className="block p-6 rounded-2xl border shadow-sm hover:shadow-md bg-white dark:bg-gray-800 transition">

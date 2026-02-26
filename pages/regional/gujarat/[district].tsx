@@ -14,7 +14,7 @@ import { fetchPublicStories, getStoryCategoryLabel } from '../../../lib/publicSt
 import { GUJARAT_DISTRICTS } from '../../../utils/regions';
 import { useLanguage } from '../../../utils/LanguageContext';
 import { getGujaratDistrictName, getStateName, tHeading, toLanguageKey } from '../../../utils/localizedNames';
-import { useI18n } from '../../../src/i18n/LanguageProvider';
+import { normalizeLang, useI18n } from '../../../src/i18n/LanguageProvider';
 
 const CATEGORIES = [
   'All',
@@ -151,6 +151,17 @@ export default function GujaratDistrictPage() {
   const { t } = useI18n();
   const { district } = router.query as { district?: string };
 
+  const queryLang = React.useMemo(() => {
+    const raw = (router.query as any)?.lang;
+    const value = Array.isArray(raw) ? raw[0] : raw;
+    return String(value || '').trim();
+  }, [router.query]);
+
+  const effectiveLang = React.useMemo(() => {
+    // Priority: query (from rewrites) -> route locale -> persisted/provider language -> default
+    return normalizeLang(queryLang || router.locale || language || 'en');
+  }, [language, queryLang, router.locale]);
+
   const pushPath = React.useCallback(
     (path: string) => {
       const next = String(path || '/');
@@ -159,14 +170,9 @@ export default function GujaratDistrictPage() {
     [router]
   );
 
-  const langKey = React.useMemo(() => toLanguageKey(language), [language]);
+  const langKey = React.useMemo(() => toLanguageKey(effectiveLang), [effectiveLang]);
 
-  const uiLang = React.useMemo(() => {
-    const v = String(language || '').toLowerCase().trim();
-    if (v === 'hi' || v === 'hindi') return 'hi' as const;
-    if (v === 'gu' || v === 'gujarati') return 'gu' as const;
-    return 'en' as const;
-  }, [language]);
+  const uiLang = React.useMemo(() => effectiveLang, [effectiveLang]);
 
   const districtSlug = typeof district === 'string' ? district : undefined;
   const entry = React.useMemo(() => GUJARAT_DISTRICTS.find((d) => d.slug === districtSlug), [districtSlug]);
