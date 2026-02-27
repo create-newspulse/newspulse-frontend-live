@@ -150,26 +150,6 @@ function unwrapArticlesList(payload: any): any[] {
   return [];
 }
 
-function mergeUniqueStories(primary: any[], secondary: any[]): any[] {
-  const seen = new Set<string>();
-  const out: any[] = [];
-
-  const push = (s: any) => {
-    const key = String(s?._id || s?.id || s?.slug || '').trim();
-    if (!key) {
-      out.push(s);
-      return;
-    }
-    if (seen.has(key)) return;
-    seen.add(key);
-    out.push(s);
-  };
-
-  for (const s of primary) push(s);
-  for (const s of secondary) push(s);
-  return out;
-}
-
 function useVoiceReader() {
   const synthRef = React.useRef<SpeechSynthesis | null>(null);
   const [speaking, setSpeaking] = React.useState(false);
@@ -434,24 +414,10 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
           return;
         }
 
-        const baseItems = unwrapArticlesList(data);
-
-        // Backward-compatible All-India view: merge legacy public National feed.
-        // This keeps older “National” content visible even if /api/articles is stricter.
-        const items = await (async () => {
-          if (activeStateUt) return baseItems;
-          try {
-            const legacy = await fetchPublicNews({ category: 'national', language: effectiveLang, limit: requested });
-            const legacyItems = Array.isArray(legacy?.items) ? legacy.items : [];
-            const merged = mergeUniqueStories(baseItems, legacyItems);
-            return merged.slice(0, requested);
-          } catch {
-            return baseItems;
-          }
-        })();
+        const items = unwrapArticlesList(data);
 
         // Heuristic: if backend returns a full page worth, assume there may be more.
-        setHasMore(items.length >= requested || baseItems.length >= requested);
+        setHasMore(items.length >= requested);
         setStories(items);
 
         setPage(pageToLoad);
@@ -739,7 +705,7 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
               <option value="all">{t('nationalPage.allStatesUts')}</option>
               {regionOptions.map((r) => (
                 <option key={r.slug} value={r.slug}>
-                  {r.label}
+                  {r.label} ({r.slug})
                 </option>
               ))}
             </select>
@@ -1048,32 +1014,6 @@ export const getStaticProps: GetStaticProps = async ({ locale }) => {
             ? json
             : [];
 
-    // Backward-compatible merge with legacy public National feed.
-    const legacyItems = await (async () => {
-      try {
-        const lp = new URLSearchParams();
-        lp.set('category', 'national');
-        lp.set('lang', lang);
-        lp.set('language', lang);
-        lp.set('limit', String(limit));
-
-        const lRes = await fetch(`${API_BASE}/api/public/news?${lp.toString()}`, { headers: { Accept: 'application/json' } });
-        const lJson = await lRes.json().catch(() => null);
-        const list = Array.isArray(lJson?.items)
-          ? lJson.items
-          : Array.isArray(lJson?.articles)
-            ? lJson.articles
-            : Array.isArray(lJson?.data)
-              ? lJson.data
-              : [];
-        return Array.isArray(list) ? list : [];
-      } catch {
-        return [];
-      }
-    })();
-
-    const mergedItems = mergeUniqueStories(items, legacyItems).slice(0, limit);
-
     // Breaking (best-effort)
     const breaking = await (async () => {
       try {
@@ -1094,7 +1034,7 @@ export const getStaticProps: GetStaticProps = async ({ locale }) => {
     return {
       props: {
         lang,
-        data: Array.isArray(mergedItems) ? mergedItems : [],
+        data: Array.isArray(items) ? items : [],
         breaking,
         messages,
       },
