@@ -6,9 +6,8 @@ import type { GetStaticProps } from 'next';
 
 import BreakingTicker from '../../components/regional/BreakingTicker';
 
-import { ALL_REGIONS } from '../../utils/india';
 import { useLanguage } from '../../utils/LanguageContext';
-import { getRegionName, tHeading, toLanguageKey } from '../../utils/localizedNames';
+import { tHeading, toLanguageKey } from '../../utils/localizedNames';
 
 import { fetchPublicNews } from '../../lib/publicNewsApi';
 import { useI18n } from '../../src/i18n/LanguageProvider';
@@ -117,12 +116,38 @@ function matchesTopic(story: AnyStory, topic: TopicChip): boolean {
   return text.includes(t);
 }
 
-function matchRegion(story: AnyStory, regionName: string) {
-  const n = normalize(regionName);
-  if (!n) return false;
-  const text = normalize(`${story?.title || ''} ${story?.excerpt || ''} ${story?.summary || ''} ${story?.content || ''} ${story?.location || ''} ${(story?.tags || []).join?.(' ') || story?.tags || ''}`);
-  if (!text) return false;
-  return new RegExp(`(^|\s)${n}(\s|$)`).test(text) || text.includes(n);
+type IndiaStateUt = { name: string; slug: string };
+
+function unwrapStateUts(payload: any): IndiaStateUt[] {
+  if (!payload) return [];
+  const list = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload?.items)
+      ? payload.items
+      : Array.isArray(payload?.data)
+        ? payload.data
+        : Array.isArray(payload?.states)
+          ? payload.states
+          : Array.isArray(payload?.result)
+            ? payload.result
+            : [];
+
+  return (list as any[])
+    .map((x) => ({
+      name: String(x?.name || x?.label || '').trim(),
+      slug: String(x?.slug || x?.key || '').trim(),
+    }))
+    .filter((x) => x.name && x.slug);
+}
+
+function unwrapArticlesList(payload: any): any[] {
+  if (!payload) return [];
+  if (Array.isArray(payload)) return payload;
+  const candidates = [payload.items, payload.articles, payload.data, payload.result];
+  for (const c of candidates) {
+    if (Array.isArray(c)) return c;
+  }
+  return [];
 }
 
 function useVoiceReader() {
@@ -256,6 +281,8 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
   const [sortKey, setSortKey] = React.useState<SortKey>('latest');
   const [searchQuery, setSearchQuery] = React.useState('');
 
+  const [stateUts, setStateUts] = React.useState<IndiaStateUt[]>([]);
+
   const initialStories = React.useMemo(() => (Array.isArray(props.data) ? props.data : []), [props.data]);
   const initialBreaking = React.useMemo(() => (Array.isArray(props.breaking) ? props.breaking : []), [props.breaking]);
 
@@ -276,7 +303,12 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
     if (!router.isReady) return;
 
     const topicParam = typeof router.query.topic === 'string' ? router.query.topic : '';
-    const stateParam = typeof (router.query as any)['location.state'] === 'string' ? String((router.query as any)['location.state']) : '';
+    const stateParam =
+      typeof (router.query as any).stateUt === 'string'
+        ? String((router.query as any).stateUt)
+        : typeof (router.query as any)['location.state'] === 'string'
+          ? String((router.query as any)['location.state'])
+          : '';
 
     if (topicParam) {
       const normalized = normalize(topicParam);
@@ -300,15 +332,22 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
     else delete nextQuery.topic;
 
     const stateValue = !selectedRegion || selectedRegion === 'all' ? '' : String(selectedRegion);
-    if (stateValue) (nextQuery as any)['location.state'] = stateValue;
-    else delete (nextQuery as any)['location.state'];
+    if (stateValue) (nextQuery as any).stateUt = stateValue;
+    else delete (nextQuery as any).stateUt;
+    // Back-compat cleanup
+    delete (nextQuery as any)['location.state'];
 
     const curTopic = typeof router.query.topic === 'string' ? router.query.topic : '';
-    const curState = typeof (router.query as any)['location.state'] === 'string' ? String((router.query as any)['location.state']) : '';
+    const curState =
+      typeof (router.query as any).stateUt === 'string'
+        ? String((router.query as any).stateUt)
+        : typeof (router.query as any)['location.state'] === 'string'
+          ? String((router.query as any)['location.state'])
+          : '';
 
     if (
       String(curTopic || '') === String((nextQuery as any).topic || '') &&
-      String(curState || '') === String((nextQuery as any)['location.state'] || '')
+      String(curState || '') === String((nextQuery as any).stateUt || '')
     ) {
       return;
     }
@@ -339,6 +378,10 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
     }
   };
 
+  const activeStateUt = React.useMemo(() => {
+    return !selectedRegion || selectedRegion === 'all' ? '' : String(selectedRegion);
+  }, [selectedRegion]);
+
   const loadPage = React.useCallback(
     async (pageToLoad: number) => {
       const limit = 20;
@@ -350,17 +393,28 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
           setLoadingMore(true);
         }
 
-        // Public API does not currently support pagination params; emulate paging by increasing limit.
+        // Backend may not support pagination; emulate paging by increasing limit.
         const requested = pageToLoad * limit;
-        const resp = await fetchPublicNews({ category: 'national', language: effectiveLang, limit: requested });
-        if (resp?.error) {
-          setError(resp.error);
+        const params = new URLSearchParams();
+        params.set('category', 'National');
+        if (activeStateUt) params.set('stateUt', activeStateUt);
+        params.set('limit', String(requested));
+        if (effectiveLang) {
+          params.set('lang', effectiveLang);
+          params.set('language', effectiveLang);
+        }
+
+        const endpoint = `/api/articles?${params.toString()}`;
+        const res = await fetch(endpoint, { headers: { Accept: 'application/json' } });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          setError(`API ${res.status}`);
           setHasMore(false);
           if (pageToLoad === 1) setStories([]);
           return;
         }
 
-        const items = Array.isArray(resp?.items) ? resp.items : [];
+        const items = unwrapArticlesList(data);
 
         // Heuristic: if backend returns a full page worth, assume there may be more.
         setHasMore(items.length >= requested);
@@ -375,10 +429,32 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
         setLoadingMore(false);
       }
     },
-    [effectiveLang, t]
+    [activeStateUt, effectiveLang, t]
   );
 
-  // Initial fetch + refetch when language changes
+  // Load master list of India states/UTs for the dropdown
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/meta/india-states-uts', { headers: { Accept: 'application/json' } });
+        const json = await res.json().catch(() => null);
+        if (cancelled) return;
+
+        const list = unwrapStateUts(json);
+        setStateUts(list);
+      } catch {
+        if (cancelled) return;
+        setStateUts([]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Initial fetch + refetch when language/state changes
   React.useEffect(() => {
     let cancelled = false;
 
@@ -435,12 +511,11 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
   }, [hasMore, loadPage, loading, loadingMore, page]);
 
   const regionOptions = React.useMemo(() => {
-    return ALL_REGIONS.map((r) => ({
-      slug: r.slug,
-      label: getRegionName(langKey, r.type, r.slug, r.name),
-      name: r.name,
-    }));
-  }, [langKey]);
+    const list = [...stateUts]
+      .map((s) => ({ slug: s.slug, label: s.name, name: s.name }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'en-IN'));
+    return list;
+  }, [stateUts]);
 
   const activeRegionEntry = React.useMemo(() => {
     if (!selectedRegion || selectedRegion === 'all') return null;
@@ -455,10 +530,6 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
       list = list.filter((s) => matchesTopic(s, selectedTopic));
     }
 
-    if (activeRegionEntry) {
-      list = list.filter((s) => matchRegion(s, activeRegionEntry.name));
-    }
-
     if (q) {
       list = list.filter((s) => {
         const text = normalize(`${s?.title || ''} ${s?.excerpt || ''} ${s?.summary || ''} ${s?.content || ''}`);
@@ -467,7 +538,7 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
     }
 
     return list;
-  }, [activeRegionEntry, searchQuery, selectedTopic, stories]);
+  }, [searchQuery, selectedTopic, stories]);
 
   const sortedStories = React.useMemo(() => {
     const copy = [...filteredStories];
@@ -574,6 +645,11 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
               <div>
                 <h1 className="text-xl md:text-2xl font-extrabold leading-tight">🏛️ {tHeading(langKey, 'national')}</h1>
                 <div className="text-xs text-slate-600 dark:text-gray-400">{t('nationalPage.newsFeed')}</div>
+                {activeRegionEntry ? (
+                  <div className="mt-0.5 text-xs text-slate-600 dark:text-gray-400">
+                    {tHeading(langKey, 'national')} &gt; {activeRegionEntry.label}
+                  </div>
+                ) : null}
               </div>
               <Link href="/national/states" className="ml-2 text-sm font-semibold text-blue-600 hover:underline">
                 {t('nationalPage.browseStates')}
@@ -629,7 +705,7 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
               <option value="all">{t('nationalPage.allStatesUts')}</option>
               {regionOptions.map((r) => (
                 <option key={r.slug} value={r.slug}>
-                  {r.label}
+                  {r.label} ({r.slug})
                 </option>
               ))}
             </select>
@@ -920,15 +996,23 @@ export const getStaticProps: GetStaticProps = async ({ locale }) => {
   try {
     const limit = 40;
     const params = new URLSearchParams();
-    params.set('category', 'national');
+    params.set('category', 'National');
     params.set('lang', lang);
     params.set('language', lang);
     params.set('limit', String(limit));
 
-    const endpoint = `${API_BASE}/api/public/news?${params.toString()}`;
+    const endpoint = `${API_BASE}/api/articles?${params.toString()}`;
     const res = await fetch(endpoint, { headers: { Accept: 'application/json' } });
     const json = await res.json().catch(() => null);
-    const items = Array.isArray(json?.items) ? json.items : Array.isArray(json?.articles) ? json.articles : Array.isArray(json?.data) ? json.data : [];
+    const items = Array.isArray(json?.items)
+      ? json.items
+      : Array.isArray(json?.articles)
+        ? json.articles
+        : Array.isArray(json?.data)
+          ? json.data
+          : Array.isArray(json)
+            ? json
+            : [];
 
     // Breaking (best-effort)
     const breaking = await (async () => {
