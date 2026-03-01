@@ -2,7 +2,6 @@ import React from "react";
 import { useLanguage } from "../utils/LanguageContext";
 import { fetchPublicNews, type Article } from "../lib/publicNewsApi";
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle } from "../lib/contentFallback";
-import LanguageToggle from "../components/LanguageToggle";
 import OriginalTag from "../components/OriginalTag";
 import { useI18n } from "../src/i18n/LanguageProvider";
 import { buildNewsUrl } from "../lib/newsRoutes";
@@ -208,14 +207,12 @@ export default function BreakingPage() {
                 {t('breakingPage.title')}
               </h1>
             </div>
-            <p className="text-slate-600 mt-1">
-              {t('breakingPage.subtitle')}
-            </p>
+              <p className="text-slate-600 mt-1">
+                {t('breakingPage.subtitle')}
+              </p>
           </div>
 
           <div className="flex items-center gap-2">
-            <LanguageToggle />
-
             <button
               onClick={() =>
                 voice.toggle(voiceText, () => {

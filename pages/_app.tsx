@@ -13,6 +13,45 @@ import SafeIntlProvider from '../lib/SafeIntlProvider';
 import { usePublicSettings } from '../src/context/PublicSettingsContext';
 import { useTheme, type ThemeMode } from '../utils/ThemeContext';
 import SeoAlternates from '../components/SeoAlternates';
+import SimpleTopHeader from '../src/components/layout/SimpleTopHeader';
+
+const CATEGORY_ROUTE_SEGMENTS = new Set([
+  'breaking',
+  'regional',
+  'national',
+  'international',
+  'business',
+  'science-technology',
+  'sports',
+  'lifestyle',
+  'glamour',
+  'web-stories',
+  'viral-videos',
+  'editorial',
+  'youth-pulse',
+  'inspiration-hub',
+  'community-reporter',
+]);
+
+function stripLocalePrefix(pathname: string): string {
+  const p = String(pathname || '/').trim();
+  if (!p || p === '/') return '/';
+
+  const lower = p.toLowerCase();
+  if (lower === '/hi' || lower.startsWith('/hi/')) return `/${lower.slice('/hi'.length).replace(/^\//, '')}`.replace(/\/$/, '') || '/';
+  if (lower === '/gu' || lower.startsWith('/gu/')) return `/${lower.slice('/gu'.length).replace(/^\//, '')}`.replace(/\/$/, '') || '/';
+  if (lower === '/en' || lower.startsWith('/en/')) return `/${lower.slice('/en'.length).replace(/^\//, '')}`.replace(/\/$/, '') || '/';
+  return p;
+}
+
+function isCategoryRoute(asPath: string): boolean {
+  const raw = String(asPath || '/');
+  const pathOnly = (raw.split('?')[0] || '/').split('#')[0] || '/';
+  const normalized = stripLocalePrefix(pathOnly).toLowerCase().replace(/\/+$/, '') || '/';
+  const parts = normalized.split('/').filter(Boolean);
+  const first = parts[0] || '';
+  return CATEGORY_ROUTE_SEGMENTS.has(first);
+}
 
 const inter = Inter({
   subsets: ['latin'],
@@ -158,13 +197,16 @@ function RouteLanguageSync() {
 }
 
 function I18nBridge({ Component, pageProps }: { Component: any; pageProps: any }) {
+  const router = useRouter();
   const { lang } = useI18n();
   const messages = getMessagesForLang(lang);
   const langClass = lang === 'hi' ? 'np-lang-hi' : lang === 'gu' ? 'np-lang-gu' : 'np-lang-en';
+  const showSimpleHeader = React.useMemo(() => isCategoryRoute(router.asPath), [router.asPath]);
   return (
     <SafeIntlProvider key={lang} messages={messages} locale={lang} onError={() => {}}>
       <SeoAlternates />
       <div className={`${inter.variable} ${gujarati.variable} ${devanagari.variable} ${langClass} relative overflow-x-hidden`}>
+        {showSimpleHeader ? <SimpleTopHeader /> : null}
         <Component {...pageProps} />
       </div>
     </SafeIntlProvider>
