@@ -206,7 +206,7 @@ export default function GujaratIndexPage() {
     setLoading(true);
     setError(null);
 
-    fetchPublicStories(undefined, { language: uiLang, category: 'regional', state: 'gujarat' })
+    fetchPublicStories(undefined, { language: uiLang, category: 'regional', state: 'gujarat', noStore: true })
       .then((items) => {
         if (cancelled) return;
         setStories(items as AnyStory[]);

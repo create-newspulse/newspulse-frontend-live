@@ -39,7 +39,14 @@ function unwrapStory(payload: any): PublicStory | null {
 
 export async function fetchPublicStories(
   baseUrl?: string,
-  options?: { language?: string; category?: string; state?: string; district?: string; city?: string }
+  options?: {
+    language?: string;
+    category?: string;
+    state?: string;
+    district?: string;
+    city?: string;
+    noStore?: boolean;
+  }
 ): Promise<PublicStory[]> {
   const base = (baseUrl || getApiBaseUrl()).replace(/\/+$/, '');
   const lang = options?.language ? String(options.language).toLowerCase().trim() : '';
@@ -54,19 +61,26 @@ export async function fetchPublicStories(
   }
   if (options?.category) params.set('category', String(options.category));
   if (state) params.set('state', state);
+  if (state) params.set('stateSlug', state);
 
   // Backend compatibility: some deployments use `district`, others use `city`.
   // Send both when a location filter is provided.
   const loc = district || city;
   if (loc) {
     params.set('district', loc);
+    params.set('districtSlug', loc);
     params.set('city', loc);
+    params.set('citySlug', loc);
   }
 
   const query = params.toString();
   const url = `${base}/api/public/stories${query ? `?${query}` : ''}`;
 
-  const res = await fetch(url);
+  const res = await fetch(url, {
+    method: 'GET',
+    cache: options?.noStore ? 'no-store' : undefined,
+    headers: options?.noStore ? { 'Cache-Control': 'no-store' } : undefined,
+  });
   if (!res.ok) throw new Error(`Failed to fetch stories (${res.status})`);
 
   const json = await res.json().catch(() => null);

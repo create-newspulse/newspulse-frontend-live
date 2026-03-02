@@ -216,6 +216,7 @@ export default function GujaratDistrictPage() {
       category: 'regional',
       state: 'gujarat',
       district: districtParam || undefined,
+      noStore: true,
     })
       .then((items) => {
         if (cancelled) return;
