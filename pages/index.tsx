@@ -1965,6 +1965,19 @@ export default function UiPreviewV145() {
   const theme = useMemo(() => getTheme(prefs.themeId), [prefs.themeId]);
   usePublicMode();
 
+  const getLocalizedBreakingHref = React.useCallback(
+    (tab: 'breaking' | 'live'): string => {
+      const raw = String(router.asPath || '/');
+      const beforeHash = raw.split('#')[0] || '/';
+      const pathPart = (beforeHash.split('?')[0] || '/').trim() || '/';
+      const p = pathPart.startsWith('/') ? pathPart : `/${pathPart}`;
+      const m = p.match(/^\/(en|hi|gu)(?=\/|$)/i);
+      const prefix = m ? `/${String(m[1] || '').toLowerCase()}` : '';
+      return `${prefix}/breaking?tab=${encodeURIComponent(tab)}`;
+    },
+    [router.asPath]
+  );
+
   const getUnprefixedPath = React.useCallback((asPath: string): string => {
     const raw = String(asPath || '/');
     const hashSplit = raw.split('#');
@@ -2012,8 +2025,6 @@ export default function UiPreviewV145() {
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mobileLeftOpen, setMobileLeftOpen] = useState(false);
-  const [viewAllOpen, setViewAllOpen] = useState(false);
-  const [viewAllKind, setViewAllKind] = useState<"live" | "breaking">("live");
 
   // Real data hooks
   const regional = useRegionalPulse("gujarat");
@@ -2214,8 +2225,7 @@ export default function UiPreviewV145() {
             items={breakingItemsToShow}
             durationSec={breakingDurationSec}
             onViewAll={() => {
-              setViewAllKind("breaking");
-              setViewAllOpen(true);
+              router.push(getLocalizedBreakingHref('breaking'));
             }}
           />
         </div>
@@ -2234,8 +2244,7 @@ export default function UiPreviewV145() {
             items={liveItemsToShow}
             durationSec={liveDurationSec}
             onViewAll={() => {
-              setViewAllKind("live");
-              setViewAllOpen(true);
+              router.push(getLocalizedBreakingHref('live'));
             }}
           />
         </div>
@@ -2588,26 +2597,6 @@ export default function UiPreviewV145() {
               );
             })}
           </div>
-        </div>
-      </Drawer>
-
-      <Drawer
-        open={viewAllOpen}
-        onClose={() => setViewAllOpen(false)}
-        theme={theme}
-        title={viewAllKind === 'live' ? t('tickers.liveUpdates') : t('tickers.breakingNews')}
-      >
-        <div className="grid gap-2">
-          {(viewAllKind === 'live'
-            ? liveItemsToShow
-            : breakingItemsToShow
-          ).map(
-            (x: string, idx: number) => (
-              <div key={idx} className="rounded-2xl border px-3 py-3 text-sm" style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}>
-                {x}
-              </div>
-            )
-          )}
         </div>
       </Drawer>
 

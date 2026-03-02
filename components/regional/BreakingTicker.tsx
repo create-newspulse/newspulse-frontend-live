@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 import React, { useId, useMemo } from 'react';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { usePublicSettings } from '../../src/context/PublicSettingsContext';
@@ -54,6 +55,7 @@ export default function BreakingTicker({
   className,
   speedSeconds,
 }: BreakingTickerProps) {
+  const router = useRouter();
   const { lang, t } = useI18n();
   const { settings } = usePublicSettings();
   const tickerLang = lang === 'gu' ? 'gu' : lang === 'hi' ? 'hi' : 'en';
@@ -81,7 +83,16 @@ export default function BreakingTicker({
 
   const isBreaking = variant === 'breaking';
   const label = isBreaking ? t('home.breakingNews') : t('home.liveUpdates');
-  const viewAllHref = '/breaking';
+  const viewAllHref = (() => {
+    const raw = String(router.asPath || '/');
+    const beforeHash = raw.split('#')[0] || '/';
+    const pathPart = (beforeHash.split('?')[0] || '/').trim() || '/';
+    const p = pathPart.startsWith('/') ? pathPart : `/${pathPart}`;
+    const m = p.match(/^\/(en|hi|gu)(?=\/|$)/i);
+    const prefix = m ? `/${String(m[1] || '').toLowerCase()}` : '';
+    const tab = isBreaking ? 'breaking' : 'live';
+    return `${prefix}/breaking?tab=${encodeURIComponent(tab)}`;
+  })();
 
   const fallbackSpeed = isBreaking ? 18 : 24;
   const settingsSpeed = (() => {

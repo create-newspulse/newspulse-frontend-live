@@ -311,6 +311,10 @@
     "tech": "Tech",
     "defence": "Defence"
   },
+  "breaking": {
+    "title": "Breaking",
+    "subtitle": "Breaking News & Live Updates — Today"
+  },
   "breakingPage": {
     "title": "Breaking",
     "subtitle": "Live updates and latest alerts",

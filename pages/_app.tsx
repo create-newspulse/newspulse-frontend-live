@@ -13,7 +13,7 @@ import SafeIntlProvider from '../lib/SafeIntlProvider';
 import { usePublicSettings } from '../src/context/PublicSettingsContext';
 import { useTheme, type ThemeMode } from '../utils/ThemeContext';
 import SeoAlternates from '../components/SeoAlternates';
-import SimpleTopHeader from '../src/components/layout/SimpleTopHeader';
+import BrandTopHeader from '../src/components/layout/BrandTopHeader';
 
 const CATEGORY_ROUTE_SEGMENTS = new Set([
   'breaking',
@@ -206,7 +206,7 @@ function I18nBridge({ Component, pageProps }: { Component: any; pageProps: any }
     <SafeIntlProvider key={lang} messages={messages} locale={lang} onError={() => {}}>
       <SeoAlternates />
       <div className={`${inter.variable} ${gujarati.variable} ${devanagari.variable} ${langClass} relative overflow-x-hidden`}>
-        {showSimpleHeader ? <SimpleTopHeader /> : null}
+        {showSimpleHeader ? <BrandTopHeader /> : null}
         <Component {...pageProps} />
       </div>
     </SafeIntlProvider>
