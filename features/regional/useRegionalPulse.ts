@@ -3,8 +3,12 @@ import { getRegionalFeed, getGujaratDistricts, getTopCities, matchesCity, matche
 import type { RegionalArticle, City, District, RegionalFilters } from "./types";
 import { useI18n } from "../../src/i18n/LanguageProvider";
 
-export function useRegionalPulse() {
+export function useRegionalPulse(languageOverride?: string) {
   const { lang, t } = useI18n();
+  const effectiveLang = useMemo(() => {
+    const v = String(languageOverride || lang || '').toLowerCase().trim();
+    return v === 'gu' || v === 'hi' || v === 'en' ? v : lang;
+  }, [lang, languageOverride]);
   const [topCities] = useState<City[]>(() => getTopCities());
   const [districts] = useState<District[]>(() => getGujaratDistricts());
   const [rawFeed, setRawFeed] = useState<RegionalArticle[]>([]);
@@ -16,14 +20,14 @@ export function useRegionalPulse() {
     setLoading(true);
     setError(null);
     try {
-      const items = await getRegionalFeed(60, lang);
+      const items = await getRegionalFeed(60, effectiveLang);
       setRawFeed(items);
     } catch (e: any) {
       setError(e?.message || t('regionalUI.failedToLoad'));
     } finally {
       setLoading(false);
     }
-  }, [lang, t]);
+  }, [effectiveLang, t]);
 
   useEffect(() => {
     fetchFeed();

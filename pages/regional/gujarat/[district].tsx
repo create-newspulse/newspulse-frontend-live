@@ -15,6 +15,7 @@ import { GUJARAT_DISTRICTS } from '../../../utils/regions';
 import { useLanguage } from '../../../utils/LanguageContext';
 import { getGujaratDistrictName, getStateName, tHeading, toLanguageKey } from '../../../utils/localizedNames';
 import { normalizeLang, useI18n } from '../../../src/i18n/LanguageProvider';
+import { getActiveRouteLang } from '../../../utils/routeLang';
 
 const CATEGORIES = [
   'All',
@@ -158,9 +159,10 @@ export default function GujaratDistrictPage() {
   }, [router.query]);
 
   const effectiveLang = React.useMemo(() => {
-    // Priority: query (from rewrites) -> route locale -> persisted/provider language -> default
-    return normalizeLang(queryLang || router.locale || language || 'en');
-  }, [language, queryLang, router.locale]);
+    const active = getActiveRouteLang(router.asPath);
+    // Priority: active route prefix -> query -> route locale -> persisted/provider language
+    return normalizeLang(active || queryLang || router.locale || language || 'en');
+  }, [language, queryLang, router.asPath, router.locale]);
 
   const pushPath = React.useCallback(
     (path: string) => {

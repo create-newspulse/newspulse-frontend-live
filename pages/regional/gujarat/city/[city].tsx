@@ -11,6 +11,7 @@ import { normalizeLang, useI18n } from '../../../../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../../../../lib/newsRoutes';
 import { resolveArticleSlug } from '../../../../lib/articleSlugs';
 import { COVER_PLACEHOLDER_SRC, onCoverImageError, resolveCoverImageUrl } from '../../../../lib/coverImages';
+import { getActiveRouteLang } from '../../../../utils/routeLang';
 
 function normalize(s: string) {
   return (s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -27,7 +28,6 @@ export default function GujaratCityPage() {
   const router = useRouter();
   const { city } = router.query as { city?: string };
   const { language } = useLanguage();
-  const { feed, loading } = useRegionalPulse();
   const { t } = useI18n();
 
   const queryLang = (() => {
@@ -36,7 +36,10 @@ export default function GujaratCityPage() {
     return String(value || '').trim();
   })();
 
-  const effectiveLang = normalizeLang(queryLang || router.locale || language || 'en');
+  const active = getActiveRouteLang(router.asPath);
+  const effectiveLang = normalizeLang(active || queryLang || router.locale || language || 'en');
+
+  const { feed, loading } = useRegionalPulse(effectiveLang);
 
   const uiLang: UiLang = effectiveLang;
   const slug = (city || '').toString();

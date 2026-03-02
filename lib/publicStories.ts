@@ -39,10 +39,13 @@ function unwrapStory(payload: any): PublicStory | null {
 
 export async function fetchPublicStories(
   baseUrl?: string,
-  options?: { language?: string; category?: string; state?: string; district?: string }
+  options?: { language?: string; category?: string; state?: string; district?: string; city?: string }
 ): Promise<PublicStory[]> {
   const base = (baseUrl || getApiBaseUrl()).replace(/\/+$/, '');
   const lang = options?.language ? String(options.language).toLowerCase().trim() : '';
+  const state = options?.state ? String(options.state).toLowerCase().trim() : '';
+  const district = options?.district ? String(options.district).trim() : '';
+  const city = options?.city ? String(options.city).trim() : '';
 
   const params = new URLSearchParams();
   if (lang) {
@@ -50,8 +53,15 @@ export async function fetchPublicStories(
     params.set('language', lang);
   }
   if (options?.category) params.set('category', String(options.category));
-  if (options?.state) params.set('state', String(options.state));
-  if (options?.district) params.set('district', String(options.district));
+  if (state) params.set('state', state);
+
+  // Backend compatibility: some deployments use `district`, others use `city`.
+  // Send both when a location filter is provided.
+  const loc = district || city;
+  if (loc) {
+    params.set('district', loc);
+    params.set('city', loc);
+  }
 
   const query = params.toString();
   const url = `${base}/api/public/stories${query ? `?${query}` : ''}`;
