@@ -1,5 +1,6 @@
 import Head from 'next/head';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 import React, { useMemo, useState } from 'react';
 import { fetchPublicNews, type Article } from '../lib/publicNewsApi';
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle } from '../lib/contentFallback';
@@ -54,11 +55,13 @@ function formatWhenLabel(iso?: string) {
 }
 
 export default function CategoryFeedPage({ title, categoryKey, extraQuery }: CategoryFeedPageProps) {
+  const router = useRouter();
   const { language } = useLanguage();
   const { t } = useI18n();
   const [items, setItems] = useState<Article[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const queryKey = useMemo(() => JSON.stringify(extraQuery || {}), [extraQuery]);
 
@@ -66,6 +69,28 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
     const key = categoryKeyToI18nKey(categoryKey);
     return key ? t(key) : title;
   }, [categoryKey, t, title]);
+
+  // Allow deep-linking into a filtered view (used by article-page category header search).
+  React.useEffect(() => {
+    if (!router.isReady) return;
+    const raw = (router.query as any)?.search ?? (router.query as any)?.q;
+    const value = Array.isArray(raw) ? raw[0] : raw;
+    const next = String(value || '').trim();
+    if (!next) return;
+    setSearchQuery(next);
+  }, [router.isReady, router.query]);
+
+  const filteredItems = useMemo(() => {
+    const q = String(searchQuery || '').trim().toLowerCase();
+    if (!q) return items;
+    return (items || []).filter((a) => {
+      const titleRes = resolveArticleTitle(a as any, language);
+      const summaryRes = resolveArticleSummaryOrExcerpt(a as any, language);
+      const hay = `${titleRes.text || ''} ${summaryRes.text || ''} ${(a as any)?.summary || ''} ${(a as any)?.excerpt || ''} ${(a as any)?.content || ''}`
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [items, language, searchQuery]);
 
   React.useEffect(() => {
     const controller = new AbortController();
@@ -142,7 +167,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
           ) : (
             <section className="mt-8">
               <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                {items.map((a) => {
+                {filteredItems.map((a) => {
                   const id = String(a._id || '').trim();
                   const slug = resolveArticleSlug(a, language);
                   const href = id ? buildNewsUrl({ id, slug, lang: language }) : '#';

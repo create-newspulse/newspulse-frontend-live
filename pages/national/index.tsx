@@ -256,6 +256,16 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
   const [sortKey, setSortKey] = React.useState<SortKey>('latest');
   const [searchQuery, setSearchQuery] = React.useState('');
 
+  // Allow deep-linking into a filtered view (used by article-page category header search).
+  React.useEffect(() => {
+    if (!router.isReady) return;
+    const raw = (router.query as any)?.search ?? (router.query as any)?.q;
+    const value = Array.isArray(raw) ? raw[0] : raw;
+    const next = String(value || '').trim();
+    if (!next) return;
+    setSearchQuery(next);
+  }, [router.isReady, router.query]);
+
   const initialStories = React.useMemo(() => (Array.isArray(props.data) ? props.data : []), [props.data]);
   const initialBreaking = React.useMemo(() => (Array.isArray(props.breaking) ? props.breaking : []), [props.breaking]);
 
