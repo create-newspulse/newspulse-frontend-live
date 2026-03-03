@@ -84,15 +84,51 @@ async function fetchNationalLiveStrip(options: {
   lang: 'en' | 'hi' | 'gu';
   signal?: AbortSignal;
 }): Promise<NationalLiveTickerItem[]> {
-  const base = getTickerBaseUrl();
-  if (!base) return [];
-
   const qs = new URLSearchParams();
   qs.set('lang', options.lang);
   qs.set('limit', '5');
   qs.set('hours', '24');
 
-  const endpoint = `${base}/api/ticker/national-live?${qs.toString()}`;
+  // In the browser, always hit same-origin to avoid CORS and to respect dev/prod base separation.
+  // This Next API route proxies to the configured backend.
+  const endpoint =
+    typeof window !== 'undefined'
+      ? `/api/ticker/national-live?${qs.toString()}`
+      : (() => {
+          const base = getTickerBaseUrl();
+          if (!base) return '';
+          return `${base}/api/ticker/national-live?${qs.toString()}`;
+        })();
+
+  if (!endpoint) return [];
+  const res = await fetch(endpoint, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+    signal: options.signal,
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok) return [];
+  return toTickerItems(unwrapTickerItems(json));
+}
+
+async function fetchGenericLiveStrip(options: {
+  lang: 'en' | 'hi' | 'gu';
+  signal?: AbortSignal;
+}): Promise<NationalLiveTickerItem[]> {
+  const qs = new URLSearchParams();
+  qs.set('lang', options.lang);
+
+  const endpoint =
+    typeof window !== 'undefined'
+      ? `/api/ticker/live?${qs.toString()}`
+      : (() => {
+          const base = getTickerBaseUrl();
+          if (!base) return '';
+          return `${base}/api/ticker/live?${qs.toString()}`;
+        })();
+
+  if (!endpoint) return [];
+
   const res = await fetch(endpoint, {
     method: 'GET',
     headers: { Accept: 'application/json' },
@@ -484,18 +520,29 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
         await loadPage(1);
       }
       if (cancelled) return;
-      try {
-        const items = await fetchNationalLiveStrip({ lang: effectiveLang });
-        setBreaking(items);
-      } catch {
-        // Fallback: show the latest national headlines rather than going blank.
+
+      const fallbackToLatestNational = async () => {
         try {
           const resp = await fetchPublicNews({ category: 'national', language: effectiveLang, limit: 5 });
-          if (resp?.error) setBreaking([]);
-          else setBreaking(Array.isArray(resp?.items) ? resp.items.slice(0, 5) : []);
+          if (resp?.error) return setBreaking([]);
+          return setBreaking(Array.isArray(resp?.items) ? resp.items.slice(0, 5) : []);
         } catch {
-          setBreaking([]);
+          return setBreaking([]);
         }
+      };
+
+      try {
+        const items = await fetchNationalLiveStrip({ lang: effectiveLang });
+        if (items.length) return setBreaking(items);
+
+        // Fallback 1: existing backend "live" ticker feed.
+        const genericLive = await fetchGenericLiveStrip({ lang: effectiveLang });
+        if (genericLive.length) return setBreaking(genericLive);
+
+        // Fallback 2: latest national headlines.
+        await fallbackToLatestNational();
+      } catch {
+        await fallbackToLatestNational();
       }
     })();
 
@@ -1030,6 +1077,15 @@ export const getStaticProps: GetStaticProps = async ({ locale }) => {
       } catch {
         // ignore
       }
+
+      // Fallback 1: existing live ticker feed.
+      try {
+        const items = await fetchGenericLiveStrip({ lang });
+        if (items.length) return items;
+      } catch {
+        // ignore
+      }
+
       try {
         const resp = await fetchPublicNews({ category: 'national', language: lang, limit: 5 });
         if (resp?.error) return [];
