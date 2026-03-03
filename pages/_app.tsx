@@ -14,6 +14,7 @@ import { usePublicSettings } from '../src/context/PublicSettingsContext';
 import { useTheme, type ThemeMode } from '../utils/ThemeContext';
 import SeoAlternates from '../components/SeoAlternates';
 import BrandTopHeader from '../src/components/layout/BrandTopHeader';
+import SmartBackButton from '../src/components/navigation/SmartBackButton';
 
 const CATEGORY_ROUTE_SEGMENTS = new Set([
   'breaking',
@@ -207,6 +208,7 @@ function I18nBridge({ Component, pageProps }: { Component: any; pageProps: any }
       <SeoAlternates />
       <div className={`${inter.variable} ${gujarati.variable} ${devanagari.variable} ${langClass} relative overflow-x-hidden`}>
         {showSimpleHeader ? <BrandTopHeader /> : null}
+        <SmartBackButton />
         <Component {...pageProps} />
       </div>
     </SafeIntlProvider>
