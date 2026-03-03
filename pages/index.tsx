@@ -27,6 +27,8 @@ import {
   Briefcase,
   Check,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Cpu,
   Flame,
   Flag,
@@ -59,6 +61,26 @@ import {
  */
 
 const cx = (...c: Array<string | false | null | undefined>) => c.filter(Boolean).join(" ");
+
+const STYLE_STORAGE_KEY = 'np_style';
+
+function readSavedStyleId(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(STYLE_STORAGE_KEY);
+    const v = String(raw || '').trim().toLowerCase();
+    return v ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeSavedStyleId(themeId: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(STYLE_STORAGE_KEY, String(themeId || ''));
+  } catch {}
+}
 
 const THEMES = [
   {
@@ -1107,48 +1129,40 @@ function TopCategoriesStrip({ theme, activeKey, onPick }: any) {
   const { t } = useI18n();
   const cats = useMemo(() => [...CATEGORIES], []);
 
+  // IMPORTANT: the ref must be on the *scroll container* (the overflow-x-auto element).
+  // If it's attached to the inner inline-flex, mouse drag won't scroll on some desktops.
   const scrollerRef = useRef<HTMLDivElement | null>(null);
-  const dragState = useRef({ down: false, startX: 0, startLeft: 0, moved: false, blockUntil: 0 });
+  const dragState = useRef({
+    down: false,
+    pointerId: -1,
+    startX: 0,
+    startLeft: 0,
+    moved: false,
+    blockUntil: 0,
+  });
 
-  React.useEffect(() => {
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateArrows = React.useCallback(() => {
     const el = scrollerRef.current;
     if (!el) return;
-
-    const onPointerDown = (e: PointerEvent) => {
-      if (e.pointerType === "touch") return;
-      dragState.current.down = true;
-      dragState.current.moved = false;
-      dragState.current.startX = e.clientX;
-      dragState.current.startLeft = el.scrollLeft;
-      (el as any).style.cursor = "grabbing";
-    };
-
-    const onPointerMove = (e: PointerEvent) => {
-      if (!dragState.current.down) return;
-      const dx = e.clientX - dragState.current.startX;
-      if (Math.abs(dx) > 6) dragState.current.moved = true;
-      el.scrollLeft = dragState.current.startLeft - dx;
-    };
-
-    const onPointerUp = () => {
-      if (!dragState.current.down) return;
-      dragState.current.down = false;
-      (el as any).style.cursor = "grab";
-      if (dragState.current.moved) dragState.current.blockUntil = Date.now() + 250;
-    };
-
-    el.addEventListener("pointerdown", onPointerDown);
-    el.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp);
-
-    (el as any).style.cursor = "grab";
-
-    return () => {
-      el.removeEventListener("pointerdown", onPointerDown);
-      el.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-    };
+    const max = Math.max(0, el.scrollWidth - el.clientWidth);
+    setCanScrollLeft(el.scrollLeft > 1);
+    setCanScrollRight(el.scrollLeft < max - 1);
   }, []);
+
+  React.useEffect(() => {
+    updateArrows();
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.addEventListener('scroll', updateArrows, { passive: true });
+    window.addEventListener('resize', updateArrows);
+    return () => {
+      el.removeEventListener('scroll', updateArrows as any);
+      window.removeEventListener('resize', updateArrows);
+    };
+  }, [updateArrows]);
 
   const labelKeyForCategory = (key: string): string => {
     if (key === 'science-technology') return 'categories.scienceTechnology';
@@ -1165,15 +1179,72 @@ function TopCategoriesStrip({ theme, activeKey, onPick }: any) {
       <div className="mx-auto w-full max-w-[1440px] px-4 md:px-8">
         <div className="rounded-2xl border border-black/10 shadow-sm ring-1 ring-black/5 bg-white/80 backdrop-blur-md">
           <div className="px-3 py-2">
-            <div className="no-scrollbar w-full overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                aria-label="Scroll categories left"
+                disabled={!canScrollLeft}
+                onClick={() => {
+                  const el = scrollerRef.current;
+                  if (!el) return;
+                  el.scrollBy?.({ left: -250, behavior: 'smooth' });
+                }}
+                className={cx(
+                  'shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-full border',
+                  'bg-white/90 border-black/10 text-slate-700',
+                  canScrollLeft ? 'hover:bg-black/[0.02]' : 'opacity-40 cursor-not-allowed'
+                )}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+
               <div
                 ref={scrollerRef}
-                className="scroll-smooth inline-flex items-center gap-2.5"
-                style={{ touchAction: "pan-x", overscrollBehaviorX: "contain" as any }}
+                className={cx('no-scrollbar w-full overflow-x-auto scroll-smooth', 'cursor-grab active:cursor-grabbing')}
+                style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x', overscrollBehaviorX: 'contain' as any }}
                 onWheel={(e: any) => {
-                  if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) (e.currentTarget.parentElement as HTMLElement)?.scrollBy?.({ left: e.deltaY, behavior: "auto" });
+                  // Convert vertical wheel to horizontal scroll for mouse-only desktops.
+                  if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+                    e.preventDefault();
+                    const el = e.currentTarget as HTMLDivElement;
+                    el.scrollLeft += e.deltaY;
+                  }
+                }}
+                onPointerDown={(e) => {
+                  if (e.pointerType === 'touch') return;
+                  const el = e.currentTarget as HTMLDivElement;
+                  dragState.current.down = true;
+                  dragState.current.pointerId = e.pointerId;
+                  dragState.current.moved = false;
+                  dragState.current.startX = e.clientX;
+                  dragState.current.startLeft = el.scrollLeft;
+                  try {
+                    el.setPointerCapture(e.pointerId);
+                  } catch {}
+                  // Avoid text selection while dragging.
+                  e.preventDefault();
+                }}
+                onPointerMove={(e) => {
+                  if (!dragState.current.down) return;
+                  const el = e.currentTarget as HTMLDivElement;
+                  const dx = e.clientX - dragState.current.startX;
+                  if (Math.abs(dx) > 6) dragState.current.moved = true;
+                  el.scrollLeft = dragState.current.startLeft - dx;
+                }}
+                onPointerUp={(e) => {
+                  if (!dragState.current.down) return;
+                  dragState.current.down = false;
+                  if (dragState.current.moved) dragState.current.blockUntil = Date.now() + 250;
+                  const el = e.currentTarget as HTMLDivElement;
+                  try {
+                    el.releasePointerCapture(dragState.current.pointerId);
+                  } catch {}
+                }}
+                onPointerCancel={() => {
+                  dragState.current.down = false;
                 }}
               >
+                <div className="inline-flex items-center gap-2.5 pr-4 whitespace-nowrap">
               {cats.map((c: any) => {
                 const active = c.key === activeKey;
                 const chipTheme = CATEGORY_THEME[c.key] || CATEGORY_THEME.__default;
@@ -1227,6 +1298,25 @@ function TopCategoriesStrip({ theme, activeKey, onPick }: any) {
               })}
                 <div className="w-2 shrink-0" />
               </div>
+              </div>
+
+              <button
+                type="button"
+                aria-label="Scroll categories right"
+                disabled={!canScrollRight}
+                onClick={() => {
+                  const el = scrollerRef.current;
+                  if (!el) return;
+                  el.scrollBy?.({ left: 250, behavior: 'smooth' });
+                }}
+                className={cx(
+                  'shrink-0 inline-flex h-9 w-9 items-center justify-center rounded-full border',
+                  'bg-white/90 border-black/10 text-slate-700',
+                  canScrollRight ? 'hover:bg-black/[0.02]' : 'opacity-40 cursor-not-allowed'
+                )}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
             </div>
           </div>
         </div>
@@ -1961,9 +2051,19 @@ export default function UiPreviewV145() {
   const { t, lang, setLang } = useI18n();
   const router = useRouter();
   const SAFE_MODE = isSafeMode();
-  const [prefs, setPrefs] = useState<any>(DEFAULT_PREFS);
+  const [prefs, setPrefs] = useState<any>(() => {
+    const saved = readSavedStyleId();
+    const valid = saved && THEMES.some((t) => t.id === saved);
+    return normalizePrefs({ ...DEFAULT_PREFS, themeId: valid ? saved : DEFAULT_PREFS.themeId });
+  });
   const theme = useMemo(() => getTheme(prefs.themeId), [prefs.themeId]);
   usePublicMode();
+
+  const setThemeId = React.useCallback((themeId: string) => {
+    const next = String(themeId || '').trim().toLowerCase();
+    if (THEMES.some((t) => t.id === next)) writeSavedStyleId(next);
+    setPrefs((p: any) => normalizePrefs({ ...p, themeId: next }));
+  }, []);
 
   const getLocalizedBreakingHref = React.useCallback(
     (tab: 'breaking' | 'live'): string => {
@@ -2067,6 +2167,13 @@ export default function UiPreviewV145() {
     if (enablePublicSettingsDrawer) return;
     if (appliedPublishedDefaultsRef.current) return;
     if (!effectiveSettings || settingsError) return;
+
+    // Never override an explicit user style choice (fixes Midnight flip on Back).
+    const saved = readSavedStyleId();
+    if (saved && THEMES.some((t) => t.id === saved)) {
+      appliedPublishedDefaultsRef.current = true;
+      return;
+    }
 
     const themePreset = (effectiveSettings as any)?.languageTheme?.themePreset;
 
@@ -2384,7 +2491,7 @@ export default function UiPreviewV145() {
                   setPrefs((p: any) => ({ ...p, lang: UI_LANG_LABEL[nextCode] }));
                 }}
               />
-              <ThemePicker theme={theme} themeId={prefs.themeId} setThemeId={(id: string) => setPrefs((p: any) => ({ ...p, themeId: id }))} />
+              <ThemePicker theme={theme} themeId={prefs.themeId} setThemeId={setThemeId} />
 
               {enablePublicSettingsDrawer ? (
                 <IconButton theme={theme} onClick={() => setSettingsOpen(true)} label={t('common.settings')}>
