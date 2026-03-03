@@ -94,8 +94,8 @@ export default function SmartBackButton() {
   };
 
   return (
-    <div className="w-full">
-      <div className="mx-auto w-full max-w-6xl px-4 pt-3">
+    <div className="w-full border-b border-slate-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+      <div className="mx-auto w-full max-w-6xl px-4 py-2">
         <button
           type="button"
           onClick={onBack}
