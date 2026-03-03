@@ -1138,6 +1138,7 @@ function TopCategoriesStrip({ theme, activeKey, onPick }: any) {
     startX: 0,
     startLeft: 0,
     moved: false,
+    captured: false,
     blockUntil: 0,
   });
 
@@ -1216,19 +1217,32 @@ function TopCategoriesStrip({ theme, activeKey, onPick }: any) {
                   dragState.current.down = true;
                   dragState.current.pointerId = e.pointerId;
                   dragState.current.moved = false;
+                  dragState.current.captured = false;
                   dragState.current.startX = e.clientX;
                   dragState.current.startLeft = el.scrollLeft;
-                  try {
-                    el.setPointerCapture(e.pointerId);
-                  } catch {}
-                  // Avoid text selection while dragging.
-                  e.preventDefault();
                 }}
                 onPointerMove={(e) => {
                   if (!dragState.current.down) return;
                   const el = e.currentTarget as HTMLDivElement;
                   const dx = e.clientX - dragState.current.startX;
-                  if (Math.abs(dx) > 6) dragState.current.moved = true;
+                  if (!dragState.current.moved && Math.abs(dx) > 6) {
+                    dragState.current.moved = true;
+                    // Only capture once we know it's a drag; capturing on pointerdown
+                    // can prevent child Links from receiving click events.
+                    if (!dragState.current.captured) {
+                      dragState.current.captured = true;
+                      try {
+                        el.setPointerCapture(dragState.current.pointerId);
+                      } catch {}
+                      // Avoid text selection while dragging.
+                      try {
+                        document.body.style.userSelect = 'none';
+                      } catch {}
+                    }
+                  }
+
+                  if (!dragState.current.moved) return;
+                  e.preventDefault();
                   el.scrollLeft = dragState.current.startLeft - dx;
                 }}
                 onPointerUp={(e) => {
@@ -1236,12 +1250,22 @@ function TopCategoriesStrip({ theme, activeKey, onPick }: any) {
                   dragState.current.down = false;
                   if (dragState.current.moved) dragState.current.blockUntil = Date.now() + 250;
                   const el = e.currentTarget as HTMLDivElement;
+                  if (dragState.current.captured) {
+                    try {
+                      el.releasePointerCapture(dragState.current.pointerId);
+                    } catch {}
+                  }
+                  dragState.current.captured = false;
                   try {
-                    el.releasePointerCapture(dragState.current.pointerId);
+                    document.body.style.userSelect = '';
                   } catch {}
                 }}
                 onPointerCancel={() => {
                   dragState.current.down = false;
+                  dragState.current.captured = false;
+                  try {
+                    document.body.style.userSelect = '';
+                  } catch {}
                 }}
               >
                 <div className="inline-flex items-center gap-2.5 pr-4 whitespace-nowrap">
