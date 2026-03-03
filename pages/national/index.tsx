@@ -23,6 +23,86 @@ const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ||
   'https://newspulse-backend-real.onrender.com';
 
+type NationalLiveTickerItem = {
+  _id: string;
+  title?: string;
+  tags?: any;
+  kind?: 'live' | 'story' | string;
+  href?: string;
+};
+
+function resolveLangFromPathname(pathname: unknown): 'en' | 'hi' | 'gu' {
+  const p = String(pathname || '').toLowerCase();
+  if (p === '/hi' || p.startsWith('/hi/')) return 'hi';
+  if (p === '/gu' || p.startsWith('/gu/')) return 'gu';
+  if (p === '/en' || p.startsWith('/en/')) return 'en';
+  return 'en';
+}
+
+function getTickerBaseUrl(): string {
+  // Spec: use NEXT_PUBLIC_API_URL for ticker endpoints.
+  // Fallbacks keep local/dev working when only other vars are set.
+  return (
+    process.env.NEXT_PUBLIC_API_URL ||
+    process.env.NEXT_PUBLIC_API_BASE_URL ||
+    process.env.NEXT_PUBLIC_API_BASE ||
+    API_BASE ||
+    ''
+  )
+    .toString()
+    .trim()
+    .replace(/\/+$/, '');
+}
+
+function unwrapTickerItems(payload: any): any[] {
+  if (!payload) return [];
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload.items)) return payload.items;
+  if (Array.isArray(payload.data)) return payload.data;
+  if (Array.isArray(payload.results)) return payload.results;
+  if (Array.isArray(payload.ticker)) return payload.ticker;
+  return [];
+}
+
+function toTickerItems(raw: any[]): NationalLiveTickerItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((it, idx) => {
+      const id = String(it?._id || it?.id || it?.key || it?.slug || `ticker-${idx}`).trim();
+      const title = String(it?.title || it?.text || it?.headline || it?.name || '').trim();
+      const tags = it?.tags;
+      const kind = it?.kind;
+      const href = typeof it?.href === 'string' ? it.href : undefined;
+      if (!id) return null;
+      return { _id: id, title, tags, kind, href } as NationalLiveTickerItem;
+    })
+    .filter(Boolean)
+    .slice(0, 5) as NationalLiveTickerItem[];
+}
+
+async function fetchNationalLiveStrip(options: {
+  lang: 'en' | 'hi' | 'gu';
+  signal?: AbortSignal;
+}): Promise<NationalLiveTickerItem[]> {
+  const base = getTickerBaseUrl();
+  if (!base) return [];
+
+  const qs = new URLSearchParams();
+  qs.set('lang', options.lang);
+  qs.set('limit', '5');
+  qs.set('hours', '24');
+
+  const endpoint = `${base}/api/ticker/national-live?${qs.toString()}`;
+  const res = await fetch(endpoint, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+    signal: options.signal,
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok) return [];
+  return toTickerItems(unwrapTickerItems(json));
+}
+
 function normalizeLang(locale: unknown): 'en' | 'hi' | 'gu' {
   const v = String(locale || '').toLowerCase().trim();
   if (v === 'hi' || v === 'hindi' || v === 'in') return 'hi';
@@ -405,15 +485,17 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
       }
       if (cancelled) return;
       try {
-        // Best-effort: treat breaking as its own public category if backend supports it.
-        const resp = await fetchPublicNews({ category: 'breaking', language: effectiveLang, limit: 10 });
-        if (resp?.error) {
-          setBreaking([]);
-        } else {
-          setBreaking(Array.isArray(resp?.items) ? resp.items : []);
-        }
+        const items = await fetchNationalLiveStrip({ lang: effectiveLang });
+        setBreaking(items);
       } catch {
-        setBreaking([]);
+        // Fallback: show the latest national headlines rather than going blank.
+        try {
+          const resp = await fetchPublicNews({ category: 'national', language: effectiveLang, limit: 5 });
+          if (resp?.error) setBreaking([]);
+          else setBreaking(Array.isArray(resp?.items) ? resp.items.slice(0, 5) : []);
+        } catch {
+          setBreaking([]);
+        }
       }
     })();
 
@@ -940,18 +1022,18 @@ export const getStaticProps: GetStaticProps = async ({ locale }) => {
     const json = await res.json().catch(() => null);
     const items = Array.isArray(json?.items) ? json.items : Array.isArray(json?.articles) ? json.articles : Array.isArray(json?.data) ? json.data : [];
 
-    // Breaking (best-effort)
+    // LIVE UPDATES strip (national-only): use ticker endpoint with fallback to latest national stories.
     const breaking = await (async () => {
       try {
-        const bp = new URLSearchParams();
-        bp.set('category', 'breaking');
-        bp.set('lang', lang);
-        bp.set('language', lang);
-        bp.set('limit', '10');
-        const bRes = await fetch(`${API_BASE}/api/public/news?${bp.toString()}`, { headers: { Accept: 'application/json' } });
-        const bJson = await bRes.json().catch(() => null);
-        const bItems = Array.isArray(bJson?.items) ? bJson.items : Array.isArray(bJson?.articles) ? bJson.articles : Array.isArray(bJson?.data) ? bJson.data : [];
-        return Array.isArray(bItems) ? bItems : [];
+        const items = await fetchNationalLiveStrip({ lang });
+        if (items.length) return items;
+      } catch {
+        // ignore
+      }
+      try {
+        const resp = await fetchPublicNews({ category: 'national', language: lang, limit: 5 });
+        if (resp?.error) return [];
+        return Array.isArray(resp?.items) ? resp.items.slice(0, 5) : [];
       } catch {
         return [];
       }
