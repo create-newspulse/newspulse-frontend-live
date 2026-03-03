@@ -37,10 +37,12 @@ function needsSmartBack(pathnameNoLocale: string): boolean {
   const p = normalizePath(pathnameNoLocale).toLowerCase();
   if (!p || p === '/') return false;
 
+  // National states pages already include their own Back UI.
+  if (p.startsWith('/national/states')) return false;
+
   if (p.startsWith('/news/')) return true;
   if (p === '/breaking') return true;
   if (p.startsWith('/regional/')) return true;
-  if (p.startsWith('/national/states')) return true;
   if (p === '/search' || p.startsWith('/search/')) return true;
 
   return false;
