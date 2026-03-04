@@ -68,6 +68,14 @@ function sanitizeContent(html: string) {
   });
 }
 
+function cleanText(value: unknown): string {
+  return String(value ?? '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function toUiLang(value: unknown): UiLang {
   const v = String(value || '').toLowerCase().trim();
   if (v === 'hi' || v === 'hindi' || v === 'in') return 'hi';
@@ -167,6 +175,10 @@ export default function NewsSlugDetailPage({ lang, article, safeHtml, topStories
   const title = String(localizedTitle || titleRes.text || article?.title || 'News').trim();
   const summary = String(summaryRes.text || article?.summary || article?.excerpt || '').trim();
 
+  const cleanedTitle = cleanText(title) || 'News';
+  const displayTitle = cleanedTitle.length > 180 ? `${cleanedTitle.slice(0, 177).trimEnd()}…` : cleanedTitle;
+  const displaySummary = cleanText(summary);
+
   const heroSrc = resolveCoverImageUrl(article) || COVER_PLACEHOLDER_SRC;
 
   const prefix = React.useMemo(() => localePrefix(lang), [lang]);
@@ -210,7 +222,7 @@ export default function NewsSlugDetailPage({ lang, article, safeHtml, topStories
 
   const shareThis = async () => {
     const url = canonicalUrl || (typeof window !== 'undefined' ? stripQueryHash(window.location.href) : '');
-    const shareTitle = String(title || 'News Pulse').trim();
+    const shareTitle = String(displayTitle || 'News Pulse').trim();
     if (!url) return;
 
     try {
@@ -257,7 +269,7 @@ export default function NewsSlugDetailPage({ lang, article, safeHtml, topStories
   return (
     <>
       <Head>
-        <title>{`${title || 'News'} | News Pulse`}</title>
+        <title>{`${displayTitle || 'News'} | News Pulse`}</title>
       </Head>
 
       <main className="min-h-screen bg-white">
@@ -303,14 +315,14 @@ export default function NewsSlugDetailPage({ lang, article, safeHtml, topStories
 
                   <div className="mt-2 flex flex-col gap-2">
                     <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 leading-tight">
-                      {title} {titleRes.isOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
+                      {displayTitle} {titleRes.isOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
                     </h1>
 
                     {error ? <div className="text-sm text-red-600">{error}</div> : null}
 
-                    {summary ? (
+                    {displaySummary ? (
                       <p className="text-base md:text-lg text-slate-700">
-                        {summary} {summaryRes.isOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
+                        {displaySummary} {summaryRes.isOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
                       </p>
                     ) : null}
 
@@ -346,7 +358,7 @@ export default function NewsSlugDetailPage({ lang, article, safeHtml, topStories
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={heroSrc}
-                      alt={title}
+                      alt={displayTitle}
                       onError={(e) => {
                         const img = e.currentTarget;
                         img.onerror = null;
