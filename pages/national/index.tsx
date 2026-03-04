@@ -72,16 +72,9 @@ function toTickerItems(raw: any[]): NationalLiveTickerItem[] {
       const title = String(it?.title || it?.text || it?.headline || it?.name || '').trim();
       const tags = it?.tags;
       const kind = it?.kind;
-      const href = typeof it?.href === 'string' ? it.href : null;
+      const href = typeof it?.href === 'string' ? it.href : undefined;
       if (!id) return null;
-      // Next.js (SSG/SSR props) cannot serialize `undefined`.
-      return {
-        _id: id,
-        title,
-        tags: tags ?? null,
-        kind: kind ?? null,
-        href,
-      } as NationalLiveTickerItem;
+      return { _id: id, title, tags, kind, href } as NationalLiveTickerItem;
     })
     .filter(Boolean)
     .slice(0, 5) as NationalLiveTickerItem[];
