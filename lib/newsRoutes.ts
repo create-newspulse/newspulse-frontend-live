@@ -15,9 +15,9 @@ export function buildNewsUrl(options: { id: string; slug?: string; lang?: unknow
 
   if (!slug) return '#';
 
-  // Canonical news URLs are always language-prefixed (including default locale).
-  // This prevents /news/* (unprefixed) from being generated in links/redirects.
-  const prefix = `/${lang}`;
+  // Default locale is served without a locale prefix.
+  // Non-default locales use an explicit prefix so shareable URLs remain stable.
+  const prefix = lang === 'en' ? '' : `/${lang}`;
 
   return `${prefix}/news/${slug}`;
 }

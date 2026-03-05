@@ -82,7 +82,7 @@ export function middleware(req: NextRequest) {
   // If the request is already locale-prefixed, we returned earlier.
   // Here we only handle unprefixed legacy URLs.
   if (needsLangPrefix) {
-    const targetLocale: Locale = pref || 'en';
+    const targetLocale: Locale = pref || nextDefaultLocale;
 
     // Only redirect for real navigations (HTML documents).
     // Next.js prefetch/data requests can otherwise see repeated 307s (e.g. `gujarat.json`)
@@ -101,8 +101,18 @@ export function middleware(req: NextRequest) {
       return res;
     }
 
-    // Build an explicit locale-prefixed path. Using the original request pathname
-    // avoids issues where Next's nextUrl.pathname has the locale prefix stripped.
+    // IMPORTANT:
+    // Do NOT force the default locale prefix (e.g. /en). Many Next deployments
+    // normalize default-locale URLs back to the unprefixed form which can create
+    // a self-redirect loop if middleware keeps trying to add /en.
+    if (targetLocale === nextDefaultLocale) {
+      const res = NextResponse.next();
+      if (pref) res.cookies.set(NEXT_LOCALE_COOKIE, pref, { path: '/', maxAge: 60 * 60 * 24 * 365 });
+      return res;
+    }
+
+    // Build an explicit locale-prefixed path (non-default locales only). Using the original
+    // request pathname avoids issues where Next's nextUrl.pathname has the locale prefix stripped.
     const redirectUrl = new URL(req.url);
     redirectUrl.pathname = `/${targetLocale}${originalPathname}`;
 
