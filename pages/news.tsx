@@ -17,7 +17,7 @@ type NewsApiArticle = {
 };
 
 const AUTO_REFRESH_MS = 45_000;
-const EXPECTED_VISIBLE_COUNT = 10;
+const EXPECTED_VISIBLE_COUNT = 20;
 const PLACEHOLDER_MIN = 3;
 const PLACEHOLDER_MAX = 5;
 
