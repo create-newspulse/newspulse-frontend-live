@@ -4,12 +4,10 @@ import React from 'react';
 import sanitizeHtml from 'sanitize-html';
 import { useRouter } from 'next/router';
 
-import OriginalTag from '../../components/OriginalTag';
 import AdSlot from '../../components/ads/AdSlot';
 import CategoryHeader from '../../src/components/category/CategoryHeader';
 import { resolveArticleSummaryOrExcerpt, type UiLang } from '../../lib/contentFallback';
 import { unwrapArticle, type Article } from '../../lib/publicNewsApi';
-import { localizeArticle } from '../../lib/localizeArticle';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { tHeading, toLanguageKey } from '../../utils/localizedNames';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
@@ -169,13 +167,9 @@ export default function NewsSlugDetailPage({ lang, article, safeHtml, topStories
   );
 
   const uiLang = toUiLang(lang);
-  const summaryRes = resolveArticleSummaryOrExcerpt(article || {}, uiLang);
   const rawTitle = cleanText((article as any)?.title);
-  const cleanedTitle = rawTitle || 'News';
-  const summary = String(summaryRes.text || (article as any)?.summary || (article as any)?.excerpt || '').trim();
-
-  const displayTitle = cleanedTitle.length > 180 ? `${cleanedTitle.slice(0, 177).trimEnd()}…` : cleanedTitle;
-  const displaySummary = cleanText(summary);
+  const displayTitle = rawTitle.length > 180 ? `${rawTitle.slice(0, 177).trimEnd()}…` : rawTitle;
+  const displaySummary = cleanText((article as any)?.summary);
 
   const heroSrc = resolveCoverImageUrl(article) || COVER_PLACEHOLDER_SRC;
 
@@ -267,7 +261,7 @@ export default function NewsSlugDetailPage({ lang, article, safeHtml, topStories
   return (
     <>
       <Head>
-        <title>{`${displayTitle || 'News'} | News Pulse`}</title>
+        <title>{`${displayTitle} | News Pulse`}</title>
       </Head>
 
       <main className="min-h-screen bg-white">
@@ -320,7 +314,7 @@ export default function NewsSlugDetailPage({ lang, article, safeHtml, topStories
 
                     {displaySummary ? (
                       <p className="text-base md:text-lg text-slate-700">
-                        {displaySummary} {summaryRes.isOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
+                        {displaySummary}
                       </p>
                     ) : null}
 
@@ -554,33 +548,32 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
     };
   }
 
+  const getRequestOrigin = () => {
+    const req = ctx.req;
+    const protoHeader = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+    const proto = protoHeader || 'http';
+    const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
+    if (!host) return '';
+    return `${proto}://${host}`;
+  };
+
   try {
-    const fetchBySlug = async (requestedLang: 'en' | 'hi' | 'gu'): Promise<{ resOk: boolean; article: any | null }> => {
-      const params = new URLSearchParams();
-      params.set('lang', requestedLang);
-      params.set('language', requestedLang);
+    const origin = getRequestOrigin();
+    const params = new URLSearchParams();
+    params.set('lang', lang);
 
-      const endpoint = `${API_BASE}/api/public/news/slug/${encodeURIComponent(rawSlug)}?${params.toString()}`;
-      const res = await fetch(endpoint, { method: 'GET', headers: { Accept: 'application/json' } });
-      const data = await res.json().catch(() => null);
-      const article = unwrapArticle(data);
-      return { resOk: res.ok, article };
-    };
+    const endpoint = `${origin}/api/public/news/${encodeURIComponent(rawSlug)}?${params.toString()}`;
+    const res = await fetch(endpoint, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        cookie: String(ctx.req.headers.cookie || ''),
+        authorization: String(ctx.req.headers.authorization || ''),
+      },
+    });
 
-    // First try the requested locale; if backend doesn't recognize the slug for that lang,
-    // try other langs to support redirects from historical wrong-language slugs.
-    const attempts: Array<'en' | 'hi' | 'gu'> = [lang, 'en', 'hi', 'gu'].filter(
-      (v, idx, arr) => arr.indexOf(v) === idx
-    ) as Array<'en' | 'hi' | 'gu'>;
-
-    let article: any | null = null;
-    for (const attemptLang of attempts) {
-      const out = await fetchBySlug(attemptLang);
-      if (out.resOk && out.article?._id) {
-        article = out.article;
-        break;
-      }
-    }
+    const data = await res.json().catch(() => null);
+    const article = unwrapArticle(data);
 
     if (!article?._id) {
       return {
@@ -595,13 +588,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
       return { redirect: { destination, permanent: true } };
     }
 
-    const { content } = localizeArticle(article, lang);
-    const html =
-      (typeof content === 'string' && content) ||
-      (typeof (article as any).content === 'string' && (article as any).content) ||
-      ((article as any).html as string) ||
-      ((article as any).body as string) ||
-      '';
+    const html = typeof (article as any).content === 'string' ? ((article as any).content as string) : '';
 
     const extra = await (async () => {
       try {
