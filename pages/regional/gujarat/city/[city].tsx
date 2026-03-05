@@ -1,12 +1,9 @@
 import Head from 'next/head';
+import React from 'react';
 import { useRouter } from 'next/router';
-import { useRegionalPulse } from '../../../../features/regional/useRegionalPulse';
-import { matchesCity } from '../../../../features/regional/api';
 import { useLanguage } from '../../../../utils/LanguageContext';
 import { getGujaratCityName, getStateName, tHeading } from '../../../../utils/localizedNames';
 import type { GetStaticProps } from 'next';
-import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../../../../lib/contentFallback';
-import OriginalTag from '../../../../components/OriginalTag';
 import { normalizeLang, useI18n } from '../../../../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../../../../lib/newsRoutes';
 import { resolveArticleSlug } from '../../../../lib/articleSlugs';
@@ -39,9 +36,47 @@ export default function GujaratCityPage() {
   const active = getActiveRouteLang(router.asPath);
   const effectiveLang = normalizeLang(active || queryLang || router.locale || language || 'en');
 
-  const { feed, loading } = useRegionalPulse(effectiveLang);
+  const [feed, setFeed] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
-  const uiLang: UiLang = effectiveLang;
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    const run = async () => {
+      try {
+        const params = new URLSearchParams();
+        params.set('lang', effectiveLang);
+        params.set('language', effectiveLang);
+        const url = `/api/public/regional/gujarat?${params.toString()}`;
+
+        const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' } });
+        if (!res.ok) throw new Error(`Failed to fetch regional feed (${res.status})`);
+
+        const data = await res.json().catch(() => null);
+        const list: unknown =
+          (data && (data.items || data.stories || data.articles || data.news || data.data || data.result)) ??
+          (Array.isArray(data) ? data : []);
+        const items = Array.isArray(list) ? (list as any[]) : [];
+
+        if (!cancelled) setFeed(items);
+      } catch (e: any) {
+        if (cancelled) return;
+        setError(e?.message || t('regionalUI.failedToLoadStories'));
+      } finally {
+        if (cancelled) return;
+        setLoading(false);
+      }
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveLang, t]);
+
   const slug = (city || '').toString();
   const displayNameFallback = (slug || '').replace(/-/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
   const displayName = getGujaratCityName(effectiveLang as any, slug, displayNameFallback || 'City');
@@ -61,19 +96,17 @@ export default function GujaratCityPage() {
         </div>
 
         {(() => {
-          const filtered = city ? feed.filter((a) => matchesCity(a as any, displayName)) : feed;
+          const filtered = city ? feed.filter((a) => matchCity(a as any, displayName)) : feed;
           return (
             <div className="grid md:grid-cols-2 gap-6">
-              {loading ? (
-                Array.from({ length: 8 }).map((_, i) => (
-                  <div key={i} className="p-6 rounded-2xl border shadow-sm animate-pulse bg-gray-50" />
-                ))
-              ) : filtered.length ? (
+              {loading && !filtered.length ? null : filtered.length ? (
                 filtered.map((article: any, idx: number) => {
                   const id = String(article?._id || article?.id || '').trim();
                   const slug = resolveArticleSlug(article, effectiveLang);
                   const href = id ? buildNewsUrl({ id, slug, lang: effectiveLang }) : '#';
                   const coverUrl = resolveCoverImageUrl(article);
+                  const title = String(article?.title || '').trim();
+                  const summary = typeof article?.summary === 'string' ? article.summary.trim() : '';
                   return (
                   <a key={idx} href={href} className="block p-6 rounded-2xl border shadow-sm hover:shadow-md bg-white dark:bg-gray-800 transition">
                     <div className="mb-3 flex items-start gap-3">
@@ -88,27 +121,12 @@ export default function GujaratCityPage() {
 
                       <div className="min-w-0 flex-1">
                         <div className="text-xs text-gray-500 mb-2">{article.publishedAt ? new Date(article.publishedAt).toLocaleString() : ''}</div>
-                    {(() => {
-                      const titleRes = resolveArticleTitle(article, uiLang);
-                      const summaryRes = resolveArticleSummaryOrExcerpt(article, uiLang);
-                      const desc =
-                        summaryRes.text ||
-                        article.excerpt ||
-                        (article.content ? String(article.content).slice(0, 160) + '...' : '');
-
-                      return (
-                        <>
-                          <h3 className="font-bold text-lg mb-2">
-                            {titleRes.text || article.title}{' '}
-                            {titleRes.isOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
-                          </h3>
-                          <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3">
-                            {desc}
-                            {summaryRes.isOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
-                          </p>
-                        </>
-                      );
-                    })()}
+                        {!!title ? (
+                          <h3 className="font-bold text-lg mb-2">{title}</h3>
+                        ) : null}
+                        {!!summary ? (
+                          <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3">{summary}</p>
+                        ) : null}
                     <div className="mt-3 text-xs text-gray-400">{t('common.source')}: {article.source || t('brand.name')}</div>
                       </div>
                     </div>
@@ -117,7 +135,7 @@ export default function GujaratCityPage() {
                 })
               ) : (
                 <div className="col-span-2 text-gray-600">
-                  {t('regionalUI.noStoriesFoundTryBroader', { name: displayName, category: tHeading(language as any, 'regional') })}
+                  {error || t('regionalUI.noStoriesFoundTryBroader', { name: displayName, category: tHeading(language as any, 'regional') })}
                 </div>
               )}
             </div>

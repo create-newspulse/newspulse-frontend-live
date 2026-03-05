@@ -10,7 +10,7 @@ import CategoryRail from '../../../components/regional/CategoryRail';
 import RegionalTabs, { type RegionalTabKey } from '../../../components/regional/RegionalTabs';
 import RegionalFeedCards from '../../../components/regional/RegionalFeedCards';
 
-import { fetchPublicStories, getStoryCategoryLabel } from '../../../lib/publicStories';
+import { getStoryCategoryLabel } from '../../../lib/publicStories';
 import { GUJARAT_DISTRICTS } from '../../../utils/regions';
 import { useLanguage } from '../../../utils/LanguageContext';
 import { getGujaratDistrictName, getStateName, tHeading, toLanguageKey } from '../../../utils/localizedNames';
@@ -211,25 +211,37 @@ export default function GujaratDistrictPage() {
 
     const districtParam = entry?.slug || '';
 
-    fetchPublicStories(undefined, {
-      language: uiLang,
-      category: 'regional',
-      state: 'gujarat',
-      district: districtParam || undefined,
-      noStore: true,
-    })
-      .then((items) => {
-        if (cancelled) return;
-        setStories(items as AnyStory[]);
-      })
-      .catch((e: any) => {
+    const run = async () => {
+      try {
+        const params = new URLSearchParams();
+        params.set('lang', uiLang);
+        params.set('language', uiLang);
+        if (districtParam) {
+          params.set('district', districtParam);
+          params.set('districtSlug', districtParam);
+        }
+
+        const url = `/api/public/regional/gujarat?${params.toString()}`;
+        const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' } });
+        if (!res.ok) throw new Error(`Failed to fetch regional feed (${res.status})`);
+
+        const data = await res.json().catch(() => null);
+        const list: unknown =
+          (data && (data.items || data.stories || data.articles || data.news || data.data || data.result)) ??
+          (Array.isArray(data) ? data : []);
+        const items = Array.isArray(list) ? (list as AnyStory[]) : [];
+
+        if (!cancelled) setStories(items);
+      } catch (e: any) {
         if (cancelled) return;
         setError(e?.message || t('regionalUI.failedToLoadStories'));
-      })
-      .finally(() => {
+      } finally {
         if (cancelled) return;
         setLoading(false);
-      });
+      }
+    };
+
+    run();
 
     return () => {
       cancelled = true;

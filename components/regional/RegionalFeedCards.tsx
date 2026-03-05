@@ -1,6 +1,5 @@
 import React from 'react';
 import { getStoryCategoryLabel, getStoryDateIso } from '../../lib/publicStories';
-import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../../lib/contentFallback';
 import OriginalTag from '../OriginalTag';
 import { buildNewsUrl } from '../../lib/newsRoutes';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
@@ -14,7 +13,7 @@ type AnyStory = any;
 
 export type RegionalFeedCardsProps = {
   stories: AnyStory[];
-  requestedLang?: UiLang;
+  requestedLang?: 'en' | 'hi' | 'gu';
   loading?: boolean;
   emptyTitle?: string;
   emptyHint?: string;
@@ -50,7 +49,7 @@ function StoryCard({
   videoPreviewHiddenLabel: string;
   untitledLabel: string;
   fallbackCategoryLabel: string;
-  requestedLang: UiLang;
+  requestedLang: 'en' | 'hi' | 'gu';
 }) {
   const id = String(story?._id || story?.id || '').trim();
   const slug = resolveArticleSlug(story, requestedLang);
@@ -61,16 +60,11 @@ function StoryCard({
 
   const districtLabel = showDistrictBadges && getDistrictLabel ? getDistrictLabel(story) : '';
 
-  // Never render embeds/videos in cards; keep it clean.
-  const titleRes = resolveArticleTitle(story, requestedLang);
-  const summaryRes = resolveArticleSummaryOrExcerpt(story, requestedLang);
+  const title = String(story?.title || '').trim() || untitledLabel;
+  const summary = typeof story?.summary === 'string' ? story.summary.trim() : '';
 
-  const title = titleRes.text || story?.title || untitledLabel;
-  const excerpt =
-    summaryRes.text ||
-    story?.summary ||
-    story?.excerpt ||
-    (story?.content ? String(story.content).slice(0, 160) + '…' : '');
+  const storyLang = String(story?.language || story?.lang || '').toLowerCase().trim();
+  const isOriginal = !!storyLang && storyLang !== requestedLang;
 
   const coverUrl = resolveCoverImageUrl(story);
 
@@ -119,10 +113,14 @@ function StoryCard({
 
                     <div className="mt-2 text-base font-semibold leading-snug">{title}</div>
 
-                    {titleRes.isOriginal ? (
+                    {isOriginal ? (
                       <div className="mt-1">
                         <OriginalTag />
                       </div>
+                    ) : null}
+
+                    {!!summary ? (
+                      <div className="mt-2 text-sm text-slate-600 line-clamp-3">{summary}</div>
                     ) : null}
                   </div>
                 </div>
@@ -151,15 +149,8 @@ export default function RegionalFeedCards({
   getDistrictLabel,
   className,
 }: RegionalFeedCardsProps) {
-  if (loading) {
-    return (
-      <div className={classNames('grid gap-4 md:grid-cols-2', className)}>
-        {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="h-32 animate-pulse rounded-2xl border border-slate-200 bg-white shadow-sm" />
-        ))}
-      </div>
-    );
-  }
+  // Never render loading skeletons/placeholders.
+  if (loading && !stories?.length) return null;
 
   if (!stories?.length) {
     return (
