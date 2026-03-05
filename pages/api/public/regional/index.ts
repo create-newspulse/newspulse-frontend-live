@@ -74,6 +74,11 @@ function normalizeGeoToken(value: unknown): string {
     .replace(/^-|-$/g, '');
 }
 
+function isInvalidOptionalToken(value: string): boolean {
+  const v = String(value || '').trim().toLowerCase();
+  return !v || v === 'undefined' || v === 'null' || v === 'none';
+}
+
 function tagList(tags: unknown): string[] {
   if (!tags) return [];
   if (Array.isArray(tags)) return tags.map((t) => String(t || '').toLowerCase().trim()).filter(Boolean);
@@ -151,6 +156,12 @@ async function fetchRegionalFallbackFromStories(options: {
   const params = new URLSearchParams((options.qs || '').replace(/^\?/, ''));
   params.set('category', 'regional');
 
+  // Guard against accidental empty/undefined filters which can yield an empty upstream response.
+  for (const k of ['district', 'districtSlug', 'city', 'citySlug'] as const) {
+    const raw = params.get(k);
+    if (raw != null && isInvalidOptionalToken(normalizeGeoToken(raw))) params.delete(k);
+  }
+
   // Backends have varied semantics for `lang`.
   // We keep `language` (content language), and normalize `lang` to uppercase if present.
   const lang = normalizeGeoToken(options.requestedLang);
@@ -203,10 +214,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const timeoutMs = Number(process.env.PUBLIC_REGIONAL_UPSTREAM_TIMEOUT_MS || 10000);
 
-  const stateSlug = normalizeGeoToken(asSingleQueryValue(req.query.stateSlug) || asSingleQueryValue(req.query.state));
-  const districtSlug = normalizeGeoToken(
+  const stateSlugRaw = normalizeGeoToken(asSingleQueryValue(req.query.stateSlug) || asSingleQueryValue(req.query.state));
+  const districtSlugRaw = normalizeGeoToken(
     asSingleQueryValue(req.query.districtSlug) || asSingleQueryValue(req.query.district)
   );
+
+  const stateSlug = isInvalidOptionalToken(stateSlugRaw) ? '' : stateSlugRaw;
+  const districtSlug = isInvalidOptionalToken(districtSlugRaw) ? '' : districtSlugRaw;
 
   // Preferred upstream endpoint (query-string based): /api/public/regional?state=...
   const primaryUrl = `${base}/api/public/regional${qs}`;

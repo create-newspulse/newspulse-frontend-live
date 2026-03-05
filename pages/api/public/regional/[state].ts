@@ -74,6 +74,11 @@ function normalizeGeoToken(value: unknown): string {
     .replace(/^-|-$/g, '');
 }
 
+function isInvalidOptionalToken(value: string): boolean {
+  const v = String(value || '').trim().toLowerCase();
+  return !v || v === 'undefined' || v === 'null' || v === 'none';
+}
+
 function tagList(tags: unknown): string[] {
   if (!tags) return [];
   if (Array.isArray(tags)) return tags.map((t) => String(t || '').toLowerCase().trim()).filter(Boolean);
@@ -149,6 +154,11 @@ async function fetchRegionalFallbackFromStories(options: {
 }): Promise<any | null> {
   const params = new URLSearchParams((options.qs || '').replace(/^\?/, ''));
   params.set('category', 'regional');
+
+  for (const k of ['district', 'districtSlug', 'city', 'citySlug'] as const) {
+    const raw = params.get(k);
+    if (raw != null && isInvalidOptionalToken(normalizeGeoToken(raw))) params.delete(k);
+  }
   const lang = normalizeGeoToken(options.requestedLang);
   if (lang && !params.get('language')) params.set('language', lang);
   const langParam = params.get('lang');
@@ -195,9 +205,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const requestedLang = String(langRaw || languageRaw || '').trim();
 
   const stateSlug = normalizeGeoToken(state);
-  const districtSlug = normalizeGeoToken(
+  const districtSlugRaw = normalizeGeoToken(
     asSingleQueryValue(req.query.districtSlug) || asSingleQueryValue(req.query.district)
   );
+  const districtSlug = isInvalidOptionalToken(districtSlugRaw) ? '' : districtSlugRaw;
 
   try {
     const upstream = await fetchWithTimeout(

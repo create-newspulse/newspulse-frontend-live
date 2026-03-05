@@ -218,8 +218,12 @@ export default function GujaratDistrictPage() {
       try {
         const params = new URLSearchParams();
         params.set('state', 'gujarat');
-        params.set('district', districtParam);
         params.set('lang', uiLang);
+
+        const districtSafe = String(districtParam || '').trim();
+        if (districtSafe && districtSafe !== 'undefined' && districtSafe !== 'null') {
+          params.set('district', districtSafe);
+        }
 
         const url = `/api/public/regional?${params.toString()}`;
         const res = await fetch(url, { method: 'GET', cache: 'no-store', headers: { Accept: 'application/json' } });
