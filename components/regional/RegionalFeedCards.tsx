@@ -157,16 +157,18 @@ export default function RegionalFeedCards({
     const out: AnyStory[] = [];
 
     for (const s of input) {
-      const resolved = resolveArticleSlug(s, requestedLang);
       const rawSlug =
         (typeof s?.slug === 'string' && s.slug) ||
         (s?.slugs && typeof s.slugs === 'object' && (s.slugs[requestedLang] || s.slugs.en || s.slugs.hi || s.slugs.gu)) ||
-        resolved ||
         '';
-      const slug = String(rawSlug || '').trim().toLowerCase();
-      if (slug) {
-        if (seen.has(slug)) continue;
-        seen.add(slug);
+      const rawId = (typeof s?._id === 'string' && s._id) || (typeof s?.id === 'string' && s.id) || '';
+      const resolved = resolveArticleSlug(s, requestedLang);
+
+      const keyRaw = rawSlug || rawId || resolved || '';
+      const key = String(keyRaw || '').trim().toLowerCase();
+      if (key) {
+        if (seen.has(key)) continue;
+        seen.add(key);
       }
       out.push(s);
     }
