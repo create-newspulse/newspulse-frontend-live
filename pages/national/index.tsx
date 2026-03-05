@@ -70,11 +70,17 @@ function toTickerItems(raw: any[]): NationalLiveTickerItem[] {
     .map((it, idx) => {
       const id = String(it?._id || it?.id || it?.key || it?.slug || `ticker-${idx}`).trim();
       const title = String(it?.title || it?.text || it?.headline || it?.name || '').trim();
-      const tags = it?.tags;
-      const kind = it?.kind;
-      const href = typeof it?.href === 'string' ? it.href : undefined;
       if (!id) return null;
-      return { _id: id, title, tags, kind, href } as NationalLiveTickerItem;
+      const out: NationalLiveTickerItem = { _id: id };
+
+      // IMPORTANT: Next.js props serialization rejects `undefined` values.
+      // Only include optional fields when they are present.
+      if (title) out.title = title;
+      if (typeof it?.href === 'string' && it.href.trim()) out.href = it.href;
+      if (it?.kind != null) out.kind = it.kind;
+      if (it?.tags != null) out.tags = it.tags;
+
+      return out;
     })
     .filter(Boolean)
     .slice(0, 5) as NationalLiveTickerItem[];
