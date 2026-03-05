@@ -7,10 +7,6 @@ import {
   unwrapRegionalFeedItems,
 } from '../../../../lib/unwrapRegionalFeed';
 
-const BLOCKED_SLUGS = new Set<string>([
-  'final-result-of-unarmed-psi-recruitment-announced-472-candidates-will-become-keeper-of-khaki',
-]);
-
 const BLOCKED_IDS = new Set<string>([
   '69a9d5f74c3cb9a18ef5a179',
   '69a9ca4a4c3cb9a18ef5a16f',
@@ -19,17 +15,6 @@ const BLOCKED_IDS = new Set<string>([
 function shouldKeepRegionalItem(item: any): boolean {
   const id = String(item?._id || item?.id || '').trim();
   if (id && BLOCKED_IDS.has(id)) return false;
-
-  const slug = String(item?.slug || '').trim();
-  if (slug && BLOCKED_SLUGS.has(slug)) return false;
-
-  const slugs = item?.slugs;
-  if (slugs && typeof slugs === 'object') {
-    for (const v of Object.values(slugs)) {
-      const s = String(v || '').trim();
-      if (s && BLOCKED_SLUGS.has(s)) return false;
-    }
-  }
 
   return true;
 }
