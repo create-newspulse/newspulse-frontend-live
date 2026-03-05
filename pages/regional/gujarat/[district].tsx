@@ -190,6 +190,7 @@ export default function GujaratDistrictPage() {
   const [stories, setStories] = React.useState<AnyStory[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [refreshNonce, setRefreshNonce] = React.useState(0);
 
   const districtTokenToSlug = React.useMemo(() => {
     const m = new Map<string, string>();
@@ -225,7 +226,7 @@ export default function GujaratDistrictPage() {
           params.set('districtSlug', districtParam);
         }
 
-        const url = `/api/public/regional/gujarat?${params.toString()}`;
+        const url = `/api/public/regional?${params.toString()}`;
         const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' } });
         if (!res.ok) throw new Error(`Failed to fetch regional feed (${res.status})`);
 
@@ -237,6 +238,8 @@ export default function GujaratDistrictPage() {
 
         if (!cancelled) setStories(items);
       } catch (e: any) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to fetch regional feed', e);
         if (cancelled) return;
         setError(e?.message || t('regionalUI.failedToLoadStories'));
       } finally {
@@ -250,7 +253,7 @@ export default function GujaratDistrictPage() {
     return () => {
       cancelled = true;
     };
-  }, [districtSlug, entry?.slug, t, uiLang]);
+  }, [districtSlug, entry?.slug, refreshNonce, t, uiLang]);
 
   const districtName = entry ? getGujaratDistrictName(langKey, entry.slug, entry.name) : t('regionalUI.allGujarat');
   const displayDistrictName = entry
@@ -476,8 +479,15 @@ export default function GujaratDistrictPage() {
 
       <div className="mx-auto max-w-6xl px-4 py-6">
         {!!error && (
-          <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
-            {error}
+          <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">{error}</div>
+            <button
+              type="button"
+              onClick={() => setRefreshNonce((n) => n + 1)}
+              className="shrink-0 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium hover:bg-slate-50"
+            >
+              Retry
+            </button>
           </div>
         )}
 

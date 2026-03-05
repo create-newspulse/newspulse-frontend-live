@@ -26,10 +26,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const stateRaw = Array.isArray(req.query.state) ? req.query.state[0] : req.query.state;
   const state = String(stateRaw || '').trim();
-  if (!state) return res.status(200).json([]);
+  if (!state) {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(400).json({ ok: false, message: 'STATE_REQUIRED' });
+  }
 
   const base = getApiBase();
-  if (!base) return res.status(200).json([]);
+  if (!base) {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(500).json({ ok: false, message: 'PUBLIC_API_BASE_NOT_CONFIGURED' });
+  }
 
   const qsIndex = (req.url || '').indexOf('?');
   const qs = qsIndex >= 0 ? (req.url || '').slice(qsIndex) : '';
@@ -51,26 +57,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const text = await upstream.text().catch(() => '');
 
-    if (upstream.status === 404) {
-      res.setHeader('Cache-Control', 'no-store');
-      return res.status(200).json([]);
-    }
-
-    if (!upstream.ok) {
-      res.setHeader('Cache-Control', 'no-store');
-      return res.status(200).json([]);
-    }
-
     try {
-      const json = text ? JSON.parse(text) : [];
       res.setHeader('Cache-Control', 'no-store');
+      if (!upstream.ok) {
+        return res.status(upstream.status).json({ ok: false, message: 'UPSTREAM_ERROR', status: upstream.status });
+      }
+
+      const json = text ? JSON.parse(text) : [];
       return res.status(200).json(json);
     } catch {
       res.setHeader('Cache-Control', 'no-store');
-      return res.status(200).json([]);
+      return res.status(502).json({ ok: false, message: 'INVALID_UPSTREAM_JSON' });
     }
   } catch {
     res.setHeader('Cache-Control', 'no-store');
-    return res.status(200).json([]);
+    return res.status(502).json({ ok: false, message: 'UPSTREAM_FETCH_FAILED' });
   }
 }

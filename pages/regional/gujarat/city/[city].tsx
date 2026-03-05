@@ -39,6 +39,7 @@ export default function GujaratCityPage() {
   const [feed, setFeed] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [refreshNonce, setRefreshNonce] = React.useState(0);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -50,7 +51,9 @@ export default function GujaratCityPage() {
         const params = new URLSearchParams();
         params.set('lang', effectiveLang);
         params.set('language', effectiveLang);
-        const url = `/api/public/regional/gujarat?${params.toString()}`;
+        params.set('state', 'gujarat');
+        params.set('stateSlug', 'gujarat');
+        const url = `/api/public/regional?${params.toString()}`;
 
         const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' } });
         if (!res.ok) throw new Error(`Failed to fetch regional feed (${res.status})`);
@@ -63,6 +66,8 @@ export default function GujaratCityPage() {
 
         if (!cancelled) setFeed(items);
       } catch (e: any) {
+        // eslint-disable-next-line no-console
+        console.error('Failed to fetch regional feed', e);
         if (cancelled) return;
         setError(e?.message || t('regionalUI.failedToLoadStories'));
       } finally {
@@ -75,7 +80,7 @@ export default function GujaratCityPage() {
     return () => {
       cancelled = true;
     };
-  }, [effectiveLang, t]);
+  }, [effectiveLang, refreshNonce, t]);
 
   const slug = (city || '').toString();
   const displayNameFallback = (slug || '').replace(/-/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
@@ -90,6 +95,19 @@ export default function GujaratCityPage() {
       </Head>
 
       <div className="max-w-6xl mx-auto px-4 py-8">
+        {!!error && (
+          <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-4 text-sm text-gray-800 sm:flex-row sm:items-center sm:justify-between dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
+            <div className="min-w-0">{error}</div>
+            <button
+              type="button"
+              onClick={() => setRefreshNonce((n) => n + 1)}
+              className="shrink-0 rounded-2xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:bg-gray-950"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         <div className="mb-6">
           <h1 className="text-3xl font-extrabold">🏙️ {displayName} — {stateName}</h1>
           <p className="text-gray-600">Local updates mentioning this {tHeading(language as any, 'city').toLowerCase()} filtered from {tHeading(language as any, 'regional')} feed.</p>
