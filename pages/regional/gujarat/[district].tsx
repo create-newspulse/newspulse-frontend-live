@@ -209,13 +209,17 @@ export default function GujaratDistrictPage() {
     setLoading(true);
     setError(null);
 
-    const districtParam = entry?.slug || '';
+    // Treat /regional/gujarat/[place] as a district filter by default.
+    const districtParam = districtSlug || entry?.slug || '';
 
     const run = async () => {
       try {
         const params = new URLSearchParams();
         params.set('lang', uiLang);
         params.set('language', uiLang);
+        // Include state as query params as well for backend compatibility.
+        params.set('state', 'gujarat');
+        params.set('stateSlug', 'gujarat');
         if (districtParam) {
           params.set('district', districtParam);
           params.set('districtSlug', districtParam);
@@ -246,7 +250,7 @@ export default function GujaratDistrictPage() {
     return () => {
       cancelled = true;
     };
-  }, [entry?.slug, t, uiLang]);
+  }, [districtSlug, entry?.slug, t, uiLang]);
 
   const districtName = entry ? getGujaratDistrictName(langKey, entry.slug, entry.name) : t('regionalUI.allGujarat');
   const displayDistrictName = entry
