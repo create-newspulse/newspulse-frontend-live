@@ -44,7 +44,9 @@ async function fetchItems(origin: string, type: BroadcastType, req: NextApiReque
 }
 
 async function fetchSettings(origin: string, req: NextApiRequest): Promise<any | null> {
-  const upstream = await fetch(`${origin}/api/public/broadcast/settings`, {
+  const lang = String((req.query as any)?.lang || '').toLowerCase().trim();
+  const langParam = lang === 'en' || lang === 'hi' || lang === 'gu' ? `?lang=${encodeURIComponent(lang)}` : '';
+  const upstream = await fetch(`${origin}/api/public/broadcast/settings${langParam}`, {
     method: 'GET',
     headers: {
       Accept: 'application/json',

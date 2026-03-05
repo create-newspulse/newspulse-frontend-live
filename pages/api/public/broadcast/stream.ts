@@ -101,6 +101,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const origin = toOrigin(base);
 
   const qLang = String((req.query as any)?.lang || '').toLowerCase().trim();
+  const langQuery = qLang === 'en' || qLang === 'hi' || qLang === 'gu' ? `?lang=${encodeURIComponent(qLang)}` : '';
   const langParam = qLang === 'en' || qLang === 'hi' || qLang === 'gu' ? `&lang=${encodeURIComponent(qLang)}` : '';
 
   let closed = false;
@@ -114,7 +115,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const fetchConfig = async (): Promise<any | null> => {
     if (!origin) return null;
     // Try config, then fallback settings.
-    const r1 = await fetch(`${origin}/api/public/broadcast/config`, {
+    const r1 = await fetch(`${origin}/api/public/broadcast/config${langQuery}`, {
       method: 'GET',
       headers: { Accept: 'application/json', 'Cache-Control': 'no-store', Pragma: 'no-cache' },
       cache: 'no-store',
@@ -124,7 +125,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (r1.ok && j) return j;
     }
 
-    const r2 = await fetch(`${origin}/api/public/broadcast/settings`, {
+    const r2 = await fetch(`${origin}/api/public/broadcast/settings${langQuery}`, {
       method: 'GET',
       headers: { Accept: 'application/json', 'Cache-Control': 'no-store', Pragma: 'no-cache' },
       cache: 'no-store',

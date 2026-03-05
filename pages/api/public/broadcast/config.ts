@@ -73,6 +73,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const base = getPublicApiBaseUrl();
   const origin = toOrigin(base);
 
+  const qLang = String((req.query as any)?.lang || '').toLowerCase().trim();
+  const langParam = qLang === 'en' || qLang === 'hi' || qLang === 'gu' ? `?lang=${encodeURIComponent(qLang)}` : '';
+
   // Fail-open: keep UI alive even if env not configured.
   if (!origin) {
     return res.status(200).json({
@@ -85,7 +88,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const fetchUpstream = async (path: string) => {
-    const upstream = await fetch(`${origin}${path}`, {
+    const upstream = await fetch(`${origin}${path}${langParam}`, {
       method: 'GET',
       headers: {
         Accept: 'application/json',
