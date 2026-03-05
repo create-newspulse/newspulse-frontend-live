@@ -157,6 +157,14 @@ type TopicChip = (typeof TOPIC_CHIPS)[number];
 
 type SortKey = 'latest' | 'most-read';
 
+const AUTO_REFRESH_MS = 45_000;
+const PLACEHOLDER_MIN = 3;
+const PLACEHOLDER_MAX = 5;
+
+function clamp(n: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, n));
+}
+
 function classNames(...s: Array<string | false | null | undefined>) {
   return s.filter(Boolean).join(' ');
 }
@@ -323,6 +331,7 @@ function CompactFeedRow({ story, lang }: { story: AnyStory; lang: 'en' | 'hi' | 
   const where = storyLocation(story);
   const tags = tagList(story?.tags);
   const tag = tags[0] || String(story?.topic || story?.section || '').trim();
+  const translationStatus = String((story as any)?.translationStatus || '').trim();
 
   return (
     <a
@@ -357,11 +366,31 @@ function CompactFeedRow({ story, lang }: { story: AnyStory; lang: 'en' | 'hi' | 
                 {tag}
               </span>
             ) : null}
+            {lang === 'gu' && translationStatus ? (
+              <span className="shrink-0 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-slate-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
+                {translationStatus}
+              </span>
+            ) : null}
             <span className="truncate text-slate-500 dark:text-gray-400">📍 {where}</span>
           </div>
         </div>
       </div>
     </a>
+  );
+}
+
+function TranslationPlaceholderRow() {
+  return (
+    <div className="flex gap-3 border-b border-slate-200 py-3 dark:border-gray-800">
+      <div className="shrink-0">
+        <div className="h-16 w-20 rounded-lg border border-slate-200 bg-slate-100 dark:border-gray-800 dark:bg-gray-900" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-semibold text-slate-800 dark:text-gray-200">Translation in progress</div>
+        <div className="mt-2 h-3 w-4/5 rounded bg-slate-100 dark:bg-gray-800" />
+        <div className="mt-2 h-3 w-3/5 rounded bg-slate-100 dark:bg-gray-800" />
+      </div>
+    </div>
   );
 }
 
@@ -402,6 +431,11 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
 
   const sentinelRef = React.useRef<HTMLDivElement | null>(null);
   const didInitRef = React.useRef(false);
+  const refreshStateRef = React.useRef({ page: 1, loading: false, loadingMore: false });
+
+  React.useEffect(() => {
+    refreshStateRef.current = { page, loading, loadingMore };
+  }, [loading, loadingMore, page]);
 
   // URL <-> filter state (shareable links)
   React.useEffect(() => {
@@ -557,6 +591,18 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
     };
   }, [effectiveLang, initialStories.length, loadPage]);
 
+  // Auto refresh the feed to pick up newly translated stories.
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const id = window.setInterval(() => {
+      const cur = refreshStateRef.current;
+      if (cur.loading || cur.loadingMore) return;
+      loadPage(cur.page);
+    }, AUTO_REFRESH_MS);
+
+    return () => window.clearInterval(id);
+  }, [loadPage]);
+
   // Infinite scroll
   React.useEffect(() => {
     const el = sentinelRef.current;
@@ -632,6 +678,13 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
 
   const hero = sortedStories[0] || null;
   const feed = hero ? sortedStories.slice(1) : sortedStories;
+
+  const placeholderCount = React.useMemo(() => {
+    if (loading || loadingMore) return 0;
+    const expected = page * 20;
+    if (stories.length >= expected) return 0;
+    return clamp(expected - stories.length, PLACEHOLDER_MIN, PLACEHOLDER_MAX);
+  }, [loading, loadingMore, page, stories.length]);
 
   const heroLocalizedTitle = React.useMemo(() => {
     if (!hero) return '';
@@ -803,6 +856,10 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
           </div>
         ) : null}
 
+        <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
+          Translating new stories… auto refresh
+        </div>
+
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-10">
           {/* Left 70% */}
           <main className="lg:col-span-7">
@@ -915,8 +972,11 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
                   }
                   return row;
                 })}
-
                 <div ref={sentinelRef} />
+
+                {Array.from({ length: placeholderCount }).map((_, i) => (
+                  <TranslationPlaceholderRow key={`translation-placeholder-${i}`} />
+                ))}
 
                 {loadingMore ? (
                   <div className="p-4 text-center text-xs text-slate-500 dark:text-gray-400">{t('common.loadingMore')}</div>
