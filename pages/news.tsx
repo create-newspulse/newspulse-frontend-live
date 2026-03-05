@@ -17,25 +17,6 @@ type NewsApiArticle = {
 };
 
 const AUTO_REFRESH_MS = 45_000;
-const EXPECTED_VISIBLE_COUNT = 20;
-const PLACEHOLDER_MIN = 3;
-const PLACEHOLDER_MAX = 5;
-
-function clamp(n: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, n));
-}
-
-function TranslationPlaceholderCard() {
-  return (
-    <div
-      className="bg-white p-4 rounded-xl shadow-md border border-slate-200"
-    >
-      <div className="text-sm font-semibold text-slate-700">Translation in progress</div>
-      <div className="mt-3 h-4 w-3/4 rounded bg-slate-100" />
-      <div className="mt-2 h-4 w-5/6 rounded bg-slate-100" />
-    </div>
-  );
-}
 
 function normalizeLang(v: unknown): 'en' | 'hi' | 'gu' {
   const s = String(v || '').toLowerCase().trim();
@@ -70,10 +51,7 @@ export default function News() {
         const url = `/api/public/news?${params.toString()}`;
 
         const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' } });
-        if (!res.ok) {
-          if (!cancelled) setArticles([]);
-          return;
-        }
+        if (!res.ok) return;
 
         const data = await res.json().catch(() => null);
         const list: unknown =
@@ -109,7 +87,7 @@ export default function News() {
 
         if (!cancelled) setArticles(mapped);
       } catch {
-        if (!cancelled) setArticles([]);
+        // Silent refresh: keep existing items on errors.
       } finally {
         inFlightRef.current = false;
         if (!cancelled) setLoading(false);
@@ -124,12 +102,6 @@ export default function News() {
     };
   }, [lang]);
 
-  const placeholderCount = useMemo(() => {
-    if (loading) return 0;
-    if (articles.length >= EXPECTED_VISIBLE_COUNT) return 0;
-    return clamp(EXPECTED_VISIBLE_COUNT - articles.length, PLACEHOLDER_MIN, PLACEHOLDER_MAX);
-  }, [articles.length, loading]);
-
   return (
     <>
       <Head>
@@ -138,10 +110,6 @@ export default function News() {
 
       <main className="min-h-screen p-6 bg-gray-100">
         <h1 className="text-3xl font-bold text-center text-blue-700 mb-6">🗞️ Top Headlines - India</h1>
-
-        <div className="mb-6 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
-          Translating new stories… auto refresh
-        </div>
 
         <div className="space-y-6">
           {articles.map((article, idx) => (
@@ -172,10 +140,6 @@ export default function News() {
                 </p>
               ) : null}
             </div>
-          ))}
-
-          {Array.from({ length: placeholderCount }).map((_, i) => (
-            <TranslationPlaceholderCard key={`translation-placeholder-${i}`} />
           ))}
         </div>
       </main>

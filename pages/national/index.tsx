@@ -158,12 +158,6 @@ type TopicChip = (typeof TOPIC_CHIPS)[number];
 type SortKey = 'latest' | 'most-read';
 
 const AUTO_REFRESH_MS = 45_000;
-const PLACEHOLDER_MIN = 3;
-const PLACEHOLDER_MAX = 5;
-
-function clamp(n: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, n));
-}
 
 function classNames(...s: Array<string | false | null | undefined>) {
   return s.filter(Boolean).join(' ');
@@ -221,15 +215,27 @@ function storyExcerpt(story: AnyStory): string {
 }
 
 function storyLocation(story: AnyStory): string {
-  return String(
-    story?.location ||
-      story?.region ||
-      story?.city ||
-      story?.state ||
-      story?.source?.name ||
-      story?.source ||
-      'India'
-  ).trim();
+  const loc = story?.location;
+
+  if (typeof loc === 'string' && loc.trim()) return loc.trim();
+  if (loc && typeof loc === 'object' && !Array.isArray(loc)) {
+    const parts = [
+      (loc as any)?.city,
+      (loc as any)?.district,
+      (loc as any)?.state,
+      (loc as any)?.country,
+    ]
+      .map((v) => (typeof v === 'string' ? v.trim() : ''))
+      .filter(Boolean);
+    if (parts.length) return parts.join(', ');
+  }
+
+  const fallbacks = [story?.region, story?.city, story?.state, story?.source?.name, story?.source];
+  for (const v of fallbacks) {
+    if (typeof v === 'string' && v.trim()) return v.trim();
+  }
+
+  return 'India';
 }
 
 function matchesTopic(story: AnyStory, topic: TopicChip): boolean {
@@ -379,21 +385,6 @@ function CompactFeedRow({ story, lang }: { story: AnyStory; lang: 'en' | 'hi' | 
   );
 }
 
-function TranslationPlaceholderRow() {
-  return (
-    <div className="flex gap-3 border-b border-slate-200 py-3 dark:border-gray-800">
-      <div className="shrink-0">
-        <div className="h-16 w-20 rounded-lg border border-slate-200 bg-slate-100 dark:border-gray-800 dark:bg-gray-900" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="text-sm font-semibold text-slate-800 dark:text-gray-200">Translation in progress</div>
-        <div className="mt-2 h-3 w-4/5 rounded bg-slate-100 dark:bg-gray-800" />
-        <div className="mt-2 h-3 w-3/5 rounded bg-slate-100 dark:bg-gray-800" />
-      </div>
-    </div>
-  );
-}
-
 export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data: AnyStory[] | null; breaking?: AnyStory[] | null }) {
   const router = useRouter();
   const { language } = useLanguage();
@@ -431,11 +422,11 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
 
   const sentinelRef = React.useRef<HTMLDivElement | null>(null);
   const didInitRef = React.useRef(false);
-  const refreshStateRef = React.useRef({ page: 1, loading: false, loadingMore: false });
+  const refreshStateRef = React.useRef({ page: 1 });
 
   React.useEffect(() => {
-    refreshStateRef.current = { page, loading, loadingMore };
-  }, [loading, loadingMore, page]);
+    refreshStateRef.current = { page };
+  }, [page]);
 
   // URL <-> filter state (shareable links)
   React.useEffect(() => {
@@ -594,14 +585,33 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
   // Auto refresh the feed to pick up newly translated stories.
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
+    let cancelled = false;
+
     const id = window.setInterval(() => {
       const cur = refreshStateRef.current;
-      if (cur.loading || cur.loadingMore) return;
-      loadPage(cur.page);
+      const curPage = Number(cur?.page || 1) || 1;
+      const limit = 20;
+      const requested = curPage * limit;
+
+      (async () => {
+        try {
+          const resp = await fetchPublicNews({ category: 'national', language: effectiveLang, limit: requested });
+          if (cancelled) return;
+          if (resp?.error) return;
+          const items = Array.isArray(resp?.items) ? resp.items : [];
+          setHasMore(items.length >= requested);
+          setStories(items);
+        } catch {
+          // keep existing
+        }
+      })();
     }, AUTO_REFRESH_MS);
 
-    return () => window.clearInterval(id);
-  }, [loadPage]);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [effectiveLang]);
 
   // Infinite scroll
   React.useEffect(() => {
@@ -678,13 +688,6 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
 
   const hero = sortedStories[0] || null;
   const feed = hero ? sortedStories.slice(1) : sortedStories;
-
-  const placeholderCount = React.useMemo(() => {
-    if (loading || loadingMore) return 0;
-    const expected = page * 20;
-    if (stories.length >= expected) return 0;
-    return clamp(expected - stories.length, PLACEHOLDER_MIN, PLACEHOLDER_MAX);
-  }, [loading, loadingMore, page, stories.length]);
 
   const heroLocalizedTitle = React.useMemo(() => {
     if (!hero) return '';
@@ -856,10 +859,6 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
           </div>
         ) : null}
 
-        <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
-          Translating new stories… auto refresh
-        </div>
-
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-10">
           {/* Left 70% */}
           <main className="lg:col-span-7">
@@ -973,10 +972,6 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
                   return row;
                 })}
                 <div ref={sentinelRef} />
-
-                {Array.from({ length: placeholderCount }).map((_, i) => (
-                  <TranslationPlaceholderRow key={`translation-placeholder-${i}`} />
-                ))}
 
                 {loadingMore ? (
                   <div className="p-4 text-center text-xs text-slate-500 dark:text-gray-400">{t('common.loadingMore')}</div>
