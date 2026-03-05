@@ -1,7 +1,11 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 import { getPublicApiBaseUrl } from '../../../../lib/publicApiBase';
-import { dedupeRegionalFeedPayload, filterRegionalFeedPayload } from '../../../../lib/unwrapRegionalFeed';
+import {
+  dedupeRegionalFeedPayload,
+  filterRegionalFeedPayload,
+  unwrapRegionalFeedItems,
+} from '../../../../lib/unwrapRegionalFeed';
 
 const BLOCKED_SLUGS = new Set<string>([
   'final-result-of-unarmed-psi-recruitment-announced-472-candidates-will-become-keeper-of-khaki',
@@ -55,6 +59,120 @@ function safeJson(text: string): any {
   }
 }
 
+function asSingleQueryValue(value: string | string[] | undefined): string {
+  return String(Array.isArray(value) ? value[0] : value || '').trim();
+}
+
+function normalizeGeoToken(value: unknown): string {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^(state|district|city)\s*[:=\-]\s*/g, '')
+    .replace(/[_\s]+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+function tagList(tags: unknown): string[] {
+  if (!tags) return [];
+  if (Array.isArray(tags)) return tags.map((t) => String(t || '').toLowerCase().trim()).filter(Boolean);
+  if (typeof tags === 'string') {
+    return tags
+      .split(/[;,|]/g)
+      .map((t) => String(t || '').toLowerCase().trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function filterByStateDistrict(items: any[], stateSlug: string, districtSlug: string): any[] {
+  let next = Array.isArray(items) ? items : [];
+  if (!next.length) return next;
+
+  if (stateSlug) {
+    const wanted = `state:${stateSlug}`;
+    const matches = next.filter((it) => {
+      const tags = tagList(it?.tags);
+      if (tags.includes(wanted)) return true;
+      const state = normalizeGeoToken(it?.state || it?.stateSlug || it?.region?.state || it?.location?.state);
+      return !!state && state === stateSlug;
+    });
+    if (matches.length) next = matches;
+  }
+
+  if (districtSlug) {
+    const wanted = `district:${districtSlug}`;
+    const matches = next.filter((it) => {
+      const tags = tagList(it?.tags);
+      if (tags.includes(wanted)) return true;
+      const district = normalizeGeoToken(
+        it?.district || it?.districtSlug || it?.location?.district || it?.geo?.district || it?.region?.district
+      );
+      return !!district && district === districtSlug;
+    });
+    if (matches.length) next = matches;
+  }
+
+  return next;
+}
+
+function setPayloadItems(payload: any, items: any[]): any {
+  if (Array.isArray(payload)) return items;
+  if (!payload || typeof payload !== 'object') return items;
+
+  if (Array.isArray((payload as any).data)) {
+    return { ...(payload as any), data: items };
+  }
+
+  if ((payload as any).data && typeof (payload as any).data === 'object') {
+    const data = (payload as any).data;
+    if (Array.isArray(data.items)) return { ...(payload as any), data: { ...data, items } };
+    if (Array.isArray(data.stories)) return { ...(payload as any), data: { ...data, stories: items } };
+    if (Array.isArray(data.articles)) return { ...(payload as any), data: { ...data, articles: items } };
+  }
+
+  if (Array.isArray((payload as any).items)) return { ...(payload as any), items };
+  if (Array.isArray((payload as any).stories)) return { ...(payload as any), stories: items };
+  if (Array.isArray((payload as any).articles)) return { ...(payload as any), articles: items };
+
+  return { ...(payload as any), items };
+}
+
+async function fetchRegionalFallbackFromStories(options: {
+  base: string;
+  qs: string;
+  requestedLang: string;
+  stateSlug: string;
+  districtSlug: string;
+  upstreamInit: RequestInit;
+  timeoutMs: number;
+}): Promise<any | null> {
+  const params = new URLSearchParams((options.qs || '').replace(/^\?/, ''));
+  params.set('category', 'regional');
+
+  // Backends have varied semantics for `lang`.
+  // We keep `language` (content language), and normalize `lang` to uppercase if present.
+  const lang = normalizeGeoToken(options.requestedLang);
+  if (lang && !params.get('language')) params.set('language', lang);
+
+  const langParam = params.get('lang');
+  if (langParam) params.set('lang', String(langParam).trim().toUpperCase());
+
+  const url = `${options.base}/api/public/stories?${params.toString()}`;
+  const upstream = await fetchWithTimeout(url, options.upstreamInit, options.timeoutMs);
+  const text = await upstream.text().catch(() => '');
+  if (upstream.status === 404) return null;
+  if (!upstream.ok) return null;
+
+  const json = safeJson(text);
+  const items = unwrapRegionalFeedItems(json ?? []);
+  if (!items.length) return json;
+
+  const filteredItems = filterByStateDistrict(items, options.stateSlug, options.districtSlug);
+  return setPayloadItems(json, filteredItems);
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
@@ -85,6 +203,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const timeoutMs = Number(process.env.PUBLIC_REGIONAL_UPSTREAM_TIMEOUT_MS || 10000);
 
+  const stateSlug = normalizeGeoToken(asSingleQueryValue(req.query.stateSlug) || asSingleQueryValue(req.query.state));
+  const districtSlug = normalizeGeoToken(
+    asSingleQueryValue(req.query.districtSlug) || asSingleQueryValue(req.query.district)
+  );
+
   // Preferred upstream endpoint (query-string based): /api/public/regional?state=...
   const primaryUrl = `${base}/api/public/regional${qs}`;
 
@@ -110,6 +233,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const legacyJson = safeJson(legacyText);
         const deduped = dedupeRegionalFeedPayload(legacyJson ?? [], requestedLang);
         const filtered = filterRegionalFeedPayload(deduped, shouldKeepRegionalItem);
+
+        // If upstream returns an empty feed, fall back to public stories.
+        if (!unwrapRegionalFeedItems(filtered).length) {
+          const fallback = await fetchRegionalFallbackFromStories({
+            base,
+            qs,
+            requestedLang,
+            stateSlug,
+            districtSlug,
+            upstreamInit,
+            timeoutMs,
+          });
+          if (fallback) {
+            const dedupedFallback = dedupeRegionalFeedPayload(fallback ?? [], requestedLang);
+            const filteredFallback = filterRegionalFeedPayload(dedupedFallback, shouldKeepRegionalItem);
+            return res.status(200).json(filteredFallback);
+          }
+        }
+
         return res.status(200).json(filtered);
       }
     }
@@ -123,6 +265,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const json = safeJson(text);
     const deduped = dedupeRegionalFeedPayload(json ?? [], requestedLang);
     const filtered = filterRegionalFeedPayload(deduped, shouldKeepRegionalItem);
+
+    // Fallback: some deployments have /api/public/regional wired up but returning empty.
+    // Use /api/public/stories?category=regional as a source-of-truth.
+    if (!unwrapRegionalFeedItems(filtered).length) {
+      const fallback = await fetchRegionalFallbackFromStories({
+        base,
+        qs,
+        requestedLang,
+        stateSlug,
+        districtSlug,
+        upstreamInit,
+        timeoutMs,
+      });
+      if (fallback) {
+        const dedupedFallback = dedupeRegionalFeedPayload(fallback ?? [], requestedLang);
+        const filteredFallback = filterRegionalFeedPayload(dedupedFallback, shouldKeepRegionalItem);
+        return res.status(200).json(filteredFallback);
+      }
+    }
+
     return res.status(200).json(filtered);
   } catch (e: any) {
     res.setHeader('Cache-Control', 'no-store');
