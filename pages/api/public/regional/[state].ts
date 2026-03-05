@@ -165,6 +165,7 @@ async function fetchRegionalFallbackFromStories(options: {
   base: string;
   qs: string;
   requestedLang: string;
+  explicitLanguage: boolean;
   stateSlug: string;
   districtSlug: string;
   timeoutMs: number;
@@ -176,22 +177,59 @@ async function fetchRegionalFallbackFromStories(options: {
     const raw = params.get(k);
     if (raw != null && isInvalidOptionalToken(normalizeGeoToken(raw))) params.delete(k);
   }
-  const lang = normalizeGeoToken(options.requestedLang);
-  if (lang && !params.get('language')) params.set('language', lang);
+  const implicitLanguage = normalizeGeoToken(options.requestedLang);
+  const usedImplicitLanguage = !!(!options.explicitLanguage && implicitLanguage && !params.get('language'));
+  if (usedImplicitLanguage) params.set('language', implicitLanguage);
   const langParam = params.get('lang');
   if (langParam) params.set('lang', String(langParam).trim().toUpperCase());
 
-  const url = `${options.base}/api/public/stories?${params.toString()}`;
-  const upstream = await fetchWithTimeout(url, { method: 'GET', headers: { Accept: 'application/json' } }, options.timeoutMs);
-  const text = await upstream.text().catch(() => '');
-  if (upstream.status === 404) return null;
-  if (!upstream.ok) return null;
+  const tryFetch = async (tryParams: URLSearchParams): Promise<any | null> => {
+    const url = `${options.base}/api/public/stories?${tryParams.toString()}`;
+    const upstream = await fetchWithTimeout(
+      url,
+      { method: 'GET', headers: { Accept: 'application/json' } },
+      options.timeoutMs
+    );
+    const text = await upstream.text().catch(() => '');
+    if (upstream.status === 404) return null;
+    if (!upstream.ok) return null;
+    return safeJson(text);
+  };
 
-  const json = safeJson(text);
+  const json = await tryFetch(params);
   const items = unwrapRegionalFeedItems(json ?? []);
+  if (!items.length && usedImplicitLanguage) {
+    const relaxed = new URLSearchParams(params.toString());
+    relaxed.delete('language');
+    const relaxedJson = await tryFetch(relaxed);
+    if (relaxedJson != null) {
+      const relaxedItems = unwrapRegionalFeedItems(relaxedJson ?? []);
+      const relaxedFiltered = filterByStateDistrict(relaxedItems, options.stateSlug, options.districtSlug);
+      return setPayloadItems(relaxedJson, relaxedFiltered);
+    }
+  }
+
   if (!items.length) return json;
   const filteredItems = filterByStateDistrict(items, options.stateSlug, options.districtSlug);
   return setPayloadItems(json, filteredItems);
+}
+
+function itemHasUsefulGeoOrTags(item: any): boolean {
+  if (!item || typeof item !== 'object') return false;
+  const tags = tagList(item?.tags);
+  if (tags.length) return true;
+  if (typeof item?.status === 'string') return true;
+  if (item?.isPublished === true || item?.published === true) return true;
+  if (item?.district || item?.city) return true;
+  if (item?.location?.district || item?.location?.city) return true;
+  return false;
+}
+
+function isLowFidelityRegionalFeed(items: any[]): boolean {
+  const input = Array.isArray(items) ? items : [];
+  if (!input.length) return false;
+  const sample = input.slice(0, 3);
+  return sample.every((it) => !itemHasUsefulGeoOrTags(it));
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -229,6 +267,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   );
   const districtSlug = isInvalidOptionalToken(districtSlugRaw) ? '' : districtSlugRaw;
 
+  const citySlugRaw = normalizeGeoToken(asSingleQueryValue(req.query.citySlug) || asSingleQueryValue(req.query.city));
+  const citySlug = isInvalidOptionalToken(citySlugRaw) ? '' : citySlugRaw;
+
+  const explicitLanguage = !!(Array.isArray(req.query.language) ? req.query.language[0] : req.query.language);
+  const wantsGeoFilter = !!districtSlug || !!citySlug;
+
   try {
     const upstream = await fetchWithTimeout(
       targetUrl,
@@ -257,11 +301,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const deduped = dedupeRegionalFeedPayload(json, requestedLang);
       const filtered = filterRegionalFeedPayload(deduped, shouldKeepRegionalItem);
 
+      const upstreamItems = unwrapRegionalFeedItems(filtered);
+      const shouldPreferFallback = wantsGeoFilter || isLowFidelityRegionalFeed(upstreamItems);
+      if (shouldPreferFallback) {
+        const fallback = await fetchRegionalFallbackFromStories({
+          base,
+          qs: sanitized.qs,
+          requestedLang,
+          explicitLanguage,
+          stateSlug,
+          districtSlug,
+          timeoutMs: Number(process.env.PUBLIC_REGIONAL_UPSTREAM_TIMEOUT_MS || 10000),
+        });
+        if (fallback) {
+          const dedupedFallback = dedupeRegionalFeedPayload(fallback ?? [], requestedLang);
+          const filteredFallback = filterRegionalFeedPayload(dedupedFallback, shouldKeepRegionalItem);
+          if (unwrapRegionalFeedItems(filteredFallback).length) return res.status(200).json(filteredFallback);
+        }
+      }
+
       if (!unwrapRegionalFeedItems(filtered).length) {
         const fallback = await fetchRegionalFallbackFromStories({
           base,
           qs: sanitized.qs,
           requestedLang,
+          explicitLanguage,
           stateSlug,
           districtSlug,
           timeoutMs: Number(process.env.PUBLIC_REGIONAL_UPSTREAM_TIMEOUT_MS || 10000),
