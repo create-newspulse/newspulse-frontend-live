@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 import { getPublicApiBaseUrl } from '../../../../lib/publicApiBase';
+import { dedupeRegionalFeedPayload } from '../../../../lib/unwrapRegionalFeed';
 
 function getApiBase(): string {
   return String(getPublicApiBaseUrl() || '')
@@ -42,6 +43,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const qsIndex = (req.url || '').indexOf('?');
   const qs = qsIndex >= 0 ? (req.url || '').slice(qsIndex) : '';
 
+  const langRaw = Array.isArray(req.query.lang) ? req.query.lang[0] : req.query.lang;
+  const languageRaw = Array.isArray(req.query.language) ? req.query.language[0] : req.query.language;
+  const requestedLang = String(langRaw || languageRaw || '').trim();
+
   const upstreamInit: RequestInit = {
     method: 'GET',
     headers: {
@@ -76,7 +81,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
 
         const legacyJson = safeJson(legacyText);
-        return res.status(200).json(legacyJson ?? []);
+        return res.status(200).json(dedupeRegionalFeedPayload(legacyJson ?? [], requestedLang));
       }
     }
 
@@ -87,7 +92,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const json = safeJson(text);
-    return res.status(200).json(json ?? []);
+    return res.status(200).json(dedupeRegionalFeedPayload(json ?? [], requestedLang));
   } catch (e: any) {
     res.setHeader('Cache-Control', 'no-store');
     const msg = String(e?.name || '').includes('Abort') ? 'UPSTREAM_TIMEOUT' : 'UPSTREAM_FETCH_FAILED';

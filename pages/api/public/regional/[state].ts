@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 import { getPublicApiBaseUrl } from '../../../../lib/publicApiBase';
+import { dedupeRegionalFeedPayload } from '../../../../lib/unwrapRegionalFeed';
 
 function getApiBase(): string {
   return String(getPublicApiBaseUrl() || '')
@@ -41,6 +42,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const qs = qsIndex >= 0 ? (req.url || '').slice(qsIndex) : '';
   const targetUrl = `${base}/api/public/regional/${encodeURIComponent(state)}${qs}`;
 
+  const langRaw = Array.isArray(req.query.lang) ? req.query.lang[0] : req.query.lang;
+  const languageRaw = Array.isArray(req.query.language) ? req.query.language[0] : req.query.language;
+  const requestedLang = String(langRaw || languageRaw || '').trim();
+
   try {
     const upstream = await fetchWithTimeout(
       targetUrl,
@@ -64,7 +69,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       const json = text ? JSON.parse(text) : [];
-      return res.status(200).json(json);
+      return res.status(200).json(dedupeRegionalFeedPayload(json, requestedLang));
     } catch {
       res.setHeader('Cache-Control', 'no-store');
       return res.status(502).json({ ok: false, message: 'INVALID_UPSTREAM_JSON' });
