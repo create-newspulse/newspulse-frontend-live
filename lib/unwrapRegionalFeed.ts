@@ -1,6 +1,61 @@
 export type RegionalFeedPayload = any;
-
 import { resolveArticleSlug } from './articleSlugs';
+
+export function filterRegionalFeedItems(items: any[], keepItem: (item: any) => boolean): any[] {
+  const input = Array.isArray(items) ? items : [];
+  if (!input.length) return input;
+
+  let changed = false;
+  const out: any[] = [];
+
+  for (const item of input) {
+    if (!keepItem(item)) {
+      changed = true;
+      continue;
+    }
+    out.push(item);
+  }
+
+  return changed ? out : input;
+}
+
+export function filterRegionalFeedPayload(
+  payload: RegionalFeedPayload,
+  keepItem: (item: any) => boolean
+): RegionalFeedPayload {
+  if (!payload) return payload;
+  if (Array.isArray(payload)) return filterRegionalFeedItems(payload, keepItem);
+  if (typeof payload !== 'object') return payload;
+
+  const arrayKeys = ['items', 'stories', 'articles', 'news', 'result'] as const;
+  let out: any = payload;
+  let changed = false;
+
+  for (const k of arrayKeys) {
+    const cur = (payload as any)[k];
+    if (Array.isArray(cur)) {
+      const nextItems = filterRegionalFeedItems(cur, keepItem);
+      if (nextItems !== cur) {
+        if (!changed) out = { ...(payload as any) };
+        out[k] = nextItems;
+        if (typeof out.total === 'number') out.total = nextItems.length;
+        if (typeof out.count === 'number') out.count = nextItems.length;
+        changed = true;
+      }
+    }
+  }
+
+  if ((payload as any).data && typeof (payload as any).data === 'object') {
+    const nextData = filterRegionalFeedPayload((payload as any).data, keepItem);
+    if (nextData !== (payload as any).data) {
+      if (!changed) out = { ...(payload as any) };
+      out.data = nextData;
+      changed = true;
+    }
+  }
+
+  return changed ? out : payload;
+}
 
 function isExplicitlyUnpublished(item: any): boolean {
   if (!item || typeof item !== 'object') return false;

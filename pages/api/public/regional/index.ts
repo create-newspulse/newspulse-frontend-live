@@ -1,7 +1,34 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 import { getPublicApiBaseUrl } from '../../../../lib/publicApiBase';
-import { dedupeRegionalFeedPayload } from '../../../../lib/unwrapRegionalFeed';
+import { dedupeRegionalFeedPayload, filterRegionalFeedPayload } from '../../../../lib/unwrapRegionalFeed';
+
+const BLOCKED_SLUGS = new Set<string>([
+  'final-result-of-unarmed-psi-recruitment-announced-472-candidates-will-become-keeper-of-khaki',
+]);
+
+const BLOCKED_IDS = new Set<string>([
+  '69a9d5f74c3cb9a18ef5a179',
+  '69a9ca4a4c3cb9a18ef5a16f',
+]);
+
+function shouldKeepRegionalItem(item: any): boolean {
+  const id = String(item?._id || item?.id || '').trim();
+  if (id && BLOCKED_IDS.has(id)) return false;
+
+  const slug = String(item?.slug || '').trim();
+  if (slug && BLOCKED_SLUGS.has(slug)) return false;
+
+  const slugs = item?.slugs;
+  if (slugs && typeof slugs === 'object') {
+    for (const v of Object.values(slugs)) {
+      const s = String(v || '').trim();
+      if (s && BLOCKED_SLUGS.has(s)) return false;
+    }
+  }
+
+  return true;
+}
 
 function getApiBase(): string {
   return String(getPublicApiBaseUrl() || '')
@@ -81,7 +108,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
 
         const legacyJson = safeJson(legacyText);
-        return res.status(200).json(dedupeRegionalFeedPayload(legacyJson ?? [], requestedLang));
+        const deduped = dedupeRegionalFeedPayload(legacyJson ?? [], requestedLang);
+        const filtered = filterRegionalFeedPayload(deduped, shouldKeepRegionalItem);
+        return res.status(200).json(filtered);
       }
     }
 
@@ -92,7 +121,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const json = safeJson(text);
-    return res.status(200).json(dedupeRegionalFeedPayload(json ?? [], requestedLang));
+    const deduped = dedupeRegionalFeedPayload(json ?? [], requestedLang);
+    const filtered = filterRegionalFeedPayload(deduped, shouldKeepRegionalItem);
+    return res.status(200).json(filtered);
   } catch (e: any) {
     res.setHeader('Cache-Control', 'no-store');
     const msg = String(e?.name || '').includes('Abort') ? 'UPSTREAM_TIMEOUT' : 'UPSTREAM_FETCH_FAILED';
