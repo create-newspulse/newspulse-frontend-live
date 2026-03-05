@@ -16,6 +16,7 @@ import { useLanguage } from '../../../utils/LanguageContext';
 import { getGujaratDistrictName, getStateName, tHeading, toLanguageKey } from '../../../utils/localizedNames';
 import { normalizeLang, useI18n } from '../../../src/i18n/LanguageProvider';
 import { getActiveRouteLang } from '../../../utils/routeLang';
+import { unwrapRegionalFeedItems } from '../../../lib/unwrapRegionalFeed';
 
 const CATEGORIES = [
   'All',
@@ -211,7 +212,7 @@ export default function GujaratDistrictPage() {
     setError(null);
 
     // Treat /regional/gujarat/[place] as a district filter by default.
-    const districtParam = districtSlug || entry?.slug || '';
+    const districtParam = String(districtSlug || entry?.slug || '').trim();
 
     const run = async () => {
       try {
@@ -221,20 +222,16 @@ export default function GujaratDistrictPage() {
         // Include state as query params as well for backend compatibility.
         params.set('state', 'gujarat');
         params.set('stateSlug', 'gujarat');
-        if (districtParam) {
-          params.set('district', districtParam);
-          params.set('districtSlug', districtParam);
-        }
+        // Always send explicit district params for /regional/gujarat/[place].
+        params.set('district', districtParam);
+        params.set('districtSlug', districtParam);
 
         const url = `/api/public/regional?${params.toString()}`;
         const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' } });
         if (!res.ok) throw new Error(`Failed to fetch regional feed (${res.status})`);
 
         const data = await res.json().catch(() => null);
-        const list: unknown =
-          (data && (data.items || data.stories || data.articles || data.news || data.data || data.result)) ??
-          (Array.isArray(data) ? data : []);
-        const items = Array.isArray(list) ? (list as AnyStory[]) : [];
+        const items = unwrapRegionalFeedItems(data) as AnyStory[];
 
         if (!cancelled) setStories(items);
       } catch (e: any) {
@@ -319,8 +316,12 @@ export default function GujaratDistrictPage() {
   const filteredStories = React.useMemo(() => {
     let list = stories;
 
-    // District filter only if the data includes district tags.
-    if (entry && districtFilteringEnabled) {
+    // If this is a district route (/regional/gujarat/[place]), do not apply extra
+    // client-side district filtering. The backend query already includes district.
+    const isDistrictRoute = !!String(districtSlug || '').trim();
+
+    // Otherwise, apply district filter only if the data includes district tags.
+    if (!isDistrictRoute && entry && districtFilteringEnabled) {
       const wantedSlug = entry.slug;
       const wantedEn = normalize(entry.name);
       const wantedLocalized = normalize(getGujaratDistrictName(langKey, entry.slug, entry.name));
@@ -355,7 +356,7 @@ export default function GujaratDistrictPage() {
     }
 
     return list;
-  }, [stories, entry, districtFilteringEnabled, districtTokenToSlug, effectiveCategory, langKey, searchQuery]);
+  }, [stories, districtSlug, entry, districtFilteringEnabled, districtTokenToSlug, effectiveCategory, langKey, searchQuery]);
 
   const tickerItems = React.useMemo(() => {
     const breakingItems = (stories || []).filter((s) => isPublished(s) && isBreakingStory(s));

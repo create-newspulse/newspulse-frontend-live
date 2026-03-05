@@ -9,6 +9,7 @@ import { buildNewsUrl } from '../../../../lib/newsRoutes';
 import { resolveArticleSlug } from '../../../../lib/articleSlugs';
 import { COVER_PLACEHOLDER_SRC, onCoverImageError, resolveCoverImageUrl } from '../../../../lib/coverImages';
 import { getActiveRouteLang } from '../../../../utils/routeLang';
+import { unwrapRegionalFeedItems } from '../../../../lib/unwrapRegionalFeed';
 
 function normalize(s: string) {
   return (s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -59,10 +60,7 @@ export default function GujaratCityPage() {
         if (!res.ok) throw new Error(`Failed to fetch regional feed (${res.status})`);
 
         const data = await res.json().catch(() => null);
-        const list: unknown =
-          (data && (data.items || data.stories || data.articles || data.news || data.data || data.result)) ??
-          (Array.isArray(data) ? data : []);
-        const items = Array.isArray(list) ? (list as any[]) : [];
+        const items = unwrapRegionalFeedItems(data) as any[];
 
         if (!cancelled) setFeed(items);
       } catch (e: any) {

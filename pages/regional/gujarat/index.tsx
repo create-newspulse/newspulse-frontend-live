@@ -16,6 +16,7 @@ import { useLanguage } from '../../../utils/LanguageContext';
 import { getGujaratDistrictName, getStateName, tHeading, toLanguageKey } from '../../../utils/localizedNames';
 import { normalizeLang, useI18n } from '../../../src/i18n/LanguageProvider';
 import { getActiveRouteLang } from '../../../utils/routeLang';
+import { unwrapRegionalFeedItems } from '../../../lib/unwrapRegionalFeed';
 
 const CATEGORIES = [
   'All',
@@ -220,10 +221,7 @@ export default function GujaratIndexPage() {
         if (!res.ok) throw new Error(`Failed to fetch regional feed (${res.status})`);
 
         const data = await res.json().catch(() => null);
-        const list: unknown =
-          (data && (data.items || data.stories || data.articles || data.news || data.data || data.result)) ??
-          (Array.isArray(data) ? data : []);
-        const items = Array.isArray(list) ? (list as AnyStory[]) : [];
+        const items = unwrapRegionalFeedItems(data) as AnyStory[];
 
         if (!cancelled) setStories(items);
       } catch (e: any) {

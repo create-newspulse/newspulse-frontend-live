@@ -21,6 +21,7 @@ export function middleware(req: NextRequest) {
 
   // Skip API and Next internals. (Also skip files with extensions like .png, .js, .css, etc.)
   const pathname = url.pathname;
+  const originalPathname = new URL(req.url).pathname;
   if (pathname.startsWith('/api') || pathname.startsWith('/_next')) {
     return NextResponse.next();
   }
@@ -33,12 +34,13 @@ export function middleware(req: NextRequest) {
   // with the locale prefix stripped, while `nextUrl.locale` still reflects the
   // requested locale. Rely on `nextUrl.locale` to avoid redirect loops.
   const pathnameLower = pathname.toLowerCase();
+  const originalLower = originalPathname.toLowerCase();
   const localeFromPrefix: Locale | null =
-    pathnameLower === '/hi' || pathnameLower.startsWith('/hi/')
+    originalLower === '/hi' || originalLower.startsWith('/hi/')
       ? 'hi'
-      : pathnameLower === '/gu' || pathnameLower.startsWith('/gu/')
+      : originalLower === '/gu' || originalLower.startsWith('/gu/')
         ? 'gu'
-        : pathnameLower === '/en' || pathnameLower.startsWith('/en/')
+        : originalLower === '/en' || originalLower.startsWith('/en/')
           ? 'en'
           : null;
 
@@ -68,35 +70,45 @@ export function middleware(req: NextRequest) {
     normalizeLocale(req.cookies.get(NEXT_LOCALE_COOKIE)?.value) ||
     null;
 
-  if (pref && (pref === 'hi' || pref === 'gu')) {
-    const pLower = pathnameLower;
-    if (pLower === '/regional' || pLower.startsWith('/regional/')) {
-      // Only redirect for real navigations (HTML documents).
-      // Next.js prefetch/data requests can otherwise see repeated 307s (e.g. `gujarat.json`)
-      // and get stuck retrying, making the page appear unresponsive.
-      const isNextData = req.headers.get('x-nextjs-data') === '1';
-      const isNextPrefetch = req.headers.get('x-nextjs-prefetch') === '1';
-      const purpose = (req.headers.get('purpose') || req.headers.get('sec-purpose') || '').toLowerCase();
-      const isPrefetch = isNextPrefetch || purpose === 'prefetch';
-      const fetchDest = (req.headers.get('sec-fetch-dest') || '').toLowerCase();
-      const accept = (req.headers.get('accept') || '').toLowerCase();
-      const isDocument = fetchDest === 'document' || accept.includes('text/html');
+  // Redirect legacy unprefixed /regional/* paths to a language-prefixed path when the
+  // user has an explicit non-default locale preference (hi/gu). For default English,
+  // keep /regional/* unprefixed because Next may normalize /en away.
+  const pLower = pathnameLower;
+  if (pLower === '/regional' || pLower.startsWith('/regional/')) {
+    const targetLocale: Locale | null = pref && pref !== 'en' ? pref : null;
 
-      if (!isDocument || isNextData || isPrefetch) {
-        const res = NextResponse.next();
-        res.cookies.set(NEXT_LOCALE_COOKIE, pref, { path: '/', maxAge: 60 * 60 * 24 * 365 });
-        return res;
-      }
+    // Only redirect for real navigations (HTML documents).
+    // Next.js prefetch/data requests can otherwise see repeated 307s (e.g. `gujarat.json`)
+    // and get stuck retrying, making the page appear unresponsive.
+    const isNextData = req.headers.get('x-nextjs-data') === '1';
+    const isNextPrefetch = req.headers.get('x-nextjs-prefetch') === '1';
+    const purpose = (req.headers.get('purpose') || req.headers.get('sec-purpose') || '').toLowerCase();
+    const isPrefetch = isNextPrefetch || purpose === 'prefetch';
+    const fetchDest = (req.headers.get('sec-fetch-dest') || '').toLowerCase();
+    const accept = (req.headers.get('accept') || '').toLowerCase();
+    const isDocument = fetchDest === 'document' || accept.includes('text/html');
 
-      const redirectUrl = req.nextUrl.clone();
-      redirectUrl.pathname = `/${pref}${pathname}`;
-
-      const res = NextResponse.redirect(redirectUrl, 307);
-      res.cookies.set(NEXT_LOCALE_COOKIE, pref, { path: '/', maxAge: 60 * 60 * 24 * 365 });
-      res.cookies.set(COOKIE_KEY, pref, { path: '/', maxAge: 60 * 60 * 24 * 365 });
-      res.cookies.set(LEGACY_COOKIE_KEY, pref, { path: '/', maxAge: 60 * 60 * 24 * 365 });
+    if (!isDocument || isNextData || isPrefetch) {
+      const res = NextResponse.next();
+      if (pref) res.cookies.set(NEXT_LOCALE_COOKIE, pref, { path: '/', maxAge: 60 * 60 * 24 * 365 });
       return res;
     }
+
+    if (!targetLocale) {
+      const res = NextResponse.next();
+      if (pref) res.cookies.set(NEXT_LOCALE_COOKIE, pref, { path: '/', maxAge: 60 * 60 * 24 * 365 });
+      return res;
+    }
+
+    const redirectUrl = req.nextUrl.clone();
+    redirectUrl.locale = targetLocale;
+    redirectUrl.pathname = pathname;
+
+    const res = NextResponse.redirect(redirectUrl, 307);
+    res.cookies.set(NEXT_LOCALE_COOKIE, targetLocale, { path: '/', maxAge: 60 * 60 * 24 * 365 });
+    res.cookies.set(COOKIE_KEY, targetLocale, { path: '/', maxAge: 60 * 60 * 24 * 365 });
+    res.cookies.set(LEGACY_COOKIE_KEY, targetLocale, { path: '/', maxAge: 60 * 60 * 24 * 365 });
+    return res;
   }
 
   const res = NextResponse.next();
