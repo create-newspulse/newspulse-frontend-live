@@ -149,10 +149,33 @@ export default function RegionalFeedCards({
   getDistrictLabel,
   className,
 }: RegionalFeedCardsProps) {
-  // Never render loading skeletons/placeholders.
-  if (loading && !stories?.length) return null;
+  const dedupedStories = React.useMemo(() => {
+    const input = Array.isArray(stories) ? stories : [];
+    if (!input.length) return input;
 
-  if (!stories?.length) {
+    const seen = new Set<string>();
+    const out: AnyStory[] = [];
+
+    for (const s of input) {
+      const rawSlug =
+        (typeof s?.slug === 'string' && s.slug) ||
+        (s?.slugs && typeof s.slugs === 'object' && (s.slugs[requestedLang] || s.slugs.en || s.slugs.hi || s.slugs.gu)) ||
+        '';
+      const slug = String(rawSlug || '').trim().toLowerCase();
+      if (slug) {
+        if (seen.has(slug)) continue;
+        seen.add(slug);
+      }
+      out.push(s);
+    }
+
+    return out;
+  }, [requestedLang, stories]);
+
+  // Never render loading skeletons/placeholders.
+  if (loading && !dedupedStories?.length) return null;
+
+  if (!dedupedStories?.length) {
     return (
       <CardShell>
         <div className="p-6">
@@ -170,7 +193,7 @@ export default function RegionalFeedCards({
 
   return (
     <div className={classNames('grid gap-4 md:grid-cols-2', className)}>
-      {stories.map((story) => (
+      {dedupedStories.map((story) => (
         <StoryCard
           key={story?._id || story?.slug || story?.title}
           story={story}
