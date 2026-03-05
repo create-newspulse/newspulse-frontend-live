@@ -217,6 +217,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         method: 'GET',
         headers: {
           Accept: 'application/json',
+          'cache-control': 'no-store',
           cookie: String(req.headers.cookie || ''),
           authorization: String(req.headers.authorization || ''),
         },

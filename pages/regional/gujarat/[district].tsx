@@ -571,7 +571,6 @@ export default function GujaratDistrictPage() {
               districtFilterHint={t('regionalUI.districtFilterHint')}
               readMoreLabel={t('regionalUI.readMore')}
               videoPreviewHiddenLabel={t('regionalUI.videoPreviewHidden')}
-              untitledLabel={t('categoryPage.untitled')}
               fallbackCategoryLabel={tHeading(language as any, 'regional')}
             />
           </>
