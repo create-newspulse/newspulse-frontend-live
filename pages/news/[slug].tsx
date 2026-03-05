@@ -282,6 +282,8 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
   const rawTitle = cleanText((resolvedArticle as any)?.title);
   const displayTitle = rawTitle.length > 180 ? `${rawTitle.slice(0, 177).trimEnd()}…` : rawTitle;
   const displaySummary = cleanText((resolvedArticle as any)?.summary);
+  const displayProvider = cleanText((resolvedArticle as any)?.provider);
+  const displayGeneratedAt = cleanText((resolvedArticle as any)?.generatedAt);
 
   const heroSrc = resolveCoverImageUrl(resolvedArticle) || COVER_PLACEHOLDER_SRC;
 
@@ -453,6 +455,14 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                       <p className="text-base md:text-lg text-slate-700">
                         {displaySummary}
                       </p>
+                    ) : null}
+
+                    {displayProvider || displayGeneratedAt ? (
+                      <div className="text-xs font-semibold text-slate-500">
+                        {displayProvider ? displayProvider : null}
+                        {displayProvider && displayGeneratedAt ? ' • ' : null}
+                        {displayGeneratedAt ? displayGeneratedAt : null}
+                      </div>
                     ) : null}
 
                     <div className="flex flex-wrap items-center gap-2 pt-1">

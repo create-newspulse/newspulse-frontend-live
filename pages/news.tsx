@@ -1,43 +1,40 @@
 // pages/news.tsx
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Head from 'next/head';
 import type { GetStaticProps } from 'next';
-import { getApiOrigin } from '../lib/publicNewsApi';
+import { useRouter } from 'next/router';
 import { useLanguage } from '../utils/LanguageContext';
-import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../lib/contentFallback';
-import OriginalTag from '../components/OriginalTag';
-import { buildNewsUrl } from '../lib/newsRoutes';
-import { resolveArticleSlug } from '../lib/articleSlugs';
 
 type NewsApiArticle = {
-  title: string;
-  titleIsOriginal?: boolean;
-  description?: string;
-  descriptionIsOriginal?: boolean;
-  url?: string;
-  publishedAt?: string;
-  source?: { name?: string };
+  _id?: string;
+  slug?: string;
+  title?: string;
+  summary?: string;
+  content?: string;
+  provider?: string;
+  generatedAt?: string;
 };
 
+function normalizeLang(v: unknown): 'en' | 'hi' | 'gu' {
+  const s = String(v || '').toLowerCase().trim();
+  if (s === 'hi' || s === 'hindi' || s === 'in') return 'hi';
+  if (s === 'gu' || s === 'gujarati') return 'gu';
+  return 'en';
+}
+
 export default function News() {
+  const router = useRouter();
   const { language } = useLanguage();
   const [articles, setArticles] = useState<NewsApiArticle[]>([]);
 
-  const uiLang: UiLang = (() => {
-    const v = String(language || '').toLowerCase().trim();
-    if (v === 'hi' || v === 'hindi') return 'hi';
-    if (v === 'gu' || v === 'gujarati') return 'gu';
-    return 'en';
-  })();
+  const lang = useMemo(() => normalizeLang((router as any)?.locale || language), [language, router]);
 
   useEffect(() => {
     const fetchNews = async () => {
       try {
-        const origin = getApiOrigin();
-        const params = new URLSearchParams({ category: 'national', limit: '5' });
-        params.set('lang', String(language));
-        params.set('language', String(language));
-        const url = `${origin}/api/public/news?${params.toString()}`;
+        const params = new URLSearchParams();
+        params.set('lang', lang);
+        const url = `/api/public/news?${params.toString()}`;
 
         const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' } });
         if (!res.ok) {
@@ -53,26 +50,17 @@ export default function News() {
         const items = Array.isArray(list) ? (list as any[]) : [];
         const mapped: NewsApiArticle[] = items
           .map((raw) => {
-            const titleRes = resolveArticleTitle(raw, uiLang);
-            const title = String(titleRes.text || '').trim();
+            const title = String(raw?.title || '').trim() || undefined;
+            const summary = String(raw?.summary || '').trim() || undefined;
+            const content = typeof raw?.content === 'string' ? raw.content : undefined;
+            const provider = String(raw?.provider || '').trim() || undefined;
+            const generatedAt = String(raw?.generatedAt || '').trim() || undefined;
+            const _id = String(raw?._id || '').trim() || undefined;
+            const slug = String(raw?.slug || '').trim() || undefined;
+
+            // Keep list items minimal: render only API-returned fields.
             if (!title) return null;
-
-            const id = String(raw?._id || raw?.id || '').trim();
-            const slug = resolveArticleSlug(raw, language);
-            const href = id ? buildNewsUrl({ id, slug, lang: language }) : undefined;
-
-            const summaryRes = resolveArticleSummaryOrExcerpt(raw, uiLang);
-            const description = String(summaryRes.text || '').trim() || undefined;
-
-            return {
-              title,
-              titleIsOriginal: titleRes.isOriginal,
-              description,
-              descriptionIsOriginal: summaryRes.isOriginal,
-              url: href,
-              publishedAt: String(raw?.publishedAt || raw?.createdAt || '').trim() || undefined,
-              source: { name: String(raw?.source?.name || raw?.source || '').trim() || undefined },
-            } as NewsApiArticle;
+            return { _id, slug, title, summary, content, provider, generatedAt } as NewsApiArticle;
           })
           .filter(Boolean) as NewsApiArticle[];
 
@@ -83,7 +71,7 @@ export default function News() {
     };
 
     fetchNews();
-  }, [language]);
+  }, [lang]);
 
   return (
     <>
@@ -101,24 +89,20 @@ export default function News() {
               className="bg-white p-4 rounded-xl shadow-md border-l-4 border-blue-600 transition hover:shadow-lg"
             >
               <h2 className="text-xl font-semibold text-gray-800">
-                {article.title} {article.titleIsOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
+                {String(article.title || '').trim()}
               </h2>
-              <p className="text-sm text-gray-500">{(article.source?.name || 'Unknown source')} – {new Date(article.publishedAt || '').toLocaleString()}</p>
-              {article.description ? (
-                <p className="mt-2 text-gray-700">
-                  {article.description} {article.descriptionIsOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
+              {article.provider || article.generatedAt ? (
+                <p className="text-sm text-gray-500">
+                  {article.provider ? String(article.provider) : ''}
+                  {article.provider && article.generatedAt ? ' – ' : ''}
+                  {article.generatedAt ? String(article.generatedAt) : ''}
                 </p>
               ) : null}
-              {article.url && (
-                <a
-                  href={article.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 mt-3 inline-block underline"
-                >
-                  Read more →
-                </a>
-              )}
+              {article.summary ? (
+                <p className="mt-2 text-gray-700">
+                  {String(article.summary)}
+                </p>
+              ) : null}
             </div>
           ))}
         </div>
