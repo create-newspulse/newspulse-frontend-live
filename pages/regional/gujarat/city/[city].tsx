@@ -50,10 +50,8 @@ export default function GujaratCityPage() {
     const run = async () => {
       try {
         const params = new URLSearchParams();
-        params.set('lang', effectiveLang);
-        params.set('language', effectiveLang);
         params.set('state', 'gujarat');
-        params.set('stateSlug', 'gujarat');
+        params.set('lang', effectiveLang);
         const url = `/api/public/regional?${params.toString()}`;
 
         const res = await fetch(url, { method: 'GET', cache: 'no-store', headers: { Accept: 'application/json' } });

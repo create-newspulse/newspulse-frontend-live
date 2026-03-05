@@ -20,7 +20,6 @@ export type RegionalFeedCardsProps = {
   districtFilterHint?: string;
   readMoreLabel?: string;
   videoPreviewHiddenLabel?: string;
-  untitledLabel?: string;
   fallbackCategoryLabel?: string;
   districtFilteringEnabled?: boolean;
   showDistrictBadges?: boolean;
@@ -38,7 +37,6 @@ function StoryCard({
   getDistrictLabel,
   readMoreLabel,
   videoPreviewHiddenLabel,
-  untitledLabel,
   fallbackCategoryLabel,
   requestedLang,
 }: {
@@ -47,7 +45,6 @@ function StoryCard({
   getDistrictLabel?: (story: AnyStory) => string;
   readMoreLabel: string;
   videoPreviewHiddenLabel: string;
-  untitledLabel: string;
   fallbackCategoryLabel: string;
   requestedLang: 'en' | 'hi' | 'gu';
 }) {
@@ -60,7 +57,8 @@ function StoryCard({
 
   const districtLabel = showDistrictBadges && getDistrictLabel ? getDistrictLabel(story) : '';
 
-  const title = String(story?.title || '').trim() || untitledLabel;
+  // Render only the API-returned fields (no English fallbacks).
+  const title = typeof story?.title === 'string' ? story.title.trim() : '';
   const summary = typeof story?.summary === 'string' ? story.summary.trim() : '';
 
   const storyLang = String(story?.language || story?.lang || '').toLowerCase().trim();
@@ -111,7 +109,7 @@ function StoryCard({
                       <span className="shrink-0 text-xs text-slate-400">{dateText}</span>
                     </div>
 
-                    <div className="mt-2 text-base font-semibold leading-snug">{title}</div>
+                    {!!title ? <div className="mt-2 text-base font-semibold leading-snug">{title}</div> : null}
 
                     {isOriginal ? (
                       <div className="mt-1">
@@ -142,7 +140,6 @@ export default function RegionalFeedCards({
   districtFilterHint = 'District-wise filtering activates when stories include district tags.',
   readMoreLabel = 'Read more →',
   videoPreviewHiddenLabel = 'Video preview hidden (embed disabled).',
-  untitledLabel = 'Untitled',
   fallbackCategoryLabel = 'Regional',
   districtFilteringEnabled,
   showDistrictBadges,
@@ -200,7 +197,6 @@ export default function RegionalFeedCards({
           getDistrictLabel={getDistrictLabel}
           readMoreLabel={readMoreLabel}
           videoPreviewHiddenLabel={videoPreviewHiddenLabel}
-          untitledLabel={untitledLabel}
           fallbackCategoryLabel={fallbackCategoryLabel}
         />
       ))}

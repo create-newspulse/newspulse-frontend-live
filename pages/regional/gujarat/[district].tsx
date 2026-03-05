@@ -217,14 +217,9 @@ export default function GujaratDistrictPage() {
     const run = async () => {
       try {
         const params = new URLSearchParams();
-        params.set('lang', uiLang);
-        params.set('language', uiLang);
-        // Include state as query params as well for backend compatibility.
         params.set('state', 'gujarat');
-        params.set('stateSlug', 'gujarat');
-        // Always send explicit district params for /regional/gujarat/[place].
         params.set('district', districtParam);
-        params.set('districtSlug', districtParam);
+        params.set('lang', uiLang);
 
         const url = `/api/public/regional?${params.toString()}`;
         const res = await fetch(url, { method: 'GET', cache: 'no-store', headers: { Accept: 'application/json' } });

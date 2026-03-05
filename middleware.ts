@@ -101,16 +101,6 @@ export function middleware(req: NextRequest) {
       return res;
     }
 
-    // Next.js treats the default locale as unprefixed and may strip `/en`.
-    // Avoid redirect loops by only enforcing a prefix for non-default locales.
-    if (targetLocale === nextDefaultLocale) {
-      const res = NextResponse.next();
-      res.cookies.set(NEXT_LOCALE_COOKIE, targetLocale, { path: '/', maxAge: 60 * 60 * 24 * 365 });
-      res.cookies.set(COOKIE_KEY, targetLocale, { path: '/', maxAge: 60 * 60 * 24 * 365 });
-      res.cookies.set(LEGACY_COOKIE_KEY, targetLocale, { path: '/', maxAge: 60 * 60 * 24 * 365 });
-      return res;
-    }
-
     // Build an explicit locale-prefixed path. Using the original request pathname
     // avoids issues where Next's nextUrl.pathname has the locale prefix stripped.
     const redirectUrl = new URL(req.url);

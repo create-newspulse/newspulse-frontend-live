@@ -103,14 +103,6 @@ const nextConfig = {
 
   async redirects() {
     return [
-      // Canonical regional landing page.
-      // Avoids the redirect-only /regional (pages/regional.tsx), which can cause repeated
-      // `regional.json` Next data requests in some clients.
-      {
-        source: '/regional',
-        destination: '/regional/gujarat',
-        permanent: false,
-      },
       {
         source: '/hi/regional',
         destination: '/hi/regional/gujarat',
@@ -123,7 +115,7 @@ const nextConfig = {
       },
       {
         source: '/en/regional',
-        destination: '/regional/gujarat',
+        destination: '/en/regional/gujarat',
         permanent: false,
       },
       {

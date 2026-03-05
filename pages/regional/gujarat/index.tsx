@@ -211,10 +211,8 @@ export default function GujaratIndexPage() {
     const run = async () => {
       try {
         const params = new URLSearchParams();
-        params.set('lang', uiLang);
-        params.set('language', uiLang);
         params.set('state', 'gujarat');
-        params.set('stateSlug', 'gujarat');
+        params.set('lang', uiLang);
         const url = `/api/public/regional?${params.toString()}`;
 
         const res = await fetch(url, { method: 'GET', cache: 'no-store', headers: { Accept: 'application/json' } });
