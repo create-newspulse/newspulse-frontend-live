@@ -7,7 +7,7 @@ import { useRouter } from 'next/router';
 import OriginalTag from '../../components/OriginalTag';
 import AdSlot from '../../components/ads/AdSlot';
 import CategoryHeader from '../../src/components/category/CategoryHeader';
-import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../../lib/contentFallback';
+import { resolveArticleSummaryOrExcerpt, type UiLang } from '../../lib/contentFallback';
 import { unwrapArticle, type Article } from '../../lib/publicNewsApi';
 import { localizeArticle } from '../../lib/localizeArticle';
 import { useI18n } from '../../src/i18n/LanguageProvider';
@@ -169,13 +169,11 @@ export default function NewsSlugDetailPage({ lang, article, safeHtml, topStories
   );
 
   const uiLang = toUiLang(lang);
-  const titleRes = resolveArticleTitle(article || {}, uiLang);
   const summaryRes = resolveArticleSummaryOrExcerpt(article || {}, uiLang);
-  const { title: localizedTitle, content: localizedContent } = React.useMemo(() => localizeArticle(article || {}, lang), [article, lang]);
-  const title = String(localizedTitle || titleRes.text || article?.title || 'News').trim();
-  const summary = String(summaryRes.text || article?.summary || article?.excerpt || '').trim();
+  const rawTitle = cleanText((article as any)?.title);
+  const cleanedTitle = rawTitle || 'News';
+  const summary = String(summaryRes.text || (article as any)?.summary || (article as any)?.excerpt || '').trim();
 
-  const cleanedTitle = cleanText(title) || 'News';
   const displayTitle = cleanedTitle.length > 180 ? `${cleanedTitle.slice(0, 177).trimEnd()}…` : cleanedTitle;
   const displaySummary = cleanText(summary);
 
@@ -315,7 +313,7 @@ export default function NewsSlugDetailPage({ lang, article, safeHtml, topStories
 
                   <div className="mt-2 flex flex-col gap-2">
                     <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 leading-tight">
-                      {displayTitle} {titleRes.isOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
+                      {displayTitle}
                     </h1>
 
                     {error ? <div className="text-sm text-red-600">{error}</div> : null}
@@ -390,8 +388,7 @@ export default function NewsSlugDetailPage({ lang, article, safeHtml, topStories
                       const slug = resolveArticleSlug(s, lang);
                       const href = id ? buildNewsUrl({ id, slug, lang }) : '#';
                       const img = resolveCoverImageUrl(s) || COVER_PLACEHOLDER_SRC;
-                      const { title: relTitle } = localizeArticle(s || {}, lang);
-                      const titleText = String(relTitle || (s as any)?.title || t('common.untitled') || 'Untitled').trim();
+                      const titleText = cleanText((s as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
                       const excerptRes = resolveArticleSummaryOrExcerpt(s || {}, uiLang);
                       const excerpt = String(excerptRes.text || (s as any)?.summary || (s as any)?.excerpt || '').trim();
                       return (
@@ -442,8 +439,7 @@ export default function NewsSlugDetailPage({ lang, article, safeHtml, topStories
                         const id = String(s?._id || '').trim();
                         const slug = resolveArticleSlug(s, lang);
                         const href = id ? buildNewsUrl({ id, slug, lang }) : '#';
-                        const { title: topTitle } = localizeArticle(s || {}, lang);
-                        const titleText = String(topTitle || (s as any)?.title || t('common.untitled') || 'Untitled').trim();
+                        const titleText = cleanText((s as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
                         return (
                           <a
                             key={id || String((s as any)?.slug || i)}
@@ -513,8 +509,7 @@ export default function NewsSlugDetailPage({ lang, article, safeHtml, topStories
                         const id = String(s?._id || '').trim();
                         const slug = resolveArticleSlug(s, lang);
                         const href = id ? buildNewsUrl({ id, slug, lang }) : '#';
-                        const { title: relTitle } = localizeArticle(s || {}, lang);
-                        const titleText = String(relTitle || (s as any)?.title || t('common.untitled') || 'Untitled').trim();
+                        const titleText = cleanText((s as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
                         return (
                           <a
                             key={id || String((s as any)?.slug || i)}
