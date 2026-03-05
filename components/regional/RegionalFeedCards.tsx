@@ -157,9 +157,11 @@ export default function RegionalFeedCards({
     const out: AnyStory[] = [];
 
     for (const s of input) {
+      const resolved = resolveArticleSlug(s, requestedLang);
       const rawSlug =
         (typeof s?.slug === 'string' && s.slug) ||
         (s?.slugs && typeof s.slugs === 'object' && (s.slugs[requestedLang] || s.slugs.en || s.slugs.hi || s.slugs.gu)) ||
+        resolved ||
         '';
       const slug = String(rawSlug || '').trim().toLowerCase();
       if (slug) {

@@ -227,7 +227,7 @@ export default function GujaratDistrictPage() {
         params.set('districtSlug', districtParam);
 
         const url = `/api/public/regional?${params.toString()}`;
-        const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' } });
+        const res = await fetch(url, { method: 'GET', cache: 'no-store', headers: { Accept: 'application/json' } });
         if (!res.ok) throw new Error(`Failed to fetch regional feed (${res.status})`);
 
         const data = await res.json().catch(() => null);
