@@ -141,16 +141,128 @@ type Props = {
   messages: any;
   locale: string;
   lang: 'en' | 'hi' | 'gu';
+  slug: string;
   article: Article | null;
   safeHtml: string;
   topStories: Article[];
   relatedStories: Article[];
   error?: string | null;
+  pending?: boolean;
 };
 
-export default function NewsSlugDetailPage({ lang, article, safeHtml, topStories, relatedStories, error }: Props) {
+function isPendingTranslationPayload(payload: any): boolean {
+  if (!payload || typeof payload !== 'object') return false;
+  const direct = String((payload as any).status || (payload as any).translationStatus || (payload as any).state || '').toLowerCase();
+  if (direct === 'pending' || direct === 'translating') return true;
+
+  const nested = (payload as any).data && typeof (payload as any).data === 'object' ? (payload as any).data : null;
+  if (!nested) return false;
+  const nestedStatus = String((nested as any).status || (nested as any).translationStatus || (nested as any).state || '').toLowerCase();
+  return nestedStatus === 'pending' || nestedStatus === 'translating';
+}
+
+export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topStories, relatedStories, error, pending }: Props) {
   const { t } = useI18n();
   const router = useRouter();
+
+  const [resolvedArticle, setResolvedArticle] = React.useState<Article | null>(article);
+  const [resolvedSafeHtml, setResolvedSafeHtml] = React.useState<string>(safeHtml || '');
+  const [pendingTranslate, setPendingTranslate] = React.useState<boolean>(Boolean(pending));
+  const [pendingError, setPendingError] = React.useState<string | null>(error || null);
+  const [pendingExhausted, setPendingExhausted] = React.useState<boolean>(false);
+  const pendingTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingAttemptsRef = React.useRef<number>(0);
+
+  const clearPendingTimer = React.useCallback(() => {
+    if (pendingTimerRef.current) {
+      clearTimeout(pendingTimerRef.current);
+      pendingTimerRef.current = null;
+    }
+  }, []);
+
+  const schedulePendingRetry = React.useCallback(
+    (pollOnce: () => Promise<void>) => {
+      clearPendingTimer();
+      pendingTimerRef.current = setTimeout(() => {
+        void pollOnce();
+      }, 1500);
+    },
+    [clearPendingTimer]
+  );
+
+  const pollOnce = React.useCallback(async () => {
+    const slugToUse = String((router.query as any)?.slug || slug || '').trim();
+    if (!slugToUse) return;
+
+    if (pendingAttemptsRef.current >= 10) {
+      setPendingExhausted(true);
+      return;
+    }
+
+    pendingAttemptsRef.current += 1;
+
+    const params = new URLSearchParams();
+    params.set('lang', lang);
+    const endpoint = `/api/public/news/${encodeURIComponent(slugToUse)}?${params.toString()}`;
+
+    try {
+      const res = await fetch(endpoint, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        cache: 'no-store',
+      });
+
+      const json = await res.json().catch(() => null);
+
+      if (isPendingTranslationPayload(json)) {
+        setPendingTranslate(true);
+        schedulePendingRetry(pollOnce);
+        return;
+      }
+
+      const next = unwrapArticle(json);
+      if (!next?._id) {
+        setPendingTranslate(false);
+        setPendingError('Try again');
+        setPendingExhausted(true);
+        return;
+      }
+
+      const html = typeof (next as any).content === 'string' ? String((next as any).content) : '';
+      setResolvedArticle(next);
+      setResolvedSafeHtml(sanitizeContent(html));
+      setPendingTranslate(false);
+      setPendingError(null);
+      setPendingExhausted(false);
+      pendingAttemptsRef.current = 0;
+      clearPendingTimer();
+    } catch {
+      setPendingTranslate(false);
+      setPendingError('Try again');
+      setPendingExhausted(true);
+    }
+  }, [clearPendingTimer, lang, router.query, schedulePendingRetry, slug]);
+
+  React.useEffect(() => {
+    // When SSR says we're pending translation, start the polling loop.
+    if (resolvedArticle?._id) return;
+    if (!pendingTranslate) return;
+    if (pendingExhausted) return;
+    if (pendingTimerRef.current) return;
+    schedulePendingRetry(pollOnce);
+    return () => clearPendingTimer();
+  }, [clearPendingTimer, pendingExhausted, pendingTranslate, pollOnce, resolvedArticle, schedulePendingRetry]);
+
+  React.useEffect(() => {
+    // If navigation changes to a different slug or language, reset pending state.
+    setResolvedArticle(article);
+    setResolvedSafeHtml(safeHtml || '');
+    setPendingError(error || null);
+    setPendingTranslate(Boolean(pending));
+    setPendingExhausted(false);
+    pendingAttemptsRef.current = 0;
+    clearPendingTimer();
+  }, [article, clearPendingTimer, error, lang, pending, safeHtml, slug]);
 
   const tx = React.useCallback(
     (key: string, fallback: string) => {
@@ -167,14 +279,14 @@ export default function NewsSlugDetailPage({ lang, article, safeHtml, topStories
   );
 
   const uiLang = toUiLang(lang);
-  const rawTitle = cleanText((article as any)?.title);
+  const rawTitle = cleanText((resolvedArticle as any)?.title);
   const displayTitle = rawTitle.length > 180 ? `${rawTitle.slice(0, 177).trimEnd()}…` : rawTitle;
-  const displaySummary = cleanText((article as any)?.summary);
+  const displaySummary = cleanText((resolvedArticle as any)?.summary);
 
-  const heroSrc = resolveCoverImageUrl(article) || COVER_PLACEHOLDER_SRC;
+  const heroSrc = resolveCoverImageUrl(resolvedArticle) || COVER_PLACEHOLDER_SRC;
 
   const prefix = React.useMemo(() => localePrefix(lang), [lang]);
-  const categoryKey = React.useMemo(() => resolveCategoryKey(article), [article]);
+  const categoryKey = React.useMemo(() => resolveCategoryKey(resolvedArticle), [resolvedArticle]);
   const categoryLabel = React.useMemo(() => categoryLabelFromKey(categoryKey), [categoryKey]);
 
   const homeHref = React.useMemo(() => (prefix ? prefix : '/'), [prefix]);
@@ -205,12 +317,12 @@ export default function NewsSlugDetailPage({ lang, article, safeHtml, topStories
   }, [categoryHeaderTitle, categoryKey, tx]);
 
   const canonicalUrl = React.useMemo(() => {
-    if (!article?._id) return '';
-    const canonicalSlug = resolveArticleSlug(article, lang);
-    const path = buildNewsUrl({ id: String(article._id || '').trim(), slug: canonicalSlug, lang });
+    if (!resolvedArticle?._id) return '';
+    const canonicalSlug = resolveArticleSlug(resolvedArticle, lang);
+    const path = buildNewsUrl({ id: String(resolvedArticle._id || '').trim(), slug: canonicalSlug, lang });
     const base = typeof window !== 'undefined' ? window.location.origin : '';
     return base ? `${base}${path}` : path;
-  }, [article, lang]);
+  }, [resolvedArticle, lang]);
 
   const shareThis = async () => {
     const url = canonicalUrl || (typeof window !== 'undefined' ? stripQueryHash(window.location.href) : '');
@@ -246,7 +358,7 @@ export default function NewsSlugDetailPage({ lang, article, safeHtml, topStories
       }
     };
 
-    pushTags((article as any)?.tags);
+    pushTags((resolvedArticle as any)?.tags);
     for (const s of topStories || []) pushTags((s as any)?.tags);
     for (const s of relatedStories || []) pushTags((s as any)?.tags);
 
@@ -256,12 +368,12 @@ export default function NewsSlugDetailPage({ lang, article, safeHtml, topStories
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
       .map(([k]) => k);
-  }, [article, relatedStories, topStories]);
+  }, [resolvedArticle, relatedStories, topStories]);
 
   return (
     <>
       <Head>
-        <title>{`${displayTitle} | News Pulse`}</title>
+        <title>{`${(pendingTranslate && !displayTitle) ? 'Translating…' : (displayTitle || 'News')} | News Pulse`}</title>
       </Head>
 
       <main className="min-h-screen bg-white">
@@ -293,8 +405,8 @@ export default function NewsSlugDetailPage({ lang, article, safeHtml, topStories
                       <span>{categoryLabel}</span>
                     )}
                     {(() => {
-                      const state = String((article as any)?.state || (article as any)?.region || '').trim();
-                      const district = String((article as any)?.district || '').trim();
+                      const state = String((resolvedArticle as any)?.state || (resolvedArticle as any)?.region || '').trim();
+                      const district = String((resolvedArticle as any)?.district || '').trim();
                       if (!state && !district) return null;
                       return (
                         <>
@@ -310,7 +422,32 @@ export default function NewsSlugDetailPage({ lang, article, safeHtml, topStories
                       {displayTitle}
                     </h1>
 
-                    {error ? <div className="text-sm text-red-600">{error}</div> : null}
+                    {pendingError ? <div className="text-sm text-red-600">{pendingError}</div> : null}
+
+                    {pendingTranslate ? (
+                      <div className="text-sm font-semibold text-slate-700">
+                        Translating...
+                      </div>
+                    ) : null}
+
+                    {pendingExhausted ? (
+                      <div className="pt-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPendingError(null);
+                            setPendingExhausted(false);
+                            pendingAttemptsRef.current = 0;
+                            setPendingTranslate(true);
+                            clearPendingTimer();
+                            void pollOnce();
+                          }}
+                          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-50"
+                        >
+                          Try again
+                        </button>
+                      </div>
+                    ) : null}
 
                     {displaySummary ? (
                       <p className="text-base md:text-lg text-slate-700">
@@ -326,9 +463,9 @@ export default function NewsSlugDetailPage({ lang, article, safeHtml, topStories
                       >
                         {tx('common.share', 'Share')}
                       </button>
-                      {Array.isArray((article as any)?.tags) && (article as any)?.tags?.length ? (
+                      {Array.isArray((resolvedArticle as any)?.tags) && (resolvedArticle as any)?.tags?.length ? (
                         <div className="flex flex-wrap gap-2">
-                          {tagList((article as any)?.tags)
+                          {tagList((resolvedArticle as any)?.tags)
                             .slice(0, 6)
                             .map((tag) => (
                               <a
@@ -364,7 +501,7 @@ export default function NewsSlugDetailPage({ lang, article, safeHtml, topStories
 
                 <div className="px-4 md:px-6 pb-6">
                   <article className="prose prose-slate max-w-none">
-                    <div dangerouslySetInnerHTML={{ __html: safeHtml }} />
+                    <div dangerouslySetInnerHTML={{ __html: resolvedSafeHtml }} />
                   </article>
                 </div>
               </div>
@@ -544,7 +681,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   const rawSlug = String((ctx.params as any)?.slug || '').trim();
   if (!rawSlug) {
     return {
-      props: { messages, locale, lang, article: null, safeHtml: '', topStories: [], relatedStories: [], error: 'Not found' },
+      props: { messages, locale, lang, slug: '', article: null, safeHtml: '', topStories: [], relatedStories: [], error: 'Not found', pending: false },
     };
   }
 
@@ -570,14 +707,33 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
         cookie: String(ctx.req.headers.cookie || ''),
         authorization: String(ctx.req.headers.authorization || ''),
       },
+      cache: 'no-store',
     });
 
     const data = await res.json().catch(() => null);
+
+    if (isPendingTranslationPayload(data)) {
+      return {
+        props: {
+          messages,
+          locale,
+          lang,
+          slug: rawSlug,
+          article: null,
+          safeHtml: '',
+          topStories: [],
+          relatedStories: [],
+          error: null,
+          pending: true,
+        },
+      };
+    }
+
     const article = unwrapArticle(data);
 
     if (!article?._id) {
       return {
-        props: { messages, locale, lang, article: null, safeHtml: '', topStories: [], relatedStories: [], error: 'Not found' },
+        props: { messages, locale, lang, slug: rawSlug, article: null, safeHtml: '', topStories: [], relatedStories: [], error: 'Not found', pending: false },
       };
     }
 
@@ -634,16 +790,18 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
         messages,
         locale,
         lang,
+        slug: rawSlug,
         article,
         safeHtml: sanitizeContent(html),
         topStories: extra.topStories,
         relatedStories: extra.relatedStories,
         error: null,
+        pending: false,
       },
     };
   } catch {
     return {
-      props: { messages, locale, lang, article: null, safeHtml: '', topStories: [], relatedStories: [], error: 'Fetch failed' },
+      props: { messages, locale, lang, slug: rawSlug, article: null, safeHtml: '', topStories: [], relatedStories: [], error: 'Fetch failed', pending: false },
     };
   }
 };
