@@ -63,6 +63,35 @@ function asSingleQueryValue(value: string | string[] | undefined): string {
   return String(Array.isArray(value) ? value[0] : value || '').trim();
 }
 
+function sanitizeRegionalQuery(qs: string, options: { state?: string; lang?: string }) {
+  const params = new URLSearchParams(String(qs || '').replace(/^\?/, ''));
+
+  const state = String(options.state || '').trim();
+  if (state) params.set('state', state);
+
+  const lang = String(options.lang || '').trim();
+  if (lang) params.set('lang', lang);
+
+  const stateSlug = normalizeGeoToken(params.get('state'));
+
+  for (const k of ['district', 'districtSlug', 'city', 'citySlug'] as const) {
+    const raw = params.get(k);
+    if (raw == null) continue;
+
+    const token = normalizeGeoToken(raw);
+    if (isInvalidOptionalToken(token) || (stateSlug && token === stateSlug)) {
+      params.delete(k);
+    }
+  }
+
+  const out = params.toString();
+  return {
+    params,
+    qs: out ? `?${out}` : '',
+    stateSlug,
+  };
+}
+
 function normalizeGeoToken(value: unknown): string {
   return String(value || '')
     .trim()
@@ -203,8 +232,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const languageRaw = Array.isArray(req.query.language) ? req.query.language[0] : req.query.language;
   const requestedLang = String(langRaw || languageRaw || '').trim();
 
+  const stateFromQuery = asSingleQueryValue(req.query.state) || asSingleQueryValue(req.query.stateSlug);
+  const sanitized = sanitizeRegionalQuery(qs, { state: stateFromQuery, lang: requestedLang });
+
   const upstreamInit: RequestInit = {
     method: 'GET',
+    cache: 'no-store',
     headers: {
       Accept: 'application/json',
       'cache-control': 'no-store',
@@ -215,7 +248,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const timeoutMs = Number(process.env.PUBLIC_REGIONAL_UPSTREAM_TIMEOUT_MS || 10000);
 
-  const stateSlugRaw = normalizeGeoToken(asSingleQueryValue(req.query.stateSlug) || asSingleQueryValue(req.query.state));
+  const stateSlugRaw = normalizeGeoToken(stateFromQuery);
   const districtSlugRaw = normalizeGeoToken(
     asSingleQueryValue(req.query.districtSlug) || asSingleQueryValue(req.query.district)
   );
@@ -224,7 +257,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const districtSlug = isInvalidOptionalToken(districtSlugRaw) ? '' : districtSlugRaw;
 
   // Preferred upstream endpoint (query-string based): /api/public/regional?state=...
-  const primaryUrl = `${base}/api/public/regional${qs}`;
+  const primaryUrl = `${base}/api/public/regional${sanitized.qs}`;
 
   try {
     const upstream = await fetchWithTimeout(primaryUrl, upstreamInit, timeoutMs);
@@ -236,11 +269,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const stateRaw = Array.isArray(req.query.state) ? req.query.state[0] : req.query.state;
       const state = String(stateRaw || '').trim();
       if (state) {
-        const legacyUrl = `${base}/api/public/regional/${encodeURIComponent(state)}${qs}`;
+        const legacyUrl = `${base}/api/public/regional/${encodeURIComponent(state)}${sanitized.qs}`;
         const legacy = await fetchWithTimeout(legacyUrl, upstreamInit, timeoutMs);
         const legacyText = await legacy.text().catch(() => '');
 
-        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('Cache-Control', 'no-store, max-age=0');
         if (!legacy.ok) {
           return res.status(legacy.status).json({ ok: false, message: 'UPSTREAM_ERROR', status: legacy.status });
         }
@@ -253,7 +286,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (!unwrapRegionalFeedItems(filtered).length) {
           const fallback = await fetchRegionalFallbackFromStories({
             base,
-            qs,
+            qs: sanitized.qs,
             requestedLang,
             stateSlug,
             districtSlug,
@@ -271,7 +304,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
 
     if (!upstream.ok) {
       return res.status(upstream.status).json({ ok: false, message: 'UPSTREAM_ERROR', status: upstream.status });
@@ -286,7 +319,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!unwrapRegionalFeedItems(filtered).length) {
       const fallback = await fetchRegionalFallbackFromStories({
         base,
-        qs,
+        qs: sanitized.qs,
         requestedLang,
         stateSlug,
         districtSlug,
@@ -302,7 +335,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.status(200).json(filtered);
   } catch (e: any) {
-    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
     const msg = String(e?.name || '').includes('Abort') ? 'UPSTREAM_TIMEOUT' : 'UPSTREAM_FETCH_FAILED';
     const status = msg === 'UPSTREAM_TIMEOUT' ? 504 : 502;
     return res.status(status).json({ ok: false, message: msg, status });

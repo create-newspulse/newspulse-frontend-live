@@ -63,6 +63,38 @@ function asSingleQueryValue(value: string | string[] | undefined): string {
   return String(Array.isArray(value) ? value[0] : value || '').trim();
 }
 
+function sanitizeRegionalQuery(qs: string, options: { state: string; lang?: string }) {
+  const params = new URLSearchParams(String(qs || '').replace(/^\?/, ''));
+
+  const state = String(options.state || '').trim();
+  if (state) params.set('state', state);
+
+  const lang = String(options.lang || '').trim();
+  if (lang) params.set('lang', lang);
+
+  const stateSlug = normalizeGeoToken(params.get('state'));
+
+  for (const k of ['district', 'districtSlug', 'city', 'citySlug'] as const) {
+    const raw = params.get(k);
+    if (raw == null) continue;
+
+    const token = normalizeGeoToken(raw);
+    if (isInvalidOptionalToken(token) || (stateSlug && token === stateSlug)) {
+      params.delete(k);
+    }
+  }
+
+  // This route encodes state in the path already.
+  params.delete('state');
+  params.delete('stateSlug');
+
+  const out = params.toString();
+  return {
+    qs: out ? `?${out}` : '',
+    stateSlug,
+  };
+}
+
 function normalizeGeoToken(value: unknown): string {
   return String(value || '')
     .trim()
@@ -198,11 +230,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const qsIndex = (req.url || '').indexOf('?');
   const qs = qsIndex >= 0 ? (req.url || '').slice(qsIndex) : '';
-  const targetUrl = `${base}/api/public/regional/${encodeURIComponent(state)}${qs}`;
 
   const langRaw = Array.isArray(req.query.lang) ? req.query.lang[0] : req.query.lang;
   const languageRaw = Array.isArray(req.query.language) ? req.query.language[0] : req.query.language;
   const requestedLang = String(langRaw || languageRaw || '').trim();
+
+  const sanitized = sanitizeRegionalQuery(qs, { state, lang: requestedLang });
+  const targetUrl = `${base}/api/public/regional/${encodeURIComponent(state)}${sanitized.qs}`;
 
   const stateSlug = normalizeGeoToken(state);
   const districtSlugRaw = normalizeGeoToken(
@@ -215,6 +249,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       targetUrl,
       {
         method: 'GET',
+        cache: 'no-store',
         headers: {
           Accept: 'application/json',
           'cache-control': 'no-store',
@@ -228,7 +263,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const text = await upstream.text().catch(() => '');
 
     try {
-      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Cache-Control', 'no-store, max-age=0');
       if (!upstream.ok) {
         return res.status(upstream.status).json({ ok: false, message: 'UPSTREAM_ERROR', status: upstream.status });
       }
@@ -240,7 +275,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!unwrapRegionalFeedItems(filtered).length) {
         const fallback = await fetchRegionalFallbackFromStories({
           base,
-          qs,
+          qs: sanitized.qs,
           requestedLang,
           stateSlug,
           districtSlug,
@@ -259,7 +294,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(502).json({ ok: false, message: 'INVALID_UPSTREAM_JSON' });
     }
   } catch {
-    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
     return res.status(502).json({ ok: false, message: 'UPSTREAM_FETCH_FAILED' });
   }
 }

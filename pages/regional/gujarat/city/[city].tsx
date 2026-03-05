@@ -10,6 +10,7 @@ import { resolveArticleSlug } from '../../../../lib/articleSlugs';
 import { COVER_PLACEHOLDER_SRC, onCoverImageError, resolveCoverImageUrl } from '../../../../lib/coverImages';
 import { getActiveRouteLang } from '../../../../utils/routeLang';
 import { unwrapRegionalFeedItems } from '../../../../lib/unwrapRegionalFeed';
+import { buildRegionalFeedSearchParams } from '../../../../lib/regionalFeedQuery';
 
 function normalize(s: string) {
   return (s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -49,9 +50,7 @@ export default function GujaratCityPage() {
 
     const run = async () => {
       try {
-        const params = new URLSearchParams();
-        params.set('state', 'gujarat');
-        params.set('lang', effectiveLang);
+        const params = buildRegionalFeedSearchParams({ state: 'gujarat', lang: effectiveLang });
         const url = `/api/public/regional?${params.toString()}`;
 
         const res = await fetch(url, { method: 'GET', cache: 'no-store', headers: { Accept: 'application/json' } });

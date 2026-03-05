@@ -17,6 +17,7 @@ import { getGujaratDistrictName, getStateName, tHeading, toLanguageKey } from '.
 import { normalizeLang, useI18n } from '../../../src/i18n/LanguageProvider';
 import { getActiveRouteLang } from '../../../utils/routeLang';
 import { unwrapRegionalFeedItems } from '../../../lib/unwrapRegionalFeed';
+import { buildRegionalFeedSearchParams } from '../../../lib/regionalFeedQuery';
 
 const CATEGORIES = [
   'All',
@@ -216,14 +217,9 @@ export default function GujaratDistrictPage() {
 
     const run = async () => {
       try {
-        const params = new URLSearchParams();
-        params.set('state', 'gujarat');
-        params.set('lang', uiLang);
-
         const districtSafe = String(districtParam || '').trim();
-        if (districtSafe && districtSafe !== 'undefined' && districtSafe !== 'null') {
-          params.set('district', districtSafe);
-        }
+        const districtFilter = districtSafe && districtSafe.toLowerCase() !== 'gujarat' ? districtSafe : null;
+        const params = buildRegionalFeedSearchParams({ state: 'gujarat', lang: uiLang, district: districtFilter });
 
         const url = `/api/public/regional?${params.toString()}`;
         const res = await fetch(url, { method: 'GET', cache: 'no-store', headers: { Accept: 'application/json' } });
