@@ -66,14 +66,24 @@ function toSlug(value: string) {
 }
 
 function extractDistrict(story: AnyStory): string {
-  return (
+  const direct =
     story?.district ||
     story?.districtName ||
     story?.location?.district ||
     story?.geo?.district ||
     story?.region?.district ||
-    ''
-  );
+    '';
+  const directValue = String(direct || '').trim();
+  if (directValue) return directValue;
+
+  const tags = tagList(story?.tags);
+  for (const t of tags) {
+    if (t.startsWith('district:')) return String(t.slice('district:'.length) || '').trim();
+    if (t.startsWith('district-')) return String(t.slice('district-'.length) || '').trim();
+    if (t.startsWith('district=')) return String(t.slice('district='.length) || '').trim();
+  }
+
+  return '';
 }
 
 function extractCategory(story: AnyStory): string {
