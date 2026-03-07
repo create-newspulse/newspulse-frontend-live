@@ -1,16 +1,25 @@
 import React, { useMemo, useState } from "react";
+import Toast from "../components/community-reporter/Toast";
+
+function normalizeBaseUrl(raw: string): string {
+  return String(raw || '').trim().replace(/\/+$/g, '');
+}
 
 export default function AdvertisePage() {
   const email = "newspulse.ads@gmail.com";
 
   const defaultSubject = useMemo(() => "Advertise on News Pulse", []);
 
+  const [toast, setToast] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-8 py-10">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <Toast message={toast} />
           <h1 className="text-2xl font-extrabold text-slate-900">Advertise on News Pulse</h1>
           <p className="mt-2 text-sm text-slate-600">
             Reach readers across Breaking, Regional, National, International, Business and Tech.
@@ -25,9 +34,13 @@ export default function AdvertisePage() {
 
           <form
             className="mt-6 grid gap-4"
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
+              if (isSubmitting) return;
+              setToast(null);
               setStatus(null);
+              setError(null);
+              setIsSubmitting(true);
 
               const form = e.currentTarget;
               const fd = new FormData(form);
@@ -35,16 +48,36 @@ export default function AdvertisePage() {
               const fromEmail = String(fd.get("email") || "").trim();
               const message = String(fd.get("message") || "").trim();
 
-              const lines = [
-                `Name: ${name || "(not provided)"}`,
-                `Email: ${fromEmail || "(not provided)"}`,
-                "",
-                message || "(no message)",
-              ];
+              try {
+                const base =
+                  normalizeBaseUrl(process.env.NEXT_PUBLIC_API_BASE || '') ||
+                  normalizeBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL || '');
 
-              const mailto = `mailto:${email}?subject=${encodeURIComponent(defaultSubject)}&body=${encodeURIComponent(lines.join("\n"))}`;
-              window.location.href = mailto;
-              setStatus("Opening your email app...");
+                const url = `${base || ''}/api/public/ads/inquiry`;
+
+                const res = await fetch(url, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                  body: JSON.stringify({ name, email: fromEmail, message }),
+                });
+
+                if (!res.ok) {
+                  const data = await res.json().catch(() => null);
+                  const msg = data && typeof data === 'object' ? String((data as any).message || (data as any).error || '') : '';
+                  throw new Error(msg || `Request failed (${res.status})`);
+                }
+
+                setToast('Inquiry sent');
+                setStatus(null);
+                setError(null);
+                form.reset();
+                setTimeout(() => setToast(null), 2500);
+              } catch (err: any) {
+                setError(err?.message || 'Could not send inquiry.');
+                setStatus(null);
+              } finally {
+                setIsSubmitting(false);
+              }
             }}
           >
             <div>
@@ -79,9 +112,12 @@ export default function AdvertisePage() {
             <div className="flex items-center justify-between gap-3">
               <button
                 type="submit"
-                className="inline-flex items-center justify-center rounded-full px-5 py-2 text-sm font-bold border border-slate-200 bg-slate-900 text-white hover:bg-slate-800"
+                disabled={isSubmitting}
+                className={
+                  "inline-flex items-center justify-center rounded-full px-5 py-2 text-sm font-bold border border-slate-200 bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-60 disabled:cursor-not-allowed"
+                }
               >
-                Send inquiry
+                {isSubmitting ? 'Sending…' : 'Send inquiry'}
               </button>
               <a
                 className="text-sm font-semibold underline text-slate-700"
@@ -91,6 +127,7 @@ export default function AdvertisePage() {
               </a>
             </div>
 
+            {error ? <div className="text-xs font-semibold text-red-600">{error}</div> : null}
             {status ? <div className="text-xs text-slate-500">{status}</div> : null}
           </form>
         </div>
