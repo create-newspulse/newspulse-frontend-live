@@ -21,6 +21,7 @@ import { useBookmarks } from "../hooks/useBookmarks";
 import { resolveArticleSlug } from "../lib/articleSlugs";
 import { buildNewsUrl } from "../lib/newsRoutes";
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from "../lib/coverImages";
+import { fetchCurrentWeather } from "../lib/fetchWeather";
 import StoryImage from "../src/components/story/StoryImage";
 import type { GetStaticProps } from "next";
 import { AnimatePresence, motion } from "framer-motion";
@@ -2123,6 +2124,33 @@ function QuickToolsCard({ theme, onToast }: any) {
 
 function SnapshotsCard({ theme }: any) {
   const { t } = useI18n();
+  const [weatherValue, setWeatherValue] = useState<string>('');
+
+  React.useEffect(() => {
+    const controller = new AbortController();
+    let mounted = true;
+
+    const city = 'Ahmedabad';
+    const load = async () => {
+      try {
+        const wx = await fetchCurrentWeather({ city, signal: controller.signal });
+        if (!mounted) return;
+        setWeatherValue(`${Math.round(wx.tempC)}°C • ${wx.condition}`);
+      } catch {
+        if (!mounted) return;
+        setWeatherValue('Weather unavailable');
+      }
+    };
+
+    void load();
+    const id = setInterval(load, 10 * 60 * 1000);
+    return () => {
+      mounted = false;
+      controller.abort();
+      clearInterval(id);
+    };
+  }, []);
+
   return (
     <Surface theme={theme} className="p-4">
       <div className="text-sm font-extrabold" style={{ color: theme.text }}>
@@ -2134,7 +2162,7 @@ function SnapshotsCard({ theme }: any) {
 
       <div className="mt-3 grid gap-2">
         {[
-          { k: t('home.snapshotWeather'), v: "27°C • Cloudy" },
+          { k: t('home.snapshotWeather'), v: weatherValue || '—' },
           { k: t('home.snapshotMarkets'), v: "Stable" },
           { k: t('home.snapshotGold'), v: "₹ — (api)" },
         ].map((x) => (
