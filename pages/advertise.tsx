@@ -5,6 +5,8 @@ function normalizeBaseUrl(raw: string): string {
   return String(raw || '').trim().replace(/\/+$/g, '');
 }
 
+const DEFAULT_BACKEND_API_BASE = 'https://newspulse-backend-real.onrender.com';
+
 export default function AdvertisePage() {
   const email = "newspulse.ads@gmail.com";
 
@@ -49,11 +51,11 @@ export default function AdvertisePage() {
               const message = String(fd.get("message") || "").trim();
 
               try {
-                const base =
+                const API =
                   normalizeBaseUrl(process.env.NEXT_PUBLIC_API_BASE || '') ||
-                  normalizeBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL || '');
+                  DEFAULT_BACKEND_API_BASE;
 
-                const url = `${base || ''}/api/public/ads/inquiry`;
+                const url = `${API}/api/public/ads/inquiry`;
 
                 const res = await fetch(url, {
                   method: 'POST',
