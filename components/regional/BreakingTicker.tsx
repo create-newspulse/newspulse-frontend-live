@@ -29,7 +29,7 @@ export type BreakingTickerProps = {
 function clampSeconds(raw: unknown, fallback: number): number {
   const n = Number(raw);
   if (!Number.isFinite(n)) return fallback;
-  return Math.min(40, Math.max(10, n));
+  return Math.min(300, Math.max(10, n));
 }
 
 function normalizeTag(t: unknown): string {
@@ -61,10 +61,13 @@ export default function BreakingTicker({
   const tickerLang = lang === 'gu' ? 'gu' : lang === 'hi' ? 'hi' : 'en';
   const id = useId().replace(/:/g, '');
 
+  const isBreaking = variant === 'breaking';
+  const maxVisibleItems = isBreaking ? 12 : 15;
+
   const safeItems = useMemo(() => {
-    if (items && items.length) return items;
+    if (items && items.length) return items.slice(0, maxVisibleItems);
     return [];
-  }, [items]);
+  }, [items, maxVisibleItems]);
 
   const messages = useMemo(() => {
     const effectiveEmpty = emptyText || (variant === 'live' ? t('home.noLiveUpdates') : t('home.noBreaking'));
@@ -78,10 +81,6 @@ export default function BreakingTicker({
     });
   }, [emptyText, safeItems, t, variant]);
 
-  // Duplicate list to get a seamless loop.
-  const loop = useMemo(() => messages.concat(messages), [messages]);
-
-  const isBreaking = variant === 'breaking';
   const label = isBreaking ? t('home.breakingNews') : t('home.liveUpdates');
   const viewAllHref = (() => {
     const raw = String(router.asPath || '/');
@@ -100,13 +99,27 @@ export default function BreakingTicker({
     const rawTicker = isBreaking ? tickers?.breaking : tickers?.live;
     return rawTicker?.speedSec ?? rawTicker?.speedSeconds;
   })();
-  const durationSec = clampSeconds(speedSeconds ?? settingsSpeed, fallbackSpeed);
+  const baseDurationSec = clampSeconds(speedSeconds ?? settingsSpeed, fallbackSpeed);
+
+  const textForSizing = useMemo(() => messages.join('  •  '), [messages]);
+  const targetCharsPerSec = isBreaking ? 9 : 8;
+  const autoDurationSec = Math.ceil(Math.max(1, textForSizing.length) / targetCharsPerSec);
+  const durationSec = clampSeconds(Math.max(baseDurationSec, autoDurationSec, fallbackSpeed), fallbackSpeed);
+
+  // Force restart of marquee when duration/lang/items change.
+  const restartKey = useMemo(() => {
+    const s = `${variant}|${tickerLang}|${durationSec}|${textForSizing}`;
+    let h = 5381;
+    for (let i = 0; i < s.length; i += 1) h = (h * 33) ^ s.charCodeAt(i);
+    return `${variant}-${tickerLang}-${durationSec}-${(h >>> 0).toString(16)}`;
+  }, [durationSec, textForSizing, tickerLang, variant]);
 
   return (
     <div
       className={classNames(
         'border-b text-white',
         isBreaking ? 'border-red-700 bg-red-600' : 'border-slate-700 bg-slate-900',
+        'np-marqueeWrap',
         className
       )}
     >
@@ -117,13 +130,21 @@ export default function BreakingTicker({
         </div>
 
         <div className="relative flex-1 overflow-hidden">
-          <div className={classNames(`np-marquee-${id}`, 'flex gap-10 text-sm font-medium')}
-          >
-            {loop.map((t, i) => (
-              <span key={`${id}-${i}`} className="tickerText whitespace-nowrap" lang={tickerLang}>
-                {t}
-              </span>
-            ))}
+          <div key={restartKey} className="np-tickerTrack" style={{ animationDuration: `${durationSec}s` }}>
+            <div className="np-tickerSeq flex items-center gap-10 text-sm font-medium">
+              {messages.map((m, i) => (
+                <span key={`${id}-a-${i}`} className="tickerText whitespace-nowrap" lang={tickerLang}>
+                  {m}
+                </span>
+              ))}
+            </div>
+            <div className="np-tickerSeq flex items-center gap-10 text-sm font-medium">
+              {messages.map((m, i) => (
+                <span key={`${id}-b-${i}`} className="tickerText whitespace-nowrap" lang={tickerLang}>
+                  {m}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -134,11 +155,6 @@ export default function BreakingTicker({
           {t('common.viewAll')}
         </Link>
       </div>
-
-      <style>{`
-        .np-marquee-${id} { width: max-content; animation: np-marquee-${id} ${durationSec}s linear infinite; }
-        @keyframes np-marquee-${id} { from { transform: translateX(0);} to { transform: translateX(-50%);} }
-      `}</style>
     </div>
   );
 }

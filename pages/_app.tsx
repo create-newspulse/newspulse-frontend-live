@@ -206,7 +206,7 @@ function I18nBridge({ Component, pageProps }: { Component: any; pageProps: any }
   return (
     <SafeIntlProvider key={lang} messages={messages} locale={lang} onError={() => {}}>
       <SeoAlternates />
-      <div className={`${inter.variable} ${gujarati.variable} ${devanagari.variable} ${langClass} relative overflow-x-hidden`}>
+      <div className={`${inter.variable} ${gujarati.variable} ${devanagari.variable} np-appRoot ${langClass} relative overflow-x-hidden`}>
         {showSimpleHeader ? <BrandTopHeader /> : null}
         <SmartBackButton />
         <Component {...pageProps} />

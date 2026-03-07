@@ -31,10 +31,10 @@ export default function BreakingTicker({
   const clampSeconds = (raw, fallback) => {
     const n = Number(raw);
     if (!Number.isFinite(n)) return fallback;
-    return Math.min(40, Math.max(10, n));
+    return Math.min(300, Math.max(10, n));
   };
 
-  const durationSec = clampSeconds(speed, 24);
+  const baseDurationSec = clampSeconds(speed, 24);
   const [headlines, setHeadlines] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -74,10 +74,12 @@ export default function BreakingTicker({
       (headline) => headline && typeof headline.text === 'string' && headline.text.trim() !== ''
     );
 
+    const capped = validHeadlines.slice(0, 15);
+
     // Use default preview message if no valid headlines are available
     setHeadlines(
-      validHeadlines.length > 0
-        ? validHeadlines
+      capped.length > 0
+        ? capped
         : [
             {
               id: 'preview-default-1',
@@ -134,12 +136,15 @@ export default function BreakingTicker({
   }
 
   // Build marquee text with separators
-  const marqueeText = (headlines && headlines.length
-    ? headlines.map(h => h?.text).filter(Boolean)
-    : []).join('  •  ');
+  const safeTexts = (headlines && headlines.length ? headlines : []).map((h) => String(h?.text || '').trim()).filter(Boolean).slice(0, 15);
+  const marqueeText = safeTexts.join('  •  ');
+
+  const targetCharsPerSec = 8;
+  const autoDurationSec = Math.ceil(Math.max(1, marqueeText.length) / targetCharsPerSec);
+  const durationSec = clampSeconds(Math.max(baseDurationSec, autoDurationSec, 24), 24);
 
   return (
-    <div className={`bg-royal-blue text-white py-2 ${fontClass} ${className}`}>
+    <div className={`bg-royal-blue text-white py-2 np-marqueeWrap ${fontClass} ${className}`}>
       <div className="flex items-center gap-3 px-3">
         <span
           className="tickerLabel inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-extrabold text-white border"
@@ -159,9 +164,13 @@ export default function BreakingTicker({
           className="relative min-w-0 flex-1 overflow-hidden"
           style={{ WebkitMaskImage: 'linear-gradient(to right, black 0%, black 90%, transparent)', maskImage: 'linear-gradient(to right, black 0%, black 90%, transparent)' }}
         >
-          <div className="whitespace-nowrap tickerText animate-marquee" style={{ animationDuration: `${durationSec}s` }}>
-            <span className="pr-10">{marqueeText}</span>
-            <span className="pr-10">{marqueeText}</span>
+          <div className="np-tickerTrack" style={{ animationDuration: `${durationSec}s` }}>
+            <div className="np-tickerSeq whitespace-nowrap">
+              <span className="tickerText pr-10">{marqueeText}</span>
+            </div>
+            <div className="np-tickerSeq whitespace-nowrap">
+              <span className="tickerText pr-10">{marqueeText}</span>
+            </div>
           </div>
         </div>
       </div>

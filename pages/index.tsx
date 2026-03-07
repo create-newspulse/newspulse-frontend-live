@@ -916,14 +916,15 @@ function TickerBar({ theme, kind, items, onViewAll, durationSec }: any) {
   const tickerLang = lang === 'gu' ? 'gu' : lang === 'hi' ? 'hi' : 'en';
 
   const defaultDurationSec = kind === 'breaking' ? 18 : 24;
+  const maxVisibleItems = kind === 'breaking' ? 12 : 15;
 
   const clampSeconds = (raw: any, fallback: number) => {
     const n = Number(raw);
     if (!Number.isFinite(n)) return fallback;
-    return Math.min(40, Math.max(10, n));
+    return Math.min(300, Math.max(10, n));
   };
 
-  const safeDurationSec = clampSeconds(durationSec, defaultDurationSec);
+  const baseDurationSec = clampSeconds(durationSec, defaultDurationSec);
 
   const stayTuned = (k: 'breaking' | 'live'): string => {
     if (tickerLang === 'hi') return k === 'breaking' ? 'कोई ब्रेकिंग न्यूज़ नहीं — अपडेट के लिए जुड़े रहें' : 'लाइव अपडेट नहीं — जुड़े रहें';
@@ -931,23 +932,32 @@ function TickerBar({ theme, kind, items, onViewAll, durationSec }: any) {
     return k === 'breaking' ? 'No breaking news right now — stay tuned' : 'No live updates right now — stay tuned';
   };
 
-  const safeItems =
-    kind === "live"
-      ? items?.length
-        ? items
-        : [t('home.noUpdates') || stayTuned('live')]
-      : items?.length
-        ? items
-        : [t('home.noBreaking') || stayTuned('breaking')];
+  const normalizeItemText = (it: any): string => {
+    if (typeof it === 'string') return it.trim();
+    if (it && typeof it === 'object') {
+      const v = String((it as any)?.text ?? (it as any)?.title ?? '').trim();
+      return v;
+    }
+    return String(it ?? '').trim();
+  };
 
-  const text = (safeItems?.length ? safeItems : [""]).join("  •  ");
+  const normalized = (Array.isArray(items) ? items : []).map(normalizeItemText).filter(Boolean).slice(0, maxVisibleItems);
+  const fallback = kind === 'live' ? (t('home.noUpdates') || stayTuned('live')) : (t('home.noBreaking') || stayTuned('breaking'));
+  const safeItems = normalized.length ? normalized : [fallback];
+
+  const text = (safeItems?.length ? safeItems : ['']).join('  •  ');
+
+  // Auto-adjust: duration grows with text length (prevents long tickers from scrolling too fast).
+  const targetCharsPerSec = kind === 'breaking' ? 9 : 8;
+  const autoDurationSec = Math.ceil(Math.max(1, text.length) / targetCharsPerSec);
+  const effectiveDurationSec = clampSeconds(Math.max(baseDurationSec, autoDurationSec, defaultDurationSec), defaultDurationSec);
 
   // Force restart of marquee when duration/lang/items change (some browsers won't re-time an in-flight animation).
   const restartKey = (() => {
-    const s = `${kind}|${tickerLang}|${safeDurationSec}|${text}`;
+    const s = `${kind}|${tickerLang}|${effectiveDurationSec}|${text}`;
     let h = 5381;
     for (let i = 0; i < s.length; i += 1) h = (h * 33) ^ s.charCodeAt(i);
-    return `${kind}-${tickerLang}-${safeDurationSec}-${(h >>> 0).toString(16)}`;
+    return `${kind}-${tickerLang}-${effectiveDurationSec}-${(h >>> 0).toString(16)}`;
   })();
 
   const bg =
@@ -983,7 +993,7 @@ function TickerBar({ theme, kind, items, onViewAll, durationSec }: any) {
                 <div
                   key={restartKey}
                   className="np-tickerTrack"
-                  style={{ animationDuration: `${safeDurationSec}s` }}
+                  style={{ animationDuration: `${effectiveDurationSec}s` }}
                 >
                   <div className="np-tickerSeq whitespace-nowrap text-sm font-medium text-white">
                     <span className="tickerText pr-10" lang={tickerLang}>{text}</span>
@@ -2271,14 +2281,14 @@ export default function UiPreviewV145() {
   const breakingTickerVisible = !SAFE_MODE && breakingTickerEnabled && (broadcastTickers.breakingEnabled ?? true);
   const liveTickerVisible = !SAFE_MODE && liveTickerEnabled && (broadcastTickers.liveEnabled ?? true);
 
-  const breakingDurationSec = clampNum(broadcastTickers.breakingSpeedSec ?? effectiveSettings.tickers.breaking.speedSec, 10, 40, 18);
-  const liveDurationSec = clampNum(broadcastTickers.liveSpeedSec ?? effectiveSettings.tickers.live.speedSec, 10, 40, 24);
+  const breakingDurationSec = clampNum(broadcastTickers.breakingSpeedSec ?? effectiveSettings.tickers.breaking.speedSec, 10, 300, 18);
+  const liveDurationSec = clampNum(broadcastTickers.liveSpeedSec ?? effectiveSettings.tickers.live.speedSec, 10, 300, 24);
 
   const breakingItems = broadcastTickers.breakingTexts;
   const showBreakingContent = breakingItems.length > 0;
-  const breakingItemsToShow = showBreakingContent ? breakingItems : [t('home.noBreaking')];
+  const breakingItemsToShow = showBreakingContent ? breakingItems.slice(0, 12) : [t('home.noBreaking')];
 
-  const liveItemsToShow = broadcastTickers.liveTexts.length > 0 ? broadcastTickers.liveTexts : [t('home.noUpdates')];
+  const liveItemsToShow = broadcastTickers.liveTexts.length > 0 ? broadcastTickers.liveTexts.slice(0, 15) : [t('home.noUpdates')];
 
   const onToast = (m: string) => setToast(m);
 
@@ -2459,13 +2469,6 @@ export default function UiPreviewV145() {
         body { overflow-x: hidden; scrollbar-gutter: stable; }
         .np-no-scrollbar::-webkit-scrollbar { display: none; }
         .np-no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        @keyframes np-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-        .np-tickerTrack { display: flex; align-items: center; width: max-content; will-change: transform; animation-name: np-marquee; animation-timing-function: linear; animation-iteration-count: infinite; }
-        .np-tickerSeq { flex-shrink: 0; display: flex; align-items: center; }
-        .np-marqueeWrap:hover .np-tickerTrack { animation-play-state: paused; }
-        @media (prefers-reduced-motion: reduce) {
-          .np-tickerTrack { animation: none !important; transform: none !important; }
-        }
       `}</style>
 
       {/* TOP HEADER */}
