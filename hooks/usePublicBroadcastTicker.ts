@@ -25,7 +25,7 @@ export type PublicBroadcastTickerState = {
 function clampSpeedSec(raw: unknown, fallback: number): number {
   const n = Number(raw);
   if (!Number.isFinite(n)) return fallback;
-  return Math.min(40, Math.max(10, n));
+  return Math.min(300, Math.max(10, n));
 }
 
 function fingerprint(b: PublicBroadcast): string {
