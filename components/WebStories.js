@@ -1,4 +1,6 @@
 // components/WebStories.js
+import { StoryImage } from '../src/components/story/StoryImage';
+
 const sampleStories = [
   {
     title: '🧠 AI Explains Budget 2024 in 60 Seconds',
@@ -32,13 +34,14 @@ const WebStories = () => {
           <a
             key={idx}
             href={story.link}
-            className="min-w-[180px] max-w-[200px] bg-white border rounded-lg shadow hover:shadow-md transition"
+            className="group min-w-[180px] max-w-[200px] bg-white border rounded-lg shadow hover:shadow-md transition"
           >
             <div className="w-full">
-              <img
+              <StoryImage
                 src={story.image}
                 alt={story.title}
-                className="rounded-t-lg object-cover w-full h-[180px]"
+                variant="top"
+                className="w-full h-[180px] rounded-t-lg rounded-b-none"
               />
             </div>
             <div className="p-2 text-sm font-medium line-clamp-2">{story.title}</div>

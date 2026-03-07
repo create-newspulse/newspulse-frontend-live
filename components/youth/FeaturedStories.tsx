@@ -1,6 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
 import type { YouthStory } from '../../utils/youthData';
+import { StoryImage } from '../../src/components/story/StoryImage';
 
 type Props = {
   stories: YouthStory[];
@@ -32,22 +33,14 @@ export default function FeaturedStories({ stories, error }: Props) {
         {stories.map((s) => (
           <article
             key={s.id}
-            className="overflow-hidden rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm hover:shadow-md transition"
+            className="group relative rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm transition hover:shadow-md"
           >
-            <div className="relative aspect-[16/9] bg-gray-100 dark:bg-gray-800">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={s.image}
-                alt={s.title}
-                loading="lazy"
-                className="h-full w-full object-cover"
-                onError={(e) => {
-                  const target = e.currentTarget as HTMLImageElement;
-                  if (target.src.includes('/fallback.svg')) return;
-                  target.src = '/fallback.svg';
-                }}
-              />
-            </div>
+            <StoryImage
+              src={s.image}
+              alt={s.title}
+              variant="top"
+              className="w-full rounded-t-2xl rounded-b-none"
+            />
             <div className="p-5">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-indigo-600">
                 <span>#{s.category}</span>

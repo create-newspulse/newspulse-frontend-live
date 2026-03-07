@@ -3,7 +3,8 @@ import { getStoryCategoryLabel, getStoryDateIso } from '../../lib/publicStories'
 import OriginalTag from '../OriginalTag';
 import { buildNewsUrl } from '../../lib/newsRoutes';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
-import { COVER_PLACEHOLDER_SRC, onCoverImageError, resolveCoverImageUrl } from '../../lib/coverImages';
+import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
+import StoryImage from '../../src/components/story/StoryImage';
 
 function classNames(...s: Array<string | false | null | undefined>) {
   return s.filter(Boolean).join(' ');
@@ -233,16 +234,14 @@ function StoryCard({
   return (
     <a
       href={href}
-      className="block rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:bg-slate-50"
+      className="group block rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:bg-slate-50"
     >
       <div className="mb-3 flex items-start gap-3">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <StoryImage
           src={coverUrl || COVER_PLACEHOLDER_SRC}
-          alt=""
-          loading="lazy"
-          onError={onCoverImageError}
-          className="h-16 w-24 rounded-xl border border-slate-200 bg-slate-100 object-cover"
+          alt={title || ''}
+          variant="mini"
+          className="border border-slate-200"
         />
 
         <div className="min-w-0 flex-1">

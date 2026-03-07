@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { COVER_PLACEHOLDER_SRC, onCoverImageError, resolveCoverImageUrl } from '../lib/coverImages';
+import { resolveCoverImageUrl } from '../lib/coverImages';
+import { StoryImage } from '../src/components/story/StoryImage';
 
 const TopNewsCard = ({ article }) => {
   const [saved, setSaved] = useState(false);
@@ -23,12 +24,12 @@ const TopNewsCard = ({ article }) => {
   const langLabel = lang === 'gu' ? 'Gujarati' : lang === 'hi' ? 'Hindi' : 'English';
 
   return (
-    <div className="bg-white rounded-xl shadow-md p-4 hover:shadow-lg transition-all duration-300 relative">
-      <img
-        src={resolveCoverImageUrl(article) || COVER_PLACEHOLDER_SRC}
-        alt={article.title}
-        onError={onCoverImageError}
-        className="w-full h-48 object-cover rounded-md"
+    <div className="group bg-white rounded-xl shadow-md p-4 hover:shadow-lg transition-all duration-300 relative">
+      <StoryImage
+        src={resolveCoverImageUrl(article)}
+        alt={article?.title || ''}
+        variant="top"
+        className="w-full h-48 rounded-md"
       />
       <h3 className="text-lg font-semibold mt-3 mb-2">{article.title}</h3>
       <div className="flex justify-between items-center text-sm text-gray-600">

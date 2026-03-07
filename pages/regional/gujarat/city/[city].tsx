@@ -7,10 +7,11 @@ import type { GetStaticProps } from 'next';
 import { normalizeLang, useI18n } from '../../../../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../../../../lib/newsRoutes';
 import { resolveArticleSlug } from '../../../../lib/articleSlugs';
-import { COVER_PLACEHOLDER_SRC, onCoverImageError, resolveCoverImageUrl } from '../../../../lib/coverImages';
+import { resolveCoverImageUrl } from '../../../../lib/coverImages';
 import { getActiveRouteLang } from '../../../../utils/routeLang';
 import { unwrapRegionalFeedItems } from '../../../../lib/unwrapRegionalFeed';
 import { buildRegionalFeedSearchParams } from '../../../../lib/regionalFeedQuery';
+import { StoryImage } from '../../../../src/components/story/StoryImage';
 
 function normalize(s: string) {
   return (s || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -121,16 +122,9 @@ export default function GujaratCityPage() {
                   const title = String(article?.title || '').trim();
                   const summary = typeof article?.summary === 'string' ? article.summary.trim() : '';
                   return (
-                  <a key={idx} href={href} className="block p-6 rounded-2xl border shadow-sm hover:shadow-md bg-white dark:bg-gray-800 transition">
+                  <a key={idx} href={href} className="group block rounded-2xl border bg-white p-6 shadow-sm transition hover:shadow-md dark:bg-gray-800">
                     <div className="mb-3 flex items-start gap-3">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={coverUrl || COVER_PLACEHOLDER_SRC}
-                        alt=""
-                        loading="lazy"
-                        onError={onCoverImageError}
-                        className="h-16 w-24 shrink-0 rounded-xl border border-gray-200 bg-gray-100 object-cover dark:border-gray-700 dark:bg-gray-900"
-                      />
+                      <StoryImage src={coverUrl} alt={title || ''} variant="mini" className="rounded-xl" />
 
                       <div className="min-w-0 flex-1">
                         <div className="text-xs text-gray-500 mb-2">{article.publishedAt ? new Date(article.publishedAt).toLocaleString() : ''}</div>

@@ -13,6 +13,7 @@ import { tHeading, toLanguageKey } from '../../utils/localizedNames';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
 import { buildNewsUrl } from '../../lib/newsRoutes';
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
+import StoryImage from '../../src/components/story/StoryImage';
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ||
@@ -285,7 +286,27 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
   const displayProvider = cleanText((resolvedArticle as any)?.provider);
   const displayGeneratedAt = cleanText((resolvedArticle as any)?.generatedAt);
 
-  const heroSrc = resolveCoverImageUrl(resolvedArticle) || COVER_PLACEHOLDER_SRC;
+  const coverRaw =
+    (resolvedArticle as any)?.imageUrl ||
+    (resolvedArticle as any)?.image ||
+    (resolvedArticle as any)?.coverImage ||
+    (resolvedArticle as any)?.thumbnail ||
+    null;
+
+  const cover = (() => {
+    if (!coverRaw) return null;
+    if (typeof coverRaw === 'string') {
+      const v = coverRaw.trim();
+      return v || null;
+    }
+    if (typeof coverRaw === 'object') {
+      const url = typeof (coverRaw as any)?.url === 'string' ? String((coverRaw as any).url).trim() : '';
+      return url || null;
+    }
+    return null;
+  })();
+
+  const heroSrc = cover || resolveCoverImageUrl(resolvedArticle) || null;
 
   const prefix = React.useMemo(() => localePrefix(lang), [lang]);
   const categoryKey = React.useMemo(() => resolveCategoryKey(resolvedArticle), [resolvedArticle]);
@@ -493,20 +514,26 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                 </div>
 
                 <div className="px-4 md:px-6 pb-5">
-                  <div className="relative h-56 md:h-72 w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={heroSrc}
-                      alt={displayTitle}
-                      onError={(e) => {
-                        const img = e.currentTarget;
-                        img.onerror = null;
-                        img.src = COVER_PLACEHOLDER_SRC;
-                      }}
-                      className="absolute inset-0 h-full w-full object-cover"
-                      loading="eager"
-                    />
-                  </div>
+                  {heroSrc ? (
+                    <div className="relative group hover:z-50">
+                      <StoryImage
+                        src={heroSrc}
+                        fallbackSrc={COVER_PLACEHOLDER_SRC}
+                        alt={displayTitle}
+                        variant="top"
+                        priority
+                        className="border border-slate-200 bg-slate-100 w-full hover:scale-[0.99] active:scale-[0.99]"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-full h-[220px] sm:h-[280px] md:h-[320px] overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
+                      <div className="h-full w-full grid place-items-center">
+                        <div className="text-xs font-extrabold tracking-tight text-slate-500 select-none">
+                          News <span className="text-slate-700">Pulse</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="px-4 md:px-6 pb-6">
@@ -539,17 +566,11 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                           className="group rounded-2xl border border-slate-200 bg-white shadow-sm hover:bg-slate-50 overflow-hidden"
                         >
                           <div className="flex gap-3 p-3">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
+                            <StoryImage
                               src={img}
-                              alt=""
-                              loading="lazy"
-                              onError={(e) => {
-                                const imgEl = e.currentTarget;
-                                imgEl.onerror = null;
-                                imgEl.src = COVER_PLACEHOLDER_SRC;
-                              }}
-                              className="h-20 w-28 rounded-xl border border-slate-200 bg-slate-100 object-cover shrink-0"
+                              alt={titleText}
+                              variant="list"
+                              className="border border-slate-200 bg-slate-100"
                             />
                             <div className="min-w-0">
                               <div className="line-clamp-2 text-sm font-bold text-slate-900 group-hover:underline">{titleText}</div>

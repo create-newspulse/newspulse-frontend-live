@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { StoryImage } from '../src/components/story/StoryImage';
 
 interface LazyImageProps {
   src: string;
@@ -72,19 +73,14 @@ export const LazyImage: React.FC<LazyImageProps> = ({
       style={{ aspectRatio: `${width}/${height}` }}
     >
       {isInView && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <StoryImage
           src={imageSrc}
           alt={alt}
-          onError={(e) => {
-            const img = e.currentTarget;
-            img.onerror = null;
-            img.src = fallback;
-          }}
-          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-500 ${
+          variant="top"
+          priority={priority}
+          className={`w-full h-full transition-opacity duration-500 ${
             isLoaded ? 'opacity-100' : 'opacity-0'
           }`}
-          loading={priority ? 'eager' : 'lazy'}
         />
       )}
       

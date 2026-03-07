@@ -29,6 +29,10 @@ export function resolveCoverImageUrl(article: any): string {
     typeof article?.coverImage?.url === 'string' ? article.coverImage.url : '',
     typeof article?.coverImageUrl === 'string' ? article.coverImageUrl : '',
     typeof article?.imageUrl === 'string' ? article.imageUrl : '',
+    typeof article?.imageURL === 'string' ? article.imageURL : '',
+    typeof article?.image?.url === 'string' ? article.image.url : '',
+    typeof article?.image === 'string' ? article.image : '',
+    typeof article?.urlToImage === 'string' ? article.urlToImage : '',
     typeof article?.thumbnailUrl === 'string' ? article.thumbnailUrl : '',
   ];
 

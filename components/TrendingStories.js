@@ -1,6 +1,7 @@
 // components/TrendingStories.js
 import {useTranslations} from 'next-intl';
-import { COVER_PLACEHOLDER_SRC, onCoverImageError, resolveCoverImageUrl } from '../lib/coverImages';
+import { resolveCoverImageUrl } from '../lib/coverImages';
+import { StoryImage } from '../src/components/story/StoryImage';
 
 const TrendingStories = ({ articles }) => {
   const t = useTranslations();
@@ -13,18 +14,14 @@ const TrendingStories = ({ articles }) => {
         {articles.slice(0, 8).map((article, index) => (
           <div
             key={index}
-            className="min-w-[200px] max-w-[200px] bg-white rounded-xl shadow-md overflow-hidden snap-start"
+            className="group shrink-0 bg-white rounded-xl shadow-md snap-start"
           >
-            <div className="w-full h-28 relative">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={resolveCoverImageUrl(article) || COVER_PLACEHOLDER_SRC}
-                alt={article.title}
-                onError={onCoverImageError}
-                className="h-full w-full object-cover"
-                loading="lazy"
-              />
-            </div>
+            <StoryImage
+              src={resolveCoverImageUrl(article)}
+              alt={article?.title || ''}
+              variant="card"
+              className="rounded-t-xl rounded-b-none"
+            />
             <div className="p-2">
               <p className="text-sm font-medium line-clamp-2">{article.title}</p>
             </div>

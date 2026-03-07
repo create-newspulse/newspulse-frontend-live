@@ -17,12 +17,18 @@ import { resolveArticleSummaryOrExcerpt, resolveArticleTitle } from "../lib/cont
 import OriginalTag from "../components/OriginalTag";
 import { DEFAULT_NORMALIZED_PUBLIC_SETTINGS, sanitizeEmbedUrl } from "../src/lib/publicSettings";
 import AdSlot from "../components/ads/AdSlot";
+import { useBookmarks } from "../hooks/useBookmarks";
+import { resolveArticleSlug } from "../lib/articleSlugs";
+import { buildNewsUrl } from "../lib/newsRoutes";
+import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from "../lib/coverImages";
+import StoryImage from "../src/components/story/StoryImage";
 import type { GetStaticProps } from "next";
 import { AnimatePresence, motion } from "framer-motion";
 import { useI18n } from "../src/i18n/LanguageProvider";
 import {
   ArrowRight,
   Bell,
+  Bookmark,
   BookOpen,
   Briefcase,
   Check,
@@ -392,44 +398,6 @@ const MENU_QUICK_THEME: Record<"home" | "videos" | "search", { base: string; hov
   },
 };
 
-const FEATURED = [
-  {
-    id: "f1",
-    kicker: "Top Story",
-    title: "Rain alert issued across key districts",
-    desc: "What to expect in the next 24 hours — and what citizens should do.",
-    time: "11:12 AM",
-    source: "Regional Desk",
-  },
-];
-
-const FEED = [
-  {
-    id: "t1",
-    title: "Global summit highlights: what changed today",
-    desc: "Key lines from the announcements — explained in simple terms.",
-    time: "10:01 AM",
-    source: "World Desk",
-    category: "International",
-  },
-  {
-    id: "t2",
-    title: "New policy update could reshape local business",
-    desc: "Who benefits, what changes, and what to watch next.",
-    time: "9:38 AM",
-    source: "Business Desk",
-    category: "Business",
-  },
-  {
-    id: "t3",
-    title: "AI chips: why the next wave of devices will feel different",
-    desc: "On-device intelligence, privacy, and the new performance race.",
-    time: "9:10 AM",
-    source: "Tech Desk",
-    category: "Science & Technology",
-  },
-];
-
 const DEFAULT_PREFS = {
   themeId: "aurora",
   lang: "English",
@@ -515,6 +483,95 @@ function safeTitle(raw: unknown): string {
   return String(raw || '').trim();
 }
 
+function cleanText(value: unknown): string {
+  return String(value ?? '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function truncateSmart(text: string, maxChars: number): string {
+  const s = String(text || '').trim();
+  if (!s) return '';
+  if (s.length <= maxChars) return s;
+  const slice = s.slice(0, maxChars);
+  const lastSpace = slice.lastIndexOf(' ');
+  const cut = lastSpace > Math.floor(maxChars * 0.6) ? slice.slice(0, lastSpace) : slice;
+  return `${cut.replace(/\s+$/g, '')}…`;
+}
+
+function makeDekFromContent(text: string): string {
+  const s = String(text || '').trim();
+  if (!s) return '';
+  if (s.length <= 140) return s;
+
+  const max = 140;
+  const min = 120;
+  const slice = s.slice(0, max);
+
+  // Prefer a word boundary, but never cut below `min` when possible.
+  for (let i = slice.length - 1; i >= min; i--) {
+    if (slice[i] === ' ') {
+      return `${slice.slice(0, i).trim()}…`;
+    }
+  }
+
+  return `${slice.trim()}…`;
+}
+
+function estimateReadMinutes(text: string): number {
+  const s = String(text || '').trim();
+  if (!s) return 1;
+  const words = s.split(/\s+/g).filter(Boolean).length;
+  // Typical reading speeds range ~180-240 wpm; keep it stable and simple.
+  return Math.max(1, Math.ceil(words / 220));
+}
+
+function storyLocationLabel(story: any): string {
+  const loc = story?.location;
+  if (typeof loc === 'string') return loc.trim();
+  const parts = [
+    safeTitle(loc?.city),
+    safeTitle(loc?.district),
+    safeTitle(loc?.state),
+    safeTitle(loc?.region),
+  ].filter(Boolean);
+  return parts.join(', ');
+}
+
+function pickTranslatedField(item: any, lang: 'en' | 'hi' | 'gu', field: string): string {
+  const direct = safeTitle(item?.translations?.[lang]?.[field]);
+  if (direct) return direct;
+  const alt1 = safeTitle(item?.i18n?.[lang]?.[field]);
+  if (alt1) return alt1;
+  const alt2 = safeTitle(item?.localized?.[lang]?.[field]);
+  if (alt2) return alt2;
+  const alt3 = safeTitle(item?.locales?.[lang]?.[field]);
+  if (alt3) return alt3;
+  return '';
+}
+
+function resolveTopStoryTitle(article: any, requestedLang: 'en' | 'hi' | 'gu') {
+  if (requestedLang !== 'en') {
+    const translated = pickTranslatedField(article, requestedLang, 'title');
+    if (translated) return { text: translated, isOriginal: false };
+  }
+  return resolveArticleTitle(article, requestedLang);
+}
+
+function resolveTopStorySummary(article: any, requestedLang: 'en' | 'hi' | 'gu') {
+  if (requestedLang !== 'en') {
+    const translated = pickTranslatedField(article, requestedLang, 'summary');
+    if (translated) return { text: translated, isOriginal: false };
+  }
+
+  // Top Story rule: use summary if present; otherwise generate a dek.
+  const summary = safeTitle(article?.summary);
+  if (summary) return { text: summary, isOriginal: false };
+  return { text: '', isOriginal: false };
+}
+
 function articleToTickerText(a: Article, requestedLang: 'en' | 'hi' | 'gu'): string | null {
   const { text } = resolveArticleTitle(a as any, requestedLang);
   const title = safeTitle(text || (a as any)?.title);
@@ -567,6 +624,33 @@ function labelKeyForCategory(key: string): string {
   if (key === 'inspiration') return 'categories.inspirationHub';
   if (key === 'community') return 'categories.communityReporter';
   return `categories.${key}`;
+}
+
+function normalizeCategoryKey(raw: unknown): string {
+  const v = String(raw || '').trim().toLowerCase();
+  if (!v) return '';
+  const aliases: Record<string, string> = {
+    'science & technology': 'science-technology',
+    'science and technology': 'science-technology',
+    'science technology': 'science-technology',
+    'science-tech': 'science-technology',
+    'web stories': 'web-stories',
+    'viral videos': 'viral-videos',
+    'youth pulse': 'youth',
+    'inspiration hub': 'inspiration',
+    'community reporter': 'community',
+  };
+  if (aliases[v]) return aliases[v];
+
+  // Normalize common backend variants.
+  const cleaned = v
+    .replace(/_/g, '-')
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  return cleaned;
 }
 
 function labelKeyForTrendingTopic(key: string): string | null {
@@ -1610,42 +1694,279 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick }: any) {
 
 function FeaturedCard({ theme, item, onToast }: any) {
   const { t } = useI18n();
+  const { isBookmarked, toggleBookmark } = useBookmarks();
+  const router = useRouter();
+
+  const requestedLang = (item?.requestedLang || 'en') as 'en' | 'hi' | 'gu';
+  const article = item?.article as Article | null | undefined;
+
+  const vm = useMemo(() => {
+    if (!article) return null;
+
+    const id = safeTitle((article as any)?._id || (article as any)?.id || (article as any)?.slug) || '';
+    const slug = resolveArticleSlug(article as any, requestedLang);
+    const href = buildNewsUrl({ id: id || slug, slug, lang: requestedLang });
+
+    const titleRes = resolveTopStoryTitle(article as any, requestedLang);
+    const summaryRes = resolveTopStorySummary(article as any, requestedLang);
+
+    const title = safeTitle(titleRes.text) || t('common.untitled');
+    const summaryFromApi = safeTitle(summaryRes.text);
+
+    const contentFallback = cleanText(
+      pickTranslatedField(article as any, requestedLang, 'content') ||
+        pickTranslatedField(article as any, requestedLang, 'body') ||
+        pickTranslatedField(article as any, requestedLang, 'html') ||
+        (article as any)?.content ||
+        (article as any)?.body ||
+        (article as any)?.html ||
+        (article as any)?.summary ||
+        (article as any)?.excerpt
+    );
+
+    const summaryGenerated = makeDekFromContent(contentFallback);
+    const excerptFallback = safeTitle(
+      pickTranslatedField(article as any, requestedLang, 'excerpt') || (article as any)?.excerpt
+    );
+    const summary = summaryFromApi || summaryGenerated || excerptFallback;
+
+    const iso = safeTitle((article as any)?.publishedAt || (article as any)?.createdAt) || '';
+    let time = '';
+    if (iso) {
+      try {
+        time = new Intl.DateTimeFormat('en-IN', {
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: 'Asia/Kolkata',
+        }).format(new Date(iso));
+      } catch {
+        time = '';
+      }
+    }
+
+    const source = safeTitle((article as any)?.source?.name || (article as any)?.source) || 'News Pulse';
+    const categoryRaw = safeTitle((article as any)?.category) || '';
+    const categoryKey = normalizeCategoryKey(categoryRaw);
+    const categoryLabelKey = categoryKey ? labelKeyForCategory(categoryKey) : '';
+    const categoryLabel = categoryLabelKey ? t(categoryLabelKey) : '';
+    const category = categoryLabelKey && categoryLabel === categoryLabelKey ? categoryRaw : (categoryLabel || categoryRaw);
+
+    const location = storyLocationLabel(article as any);
+    const readMinutes = estimateReadMinutes(`${title} ${summary} ${contentFallback}`);
+
+    const coverRaw =
+      pickTranslatedField(article as any, requestedLang, 'imageUrl') || (article as any)?.imageUrl ||
+      pickTranslatedField(article as any, requestedLang, 'coverImage') || (article as any)?.coverImage ||
+      pickTranslatedField(article as any, requestedLang, 'image') || (article as any)?.image ||
+      pickTranslatedField(article as any, requestedLang, 'thumbnail') || (article as any)?.thumbnail ||
+      (Array.isArray((article as any)?.images) ? (article as any)?.images?.[0] : null) ||
+      null;
+
+    const cover = (() => {
+      if (!coverRaw) return '';
+      if (typeof coverRaw === 'string') return coverRaw.trim();
+      if (typeof coverRaw === 'object') {
+        const url = typeof (coverRaw as any)?.url === 'string' ? String((coverRaw as any).url).trim() : '';
+        if (url) return url;
+        const src = typeof (coverRaw as any)?.src === 'string' ? String((coverRaw as any).src).trim() : '';
+        if (src) return src;
+      }
+      return '';
+    })();
+
+    const imageSrc = cover || resolveCoverImageUrl(article as any) || '';
+
+    return {
+      id: id || slug || title,
+      href,
+      title,
+      summary,
+      titleIsOriginal: Boolean(titleRes.isOriginal),
+      summaryIsOriginal: Boolean(summaryFromApi ? summaryRes.isOriginal : false),
+      time: time || '—',
+      iso: iso || '',
+      source,
+      category,
+      location,
+      readMinutes,
+      imageSrc,
+    };
+  }, [article, requestedLang, t]);
+
+  const bookmarked = vm ? isBookmarked(vm.id) : false;
+
+  const onToggleSave = React.useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!vm) return;
+
+      toggleBookmark({
+        id: vm.id,
+        title: vm.title,
+        excerpt: vm.summary,
+        image: vm.imageSrc || '',
+        source: vm.source,
+        category: vm.category || '',
+        publishedAt: vm.iso || '',
+        url: vm.href,
+      });
+    },
+    [toggleBookmark, vm]
+  );
+
+  const lineClamp2: React.CSSProperties = {
+    display: '-webkit-box',
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical',
+    overflow: 'hidden',
+  };
+
+  const Chip = ({ children }: { children: React.ReactNode }) => (
+    <span
+      className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold border"
+      style={{ background: theme.chip, borderColor: theme.border, color: theme.sub }}
+    >
+      {children}
+    </span>
+  );
+
+  const topStoryLabel = t('home.topStory');
+
+  // Fallback: never show hardcoded English placeholder on non-English routes.
+  const fallbackTitle = t('home.updateFallback');
+  const fallbackSummary = t('home.noUpdates');
+
+  const openArticle = React.useCallback(() => {
+    if (!vm?.href) return;
+    void router.push(vm.href);
+  }, [router, vm?.href]);
+
   return (
-    <Surface theme={theme} className="overflow-hidden">
-      <div className="p-5 sm:p-6">
+    <Surface theme={theme} className="group">
+      <div
+        className={cx("p-5 sm:p-6", vm ? 'cursor-pointer' : '')}
+        role={vm ? 'link' : undefined}
+        tabIndex={vm ? 0 : undefined}
+        aria-label={vm ? (vm.title || t('home.topStory')) : undefined}
+        onClick={vm ? openArticle : undefined}
+        onKeyDown={
+          vm
+            ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  openArticle();
+                }
+              }
+            : undefined
+        }
+      >
         <div className="flex items-start justify-between gap-3">
           <span
             className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-extrabold border"
             style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}
           >
             <span className="inline-block h-2 w-2 rounded-full" style={{ background: theme.live }} />
-            {item.kicker}
+            {topStoryLabel}
           </span>
-          <div className="hidden sm:flex items-center gap-2 text-xs" style={{ color: theme.sub }}>
-            <span className="rounded-full px-2.5 py-1 border" style={{ background: theme.chip, borderColor: theme.border }}>
-              {item.time}
-            </span>
-            <span style={{ opacity: 0.55 }}>•</span>
-            <span>{item.source}</span>
+
+          <div className="flex items-center gap-2">
+            {vm ? (
+              <button
+                type="button"
+                onClick={onToggleSave}
+                aria-label={bookmarked ? t('common.saved') : t('common.save')}
+                title={bookmarked ? t('common.saved') : t('common.save')}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border transition hover:opacity-[0.98]"
+                style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}
+              >
+                <Bookmark className="h-5 w-5" fill={bookmarked ? 'currentColor' : 'none'} />
+              </button>
+            ) : null}
+
+            <div className="hidden sm:flex items-center gap-2 text-xs" style={{ color: theme.sub }}>
+              <span className="rounded-full px-2.5 py-1 border" style={{ background: theme.chip, borderColor: theme.border }}>
+                {vm ? vm.time : '—'}
+              </span>
+              <span style={{ opacity: 0.55 }}>•</span>
+              <span>{vm ? vm.source : 'News Pulse'}</span>
+            </div>
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-xl sm:text-2xl font-black tracking-tight" style={{ color: theme.text }}>
-          <span>{item.title}</span>
-          {item.titleIsOriginal ? <OriginalTag /> : null}
-        </div>
-        <div className="mt-1 text-sm" style={{ color: theme.sub }}>
-          {item.desc}
-          {item.descIsOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
-        </div>
+        <div className="mt-4 grid gap-4 grid-cols-[140px_1fr] sm:grid-cols-[180px_1fr] md:grid-cols-[220px_1fr] sm:items-start">
+          {vm?.imageSrc ? (
+            <StoryImage
+              src={vm.imageSrc}
+              alt={vm?.title || ''}
+              variant="card"
+              priority
+              fallbackSrc={COVER_PLACEHOLDER_SRC}
+              className="border border-black/10"
+            />
+          ) : (
+            <div className="relative overflow-hidden rounded-2xl shrink-0 w-[140px] h-[90px] sm:w-[180px] sm:h-[110px] md:w-[220px] md:h-[130px] border border-black/10 bg-black/5">
+              <div className="absolute inset-0 grid place-items-center">
+                <div className="text-[11px] font-extrabold tracking-tight text-slate-600/90 select-none">
+                  News <span className="text-slate-800/90">Pulse</span>
+                </div>
+              </div>
+            </div>
+          )}
 
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <Button theme={theme} variant="solid" onClick={() => onToast("Open featured story (planned)")}>
-            {t('common.read')} <ArrowRight className="h-4 w-4" />
-          </Button>
-          <Button theme={theme} variant="soft" onClick={() => onToast("Watch / Listen (planned)")}>
-            <Play className="h-4 w-4" /> {t('common.watch')}
-          </Button>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 text-xl sm:text-2xl font-black tracking-tight" style={{ color: theme.text }}>
+              <span style={lineClamp2}>{vm ? vm.title : fallbackTitle}</span>
+              {vm?.titleIsOriginal ? <OriginalTag /> : null}
+            </div>
+
+            <div className="mt-1 text-sm" style={{ color: theme.sub }}>
+              <span style={lineClamp2}>{vm ? vm.summary : fallbackSummary}</span>
+              {vm?.summaryIsOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
+            </div>
+
+            {vm ? (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {vm.category ? <Chip>{vm.category}</Chip> : null}
+                {vm.location ? (
+                  <Chip>
+                    <MapPin className="h-3.5 w-3.5" /> {vm.location}
+                  </Chip>
+                ) : null}
+                <Chip>
+                  <BookOpen className="h-3.5 w-3.5" /> {vm.readMinutes} {t('common.minutesShort')}
+                </Chip>
+              </div>
+            ) : null}
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              {vm ? (
+                <Link
+                  href={vm.href}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold border transition hover:opacity-[0.98]"
+                  style={{ background: theme.accent, color: "#fff", borderColor: "transparent" }}
+                >
+                  {t('common.read')} <ArrowRight className="h-4 w-4" />
+                </Link>
+              ) : (
+                <Button theme={theme} variant="solid" onClick={() => onToast("Open top story (planned)")}>
+                  {t('common.read')} <ArrowRight className="h-4 w-4" />
+                </Button>
+              )}
+
+              <Button
+                theme={theme}
+                variant="soft"
+                onClick={(e: React.MouseEvent) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onToast("Listen (planned)");
+                }}
+              >
+                <Radio className="h-4 w-4" /> {t('common.listen')}
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
     </Surface>
@@ -2141,6 +2462,7 @@ export default function UiPreviewV145() {
 
   const effectiveSettings = settings ?? DEFAULT_NORMALIZED_PUBLIC_SETTINGS;
   const [latestFromBackend, setLatestFromBackend] = useState<any[]>([]);
+  const [topStory, setTopStory] = useState<Article | null>(null);
 
   const apiLang = useMemo(() => {
     const code = toUiLangCode(lang);
@@ -2180,6 +2502,7 @@ export default function UiPreviewV145() {
       const latestResp = await fetchPublicNews({ language: apiLang, limit: 12, signal: controller.signal });
       if (controller.signal.aborted) return;
       const latestArticles = latestResp.items || [];
+      setTopStory(latestArticles[0] || null);
       setLatestFromBackend(latestArticles.map((a) => articleToFeedItem(a as any, apiLang)));
       const breakingResp = await fetchPublicNews({ category: 'breaking', language: apiLang, limit: 10, signal: controller.signal });
       if (controller.signal.aborted) return;
@@ -2188,6 +2511,7 @@ export default function UiPreviewV145() {
       void breakingResp;
     })().catch(() => {
       if (controller.signal.aborted) return;
+      setTopStory(null);
       setLatestFromBackend([]);
     });
 
@@ -2561,7 +2885,7 @@ export default function UiPreviewV145() {
           {/* MIDDLE (News Content) */}
           <main className="col-span-12 lg:col-span-6">
             <div className="grid gap-4">
-              <FeaturedCard theme={theme} item={FEATURED[0]} onToast={onToast} />
+              <FeaturedCard theme={theme} item={{ article: topStory, requestedLang: apiLang }} onToast={onToast} />
             </div>
           </main>
 

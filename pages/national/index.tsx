@@ -15,7 +15,8 @@ import { useI18n } from '../../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../../lib/newsRoutes';
 import { localizeArticle } from '../../lib/localizeArticle';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
-import { COVER_PLACEHOLDER_SRC, onCoverImageError, resolveCoverImageUrl } from '../../lib/coverImages';
+import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
+import StoryImage from '../../src/components/story/StoryImage';
 
 type AnyStory = any;
 
@@ -198,10 +199,6 @@ function storyImage(story: AnyStory): string {
   return resolveCoverImageUrl(story) || COVER_PLACEHOLDER_SRC;
 }
 
-function onImgErrorFallback(e: React.SyntheticEvent<HTMLImageElement>) {
-  onCoverImageError(e);
-}
-
 function storyExcerpt(story: AnyStory): string {
   const raw =
     story?.excerpt ||
@@ -345,12 +342,11 @@ function CompactFeedRow({ story, lang }: { story: AnyStory; lang: 'en' | 'hi' | 
       className="group flex gap-3 border-b border-slate-200 py-3 hover:bg-slate-50 dark:border-gray-800 dark:hover:bg-gray-900/60"
     >
       <div className="shrink-0">
-        <img
+        <StoryImage
           src={img}
-          alt=""
-          onError={onImgErrorFallback}
-          className="h-16 w-20 rounded-lg object-cover border border-slate-200 bg-slate-100 dark:border-gray-800 dark:bg-gray-900"
-          loading="lazy"
+          alt={safeTitle}
+          variant="mini"
+          className="border border-slate-200 bg-slate-100 dark:border-gray-800 dark:bg-gray-900"
         />
       </div>
 
@@ -872,12 +868,13 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
                 </div>
               ) : hero ? (
                 <div className="p-4">
-                  <a href={storyHref(hero, effectiveLang)} className="block">
-                    <img
+                  <a href={storyHref(hero, effectiveLang)} className="block group">
+                    <StoryImage
                       src={storyImage(hero)}
-                      alt=""
-                      onError={onImgErrorFallback}
-                      className="h-56 w-full rounded-xl object-cover border border-slate-200 bg-slate-100 dark:border-gray-800 dark:bg-gray-800"
+                      alt={heroLocalizedTitle || ''}
+                      variant="top"
+                      priority
+                      className="border border-slate-200 bg-slate-100 dark:border-gray-800 dark:bg-gray-800"
                     />
                     <div className="mt-3">
                       <div className="flex items-center justify-between gap-3">
@@ -1077,12 +1074,11 @@ function NationalSidebar({
           {videoStory ? (
             <a href={storyHref(videoStory, language)} className="block group">
               <div className="relative">
-                <img
+                <StoryImage
                   src={storyImage(videoStory)}
-                  alt=""
-                  onError={onImgErrorFallback}
-                  className="h-40 w-full rounded-xl object-cover border border-slate-200 bg-slate-100 dark:border-gray-800 dark:bg-gray-800"
-                  loading="lazy"
+                  alt={String(videoStory?.title || '').trim()}
+                  variant="top"
+                  className="border border-slate-200 bg-slate-100 dark:border-gray-800 dark:bg-gray-800"
                 />
                 <div className="absolute left-2 top-2 rounded-full bg-white/90 px-2 py-1 text-xs font-bold text-slate-900">
                   ▶ {t('common.video')}

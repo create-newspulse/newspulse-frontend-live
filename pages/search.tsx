@@ -9,7 +9,8 @@ import { useLanguage } from '../utils/LanguageContext';
 import { useI18n } from '../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../lib/newsRoutes';
 import { resolveArticleSlug } from '../lib/articleSlugs';
-import { COVER_PLACEHOLDER_SRC, onCoverImageError, resolveCoverImageUrl } from '../lib/coverImages';
+import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../lib/coverImages';
+import StoryImage from '../src/components/story/StoryImage';
 
 // Preview-only component you can paste into:
 // - Next.js App Router: /app/search/page.tsx (export default)
@@ -259,16 +260,14 @@ function ResultCard({ item, language }: { item: SearchItem; language: 'en' | 'hi
   const { t } = useI18n();
   const href = buildNewsUrl({ id: item.id, slug: resolveArticleSlug(item, language), lang: language });
   return (
-    <div className="rounded-2xl border border-black/10 bg-white p-4 shadow-sm hover:shadow-md transition">
+    <div className="group rounded-2xl border border-black/10 bg-white p-4 shadow-sm hover:shadow-md transition">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 gap-3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <StoryImage
             src={item.coverImageUrl || COVER_PLACEHOLDER_SRC}
-            alt=""
-            loading="lazy"
-            onError={onCoverImageError}
-            className="h-16 w-24 shrink-0 rounded-xl border border-black/10 bg-black/5 object-cover"
+            alt={item.title || ''}
+            variant="mini"
+            className="border border-black/10"
           />
 
           <div className="min-w-0">

@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { useYouthPulse } from '../../features/youthPulse/useYouthPulse';
 import type { YouthStory } from '../../features/youthPulse/types';
 import { useI18n } from '../../src/i18n/LanguageProvider';
+import { StoryImage } from '../../src/components/story/StoryImage';
 
 export default function YouthCategoryPage() {
   const router = useRouter();
@@ -49,19 +50,11 @@ export default function YouthCategoryPage() {
             <p className="text-gray-600 dark:text-gray-300">{t('youthPulse.noPostsYet')}</p>
           ) : (
             stories.map((s) => (
-              <article key={s.id} className="overflow-hidden rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={s.image}
-                  alt={s.title}
-                  className="w-full aspect-[16/9] object-cover bg-gray-100 dark:bg-gray-800"
-                  loading="lazy"
-                  onError={(e) => {
-                    const target = e.currentTarget as HTMLImageElement;
-                    if (target.src.includes('/fallback.svg')) return;
-                    target.src = '/fallback.svg';
-                  }}
-                />
+              <article
+                key={s.id}
+                className="group relative rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm"
+              >
+                <StoryImage src={s.image} alt={s.title} variant="top" />
                 <div className="p-5">
                   <div className="text-xs font-semibold uppercase tracking-wide text-indigo-600">{s.category}</div>
                   <h3 className="mt-2 text-lg font-bold">{s.title}</h3>
