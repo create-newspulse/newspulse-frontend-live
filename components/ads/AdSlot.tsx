@@ -8,22 +8,47 @@ import { useLanguage } from "../../src/i18n/language";
 import { getPublicApiBaseUrl } from "../../lib/publicApiBase";
 import { isSafeMode } from "../../utils/safeMode";
 
-export type AdSlotName = "HOME_728x90" | "HOME_RIGHT_300x250";
+export type AdSlotName = "HOME_728x90" | "HOME_RIGHT_300x250" | "ARTICLE_INLINE";
 
 export type AdSlotProps = {
   slot: AdSlotName;
   className?: string;
   fallback?: React.ReactNode;
+  hideWhenEmpty?: boolean;
+  showAdvertisementLabel?: boolean;
 };
 
 type PublicAd = {
-  id: string | number;
+  id?: string | number;
   _id?: string;
   title?: string;
   imageUrl?: string;
   targetUrl?: string;
   isClickable?: boolean;
 };
+
+function resolveAdImageUrl(ad: any): string {
+  if (!ad) return '';
+  return String(
+    ad.imageUrl ||
+      ad.imageURL ||
+      ad.image ||
+      ad.imageSrc ||
+      ad.creativeUrl ||
+      ad.creativeURL ||
+      ''
+  ).trim();
+}
+
+function normalizeAd(ad: any): PublicAd | null {
+  if (!ad) return null;
+  const imageUrl = resolveAdImageUrl(ad);
+  if (!imageUrl) return null;
+  return {
+    ...(ad as PublicAd),
+    imageUrl,
+  };
+}
 
 function getApiBase(): string {
   return getPublicApiBaseUrl();
@@ -45,6 +70,12 @@ function pickAd(payload: any): PublicAd | null {
 
 function slotSizing(slot: AdSlotName) {
   switch (slot) {
+    case "ARTICLE_INLINE":
+      return {
+        wrap: "w-full",
+        frame: "mx-auto w-full max-w-[728px]",
+        img: "h-auto w-full object-contain",
+      };
     case "HOME_RIGHT_300x250":
       return {
         wrap: "w-full",
@@ -95,10 +126,20 @@ function AdBadge() {
   );
 }
 
-export default function AdSlot({ slot, className = "", fallback }: AdSlotProps) {
+export default function AdSlot({
+  slot,
+  className = "",
+  fallback,
+  hideWhenEmpty: hideWhenEmptyProp,
+  showAdvertisementLabel: showAdvertisementLabelProp,
+}: AdSlotProps) {
   const { slotEnabled } = useAdSettings();
-  const isDisabled = slotEnabled?.[slot] === false;
+  const slotEnabledValue = slotEnabled?.[slot];
+  const isExplicitlyEnabled = slotEnabledValue === true;
+  const isDisabled = slotEnabledValue === false;
   const SAFE_MODE = isSafeMode();
+  const hideWhenEmpty = hideWhenEmptyProp ?? slot === "ARTICLE_INLINE";
+  const showAdvertisementLabel = showAdvertisementLabelProp ?? slot === "ARTICLE_INLINE";
 
   const pollSec = (() => {
     const raw = Number(process.env.NEXT_PUBLIC_PUBLIC_ADS_POLL_SEC || 0);
@@ -108,6 +149,36 @@ export default function AdSlot({ slot, className = "", fallback }: AdSlotProps) 
   const [ad, setAd] = useState<PublicAd | null>(null);
   const [loaded, setLoaded] = useState(false);
   const firedImpressionFor = useRef<string | number | null>(null);
+
+  const [hasMounted, setHasMounted] = useState(false);
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
+
+  const debugAdsFlag = String(process.env.NEXT_PUBLIC_DEBUG_ADS || '').trim().toLowerCase();
+  const debugAdsEnabled = debugAdsFlag === '1' || debugAdsFlag === 'true' || debugAdsFlag === 'yes';
+
+  const isLocalhostDev =
+    hasMounted &&
+    process.env.NODE_ENV !== 'production' &&
+    debugAdsEnabled &&
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+  const devDebugText = (() => {
+    if (!isLocalhostDev) return null;
+    if (slot !== 'ARTICLE_INLINE') return null;
+
+    // IMPORTANT: when placement is OFF, show nothing at all.
+    if (!isExplicitlyEnabled) return null;
+
+    if (loaded && !ad) return 'ARTICLE_INLINE: enabled but no ad found';
+    return null;
+  })();
+
+  const DevDebugLine = devDebugText ? (
+    <div className="not-prose mb-2 text-[11px] font-semibold text-slate-500">{devDebugText}</div>
+  ) : null;
 
   const base = useMemo(() => getApiBase(), []);
   const sizes = useMemo(() => slotSizing(slot), [slot]);
@@ -133,10 +204,10 @@ export default function AdSlot({ slot, className = "", fallback }: AdSlotProps) 
         const json = await res.json().catch(() => null as any);
         if (signal?.aborted) return;
 
-        const nextAd = (json && (json.ad ?? null)) ? (json.ad as PublicAd) : pickAd(json);
+        const picked = (json && (json.ad ?? null)) ? (json.ad as PublicAd) : pickAd(json);
+        const nextAd = normalizeAd(picked);
         // Image-only ads supported; click-through is optional.
-        if (nextAd?.imageUrl) setAd(nextAd);
-        else setAd(null);
+        setAd(nextAd);
       } catch (err: any) {
         // Common in dev when ad blockers/CORS/offline interfere. Don't crash the page.
         if (err?.name === "AbortError") return;
@@ -243,12 +314,47 @@ export default function AdSlot({ slot, className = "", fallback }: AdSlotProps) 
 
   const isClickable = !!ad?.isClickable && !!ad?.targetUrl;
 
-  // Respect global ON/OFF switch. Return null only after all hooks.
+  // Respect global ON/OFF switch. When OFF, render nothing (including no dev debug line).
   if (isDisabled) return null;
 
   if (!ad) {
-    // While loading, still show fallback to keep layout stable.
-    return <div className={`${sizes.wrap} ${className}`}>{fallback ?? <DefaultFallback slot={slot} />}</div>;
+    // For inline article placements we must not render placeholders on production.
+    if (hideWhenEmpty) {
+      if (DevDebugLine) return DevDebugLine;
+      return null;
+    }
+
+    // While loading (or empty), show fallback to keep layout stable.
+    return (
+      <>
+        {DevDebugLine}
+        <div className={`${sizes.wrap} ${className}`}>{fallback ?? <DefaultFallback slot={slot} />}</div>
+      </>
+    );
+  }
+
+  if (showAdvertisementLabel) {
+    const adId = (ad as any)?.id ?? (ad as any)?._id;
+    return (
+      <section className={`not-prose my-8 block md:my-10 ${className}`} aria-label="Advertisement" data-ad-slot={slot} data-ad-id={adId ? String(adId) : undefined}>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4 shadow-sm md:px-5">
+          <div className="mb-3 text-center text-[11px] font-bold uppercase tracking-[0.24em] text-slate-500">
+            Advertisement
+          </div>
+          <div className="mx-auto w-full max-w-[728px] overflow-hidden rounded-xl border border-slate-200 bg-white p-3 sm:p-4">
+            {isClickable ? (
+              <a href={ad.targetUrl} target="_blank" rel="sponsored noopener noreferrer" onClick={onClick} className="block w-full cursor-pointer">
+                <img src={ad.imageUrl} alt={ad.title || "Advertisement"} className={sizes.img} loading={loaded ? "eager" : "lazy"} />
+              </a>
+            ) : (
+              <div className="block w-full cursor-default">
+                <img src={ad.imageUrl} alt={ad.title || "Advertisement"} className={sizes.img} loading={loaded ? "eager" : "lazy"} />
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+    );
   }
 
   return (

@@ -1,12 +1,13 @@
 import type { GetServerSideProps } from 'next';
 import Head from 'next/head';
 import React from 'react';
-import sanitizeHtml from 'sanitize-html';
 import { useRouter } from 'next/router';
 
 import AdSlot from '../../components/ads/AdSlot';
 import CategoryHeader from '../../src/components/category/CategoryHeader';
 import { resolveArticleSummaryOrExcerpt, type UiLang } from '../../lib/contentFallback';
+import { splitArticleHtmlForInlineAd } from '../../lib/articleInlineAd';
+import { formatArticleBodyHtml } from '../../lib/articleBody';
 import { unwrapArticle, type Article } from '../../lib/publicNewsApi';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { tHeading, toLanguageKey } from '../../utils/localizedNames';
@@ -20,51 +21,7 @@ const API_BASE =
   'https://newspulse-backend-real.onrender.com';
 
 function sanitizeContent(html: string) {
-  return sanitizeHtml(html || '', {
-    disallowedTagsMode: 'discard',
-    allowedTags: [
-      'p',
-      'br',
-      'strong',
-      'em',
-      'b',
-      'i',
-      'u',
-      's',
-      'blockquote',
-      'code',
-      'pre',
-      'ul',
-      'ol',
-      'li',
-      'h1',
-      'h2',
-      'h3',
-      'h4',
-      'h5',
-      'h6',
-      'hr',
-      'a',
-      'span',
-      'div',
-      'img',
-      'table',
-      'thead',
-      'tbody',
-      'tr',
-      'th',
-      'td',
-    ],
-    allowedAttributes: {
-      a: ['href', 'name', 'target', 'rel'],
-      img: ['src', 'alt', 'title', 'width', 'height', 'loading'],
-      '*': ['class', 'style'],
-    },
-    allowedSchemes: ['http', 'https', 'mailto'],
-    transformTags: {
-      a: sanitizeHtml.simpleTransform('a', { rel: 'noopener noreferrer', target: '_blank' }),
-    },
-  });
+  return formatArticleBodyHtml(html || '');
 }
 
 function cleanText(value: unknown): string {
@@ -264,6 +221,8 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
     pendingAttemptsRef.current = 0;
     clearPendingTimer();
   }, [article, clearPendingTimer, error, lang, pending, safeHtml, slug]);
+
+  const inlinePlacement = React.useMemo(() => splitArticleHtmlForInlineAd(resolvedSafeHtml || ''), [resolvedSafeHtml]);
 
   const tx = React.useCallback(
     (key: string, fallback: string) => {
@@ -538,7 +497,19 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
 
                 <div className="px-4 md:px-6 pb-6">
                   <article className="prose prose-slate max-w-none">
-                    <div dangerouslySetInnerHTML={{ __html: resolvedSafeHtml }} />
+                    {inlinePlacement.insertedAfterParagraph ? (
+                      <>
+                        <div dangerouslySetInnerHTML={{ __html: inlinePlacement.beforeHtml }} />
+                        <AdSlot
+                          slot="ARTICLE_INLINE"
+                          hideWhenEmpty
+                          showAdvertisementLabel
+                        />
+                        <div dangerouslySetInnerHTML={{ __html: inlinePlacement.afterHtml }} />
+                      </>
+                    ) : (
+                      <div dangerouslySetInnerHTML={{ __html: resolvedSafeHtml }} />
+                    )}
                   </article>
                 </div>
               </div>

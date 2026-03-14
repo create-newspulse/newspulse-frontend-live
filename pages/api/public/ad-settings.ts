@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 
 import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
 
-type SlotName = 'HOME_728x90' | 'HOME_RIGHT_300x250';
+type SlotName = 'HOME_728x90' | 'HOME_RIGHT_300x250' | 'ARTICLE_INLINE';
 
 export type PublicAdSettingsResponse = {
   ok: boolean;
@@ -14,8 +14,19 @@ const DEFAULT_SETTINGS: PublicAdSettingsResponse = {
   slotEnabled: {
     HOME_728x90: true,
     HOME_RIGHT_300x250: true,
+    ARTICLE_INLINE: true,
   },
 };
+
+function coerceEnabled(value: unknown): boolean {
+  if (value === false) return false;
+  if (value === 0) return false;
+  if (value == null) return true;
+  const raw = String(value).trim().toLowerCase();
+  if (!raw) return true;
+  if (raw === 'false' || raw === '0' || raw === 'off' || raw === 'disabled' || raw === 'no') return false;
+  return true;
+}
 
 function noStore(res: NextApiResponse) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -30,8 +41,9 @@ function sanitize(upstream: any): PublicAdSettingsResponse {
   return {
     ok: s?.ok === true,
     slotEnabled: {
-      HOME_728x90: slotEnabledRaw?.HOME_728x90 !== false,
-      HOME_RIGHT_300x250: slotEnabledRaw?.HOME_RIGHT_300x250 !== false,
+      HOME_728x90: coerceEnabled(slotEnabledRaw?.HOME_728x90),
+      HOME_RIGHT_300x250: coerceEnabled(slotEnabledRaw?.HOME_RIGHT_300x250),
+      ARTICLE_INLINE: coerceEnabled(slotEnabledRaw?.ARTICLE_INLINE),
     },
   };
 }
