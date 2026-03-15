@@ -3,10 +3,9 @@ import Head from 'next/head';
 import React from 'react';
 import { useRouter } from 'next/router';
 
-import AdSlot from '../../components/ads/AdSlot';
+import AdSlot from '../../src/components/ads/AdSlot';
 import CategoryHeader from '../../src/components/category/CategoryHeader';
 import { resolveArticleSummaryOrExcerpt, type UiLang } from '../../lib/contentFallback';
-import { splitArticleHtmlForInlineAd } from '../../lib/articleInlineAd';
 import { formatArticleBodyHtml } from '../../lib/articleBody';
 import { unwrapArticle, type Article } from '../../lib/publicNewsApi';
 import { useI18n } from '../../src/i18n/LanguageProvider';
@@ -222,7 +221,38 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
     clearPendingTimer();
   }, [article, clearPendingTimer, error, lang, pending, safeHtml, slug]);
 
-  const inlinePlacement = React.useMemo(() => splitArticleHtmlForInlineAd(resolvedSafeHtml || ''), [resolvedSafeHtml]);
+  const paragraphBlocks = React.useMemo(() => {
+    const html = String(resolvedSafeHtml || '').trim();
+    if (!html) return [] as string[];
+
+    const blocks: string[] = [];
+    const re = /<p\b[^>]*>[\s\S]*?<\/p>/gi;
+    let lastIndex = 0;
+    let match: RegExpExecArray | null = null;
+
+    while ((match = re.exec(html))) {
+      const before = html.slice(lastIndex, match.index);
+      if (before.trim()) blocks.push(before);
+      blocks.push(match[0]);
+      lastIndex = re.lastIndex;
+    }
+
+    const rest = html.slice(lastIndex);
+    if (rest.trim()) blocks.push(rest);
+
+    return blocks;
+  }, [resolvedSafeHtml]);
+
+  const inlineInsertAfterIndex = React.useMemo(() => {
+    const indices: number[] = [];
+    for (let i = 0; i < paragraphBlocks.length; i += 1) {
+      const b = String(paragraphBlocks[i] || '').trim();
+      if (/^<p\b/i.test(b)) indices.push(i);
+    }
+    if (!indices.length) return null;
+    if (indices.length >= 3) return indices[2];
+    return indices[0];
+  }, [paragraphBlocks]);
 
   const tx = React.useCallback(
     (key: string, fallback: string) => {
@@ -497,12 +527,15 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
 
                 <div className="px-4 md:px-6 pb-6">
                   <article className="prose prose-slate max-w-none">
-                    {inlinePlacement.insertedAfterParagraph ? (
-                      <>
-                        <div dangerouslySetInnerHTML={{ __html: inlinePlacement.beforeHtml }} />
-                        <AdSlot slot="ARTICLE_INLINE" />
-                        <div dangerouslySetInnerHTML={{ __html: inlinePlacement.afterHtml }} />
-                      </>
+                    {paragraphBlocks.length ? (
+                      paragraphBlocks.map((block, idx) => (
+                        <React.Fragment key={`pblock-${idx}`}>
+                          <div dangerouslySetInnerHTML={{ __html: block }} />
+                          {inlineInsertAfterIndex === idx ? (
+                            <AdSlot slot="ARTICLE_INLINE" variant="articleInline" />
+                          ) : null}
+                        </React.Fragment>
+                      ))
                     ) : (
                       <div dangerouslySetInnerHTML={{ __html: resolvedSafeHtml }} />
                     )}
@@ -510,7 +543,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                 </div>
 
                 <div className="px-4 md:px-6 pb-6">
-                  <AdSlot slot="ARTICLE_END" />
+                  <AdSlot slot="ARTICLE_END" variant="articleEnd" />
                 </div>
               </div>
 
@@ -629,7 +662,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                 </div>
 
                 {/* Ad */}
-                <AdSlot slot="HOME_RIGHT_300x250" />
+                <AdSlot slot="HOME_RIGHT_300x250" variant="right300" />
 
                 {/* Related list */}
                 <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">

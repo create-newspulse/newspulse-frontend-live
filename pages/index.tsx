@@ -16,7 +16,7 @@ import { isSafeMode } from "../utils/safeMode";
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle } from "../lib/contentFallback";
 import OriginalTag from "../components/OriginalTag";
 import { DEFAULT_NORMALIZED_PUBLIC_SETTINGS, sanitizeEmbedUrl } from "../src/lib/publicSettings";
-import AdSlot from "../components/ads/AdSlot";
+import AdSlot from "../src/components/ads/AdSlot";
 import { useBookmarks } from "../hooks/useBookmarks";
 import { resolveArticleSlug } from "../lib/articleSlugs";
 import { buildNewsUrl } from "../lib/newsRoutes";
@@ -2890,6 +2890,7 @@ export default function UiPreviewV145() {
 
       <AdSlot
         slot="HOME_728x90"
+        variant="homeBanner"
         className="mx-auto w-full max-w-[1440px] px-4 md:px-8 my-2"
       />
 
@@ -2920,7 +2921,7 @@ export default function UiPreviewV145() {
           {/* RIGHT (Advertisements) */}
           <aside className="col-span-12 lg:col-span-3">
             <div className="sticky top-4 grid gap-4">
-              <AdSlot slot="HOME_RIGHT_300x250" />
+              <AdSlot slot="HOME_RIGHT_300x250" variant="right300" />
 
               <FeedList theme={theme} title={t('home.latest')} items={latestFromBackend} onOpen={(id: string) => onToast(id === "viewall" ? "View all latest (planned)" : `Open story: ${id}`)} />
 
