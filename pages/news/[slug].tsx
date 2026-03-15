@@ -500,17 +500,17 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                     {inlinePlacement.insertedAfterParagraph ? (
                       <>
                         <div dangerouslySetInnerHTML={{ __html: inlinePlacement.beforeHtml }} />
-                        <AdSlot
-                          slot="ARTICLE_INLINE"
-                          hideWhenEmpty
-                          showAdvertisementLabel
-                        />
+                        <AdSlot slot="ARTICLE_INLINE" />
                         <div dangerouslySetInnerHTML={{ __html: inlinePlacement.afterHtml }} />
                       </>
                     ) : (
                       <div dangerouslySetInnerHTML={{ __html: resolvedSafeHtml }} />
                     )}
                   </article>
+                </div>
+
+                <div className="px-4 md:px-6 pb-6">
+                  <AdSlot slot="ARTICLE_END" />
                 </div>
               </div>
 

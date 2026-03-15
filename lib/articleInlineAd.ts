@@ -1,7 +1,7 @@
 export type ArticleInlinePlacement = {
   beforeHtml: string;
   afterHtml: string;
-  insertedAfterParagraph: 2 | 3 | null;
+  insertedAfterParagraph: 1 | 3 | null;
   paragraphTagCount: number;
   bodyParagraphCount: number;
   containsEscapedNewlines: boolean;
@@ -38,11 +38,13 @@ function isHeadingOnlyParagraph(innerHtml: string, innerText: string): boolean {
   return unwrapped === innerText && innerText.length <= 120;
 }
 
-function pickTargetParagraph(candidates: ParagraphCandidate[]): 2 | 3 | null {
-  if (candidates.length < 2) return null;
-  const firstTwoChars = candidates[0].textLength + candidates[1].textLength;
-  if (candidates.length >= 3 && firstTwoChars < 160) return 3;
-  return 2;
+function pickTargetParagraph(candidates: ParagraphCandidate[]): 1 | 3 | null {
+  // Desired behavior:
+  // - Prefer inserting after the 3rd body paragraph.
+  // - If the article is short (< 3 body paragraphs), still insert after the 1st paragraph.
+  if (candidates.length >= 3) return 3;
+  if (candidates.length >= 1) return 1;
+  return null;
 }
 
 export function splitArticleHtmlForInlineAd(html: string): ArticleInlinePlacement {
@@ -54,20 +56,6 @@ export function splitArticleHtmlForInlineAd(html: string): ArticleInlinePlacemen
   if (!source) {
     return {
       beforeHtml: '',
-      afterHtml: '',
-      insertedAfterParagraph: null,
-      paragraphTagCount,
-      bodyParagraphCount: 0,
-      containsEscapedNewlines,
-      containsLiteralNewlines,
-    };
-  }
-
-  // Requirement: only insert when the article has at least 4 paragraphs.
-  // Use raw <p> tag count (not just “body paragraphs”) to avoid inserting into very short content.
-  if (paragraphTagCount < 4) {
-    return {
-      beforeHtml: source,
       afterHtml: '',
       insertedAfterParagraph: null,
       paragraphTagCount,
@@ -132,7 +120,7 @@ export function splitArticleHtmlForInlineAd(html: string): ArticleInlinePlacemen
   }
 
   const insertedAfterParagraph = pickTargetParagraph(candidates);
-  const splitIndex = insertedAfterParagraph === 3 ? candidates[2]?.boundary : candidates[1]?.boundary;
+  const splitIndex = insertedAfterParagraph === 3 ? candidates[2]?.boundary : candidates[0]?.boundary;
 
   if (splitIndex == null || insertedAfterParagraph == null) {
     return {
