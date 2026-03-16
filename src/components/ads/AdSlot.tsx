@@ -71,6 +71,8 @@ function defaultVariantForSlot(normalizedSlot: string): Variant {
   switch (normalizedSlot) {
     case 'HOME_728x90':
       return 'homeBanner';
+    case 'FOOTER_BANNER_728x90':
+      return 'homeBanner';
     case 'HOME_RIGHT_300x250':
       return 'right300';
     case 'ARTICLE_END':
@@ -131,6 +133,25 @@ function HomeBannerPlaceholder() {
         </div>
 
         <AdvertiseLink>{t('common.advertiseHere') || 'Advertise Here'}</AdvertiseLink>
+      </div>
+    </div>
+  );
+}
+
+function BannerImageBlockedPlaceholder() {
+  return (
+    <div className="w-full rounded-2xl border border-slate-200/80 bg-white/70 backdrop-blur px-4 py-3 shadow-sm">
+      <div className="min-h-[56px] md:min-h-[72px] flex items-center justify-between gap-4">
+        <div className="min-w-0 flex items-center gap-3">
+          <AdBadge />
+
+          <div className="min-w-0">
+            <div className="font-extrabold text-slate-900 truncate">Image blocked (untrusted domain)</div>
+            <div className="text-xs text-slate-600 truncate">Please host/upload the banner image (preferred).</div>
+          </div>
+        </div>
+
+        <AdvertiseLink>Advertise Here</AdvertiseLink>
       </div>
     </div>
   );
@@ -207,9 +228,9 @@ export default function AdSlot({ slot, variant, className = '' }: AdSlotProps) {
   const [enabled, setEnabled] = React.useState(true);
   const [ad, setAd] = React.useState<PublicAd | null>(null);
 
-  const [creativeSrc, setCreativeSrc] = React.useState('');
+  const [imgError, setImgError] = React.useState(false);
   React.useEffect(() => {
-    setCreativeSrc(String(ad?.imageUrl || '').trim());
+    setImgError(false);
   }, [ad?.imageUrl]);
 
   React.useEffect(() => {
@@ -314,6 +335,8 @@ export default function AdSlot({ slot, variant, className = '' }: AdSlotProps) {
 
   if (!enabled) return null;
 
+  const imageUrl = (ad?.imageUrl || '').trim();
+
   const renderPlaceholder = () => {
     if (effectiveVariant === 'homeBanner') return <HomeBannerPlaceholder />;
     if (effectiveVariant === 'banner728x90') return <FooterBanner728Placeholder />;
@@ -321,17 +344,17 @@ export default function AdSlot({ slot, variant, className = '' }: AdSlotProps) {
     return <ArticleCompactPlaceholder reserveHeightClass={reserve} />;
   };
 
-  if (!ad) {
-    return <div className={className}>{renderPlaceholder()}</div>;
+  if (!ad || !imageUrl || imgError) {
+    const placeholder = imgError && (effectiveVariant === 'homeBanner' || effectiveVariant === 'banner728x90')
+      ? <BannerImageBlockedPlaceholder />
+      : renderPlaceholder();
+
+    return <div className={className}>{placeholder}</div>;
   }
 
   const onCreativeError = (event: React.SyntheticEvent<HTMLImageElement>) => {
-    const img = event.currentTarget;
-    const current = String(img.getAttribute('src') || '').trim();
-    if (!current) return;
-    if (current === '/ads/placeholder.png') return;
-    img.src = '/ads/placeholder.png';
-    setCreativeSrc('/ads/placeholder.png');
+    event.currentTarget.style.display = 'none';
+    setImgError(true);
   };
 
   const imgClassName = (() => {
@@ -351,7 +374,7 @@ export default function AdSlot({ slot, variant, className = '' }: AdSlotProps) {
 
   const body = (
     <img
-      src={creativeSrc}
+      src={imageUrl}
       alt={ad.title || 'Advertisement'}
       loading="lazy"
       decoding="async"

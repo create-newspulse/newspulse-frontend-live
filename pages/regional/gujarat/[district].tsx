@@ -598,7 +598,11 @@ export default function GujaratDistrictPage() {
         onPickDistrict={onPickDistrict}
       />
 
-      <AdSlot slot="FOOTER_BANNER_728x90" variant="banner728x90" className="mx-auto max-w-6xl px-4 my-4" />
+      <AdSlot
+        slot="FOOTER_BANNER_728x90"
+        variant="homeBanner"
+        className="mx-auto w-full max-w-[1440px] px-4 md:px-8 my-2"
+      />
 
       <footer className="border-t border-slate-200 bg-white">
         <div className="mx-auto max-w-6xl px-4 py-6 text-sm text-slate-600">

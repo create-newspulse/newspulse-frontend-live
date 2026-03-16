@@ -2978,8 +2978,8 @@ export default function UiPreviewV145() {
             <>
               <AdSlot
                 slot="FOOTER_BANNER_728x90"
-                variant="banner728x90"
-                className="mx-auto max-w-6xl px-4 my-4"
+                variant="homeBanner"
+                className="mx-auto w-full max-w-[1440px] px-4 md:px-8 my-2"
               />
               {b.node}
             </>
