@@ -1,5 +1,3 @@
-"use client";
-
 import React, { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
@@ -2975,7 +2973,20 @@ export default function UiPreviewV145() {
 
       {/* APP PROMO + FOOTER */}
       {bottomBlocks.map((b) => (
-        <React.Fragment key={b.key}>{b.node}</React.Fragment>
+        <React.Fragment key={b.key}>
+          {b.key === 'footer' ? (
+            <>
+              <AdSlot
+                slot="FOOTER_BANNER_728x90"
+                variant="banner728x90"
+                className="mx-auto max-w-6xl px-4 my-4"
+              />
+              {b.node}
+            </>
+          ) : (
+            b.node
+          )}
+        </React.Fragment>
       ))}
 
       {/* DRAWERS */}

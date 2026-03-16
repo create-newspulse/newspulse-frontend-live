@@ -1,11 +1,9 @@
-"use client";
-
 import React from 'react';
 
 import { normalizeSlot } from '../../lib/adSlots';
 import { useLanguage } from '../../i18n/language';
 
-type Variant = 'homeBanner' | 'right300' | 'articleInline' | 'articleEnd';
+type Variant = 'homeBanner' | 'banner728x90' | 'right300' | 'articleInline' | 'articleEnd';
 
 type PublicAd = {
   id?: string | number;
@@ -162,6 +160,17 @@ function Right300Placeholder() {
   );
 }
 
+function FooterBanner728Placeholder() {
+  return (
+    <div className="mx-auto w-full max-w-[728px] rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden h-[90px] flex items-center justify-between gap-4 px-4">
+      <div className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-slate-500">ADVERTISEMENT</div>
+      <a href="/advertise" className="shrink-0 text-sm font-semibold underline text-slate-700">
+        Advertise Here
+      </a>
+    </div>
+  );
+}
+
 function ArticleCompactPlaceholder({ reserveHeightClass }: { reserveHeightClass: string }) {
   return (
     <div className={`mx-auto w-full max-w-[728px] rounded-2xl border border-slate-200 bg-white px-4 py-4 text-center ${reserveHeightClass}`}>
@@ -177,6 +186,8 @@ function sizing(variant: Variant) {
   switch (variant) {
     case 'homeBanner':
       return { wrap: 'w-full', reserve: 'min-h-[72px]' };
+    case 'banner728x90':
+      return { wrap: 'w-full', reserve: 'min-h-[90px]' };
     case 'right300':
       return { wrap: 'w-full', reserve: 'min-h-[250px]' };
     case 'articleEnd':
@@ -187,7 +198,7 @@ function sizing(variant: Variant) {
 }
 
 export default function AdSlot({ slot, variant, className = '' }: AdSlotProps) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
 
   const normalizedSlot = React.useMemo(() => normalizeSlot(slot), [slot]);
   const effectiveVariant = variant ?? defaultVariantForSlot(normalizedSlot);
@@ -208,35 +219,56 @@ export default function AdSlot({ slot, variant, className = '' }: AdSlotProps) {
       return;
     }
 
-    const ac = new AbortController();
+    const REFRESH_INTERVAL_MS = 10_000;
+    const lang = String(language || 'en').toLowerCase();
     const base = resolveBackendBase();
-    const backendUrl = base ? `${base}/api/public/ads?slot=${encodeURIComponent(normalizedSlot)}` : '';
-    const proxyUrl = `/api/public/ads?slot=${encodeURIComponent(normalizedSlot)}`;
+    const qs = `slot=${encodeURIComponent(normalizedSlot)}&lang=${encodeURIComponent(lang)}`;
+    const backendUrl = base ? `${base}/api/public/ads?${qs}` : '';
+    const proxyUrl = `/api/public/ads?${qs}`;
 
-    async function fetchJson(url: string) {
+    let activeController: AbortController | null = null;
+    const abortActive = () => {
+      if (!activeController) return;
+      try {
+        activeController.abort();
+      } catch {
+        // ignore
+      }
+      activeController = null;
+    };
+
+    async function fetchJson(url: string, signal: AbortSignal) {
       const res = await fetch(url, {
         method: 'GET',
-        signal: ac.signal,
+        signal,
+        cache: 'no-store',
         headers: { Accept: 'application/json' },
       });
       const json = (await res.json().catch(() => null)) as PublicAdsResponse | any;
       return { res, json };
     }
 
-    (async () => {
+    const applyPayload = (json: any) => {
+      const enabledRaw = json && typeof json === 'object' ? (json as any).enabled : undefined;
+      const nextEnabled = enabledRaw === false ? false : true;
+      const picked = json && typeof json === 'object' ? ((json as any).ad ?? pickAd(json)) : null;
+      const nextAd = normalizeAd(picked);
+
+      setEnabled(nextEnabled);
+      setAd(nextEnabled ? nextAd : null);
+    };
+
+    async function refreshOnce() {
+      abortActive();
+      activeController = new AbortController();
+      const signal = activeController.signal;
+
       try {
-        const { json } = backendUrl ? await fetchJson(backendUrl) : await fetchJson(proxyUrl);
-        if (ac.signal.aborted) return;
-
-        const enabledRaw = json && typeof json === 'object' ? (json as any).enabled : undefined;
-        const nextEnabled = enabledRaw === false ? false : true;
-        const picked = json && typeof json === 'object' ? ((json as any).ad ?? pickAd(json)) : null;
-        const nextAd = normalizeAd(picked);
-
-        setEnabled(nextEnabled);
-        setAd(nextEnabled ? nextAd : null);
+        const { json } = backendUrl ? await fetchJson(backendUrl, signal) : await fetchJson(proxyUrl, signal);
+        if (signal.aborted) return;
+        applyPayload(json);
       } catch {
-        if (ac.signal.aborted) return;
+        if (signal.aborted) return;
         // If direct backend fetch failed (CORS/network), retry via same-origin proxy.
         if (!backendUrl) {
           setEnabled(true);
@@ -245,31 +277,46 @@ export default function AdSlot({ slot, variant, className = '' }: AdSlotProps) {
         }
 
         try {
-          const { json } = await fetchJson(proxyUrl);
-          if (ac.signal.aborted) return;
-
-          const enabledRaw = json && typeof json === 'object' ? (json as any).enabled : undefined;
-          const nextEnabled = enabledRaw === false ? false : true;
-          const picked = json && typeof json === 'object' ? ((json as any).ad ?? pickAd(json)) : null;
-          const nextAd = normalizeAd(picked);
-
-          setEnabled(nextEnabled);
-          setAd(nextEnabled ? nextAd : null);
+          const { json } = await fetchJson(proxyUrl, signal);
+          if (signal.aborted) return;
+          applyPayload(json);
         } catch {
-          if (ac.signal.aborted) return;
+          if (signal.aborted) return;
           setEnabled(true);
           setAd(null);
         }
       }
-    })();
+    }
 
-    return () => ac.abort();
-  }, [normalizedSlot]);
+    // Initial fetch + auto refresh.
+    void refreshOnce();
+    const intervalId = window.setInterval(() => {
+      void refreshOnce();
+    }, REFRESH_INTERVAL_MS);
+
+    // Revalidate on focus/visibility.
+    const onFocus = () => {
+      void refreshOnce();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') void refreshOnce();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+      abortActive();
+    };
+  }, [normalizedSlot, language]);
 
   if (!enabled) return null;
 
   const renderPlaceholder = () => {
     if (effectiveVariant === 'homeBanner') return <HomeBannerPlaceholder />;
+    if (effectiveVariant === 'banner728x90') return <FooterBanner728Placeholder />;
     if (effectiveVariant === 'right300') return <Right300Placeholder />;
     return <ArticleCompactPlaceholder reserveHeightClass={reserve} />;
   };
@@ -293,6 +340,8 @@ export default function AdSlot({ slot, variant, className = '' }: AdSlotProps) {
         return 'mx-auto w-full max-w-[300px] h-[250px] object-contain';
       case 'homeBanner':
         return 'w-full h-auto max-h-[90px] object-contain';
+      case 'banner728x90':
+        return 'w-full h-full object-cover block';
       case 'articleEnd':
       case 'articleInline':
       default:
@@ -349,22 +398,31 @@ export default function AdSlot({ slot, variant, className = '' }: AdSlotProps) {
   const frameClassName =
     effectiveVariant === 'homeBanner'
       ? 'w-full rounded-2xl border border-slate-200/80 bg-white/70 backdrop-blur px-4 py-3 shadow-sm'
-      : 'mx-auto w-full max-w-[728px] rounded-2xl border border-slate-200 bg-white p-3';
+      : effectiveVariant === 'banner728x90'
+        ? 'mx-auto w-full max-w-[728px] rounded-2xl border border-slate-200 bg-white overflow-hidden h-[90px]'
+        : 'mx-auto w-full max-w-[728px] rounded-2xl border border-slate-200 bg-white p-3';
+
+  const containerClassName =
+    effectiveVariant === 'banner728x90'
+      ? `${frameClassName} flex items-stretch`
+      : `${frameClassName} ${reserve} flex items-center justify-center`;
+
+  const fillClassName = effectiveVariant === 'banner728x90' ? 'block w-full h-full' : 'block w-full';
 
   return (
     <div className={`${className} not-prose`} data-ad-slot={normalizedSlot}>
-      <div className={`${frameClassName} ${reserve} flex items-center justify-center`}>
+      <div className={containerClassName}>
         {isClickable ? (
           <a
             href={String(ad.targetUrl)}
             target="_blank"
             rel="nofollow sponsored noopener noreferrer"
-            className="block w-full"
+            className={fillClassName}
           >
             {body}
           </a>
         ) : (
-          <div className="block w-full">{body}</div>
+          <div className={fillClassName}>{body}</div>
         )}
       </div>
     </div>

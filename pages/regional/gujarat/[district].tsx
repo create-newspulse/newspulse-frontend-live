@@ -18,6 +18,7 @@ import { normalizeLang, useI18n } from '../../../src/i18n/LanguageProvider';
 import { getActiveRouteLang } from '../../../utils/routeLang';
 import { unwrapRegionalFeedItems } from '../../../lib/unwrapRegionalFeed';
 import { buildRegionalFeedSearchParams } from '../../../lib/regionalFeedQuery';
+import AdSlot from '../../../src/components/ads/AdSlot';
 
 const CATEGORIES = [
   'All',
@@ -596,6 +597,8 @@ export default function GujaratDistrictPage() {
         onPickAll={() => pushPath('/regional/gujarat')}
         onPickDistrict={onPickDistrict}
       />
+
+      <AdSlot slot="FOOTER_BANNER_728x90" variant="banner728x90" className="mx-auto max-w-6xl px-4 my-4" />
 
       <footer className="border-t border-slate-200 bg-white">
         <div className="mx-auto max-w-6xl px-4 py-6 text-sm text-slate-600">
