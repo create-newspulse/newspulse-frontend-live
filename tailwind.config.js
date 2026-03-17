@@ -4,6 +4,17 @@ module.exports = {
     "./pages/**/*.{js,ts,jsx,tsx}",
     "./components/**/*.{js,ts,jsx,tsx}"
   ],
+  safelist: [
+    'max-w-[728px]',
+    'max-w-[970px]',
+    'xl:max-w-[900px]',
+    'xl:max-w-[1200px]',
+    'h-[250px]',
+    'max-w-[300px]',
+    'h-[600px]',
+    'w-[calc(100%-2rem)]',
+    'h-[calc(100%-2rem)]',
+  ],
   darkMode: 'class',
   theme: {
     extend: {

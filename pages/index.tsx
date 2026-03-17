@@ -2889,7 +2889,13 @@ export default function UiPreviewV145() {
       <AdSlot
         slot="HOME_728x90"
         variant="homeBanner"
-        className="mx-auto w-full max-w-[1440px] px-4 md:px-8 my-2"
+        className="mx-auto mt-3 mb-4"
+      />
+
+      <AdSlot
+        slot="HOME_BILLBOARD_970x250"
+        variant="billboard970x250"
+        className="mx-auto mt-2 mb-8"
       />
 
       {/* TRENDING (below top advertisement) */}
@@ -2920,6 +2926,8 @@ export default function UiPreviewV145() {
           <aside className="col-span-12 lg:col-span-3">
             <div className="sticky top-4 grid gap-4">
               <AdSlot slot="HOME_RIGHT_300x250" variant="right300" />
+
+              <AdSlot slot="HOME_RIGHT_300x600" variant="right300x600" className="hidden lg:block" />
 
               <FeedList theme={theme} title={t('home.latest')} items={latestFromBackend} onOpen={(id: string) => onToast(id === "viewall" ? "View all latest (planned)" : `Open story: ${id}`)} />
 
