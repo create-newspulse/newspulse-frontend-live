@@ -10,6 +10,7 @@ import { getTrendingTopics } from "../lib/getTrendingTopics";
 import { fetchPublicNews, type Article } from "../lib/publicNewsApi";
 import { toTickerTexts } from "../lib/publicBroadcast";
 import { usePublicBroadcastTicker } from "../hooks/usePublicBroadcastTicker";
+import { usePublicAdSlot } from "../hooks/usePublicAdSlot";
 import { isSafeMode } from "../utils/safeMode";
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle } from "../lib/contentFallback";
 import OriginalTag from "../components/OriginalTag";
@@ -997,6 +998,7 @@ function TickerBar({ theme, kind, items, onViewAll, durationSec }: any) {
   const { t, lang } = useI18n();
   const label = kind === "breaking" ? `🔥 ${t('home.breakingNews')}` : `🔵 ${t('home.liveUpdates')}`;
   const tickerLang = lang === 'gu' ? 'gu' : lang === 'hi' ? 'hi' : 'en';
+  const sponsor = useTickerSponsor(kind, tickerLang);
 
   const defaultDurationSec = kind === 'breaking' ? 18 : 24;
   const maxVisibleItems = kind === 'breaking' ? 12 : 15;
@@ -1063,7 +1065,7 @@ function TickerBar({ theme, kind, items, onViewAll, durationSec }: any) {
               </span>
 
               <div
-                className="relative min-w-0 flex-1 overflow-hidden pr-24"
+                className="relative min-w-0 flex-1 overflow-hidden pr-6"
                 style={{
                   WebkitMaskImage: "linear-gradient(to right, black 0%, black 90%, transparent)",
                   maskImage: "linear-gradient(to right, black 0%, black 90%, transparent)",
@@ -1087,7 +1089,15 @@ function TickerBar({ theme, kind, items, onViewAll, durationSec }: any) {
                 </div>
               </div>
 
-              <button type="button" onClick={onViewAll} className="text-xs font-semibold text-white/95 hover:underline flex-none relative z-10">
+              <div className="hidden md:flex items-center gap-3 shrink-0">
+                <TickerSponsorMeta kind={kind} sponsor={sponsor} />
+
+                <button type="button" onClick={onViewAll} className="text-xs font-semibold text-white whitespace-nowrap flex-none relative z-10">
+                  {t('common.viewAll')}
+                </button>
+              </div>
+
+              <button type="button" onClick={onViewAll} className="text-xs font-semibold text-white whitespace-nowrap flex-none relative z-10 md:hidden">
                 {t('common.viewAll')}
               </button>
             </div>
@@ -1096,6 +1106,74 @@ function TickerBar({ theme, kind, items, onViewAll, durationSec }: any) {
       </div>
     </div>
   );
+}
+
+type TickerSponsor = {
+  brand: string;
+  targetUrl: string;
+};
+
+function TickerSponsorMeta({ kind, sponsor }: { kind: 'breaking' | 'live'; sponsor: TickerSponsor | null }) {
+  void kind;
+  if (sponsor) {
+    return (
+      <a
+        href={sponsor.targetUrl}
+        target="_blank"
+        rel="sponsored noopener noreferrer"
+        className="hidden md:flex text-[11px] opacity-90 text-white whitespace-nowrap hover:opacity-100"
+        title={`Sponsored by ${sponsor.brand}`}
+      >
+        Sponsored by <span className="font-semibold max-w-[180px] inline-block align-middle truncate">{sponsor.brand}</span>
+      </a>
+    );
+  }
+
+  return null;
+}
+
+function resolveSponsorBrand(ad: any): string {
+  const normalizeLabel = (value: unknown): string => {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    const upper = text.toUpperCase();
+    if (/^(?:[A-Z0-9]+_)+[A-Z0-9]+$/.test(text) && text === upper) return '';
+    return text;
+  };
+
+  const candidates = [
+    ad?.brandName,
+    ad?.title,
+    ad?.name,
+    ad?.advertiserName,
+  ];
+
+  for (const candidate of candidates) {
+    const value = normalizeLabel(candidate);
+    if (value) return value;
+  }
+
+  return '';
+}
+
+function normalizeSponsorAd(ad: any, enabled: boolean): TickerSponsor | null {
+  if (!enabled || !ad || typeof ad !== 'object') return null;
+  const brand = resolveSponsorBrand(ad);
+  if (!brand) return null;
+  const targetUrl = String(ad.targetUrl || ad.clickUrl || ad.url || '').trim();
+  if (!targetUrl) return null;
+  return { brand, targetUrl };
+}
+
+function useTickerSponsor(kind: 'breaking' | 'live', lang: 'en' | 'hi' | 'gu') {
+  const slot = kind === 'live' ? 'LIVE_UPDATE_SPONSOR' : 'BREAKING_SPONSOR';
+  const { enabled, ad } = usePublicAdSlot({
+    slot,
+    language: lang,
+    allowWithoutImage: true,
+  });
+
+  return normalizeSponsorAd(ad, enabled);
 }
 
 function TrendingStrip({ theme, onPick }: any) {

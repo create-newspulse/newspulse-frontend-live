@@ -1,5 +1,6 @@
 import React from 'react';
 
+import { usePublicAdSlot, type PublicAd } from '../../../hooks/usePublicAdSlot';
 import { normalizeSlot } from '../../lib/adSlots';
 import { useLanguage } from '../../i18n/language';
 
@@ -11,29 +12,6 @@ type Variant =
   | 'right300x600'
   | 'articleInline'
   | 'articleEnd';
-
-type PublicAd = {
-  id?: string | number;
-  _id?: string;
-  title?: string;
-  imageUrl?: string;
-  targetUrl?: string;
-  isClickable?: boolean;
-  width?: number | string;
-  height?: number | string;
-  imageWidth?: number | string;
-  imageHeight?: number | string;
-  creativeWidth?: number | string;
-  creativeHeight?: number | string;
-};
-
-type PublicAdsResponse = {
-  ok?: boolean;
-  enabled?: boolean;
-  ad?: PublicAd | null;
-  ads?: PublicAd[];
-  data?: any;
-};
 
 type StrictSlotConfig = {
   w: number;
@@ -87,45 +65,6 @@ export type AdSlotProps = {
   className?: string;
   renderMode?: 'default' | 'articleDisplay';
 };
-
-function normalizeBase(raw: string): string {
-  return String(raw || '')
-    .trim()
-    .replace(/\/+$/, '')
-    .replace(/\/api\/?$/, '');
-}
-
-function resolveBackendBase(): string {
-  // Required contract for public ads.
-  const configured = normalizeBase(String(process.env.NEXT_PUBLIC_BACKEND_URL || ''));
-  return configured;
-}
-
-function resolveAdImageUrl(ad: any): string {
-  if (!ad) return '';
-  return String(
-    ad.imageUrl || ad.imageURL || ad.image || ad.imageSrc || ad.creativeUrl || ad.creativeURL || ''
-  ).trim();
-}
-
-function pickAd(payload: any): any {
-  if (!payload) return null;
-  if (payload.ad) return payload.ad;
-  if (Array.isArray(payload.ads)) return payload.ads[0] || null;
-  if (Array.isArray(payload)) return payload[0] || null;
-  if (payload.data) {
-    if (Array.isArray(payload.data)) return payload.data[0] || null;
-    return payload.data;
-  }
-  return payload;
-}
-
-function normalizeAd(ad: any): PublicAd | null {
-  if (!ad) return null;
-  const imageUrl = resolveAdImageUrl(ad);
-  if (!imageUrl) return null;
-  return { ...(ad as PublicAd), imageUrl };
-}
 
 function defaultVariantForSlot(normalizedSlot: string): Variant {
   switch (normalizedSlot) {
@@ -583,127 +522,15 @@ export default function AdSlot({ slot, variant, className = '', renderMode = 'de
 
   const strictConfig = getStrictSlotConfig(normalizedSlot);
   const homepageUnitConfig = getHomepageUnitConfig(normalizedSlot);
-
-  const [enabled, setEnabled] = React.useState(true);
-  const [ad, setAd] = React.useState<PublicAd | null>(null);
-  const [isLoading, setIsLoading] = React.useState(true);
-  const [hasResolved, setHasResolved] = React.useState(false);
+  const { enabled, ad, isLoading, hasResolved } = usePublicAdSlot({
+    slot: normalizedSlot,
+    language,
+  });
 
   const [imgError, setImgError] = React.useState(false);
   React.useEffect(() => {
     setImgError(false);
   }, [ad?.imageUrl]);
-
-  React.useEffect(() => {
-    if (!normalizedSlot) {
-      setEnabled(true);
-      setAd(null);
-      setIsLoading(false);
-      setHasResolved(true);
-      return;
-    }
-
-    setIsLoading(true);
-    setHasResolved(false);
-
-    const REFRESH_INTERVAL_MS = 10_000;
-    const lang = String(language || 'en').toLowerCase();
-    const base = resolveBackendBase();
-    const qs = `slot=${encodeURIComponent(normalizedSlot)}&lang=${encodeURIComponent(lang)}`;
-    const backendUrl = base ? `${base}/api/public/ads?${qs}` : '';
-    const proxyUrl = `/api/public/ads?${qs}`;
-
-    let activeController: AbortController | null = null;
-    const abortActive = () => {
-      if (!activeController) return;
-      try {
-        activeController.abort();
-      } catch {
-        // ignore
-      }
-      activeController = null;
-    };
-
-    async function fetchJson(url: string, signal: AbortSignal) {
-      const res = await fetch(url, {
-        method: 'GET',
-        signal,
-        cache: 'no-store',
-        headers: { Accept: 'application/json' },
-      });
-      const json = (await res.json().catch(() => null)) as PublicAdsResponse | any;
-      return { res, json };
-    }
-
-    const applyPayload = (json: any) => {
-      const enabledRaw = json && typeof json === 'object' ? (json as any).enabled : undefined;
-      const nextEnabled = enabledRaw === false ? false : true;
-      const picked = json && typeof json === 'object' ? ((json as any).ad ?? pickAd(json)) : null;
-      const nextAd = normalizeAd(picked);
-
-      setEnabled(nextEnabled);
-      setAd(nextEnabled ? nextAd : null);
-      setHasResolved(true);
-      setIsLoading(false);
-    };
-
-    async function refreshOnce() {
-      abortActive();
-      activeController = new AbortController();
-      const signal = activeController.signal;
-
-      try {
-        const { json } = backendUrl ? await fetchJson(backendUrl, signal) : await fetchJson(proxyUrl, signal);
-        if (signal.aborted) return;
-        applyPayload(json);
-      } catch {
-        if (signal.aborted) return;
-        // If direct backend fetch failed (CORS/network), retry via same-origin proxy.
-        if (!backendUrl) {
-          setEnabled(true);
-          setAd(null);
-          setHasResolved(true);
-          setIsLoading(false);
-          return;
-        }
-
-        try {
-          const { json } = await fetchJson(proxyUrl, signal);
-          if (signal.aborted) return;
-          applyPayload(json);
-        } catch {
-          if (signal.aborted) return;
-          setEnabled(true);
-          setAd(null);
-          setHasResolved(true);
-          setIsLoading(false);
-        }
-      }
-    }
-
-    // Initial fetch + auto refresh.
-    void refreshOnce();
-    const intervalId = window.setInterval(() => {
-      void refreshOnce();
-    }, REFRESH_INTERVAL_MS);
-
-    // Revalidate on focus/visibility.
-    const onFocus = () => {
-      void refreshOnce();
-    };
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') void refreshOnce();
-    };
-    window.addEventListener('focus', onFocus);
-    document.addEventListener('visibilitychange', onVisibility);
-
-    return () => {
-      window.clearInterval(intervalId);
-      window.removeEventListener('focus', onFocus);
-      document.removeEventListener('visibilitychange', onVisibility);
-      abortActive();
-    };
-  }, [normalizedSlot, language]);
 
   if (!enabled) return null;
 
@@ -893,8 +720,6 @@ export default function AdSlot({ slot, variant, className = '', renderMode = 'de
         return 'w-full h-auto max-h-[90px] object-contain';
       case 'banner728x90':
         return 'w-full h-full object-cover block';
-      case 'articleEnd':
-      case 'articleInline':
       default:
         return 'h-auto w-full object-contain';
     }

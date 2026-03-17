@@ -6,6 +6,13 @@ type PublicAd = {
   id?: string | number;
   _id?: string;
   title?: string;
+  name?: string;
+  brand?: string;
+  brandName?: string;
+  sponsor?: string;
+  sponsorName?: string;
+  advertiser?: string;
+  advertiserName?: string;
   imageUrl?: string;
   targetUrl?: string;
   isClickable?: boolean;
@@ -29,6 +36,35 @@ function normalizeOrigin(base: string): string {
   return String(base || '').trim().replace(/\/+$/, '').replace(/\/api\/?$/, '');
 }
 
+function resolveSponsorBrand(ad: any): string {
+  const normalizeLabel = (value: unknown): string => {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    const upper = text.toUpperCase();
+    if (upper === 'LIVE_UPDATE_SPONSOR') return '';
+    if (/^(?:[A-Z0-9]+_)+[A-Z0-9]+$/.test(text) && text === upper) return '';
+    return text;
+  };
+
+  const candidates = [
+    ad?.brandName,
+    ad?.title,
+    ad?.name,
+    ad?.advertiserName,
+    ad?.brand,
+    ad?.sponsorName,
+    ad?.sponsor,
+    ad?.advertiser,
+  ];
+
+  for (const candidate of candidates) {
+    const value = normalizeLabel(candidate);
+    if (value) return value;
+  }
+
+  return '';
+}
+
 function resolveAdImageUrl(ad: any): string {
   if (!ad) return '';
   return String(
@@ -48,9 +84,14 @@ function pickAd(payload: any): PublicAd | null {
   return payload as PublicAd;
 }
 
-function normalizeAd(ad: any): PublicAd | null {
+function normalizeAd(ad: any, slot?: string): PublicAd | null {
   if (!ad) return null;
   const imageUrl = resolveAdImageUrl(ad);
+  if (/SPONSOR$/i.test(String(slot || '').trim())) {
+    const brand = resolveSponsorBrand(ad);
+    if (!brand) return null;
+    return { ...(ad as PublicAd), title: String((ad as any)?.title || brand).trim() || brand };
+  }
   if (!imageUrl) return null;
   return { ...(ad as PublicAd), imageUrl };
 }
@@ -103,7 +144,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     const enabled = enabledRaw === false ? false : true;
 
     const picked = json && typeof json === 'object' ? ((json as any).ad ?? pickAd(json)) : null;
-    const ad = normalizeAd(picked);
+    const ad = normalizeAd(picked, slot);
 
     return res.status(200).json({ ok: upstream.ok, enabled, ad: enabled ? ad : null });
   } catch {
