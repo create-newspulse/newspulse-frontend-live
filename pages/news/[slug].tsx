@@ -15,6 +15,23 @@ import { buildNewsUrl } from '../../lib/newsRoutes';
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
 import StoryImage from '../../src/components/story/StoryImage';
 
+type ArticleDisplayAdProps = {
+  slotId: 'ARTICLE_INLINE' | 'ARTICLE_END';
+};
+
+function ArticleDisplayAd({ slotId }: ArticleDisplayAdProps) {
+  const variant = slotId === 'ARTICLE_END' ? 'articleEnd' : 'articleInline';
+
+  return (
+    <div className="not-prose clear-both mx-auto my-7 w-full max-w-[336px]">
+      <div className="mb-1 text-left">
+        <span className="text-xs uppercase tracking-wide text-slate-500">ADVERTISEMENT</span>
+      </div>
+      <AdSlot slot={slotId} variant={variant} renderMode="articleDisplay" className="w-full" />
+    </div>
+  );
+}
+
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ||
   'https://newspulse-backend-real.onrender.com';
@@ -532,7 +549,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                         <React.Fragment key={`pblock-${idx}`}>
                           <div dangerouslySetInnerHTML={{ __html: block }} />
                           {inlineInsertAfterIndex === idx ? (
-                            <AdSlot slot="ARTICLE_INLINE" variant="articleInline" />
+                            <ArticleDisplayAd slotId="ARTICLE_INLINE" />
                           ) : null}
                         </React.Fragment>
                       ))
@@ -543,7 +560,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                 </div>
 
                 <div className="px-4 md:px-6 pb-6">
-                  <AdSlot slot="ARTICLE_END" variant="articleEnd" />
+                  <ArticleDisplayAd slotId="ARTICLE_END" />
                 </div>
               </div>
 

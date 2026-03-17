@@ -19,6 +19,12 @@ type PublicAd = {
   imageUrl?: string;
   targetUrl?: string;
   isClickable?: boolean;
+  width?: number | string;
+  height?: number | string;
+  imageWidth?: number | string;
+  imageHeight?: number | string;
+  creativeWidth?: number | string;
+  creativeHeight?: number | string;
 };
 
 type PublicAdsResponse = {
@@ -79,6 +85,7 @@ export type AdSlotProps = {
   slot: string;
   variant?: Variant;
   className?: string;
+  renderMode?: 'default' | 'articleDisplay';
 };
 
 function normalizeBase(raw: string): string {
@@ -249,6 +256,103 @@ function HomepageUnitSkeleton({
     <HomepageUnitFrame normalizedSlot={normalizedSlot} config={config}>
       <div className="h-full w-full animate-pulse bg-slate-100" />
     </HomepageUnitFrame>
+  );
+}
+
+function coercePositiveNumber(value: unknown): number | null {
+  const num = Number(value);
+  return Number.isFinite(num) && num > 0 ? num : null;
+}
+
+function resolveAdDimensions(ad: PublicAd | null | undefined, fallback: { width: number; height: number }) {
+  const width =
+    coercePositiveNumber(ad?.width) ??
+    coercePositiveNumber(ad?.imageWidth) ??
+    coercePositiveNumber(ad?.creativeWidth) ??
+    fallback.width;
+  const height =
+    coercePositiveNumber(ad?.height) ??
+    coercePositiveNumber(ad?.imageHeight) ??
+    coercePositiveNumber(ad?.creativeHeight) ??
+    fallback.height;
+
+  return { width, height };
+}
+
+function ArticleAdBlock({
+  normalizedSlot,
+  children,
+}: {
+  normalizedSlot: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="not-prose clear-both mx-auto my-6 w-full max-w-[336px]" data-ad-slot={normalizedSlot}>
+      <div className="mb-1 text-left">
+        <span className="text-xs uppercase tracking-wide text-slate-500">ADVERTISEMENT</span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function ArticleAdPlaceholder({ normalizedSlot }: { normalizedSlot: string }) {
+  return (
+    <ArticleAdBlock normalizedSlot={normalizedSlot}>
+      <a
+        href="/advertise"
+        className="flex w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-4 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
+        style={{ aspectRatio: '300 / 250' }}
+      >
+        Advertise Here
+      </a>
+    </ArticleAdBlock>
+  );
+}
+
+function BareArticleAdFrame({
+  dimensions,
+  children,
+}: {
+  dimensions: { width: number; height: number };
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className="w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+      style={{ aspectRatio: `${dimensions.width} / ${dimensions.height}` }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function BareArticleAdPlaceholder() {
+  return (
+    <BareArticleAdFrame dimensions={{ width: 300, height: 250 }}>
+      <a
+        href="/advertise"
+        className="flex h-full w-full items-center justify-center px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+      >
+        Advertise Here
+      </a>
+    </BareArticleAdFrame>
+  );
+}
+
+function BareArticleAdSkeleton() {
+  return (
+    <BareArticleAdFrame dimensions={{ width: 300, height: 250 }}>
+      <div className="h-full w-full animate-pulse bg-slate-100" />
+    </BareArticleAdFrame>
+  );
+}
+
+function ArticleAdSkeleton({ normalizedSlot }: { normalizedSlot: string }) {
+  return (
+    <ArticleAdBlock normalizedSlot={normalizedSlot}>
+      <div className="w-full animate-pulse rounded-xl border border-slate-200 bg-slate-100 shadow-sm" style={{ aspectRatio: '300 / 250' }} />
+    </ArticleAdBlock>
   );
 }
 
@@ -470,7 +574,7 @@ function sizing(variant: Variant) {
   }
 }
 
-export default function AdSlot({ slot, variant, className = '' }: AdSlotProps) {
+export default function AdSlot({ slot, variant, className = '', renderMode = 'default' }: AdSlotProps) {
   const { t, language } = useLanguage();
 
   const normalizedSlot = React.useMemo(() => normalizeSlot(slot), [slot]);
@@ -604,6 +708,16 @@ export default function AdSlot({ slot, variant, className = '' }: AdSlotProps) {
   if (!enabled) return null;
 
   const imageUrl = (ad?.imageUrl || '').trim();
+  const isArticleVariant = effectiveVariant === 'articleInline' || effectiveVariant === 'articleEnd';
+  const isArticleDisplayMode = renderMode === 'articleDisplay' && isArticleVariant;
+
+  if (isArticleDisplayMode && isLoading && !hasResolved) {
+    return <div className={`${className} not-prose`}><BareArticleAdSkeleton /></div>;
+  }
+
+  if ((effectiveVariant === 'articleInline' || effectiveVariant === 'articleEnd') && isLoading && !hasResolved) {
+    return <ArticleAdSkeleton normalizedSlot={normalizedSlot} />;
+  }
 
   if (homepageUnitConfig && isLoading && !hasResolved) {
     return <div className={className}><HomepageUnitSkeleton normalizedSlot={normalizedSlot} config={homepageUnitConfig} /></div>;
@@ -626,6 +740,14 @@ export default function AdSlot({ slot, variant, className = '' }: AdSlotProps) {
       return <div className={className}>{renderPlaceholder()}</div>;
     }
 
+    if (isArticleDisplayMode) {
+      return <div className={`${className} not-prose`}><BareArticleAdPlaceholder /></div>;
+    }
+
+    if (effectiveVariant === 'articleInline' || effectiveVariant === 'articleEnd') {
+      return <ArticleAdPlaceholder normalizedSlot={normalizedSlot} />;
+    }
+
     const placeholder = imgError && !homepageUnitConfig && (effectiveVariant === 'homeBanner' || effectiveVariant === 'banner728x90')
       ? <BannerImageBlockedPlaceholder />
       : renderPlaceholder();
@@ -637,6 +759,76 @@ export default function AdSlot({ slot, variant, className = '' }: AdSlotProps) {
     event.currentTarget.style.display = 'none';
     setImgError(true);
   };
+
+  if (isArticleDisplayMode) {
+    const isClickable = Boolean(ad.isClickable && ad.targetUrl);
+    const dimensions = resolveAdDimensions(ad, { width: 300, height: 250 });
+    const image = (
+      <img
+        src={imageUrl}
+        alt={ad.title || 'Advertisement'}
+        loading="lazy"
+        decoding="async"
+        sizes="(max-width: 640px) 100vw, 336px"
+        onError={onCreativeError}
+        className="absolute inset-0 block h-full w-full object-contain"
+      />
+    );
+
+    return (
+      <div className={`${className} not-prose`}>
+        <BareArticleAdFrame dimensions={dimensions}>
+          {isClickable ? (
+            <a
+              href={String(ad.targetUrl)}
+              target="_blank"
+              rel="nofollow sponsored noopener noreferrer"
+              className="relative block h-full w-full"
+            >
+              {image}
+            </a>
+          ) : (
+            <div className="relative h-full w-full">{image}</div>
+          )}
+        </BareArticleAdFrame>
+      </div>
+    );
+  }
+
+  if (effectiveVariant === 'articleInline' || effectiveVariant === 'articleEnd') {
+    const isClickable = Boolean(ad.isClickable && ad.targetUrl);
+    const dimensions = resolveAdDimensions(ad, { width: 300, height: 250 });
+    const image = (
+      <img
+        src={imageUrl}
+        alt={ad.title || 'Advertisement'}
+        loading="lazy"
+        decoding="async"
+        sizes="(max-width: 640px) 100vw, 336px"
+        onError={onCreativeError}
+        className="absolute inset-0 block h-full w-full object-contain"
+      />
+    );
+
+    return (
+      <ArticleAdBlock normalizedSlot={normalizedSlot}>
+        <div className="w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm" style={{ aspectRatio: `${dimensions.width} / ${dimensions.height}` }}>
+          {isClickable ? (
+            <a
+              href={String(ad.targetUrl)}
+              target="_blank"
+              rel="nofollow sponsored noopener noreferrer"
+              className="relative block h-full w-full"
+            >
+              {image}
+            </a>
+          ) : (
+            <div className="relative h-full w-full">{image}</div>
+          )}
+        </div>
+      </ArticleAdBlock>
+    );
+  }
 
   if (homepageUnitConfig) {
     const isClickable = Boolean(ad.isClickable && ad.targetUrl);
