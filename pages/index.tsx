@@ -11,6 +11,7 @@ import { fetchPublicNews, type Article } from "../lib/publicNewsApi";
 import { toTickerTexts } from "../lib/publicBroadcast";
 import { usePublicBroadcastTicker } from "../hooks/usePublicBroadcastTicker";
 import { usePublicAdSlot } from "../hooks/usePublicAdSlot";
+import { usePublicTickerAds } from "../hooks/usePublicTickerAds";
 import { isSafeMode } from "../utils/safeMode";
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle } from "../lib/contentFallback";
 import OriginalTag from "../components/OriginalTag";
@@ -22,6 +23,7 @@ import { buildNewsUrl } from "../lib/newsRoutes";
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from "../lib/coverImages";
 import { fetchCurrentWeather } from "../lib/fetchWeather";
 import StoryImage from "../src/components/story/StoryImage";
+import { getTickerMarqueeText, mergeTickerItemsWithAds, type TickerMarqueeItem } from "../lib/publicTickerAds";
 import type { GetStaticProps } from "next";
 import { AnimatePresence, motion } from "framer-motion";
 import { useI18n } from "../src/i18n/LanguageProvider";
@@ -994,14 +996,25 @@ function LanguagePicker({
   );
 }
 
-function TickerBar({ theme, kind, items, onViewAll, durationSec }: any) {
+function TickerBar({
+  theme,
+  kind,
+  items,
+  onViewAll,
+  durationSec,
+}: {
+  theme: any;
+  kind: 'breaking' | 'live';
+  items: TickerMarqueeItem[];
+  onViewAll: () => void;
+  durationSec: number;
+}) {
   const { t, lang } = useI18n();
   const label = kind === "breaking" ? `🔥 ${t('home.breakingNews')}` : `🔵 ${t('home.liveUpdates')}`;
   const tickerLang = lang === 'gu' ? 'gu' : lang === 'hi' ? 'hi' : 'en';
   const sponsor = useTickerSponsor(kind, tickerLang);
 
   const defaultDurationSec = kind === 'breaking' ? 18 : 24;
-  const maxVisibleItems = kind === 'breaking' ? 12 : 15;
 
   const clampSeconds = (raw: any, fallback: number) => {
     const n = Number(raw);
@@ -1026,24 +1039,74 @@ function TickerBar({ theme, kind, items, onViewAll, durationSec }: any) {
     return String(it ?? '').trim();
   };
 
-  const normalized = (Array.isArray(items) ? items : []).map(normalizeItemText).filter(Boolean).slice(0, maxVisibleItems);
-  const fallback = kind === 'live' ? (t('home.noUpdates') || stayTuned('live')) : (t('home.noBreaking') || stayTuned('breaking'));
-  const safeItems = normalized.length ? normalized : [fallback];
+  const normalized = (Array.isArray(items) ? items : [])
+    .map((item: any, index: number) => {
+      if (item && typeof item === 'object' && (item.kind === 'news' || item.kind === 'ad')) {
+        const text = normalizeItemText(item);
+        if (!text) return null;
+        return { ...item, id: String(item.id || `${item.kind}-${index}`), text } as TickerMarqueeItem;
+      }
 
-  const text = (safeItems?.length ? safeItems : ['']).join('  •  ');
+      const text = normalizeItemText(item);
+      if (!text) return null;
+      return { id: `news-${index}`, kind: 'news', text } satisfies TickerMarqueeItem;
+    })
+    .filter(Boolean) as TickerMarqueeItem[];
+
+  const fallback = kind === 'live' ? (t('home.noUpdates') || stayTuned('live')) : (t('home.noBreaking') || stayTuned('breaking'));
+  const safeItems = normalized.length ? normalized : [{ id: `${kind}-fallback`, kind: 'news', text: fallback } satisfies TickerMarqueeItem];
+
+  const marqueeText = getTickerMarqueeText(safeItems);
 
   // Auto-adjust: duration grows with text length (prevents long tickers from scrolling too fast).
   const targetCharsPerSec = kind === 'breaking' ? 9 : 8;
-  const autoDurationSec = Math.ceil(Math.max(1, text.length) / targetCharsPerSec);
+  const autoDurationSec = Math.ceil(Math.max(1, marqueeText.length) / targetCharsPerSec);
   const effectiveDurationSec = clampSeconds(Math.max(baseDurationSec, autoDurationSec, defaultDurationSec), defaultDurationSec);
 
   // Force restart of marquee when duration/lang/items change (some browsers won't re-time an in-flight animation).
   const restartKey = (() => {
-    const s = `${kind}|${tickerLang}|${effectiveDurationSec}|${text}`;
+    const s = `${kind}|${tickerLang}|${effectiveDurationSec}|${marqueeText}`;
     let h = 5381;
     for (let i = 0; i < s.length; i += 1) h = (h * 33) ^ s.charCodeAt(i);
     return `${kind}-${tickerLang}-${effectiveDurationSec}-${(h >>> 0).toString(16)}`;
   })();
+
+  const renderTickerSequence = (suffix: string) => (
+    <div className="np-tickerSeq pr-10 flex items-center whitespace-nowrap text-sm font-medium text-white">
+      {safeItems.map((item, index) => {
+        const isAd = item.kind === 'ad';
+        const content = isAd ? (
+          <span className="tickerText" lang={tickerLang}>{`🟡 Ad: ${item.text}`}</span>
+        ) : (
+          <span className="tickerText" lang={tickerLang}>{item.text}</span>
+        );
+
+        return (
+          <React.Fragment key={`${item.id}-${suffix}`}>
+            {index > 0 ? <span aria-hidden="true" className="mx-4 opacity-60">•</span> : null}
+            {isAd ? (
+              item.url ? (
+                <a
+                  href={item.url}
+                  target="_blank"
+                  rel="sponsored noopener noreferrer"
+                  className="inline-flex items-center rounded-full border border-white/20 bg-black/15 px-3 py-1 text-amber-50/95 opacity-95 transition hover:bg-black/25 hover:opacity-100"
+                >
+                  {content}
+                </a>
+              ) : (
+                <span className="inline-flex items-center rounded-full border border-white/20 bg-black/15 px-3 py-1 text-amber-50/95 opacity-95">
+                  {content}
+                </span>
+              )
+            ) : (
+              content
+            )}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
 
   const bg =
     kind === "breaking"
@@ -1080,12 +1143,8 @@ function TickerBar({ theme, kind, items, onViewAll, durationSec }: any) {
                   className="np-tickerTrack"
                   style={{ animationDuration: `${effectiveDurationSec}s` }}
                 >
-                  <div className="np-tickerSeq whitespace-nowrap text-sm font-medium text-white">
-                    <span className="tickerText pr-10" lang={tickerLang}>{text}</span>
-                  </div>
-                  <div className="np-tickerSeq whitespace-nowrap text-sm font-medium text-white">
-                    <span className="tickerText pr-10" lang={tickerLang}>{text}</span>
-                  </div>
+                  {renderTickerSequence('a')}
+                  {renderTickerSequence('b')}
                 </div>
               </div>
 
@@ -2580,6 +2639,18 @@ export default function UiPreviewV145() {
     enabled: !SAFE_MODE,
   });
 
+  const breakingTickerAds = usePublicTickerAds({
+    lang: apiLang,
+    channel: 'breaking',
+    enabled: !SAFE_MODE,
+  });
+
+  const liveTickerAds = usePublicTickerAds({
+    lang: apiLang,
+    channel: 'live',
+    enabled: !SAFE_MODE,
+  });
+
   const [activeCatKey, setActiveCatKey] = useState<string>("breaking");
   const [toast, setToast] = useState<string>("");
 
@@ -2714,9 +2785,15 @@ export default function UiPreviewV145() {
 
   const breakingItems = broadcastTickers.breakingTexts;
   const showBreakingContent = breakingItems.length > 0;
-  const breakingItemsToShow = showBreakingContent ? breakingItems.slice(0, 12) : [t('home.noBreaking')];
+  const breakingItemsToShow = useMemo(
+    () => mergeTickerItemsWithAds(showBreakingContent ? breakingItems.slice(0, 12) : [], breakingTickerAds.ads, 'breaking'),
+    [breakingItems, breakingTickerAds.ads, showBreakingContent]
+  );
 
-  const liveItemsToShow = broadcastTickers.liveTexts.length > 0 ? broadcastTickers.liveTexts.slice(0, 15) : [t('home.noUpdates')];
+  const liveItemsToShow = useMemo(
+    () => mergeTickerItemsWithAds(broadcastTickers.liveTexts.length > 0 ? broadcastTickers.liveTexts.slice(0, 15) : [], liveTickerAds.ads, 'live'),
+    [broadcastTickers.liveTexts, liveTickerAds.ads]
+  );
 
   const onToast = (m: string) => setToast(m);
 
