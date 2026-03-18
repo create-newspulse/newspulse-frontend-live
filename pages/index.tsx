@@ -580,7 +580,8 @@ function articleToTickerText(a: Article, requestedLang: 'en' | 'hi' | 'gu'): str
 }
 
 function articleToFeedItem(a: Article, requestedLang: 'en' | 'hi' | 'gu') {
-  const id = safeTitle((a as any)?._id || (a as any)?.id || (a as any)?.slug) || undefined;
+  const id = safeTitle((a as any)?._id || (a as any)?.id) || undefined;
+  const slug = resolveArticleSlug(a as any, requestedLang) || safeTitle((a as any)?.slug) || undefined;
   const titleRes = resolveArticleTitle(a as any, requestedLang);
   const descRes = resolveArticleSummaryOrExcerpt(a as any, requestedLang);
 
@@ -606,7 +607,8 @@ function articleToFeedItem(a: Article, requestedLang: 'en' | 'hi' | 'gu') {
   const category = safeTitle((a as any)?.category) || '';
 
   return {
-    id: id || title,
+    id: id || slug || title,
+    slug,
     title,
     desc,
     titleIsOriginal: titleRes.isOriginal,
@@ -2108,58 +2110,164 @@ function FeaturedCard({ theme, item, onToast }: any) {
   );
 }
 
-function FeedList({ theme, title, items, onOpen, lang }: any) {
+function FeedList({ theme, title, items, lang }: any) {
   const { t } = useI18n();
   const safeLang = (lang === 'hi' || lang === 'gu') ? lang : 'en';
+  const prefix = safeLang === 'en' ? '' : `/${safeLang}`;
+
+  const MAX_ITEMS = 8;
+  const CATEGORY_ORDER = [
+    'regional',
+    'national',
+    'international',
+    'business',
+    'science-tech',
+    'sports',
+    'lifestyle',
+    'glamour',
+  ] as const;
+  type LatestCategoryKey = (typeof CATEGORY_ORDER)[number] | 'unknown';
+
+  const normalizeCategoryKey = (raw: unknown): LatestCategoryKey => {
+    const v = String(raw || '').toLowerCase().trim();
+    if (!v) return 'unknown';
+    if (v.includes('sci') || v.includes('tech') || v.includes('science')) return 'science-tech';
+    if (v.includes('international') || v.includes('world')) return 'international';
+    if (v.includes('national')) return 'national';
+    if (v.includes('business')) return 'business';
+    if (v.includes('sport')) return 'sports';
+    if (v.includes('lifestyle')) return 'lifestyle';
+    if (v.includes('glamour') || v.includes('entertain')) return 'glamour';
+    if (v.includes('regional') || v.includes('gujarat') || v.includes('local')) return 'regional';
+    return 'unknown';
+  };
+
+  const categoryBadgeClasses = (raw: unknown): string => {
+    const key = normalizeCategoryKey(raw);
+    if (key === 'business') return 'bg-blue-50 text-blue-700 border-blue-100';
+    if (key === 'national') return 'bg-orange-50 text-orange-700 border-orange-100';
+    if (key === 'international') return 'bg-purple-50 text-purple-700 border-purple-100';
+    if (key === 'sports') return 'bg-green-50 text-green-700 border-green-100';
+    if (key === 'science-tech') return 'bg-cyan-50 text-cyan-700 border-cyan-100';
+    if (key === 'lifestyle') return 'bg-pink-50 text-pink-700 border-pink-100';
+    if (key === 'glamour') return 'bg-rose-50 text-rose-700 border-rose-100';
+    if (key === 'regional') return 'bg-emerald-50 text-emerald-700 border-emerald-100';
+    return 'bg-slate-50 text-slate-700 border-slate-100';
+  };
+
+  const isLoading = items == null;
+  const listItems: any[] = Array.isArray(items) ? items : [];
+
+  const orderedItems = React.useMemo(() => {
+    const picked: any[] = [];
+    const pickedIds = new Set<string>();
+
+    const getItemId = (it: any): string => {
+      const raw = String(it?.id || it?.slug || '').trim();
+      return raw;
+    };
+
+    // 1 per category in fixed order
+    for (const cat of CATEGORY_ORDER) {
+      const found = listItems.find((it) => {
+        const id = getItemId(it);
+        if (!id) return false;
+        if (pickedIds.has(id)) return false;
+        return normalizeCategoryKey(it?.category) === cat;
+      });
+      if (found) {
+        const id = getItemId(found);
+        if (id && !pickedIds.has(id)) {
+          picked.push(found);
+          pickedIds.add(id);
+        }
+      }
+    }
+
+    return picked.slice(0, MAX_ITEMS);
+  }, [listItems]);
+
   return (
-    <Surface theme={theme} className="p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <div className="text-sm font-extrabold" style={{ color: theme.text }}>
-            {title}
-          </div>
-          <div className="text-xs" style={{ color: theme.sub }}>
-            {t('home.freshUpdates')}
-          </div>
-        </div>
-        <Button theme={theme} variant="soft" className="shrink-0 whitespace-nowrap" onClick={() => onOpen("viewall")}>
-          {t('common.viewAll')}
-        </Button>
-      </div>
-
-      <div className="mt-4">
-        {items.map((f: any, index: number) => {
-          const href = buildNewsUrl({ id: String(f?.id || '').trim(), lang: safeLang });
-          const metaParts = [String(f?.time || '').trim(), String(f?.source || '').trim()].filter(Boolean);
-          if (String(f?.category || '').trim()) metaParts.push(String(f.category).trim());
-          const meta = metaParts.join(' • ');
-
-          return (
-            <Link
-              key={String(f?.id || index)}
-              href={href}
-              className="block rounded-xl px-3 py-2 transition hover:bg-black/5 dark:hover:bg-white/5 border-b last:border-b-0"
-              style={{ borderColor: theme.border }}
-              onClick={() => {
-                // Keep existing hook point for future analytics without blocking navigation.
-                try { onOpen?.(String(f?.id || '')); } catch {}
-              }}
-            >
-              {meta ? (
-                <div className="text-[11px] opacity-90 truncate" style={{ color: theme.sub }}>
-                  {meta}
-                </div>
-              ) : null}
-
-              <div className="mt-1 flex items-start gap-2" style={{ color: theme.text }}>
-                <span className="font-semibold text-sm leading-snug line-clamp-2">{String(f?.title || '').trim()}</span>
-                {f?.titleIsOriginal ? <OriginalTag /> : null}
+    <div className="rounded-2xl border border-slate-200/70 bg-white/80 backdrop-blur shadow-sm hover:shadow-md transition">
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="inline-block h-2 w-2 rounded-full bg-slate-400" aria-hidden="true" />
+              <div className="text-sm font-extrabold truncate" style={{ color: theme.text }}>
+                {title}
               </div>
-            </Link>
-          );
-        })}
+            </div>
+            <div className="mt-0.5 text-xs" style={{ color: theme.sub }}>
+              {t('home.freshUpdates')}
+            </div>
+          </div>
+
+          <Link
+            href={`${prefix}/latest`}
+            className="shrink-0 whitespace-nowrap text-sm px-3 py-1 rounded-full border border-slate-200 bg-white/70 hover:bg-slate-50 transition"
+            style={{ color: theme.text }}
+          >
+            {t('common.viewAll')}
+          </Link>
+        </div>
       </div>
-    </Surface>
+
+      <div className="px-2 pb-2">
+        <div className="max-h-[520px] overflow-auto">
+          {isLoading ? (
+            <div className="px-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={`sk-${i}`} className="border-b border-slate-100 last:border-b-0 py-2">
+                  <div className="h-3 w-2/3 rounded bg-slate-100 animate-pulse" />
+                  <div className="mt-2 h-4 w-full rounded bg-slate-100 animate-pulse" />
+                </div>
+              ))}
+            </div>
+          ) : !orderedItems.length ? (
+            <div className="px-4 pb-4 text-sm text-slate-500">No fresh updates right now</div>
+          ) : (
+            orderedItems.map((f: any, index: number) => {
+              const rawId = String(f?.id || '').trim();
+              const rawSlug = String(f?.slug || '').trim();
+              const href = buildNewsUrl({ id: rawId || rawSlug, slug: rawSlug, lang: safeLang });
+              const time = String(f?.time || '').trim();
+              const category = String(f?.category || '').trim();
+              const metaText = time;
+
+              return (
+                <Link
+                  key={String(f?.id || f?.slug || index)}
+                  href={href}
+                  className="block rounded-xl px-3 py-2 transition border-b border-slate-100 last:border-b-0 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    {metaText ? (
+                      <div className="text-[11px] text-slate-500 truncate">{metaText}</div>
+                    ) : null}
+
+                    {category ? (
+                      <span
+                        className={`ml-auto shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${categoryBadgeClasses(category)}`}
+                      >
+                        {category}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-1 flex items-start gap-2">
+                    <span className="line-clamp-2 font-semibold text-sm leading-snug" style={{ color: theme.text }}>
+                      {String(f?.title || '').trim()}
+                    </span>
+                    {f?.titleIsOriginal ? <OriginalTag /> : null}
+                  </div>
+                </Link>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -2621,7 +2729,7 @@ export default function UiPreviewV145() {
   } = usePublicSettings();
 
   const effectiveSettings = settings ?? DEFAULT_NORMALIZED_PUBLIC_SETTINGS;
-  const [latestFromBackend, setLatestFromBackend] = useState<any[]>([]);
+  const [latestFromBackend, setLatestFromBackend] = useState<any[] | null>(null);
   const [topStory, setTopStory] = useState<Article | null>(null);
 
   const apiLang = useMemo(() => {
@@ -2668,6 +2776,8 @@ export default function UiPreviewV145() {
   // Fetch homepage data (latest) from backend.
   React.useEffect(() => {
     const controller = new AbortController();
+
+    setLatestFromBackend(null);
 
     (async () => {
       // Latest news list (homepage)
@@ -3113,7 +3223,6 @@ export default function UiPreviewV145() {
                 title={t('home.latest')}
                 items={latestFromBackend}
                 lang={apiLang}
-                onOpen={(id: string) => onToast(id === "viewall" ? "View all latest (planned)" : `Open story: ${id}`)}
               />
 
               <AdSlot slot="HOME_RIGHT_300x600" variant="right300x600" className="hidden lg:block mt-4" />

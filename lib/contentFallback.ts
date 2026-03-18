@@ -7,6 +7,26 @@ export type ResolvedContent = {
   isOriginal: boolean;
 };
 
+function extractTextLike(value: any): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value).trim();
+
+  if (typeof value === 'object') {
+    return pickNonEmpty(value.text, value.value, value.html, value.content, value.body);
+  }
+
+  return '';
+}
+
+function pickNonEmptyTextLike(...candidates: any[]): string {
+  for (const c of candidates) {
+    const s = extractTextLike(c);
+    if (s) return s;
+  }
+  return '';
+}
+
 function normLang(raw: unknown): UiLang | null {
   const v = String(raw || '').toLowerCase().trim();
   if (v === 'en' || v === 'hi' || v === 'gu') return v;
@@ -78,15 +98,119 @@ function getTranslatedField(item: any, field: 'title' | 'summary' | 'excerpt', l
 
   // Try translations[lang][field]
   const v1 = getNested(rec, [lang, field]);
-  const t1 = pickNonEmpty(v1?.text, v1);
+  const t1 = extractTextLike(v1);
   if (t1) return t1;
 
   // Try translations[field][lang]
   const v2 = getNested(rec, [field, lang]);
-  const t2 = pickNonEmpty(v2?.text, v2);
+  const t2 = extractTextLike(v2);
   if (t2) return t2;
 
   return '';
+}
+
+function getTranslatedBodyHtml(item: any, lang: UiLang): string {
+  const container = getTranslationContainer(item);
+  const rec = getRecord(container);
+  if (!rec) return '';
+
+  const fields = ['content', 'html', 'body'] as const;
+
+  for (const field of fields) {
+    const v1 = getNested(rec, [lang, field]);
+    const t1 = extractTextLike(v1);
+    if (t1) return t1;
+  }
+
+  for (const field of fields) {
+    const v2 = getNested(rec, [field, lang]);
+    const t2 = extractTextLike(v2);
+    if (t2) return t2;
+  }
+
+  return '';
+}
+
+function getBodySourceHtml(item: any): string {
+  return pickNonEmptyTextLike(
+    item?.originalContent,
+    item?.sourceContent,
+    item?.contentOriginal,
+    item?.originalHtml,
+    item?.sourceHtml,
+    item?.htmlOriginal,
+    item?.originalBody,
+    item?.sourceBody,
+    item?.bodyOriginal,
+    item?.source?.content,
+    item?.source?.html,
+    item?.source?.body,
+    item?.content,
+    item?.html,
+    item?.body
+  );
+}
+
+function getBodyStatus(item: any, lang: UiLang): TranslationStatus | null {
+  const direct = typeof item?.translationStatus === 'string' ? normStatus(item?.translationStatus) : null;
+  if (direct) return direct;
+
+  const byLang = normStatus(item?.translationStatus?.[lang]);
+  if (byLang) return byLang;
+
+  const container = getTranslationContainer(item);
+  const rec = getRecord(container);
+  if (!rec) return null;
+
+  const fields = ['content', 'html', 'body'] as const;
+
+  for (const field of fields) {
+    const a = getNested(rec, [lang, field]);
+    const s1 = normStatus(a?.status || a?.translationStatus);
+    if (s1) return s1;
+  }
+
+  for (const field of fields) {
+    const b = getNested(rec, [field, lang]);
+    const s2 = normStatus(b?.status || b?.translationStatus);
+    if (s2) return s2;
+  }
+
+  return null;
+}
+
+function getBodyTranslationFallbackFlag(item: any, lang: UiLang): boolean {
+  try {
+    if (item?.translationFallback === true) return true;
+    if (item?.translationFallback && typeof item.translationFallback === 'object' && item.translationFallback?.[lang] === true) return true;
+
+    if (item?.contentTranslationFallback === true) return true;
+    if (item?.htmlTranslationFallback === true) return true;
+    if (item?.bodyTranslationFallback === true) return true;
+
+    const container = getTranslationContainer(item);
+    const rec = getRecord(container);
+    if (!rec) return false;
+
+    const fields = ['content', 'html', 'body'] as const;
+    for (const field of fields) {
+      const a = getNested(rec, [lang, field]);
+      if (a?.translationFallback === true) return true;
+      if (a?.fallbackOriginal === true) return true;
+      if (a?.useOriginal === true) return true;
+    }
+
+    for (const field of fields) {
+      const b = getNested(rec, [field, lang]);
+      if (b?.translationFallback === true) return true;
+      if (b?.fallbackOriginal === true) return true;
+      if (b?.useOriginal === true) return true;
+    }
+  } catch {
+    return false;
+  }
+
+  return false;
 }
 
 function getStatusField(item: any, field: 'title' | 'summary' | 'excerpt', lang: UiLang): TranslationStatus | null {
@@ -95,7 +219,7 @@ function getStatusField(item: any, field: 'title' | 'summary' | 'excerpt', lang:
   // - translationStatus: 'APPROVED'
   // - translations[lang][field].status
   // - translations[field][lang].status
-  const direct = normStatus(item?.translationStatus);
+  const direct = typeof item?.translationStatus === 'string' ? normStatus(item?.translationStatus) : null;
   if (direct) return direct;
 
   const byLang = normStatus(item?.translationStatus?.[lang]);
@@ -196,7 +320,10 @@ export function resolveArticleField(
   }
 
   // No status => preserve existing behavior (API already language-filtered in most deployments)
-  const best = pickNonEmpty(item?.[field], translated, source);
+  // Prefer requested-language translations over the top-level field.
+  // Some backends return a single canonical language in `title/summary` and
+  // place the requested language under `translations[lang]` with no explicit status.
+  const best = pickNonEmpty(translated, item?.[field], source);
   return { text: best, isOriginal: false };
 }
 
@@ -208,4 +335,37 @@ export function resolveArticleSummaryOrExcerpt(article: unknown, requestedLang: 
   const s = resolveArticleField(article, 'summary', requestedLang);
   if (s.text) return s;
   return resolveArticleField(article, 'excerpt', requestedLang);
+}
+
+export function resolveArticleBodyHtml(article: unknown, requestedLang: UiLang): ResolvedContent {
+  const item = (article && typeof article === 'object') ? (article as any) : null;
+  if (!item) return { text: '', isOriginal: false };
+
+  const lang = normLang(requestedLang) || 'en';
+  const sourceLang = getSourceLang(item);
+
+  const source = getBodySourceHtml(item);
+  const translated = getTranslatedBodyHtml(item, lang);
+  const status = getBodyStatus(item, lang);
+  const translationFallback = getBodyTranslationFallbackFlag(item, lang);
+
+  // Same semantics as resolveArticleField, but for body/html/content.
+  if (translationFallback) {
+    const text = source || translated || pickNonEmptyTextLike(item?.content, item?.html, item?.body);
+    return { text, isOriginal: false };
+  }
+
+  if (status) {
+    if (status === 'APPROVED') {
+      const text = translated || pickNonEmptyTextLike(item?.content, item?.html, item?.body);
+      return { text, isOriginal: false };
+    }
+
+    const text = source || translated || pickNonEmptyTextLike(item?.content, item?.html, item?.body);
+    const isOriginal = Boolean(sourceLang && sourceLang !== lang);
+    return { text, isOriginal };
+  }
+
+  const best = pickNonEmptyTextLike(translated, item?.content, item?.html, item?.body, source);
+  return { text: best, isOriginal: false };
 }

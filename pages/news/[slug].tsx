@@ -5,7 +5,7 @@ import { useRouter } from 'next/router';
 
 import AdSlot from '../../src/components/ads/AdSlot';
 import CategoryHeader from '../../src/components/category/CategoryHeader';
-import { resolveArticleSummaryOrExcerpt, type UiLang } from '../../lib/contentFallback';
+import { resolveArticleBodyHtml, resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../../lib/contentFallback';
 import { formatArticleBodyHtml } from '../../lib/articleBody';
 import { unwrapArticle, type Article } from '../../lib/publicNewsApi';
 import { useI18n } from '../../src/i18n/LanguageProvider';
@@ -50,16 +50,18 @@ function cleanText(value: unknown): string {
 
 function toUiLang(value: unknown): UiLang {
   const v = String(value || '').toLowerCase().trim();
-  if (v === 'hi' || v === 'hindi' || v === 'in') return 'hi';
-  if (v === 'gu' || v === 'gujarati') return 'gu';
+  const base = v.split(/[-_]/g)[0] || v;
+  if (base === 'hi' || base === 'hindi' || base === 'in') return 'hi';
+  if (base === 'gu' || base === 'gujarati') return 'gu';
   return 'en';
 }
 
 function normalizeLang(value: unknown): 'en' | 'hi' | 'gu' {
   const v = String(value || '').toLowerCase().trim();
-  if (v === 'hi' || v === 'hindi' || v === 'in') return 'hi';
-  if (v === 'gu' || v === 'gujarati') return 'gu';
-  if (v === 'en' || v === 'english') return 'en';
+  const base = v.split(/[-_]/g)[0] || v;
+  if (base === 'hi' || base === 'hindi' || base === 'in') return 'hi';
+  if (base === 'gu' || base === 'gujarati') return 'gu';
+  if (base === 'en' || base === 'english') return 'en';
   return 'en';
 }
 
@@ -202,7 +204,8 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
         return;
       }
 
-      const html = typeof (next as any).content === 'string' ? String((next as any).content) : '';
+      const uiLang = toUiLang(lang);
+      const html = resolveArticleBodyHtml(next || {}, uiLang).text;
       setResolvedArticle(next);
       setResolvedSafeHtml(sanitizeContent(html));
       setPendingTranslate(false);
@@ -286,9 +289,12 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
   );
 
   const uiLang = toUiLang(lang);
-  const rawTitle = cleanText((resolvedArticle as any)?.title);
+  const titleRes = resolveArticleTitle(resolvedArticle || {}, uiLang);
+  const summaryRes = resolveArticleSummaryOrExcerpt(resolvedArticle || {}, uiLang);
+
+  const rawTitle = cleanText(titleRes.text || (resolvedArticle as any)?.title);
   const displayTitle = rawTitle.length > 180 ? `${rawTitle.slice(0, 177).trimEnd()}…` : rawTitle;
-  const displaySummary = cleanText((resolvedArticle as any)?.summary);
+  const displaySummary = cleanText(summaryRes.text || (resolvedArticle as any)?.summary);
   const displayProvider = cleanText((resolvedArticle as any)?.provider);
   const displayGeneratedAt = cleanText((resolvedArticle as any)?.generatedAt);
 
@@ -577,7 +583,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                       const slug = resolveArticleSlug(s, lang);
                       const href = id ? buildNewsUrl({ id, slug, lang }) : '#';
                       const img = resolveCoverImageUrl(s) || COVER_PLACEHOLDER_SRC;
-                      const titleText = cleanText((s as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
+                      const titleText = cleanText(resolveArticleTitle(s || {}, uiLang).text || (s as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
                       const excerptRes = resolveArticleSummaryOrExcerpt(s || {}, uiLang);
                       const excerpt = String(excerptRes.text || (s as any)?.summary || (s as any)?.excerpt || '').trim();
                       return (
@@ -622,7 +628,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                         const id = String(s?._id || '').trim();
                         const slug = resolveArticleSlug(s, lang);
                         const href = id ? buildNewsUrl({ id, slug, lang }) : '#';
-                        const titleText = cleanText((s as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
+                        const titleText = cleanText(resolveArticleTitle(s || {}, uiLang).text || (s as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
                         return (
                           <a
                             key={id || String((s as any)?.slug || i)}
@@ -692,7 +698,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                         const id = String(s?._id || '').trim();
                         const slug = resolveArticleSlug(s, lang);
                         const href = id ? buildNewsUrl({ id, slug, lang }) : '#';
-                        const titleText = cleanText((s as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
+                        const titleText = cleanText(resolveArticleTitle(s || {}, uiLang).text || (s as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
                         return (
                           <a
                             key={id || String((s as any)?.slug || i)}
@@ -796,7 +802,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
       return { redirect: { destination, permanent: true } };
     }
 
-    const html = typeof (article as any).content === 'string' ? ((article as any).content as string) : '';
+    const html = resolveArticleBodyHtml(article || {}, lang).text;
 
     const extra = await (async () => {
       try {
