@@ -1,8 +1,18 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import React, { useId, useMemo } from 'react';
+import { usePublicTickerAds } from '../../hooks/usePublicTickerAds';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { usePublicSettings } from '../../src/context/PublicSettingsContext';
+import {
+  mergeTickerItemsWithAds,
+  type TickerMarqueeItem,
+} from '../../lib/publicTickerAds';
+import { isSafeMode } from '../../utils/safeMode';
+
+type TickerRenderItem =
+  | { id: string; type: 'news'; message: string }
+  | { id: string; type: 'ad'; message: string; url: string | null };
 
 function classNames(...s: Array<string | false | null | undefined>) {
   return s.filter(Boolean).join(' ');
@@ -60,6 +70,7 @@ export default function BreakingTicker({
   const { settings } = usePublicSettings();
   const tickerLang = lang === 'gu' ? 'gu' : lang === 'hi' ? 'hi' : 'en';
   const id = useId().replace(/:/g, '');
+  const SAFE_MODE = isSafeMode();
 
   const isBreaking = variant === 'breaking';
   const maxVisibleItems = isBreaking ? 12 : 15;
@@ -81,6 +92,49 @@ export default function BreakingTicker({
     });
   }, [emptyText, safeItems, t, variant]);
 
+  const tickerAds = usePublicTickerAds({
+    lang: tickerLang,
+    channel: variant,
+    enabled: !SAFE_MODE,
+    refreshIntervalMs: 15_000,
+  });
+
+  const mergedItems: TickerMarqueeItem[] = useMemo(() => {
+    // Keep the normal ticker list unchanged when there are no real items.
+    if (!safeItems.length) {
+      return (messages || []).map((text, index) => ({
+        id: `news-${variant}-${index}`,
+        kind: 'news',
+        text: String(text || '').trim(),
+      }));
+    }
+
+    return mergeTickerItemsWithAds(messages, tickerAds.ads, variant);
+  }, [messages, safeItems.length, tickerAds.ads, variant]);
+
+  const renderItems: TickerRenderItem[] = useMemo(
+    () =>
+      (mergedItems || [])
+        .map((item) => {
+          if (item.kind === 'ad') {
+            return {
+              id: item.id,
+              type: 'ad',
+              message: item.text,
+              url: item.url,
+            } satisfies TickerRenderItem;
+          }
+
+          return {
+            id: item.id,
+            type: 'news',
+            message: item.text,
+          } satisfies TickerRenderItem;
+        })
+        .filter((item) => String(item.message || '').trim() !== ''),
+    [mergedItems]
+  );
+
   const label = isBreaking ? t('home.breakingNews') : t('home.liveUpdates');
   const viewAllHref = (() => {
     const raw = String(router.asPath || '/');
@@ -101,7 +155,13 @@ export default function BreakingTicker({
   })();
   const baseDurationSec = clampSeconds(speedSeconds ?? settingsSpeed, fallbackSpeed);
 
-  const textForSizing = useMemo(() => messages.join('  •  '), [messages]);
+  const textForSizing = useMemo(
+    () =>
+      (renderItems || [])
+        .map((item) => (item.type === 'ad' ? `🟡 Ad: ${item.message}` : item.message))
+        .join('  •  '),
+    [renderItems]
+  );
   const targetCharsPerSec = isBreaking ? 9 : 8;
   const autoDurationSec = Math.ceil(Math.max(1, textForSizing.length) / targetCharsPerSec);
   const durationSec = clampSeconds(Math.max(baseDurationSec, autoDurationSec, fallbackSpeed), fallbackSpeed);
@@ -132,16 +192,46 @@ export default function BreakingTicker({
         <div className="relative flex-1 overflow-hidden">
           <div key={restartKey} className="np-tickerTrack" style={{ animationDuration: `${durationSec}s` }}>
             <div className="np-tickerSeq flex items-center gap-10 text-sm font-medium">
-              {messages.map((m, i) => (
-                <span key={`${id}-a-${i}`} className="tickerText whitespace-nowrap" lang={tickerLang}>
-                  {m}
+              {renderItems.map((item, i) => (
+                <span
+                  key={`${id}-a-${item.id}-${i}`}
+                  className="tickerText whitespace-nowrap"
+                  lang={tickerLang}
+                  data-type={item.type}
+                >
+                  {item.type === 'ad' ? (
+                    item.url ? (
+                      <a href={item.url} target="_blank" rel="sponsored noopener noreferrer" className="hover:underline">
+                        {`🟡 Ad: ${item.message}`}
+                      </a>
+                    ) : (
+                      <>{`🟡 Ad: ${item.message}`}</>
+                    )
+                  ) : (
+                    item.message
+                  )}
                 </span>
               ))}
             </div>
             <div className="np-tickerSeq flex items-center gap-10 text-sm font-medium">
-              {messages.map((m, i) => (
-                <span key={`${id}-b-${i}`} className="tickerText whitespace-nowrap" lang={tickerLang}>
-                  {m}
+              {renderItems.map((item, i) => (
+                <span
+                  key={`${id}-b-${item.id}-${i}`}
+                  className="tickerText whitespace-nowrap"
+                  lang={tickerLang}
+                  data-type={item.type}
+                >
+                  {item.type === 'ad' ? (
+                    item.url ? (
+                      <a href={item.url} target="_blank" rel="sponsored noopener noreferrer" className="hover:underline">
+                        {`🟡 Ad: ${item.message}`}
+                      </a>
+                    ) : (
+                      <>{`🟡 Ad: ${item.message}`}</>
+                    )
+                  ) : (
+                    item.message
+                  )}
                 </span>
               ))}
             </div>

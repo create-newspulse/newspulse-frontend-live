@@ -13,7 +13,8 @@ type UsePublicTickerAdsOptions = {
   lang: BroadcastLang;
   channel: TickerChannel;
   enabled?: boolean;
-  refreshIntervalMs?: number;
+  /** Optional polling to pick up schedule-based ad activation; set to 0/false to disable. */
+  refreshIntervalMs?: number | false;
 };
 
 type UsePublicTickerAdsResult = {
@@ -101,9 +102,8 @@ export function usePublicTickerAds({
   lang,
   channel,
   enabled = true,
-  refreshIntervalMs = 15_000,
+  refreshIntervalMs = 0,
 }: UsePublicTickerAdsOptions): UsePublicTickerAdsResult {
-  void refreshIntervalMs;
   const cacheKey = useMemo(() => buildCacheKey(lang, channel), [lang, channel]);
   const initialCache = enabled ? getFreshCacheEntry(cacheKey, TICKER_ADS_CACHE_TTL_MS) : null;
 
@@ -151,11 +151,23 @@ export function usePublicTickerAds({
       refreshOnce(true);
     });
 
+    const pollMsRaw = refreshIntervalMs === false ? 0 : Number(refreshIntervalMs || 0);
+    const pollMs = Number.isFinite(pollMsRaw) ? Math.max(5_000, Math.floor(pollMsRaw)) : 0;
+    const shouldPoll = pollMs > 0;
+    const intervalId = shouldPoll
+      ? setInterval(() => {
+          if (cancelled) return;
+          if (typeof document !== 'undefined' && document.hidden) return;
+          refreshOnce(false);
+        }, pollMs)
+      : null;
+
     return () => {
       cancelled = true;
       unsubscribe();
+      if (intervalId) clearInterval(intervalId as any);
     };
-  }, [ads.length, cacheKey, channel, enabled, lang]);
+  }, [ads.length, cacheKey, channel, enabled, lang, refreshIntervalMs]);
 
   const refetch = (force = true) => {
     if (!enabled) return;

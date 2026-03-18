@@ -57,6 +57,52 @@ describe('publicTickerAds helpers', () => {
     expect(filterTickerAdsForChannel(ads, 'live').map((ad) => ad.id)).toEqual(['both-channels', 'live-only']);
   });
 
+  test("normalizePublicTickerAds supports lang='all' copy across languages", () => {
+    const raw = {
+      ads: [
+        {
+          id: 'all-ad',
+          translations: {
+            all: 'One message for everyone',
+            en: 'English fallback that should NOT override all',
+          },
+          channel: 'both',
+        },
+      ],
+    };
+
+    const en = normalizePublicTickerAds(raw, { lang: 'en', fallbackChannel: 'live' }).ads;
+    const hi = normalizePublicTickerAds(raw, { lang: 'hi', fallbackChannel: 'live' }).ads;
+    const gu = normalizePublicTickerAds(raw, { lang: 'gu', fallbackChannel: 'live' }).ads;
+
+    expect(en[0]?.text).toBe('English fallback that should NOT override all');
+    // Requested lang is missing -> prefer `all` rather than an unrelated 'en' translation.
+    expect(hi[0]?.text).toBe('One message for everyone');
+    expect(gu[0]?.text).toBe('One message for everyone');
+  });
+
+  test('normalizePublicTickerAds prefers message over other fields and translations', () => {
+    const raw = {
+      ads: [
+        {
+          id: 'msg-wins',
+          // Simulate backend returning a generic/default `text` plus a localized `message`.
+          text: 'Default English text',
+          message: 'Localized message',
+          translations: {
+            en: 'Translation EN that should NOT override message',
+            hi: 'Translation HI that should NOT override message',
+            gu: 'Translation GU that should NOT override message',
+          },
+          channel: 'both',
+        },
+      ],
+    };
+
+    const res = normalizePublicTickerAds(raw, { lang: 'gu', fallbackChannel: 'live' });
+    expect(res.ads[0]?.text).toBe('Localized message');
+  });
+
   test('mergeTickerItemsWithAds inserts an ad every configured frequency in round-robin order', () => {
     const ads = normalizePublicTickerAds(
       {

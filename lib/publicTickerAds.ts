@@ -99,6 +99,9 @@ function resolveTickerAdUrl(item: Record<string, any>): string | null {
 }
 
 export function resolveTickerAdText(item: Record<string, any>, lang?: BroadcastLang): string | null {
+  const message = String(item.message ?? '').trim();
+  if (message) return message;
+
   const wanted = normalizeLang(lang);
   const sourceLang = normalizeLang(item.sourceLang || item.sourceLanguage || item.lang);
   const translations = getTranslationsRecord(item);
@@ -106,10 +109,11 @@ export function resolveTickerAdText(item: Record<string, any>, lang?: BroadcastL
   if (wanted && translations?.[wanted]) return translations[wanted];
 
   const direct = pickFirstNonEmpty([
+    // Prefer backend-localized copy when provided as `message`.
+    item.message,
     item.text,
     item.title,
     item.headline,
-    item.message,
     item.copy,
     item.name,
     item.brandName,
@@ -121,6 +125,11 @@ export function resolveTickerAdText(item: Record<string, any>, lang?: BroadcastL
   if (translations) {
     const candidates: unknown[] = [];
     if (wanted && translations[wanted]) candidates.push(translations[wanted]);
+    // If backend marks an ad as `lang=all`, it may store the copy under an `all` key.
+    // Prefer that over unrelated language fallbacks when the requested lang is missing.
+    if (!wanted || !translations[wanted]) {
+      if (translations.all) candidates.push(translations.all);
+    }
     if (sourceLang && translations[sourceLang]) candidates.push(translations[sourceLang]);
     for (const key of ['en', 'hi', 'gu']) {
       if (translations[key]) candidates.push(translations[key]);

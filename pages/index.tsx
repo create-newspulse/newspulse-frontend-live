@@ -2642,12 +2642,14 @@ export default function UiPreviewV145() {
     lang: apiLang,
     channel: 'breaking',
     enabled: !SAFE_MODE,
+    refreshIntervalMs: 15_000,
   });
 
   const liveTickerAds = usePublicTickerAds({
     lang: apiLang,
     channel: 'live',
     enabled: !SAFE_MODE,
+    refreshIntervalMs: 15_000,
   });
 
   const [activeCatKey, setActiveCatKey] = useState<string>("breaking");
