@@ -1,7 +1,6 @@
 import React, { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { useRegionalPulse } from "../src/features/regional/useRegionalPulse";
 import { useYouthPulse } from "../features/youthPulse/useYouthPulse";
 import { usePublicMode } from "../utils/PublicModeProvider";
 import { usePublicSettings } from "../src/context/PublicSettingsContext";
@@ -2109,8 +2108,9 @@ function FeaturedCard({ theme, item, onToast }: any) {
   );
 }
 
-function FeedList({ theme, title, items, onOpen }: any) {
+function FeedList({ theme, title, items, onOpen, lang }: any) {
   const { t } = useI18n();
+  const safeLang = (lang === 'hi' || lang === 'gu') ? lang : 'en';
   return (
     <Surface theme={theme} className="p-4">
       <div className="flex items-center justify-between gap-3">
@@ -2122,45 +2122,42 @@ function FeedList({ theme, title, items, onOpen }: any) {
             {t('home.freshUpdates')}
           </div>
         </div>
-        <Button theme={theme} variant="soft" onClick={() => onOpen("viewall")}>
+        <Button theme={theme} variant="soft" className="shrink-0 whitespace-nowrap" onClick={() => onOpen("viewall")}>
           {t('common.viewAll')}
         </Button>
       </div>
 
-      <div className="mt-4 grid gap-3">
-        {items.map((f: any) => (
-          <button
-            key={f.id}
-            type="button"
-            onClick={() => onOpen(f.id)}
-            className="rounded-3xl border p-4 text-left transition hover:opacity-[0.98]"
-            style={{ background: theme.surface2, borderColor: theme.border }}
-          >
-            <div className="flex flex-wrap items-center gap-2 text-xs" style={{ color: theme.sub }}>
-              <span className="rounded-full px-2.5 py-1 border" style={{ background: theme.chip, borderColor: theme.border }}>
-                {f.time}
-              </span>
-              <span style={{ opacity: 0.55 }}>•</span>
-              <span>{f.source}</span>
-              {f.category ? (
-                <>
-                  <span style={{ opacity: 0.55 }}>•</span>
-                  <span className="rounded-full px-2.5 py-1 border" style={{ background: theme.chip, borderColor: theme.border }}>
-                    {f.category}
-                  </span>
-                </>
+      <div className="mt-4">
+        {items.map((f: any, index: number) => {
+          const href = buildNewsUrl({ id: String(f?.id || '').trim(), lang: safeLang });
+          const metaParts = [String(f?.time || '').trim(), String(f?.source || '').trim()].filter(Boolean);
+          if (String(f?.category || '').trim()) metaParts.push(String(f.category).trim());
+          const meta = metaParts.join(' • ');
+
+          return (
+            <Link
+              key={String(f?.id || index)}
+              href={href}
+              className="block rounded-xl px-3 py-2 transition hover:bg-black/5 dark:hover:bg-white/5 border-b last:border-b-0"
+              style={{ borderColor: theme.border }}
+              onClick={() => {
+                // Keep existing hook point for future analytics without blocking navigation.
+                try { onOpen?.(String(f?.id || '')); } catch {}
+              }}
+            >
+              {meta ? (
+                <div className="text-[11px] opacity-90 truncate" style={{ color: theme.sub }}>
+                  {meta}
+                </div>
               ) : null}
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-base font-extrabold" style={{ color: theme.text }}>
-              <span>{f.title}</span>
-              {f.titleIsOriginal ? <OriginalTag /> : null}
-            </div>
-            <div className="mt-1 text-sm" style={{ color: theme.sub }}>
-              {f.desc}
-              {f.descIsOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
-            </div>
-          </button>
-        ))}
+
+              <div className="mt-1 flex items-start gap-2" style={{ color: theme.text }}>
+                <span className="font-semibold text-sm leading-snug line-clamp-2">{String(f?.title || '').trim()}</span>
+                {f?.titleIsOriginal ? <OriginalTag /> : null}
+              </div>
+            </Link>
+          );
+        })}
       </div>
     </Surface>
   );
@@ -2659,7 +2656,6 @@ export default function UiPreviewV145() {
   const [mobileLeftOpen, setMobileLeftOpen] = useState(false);
 
   // Real data hooks
-  const regional = useRegionalPulse("gujarat");
   const youth = useYouthPulse();
 
   // Keep preview prefs in sync with global language (source of truth for UI i18n)
@@ -2909,6 +2905,27 @@ export default function UiPreviewV145() {
 
   const showAnyTicker = tickerBlocks.length > 0;
 
+  const youthPulseTrendingBlock = (
+    <div className="rounded-2xl border overflow-hidden" style={{ background: theme.surface2, borderColor: theme.border }}>
+      <div className="flex items-center justify-between px-3 py-2 border-b" style={{ borderColor: theme.border }}>
+        <div className="text-sm font-extrabold" style={{ color: theme.text }}>{t('home.youthPulseTrending')}</div>
+        <a href="/youth-pulse" className="text-xs font-semibold shrink-0 whitespace-nowrap" style={{ color: theme.accent2 }}>{t('common.viewAll')} →</a>
+      </div>
+      <div className="p-3 grid gap-2">
+        {(youth.trending.slice(0, 6)).map((y: any) => (
+          <a key={String(y.id)} href={`/youth-pulse`} className="rounded-xl border px-3 py-2 text-sm hover:opacity-95" style={{ background: theme.surface, borderColor: theme.border, color: theme.text }}>
+            {y.title}
+          </a>
+        ))}
+        {youth.loading && !youth.trending.length ? (
+          <div className="rounded-xl border px-3 py-7 animate-pulse" style={{ background: theme.surface, borderColor: theme.border }} />
+        ) : null}
+      </div>
+    </div>
+  );
+
+  const hasSnapshotsBlock = sidebarBlocks.some((b) => b.key === 'snapshots');
+
   const bottomBlocks = [
     {
       key: 'appPromo',
@@ -2975,6 +2992,12 @@ export default function UiPreviewV145() {
         body { overflow-x: hidden; scrollbar-gutter: stable; }
         .np-no-scrollbar::-webkit-scrollbar { display: none; }
         .np-no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .line-clamp-2 {
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
       `}</style>
 
       {/* TOP HEADER */}
@@ -3066,7 +3089,9 @@ export default function UiPreviewV145() {
           <aside className="col-span-12 lg:col-span-3">
             <div className="sticky top-4 grid gap-4">
               {sidebarBlocks.map((b) => (
-                <React.Fragment key={b.key}>{b.node}</React.Fragment>
+                <React.Fragment key={b.key}>
+                  {b.node}
+                </React.Fragment>
               ))}
             </div>
           </aside>
@@ -3083,53 +3108,16 @@ export default function UiPreviewV145() {
             <div className="sticky top-4 grid gap-4">
               <AdSlot slot="HOME_RIGHT_300x250" variant="right300" />
 
-              <AdSlot slot="HOME_RIGHT_300x600" variant="right300x600" className="hidden lg:block" />
+              <FeedList
+                theme={theme}
+                title={t('home.latest')}
+                items={latestFromBackend}
+                lang={apiLang}
+                onOpen={(id: string) => onToast(id === "viewall" ? "View all latest (planned)" : `Open story: ${id}`)}
+              />
 
-              <FeedList theme={theme} title={t('home.latest')} items={latestFromBackend} onOpen={(id: string) => onToast(id === "viewall" ? "View all latest (planned)" : `Open story: ${id}`)} />
-
-              {/* Regional preview */}
-              <div className="rounded-2xl border overflow-hidden" style={{ background: theme.surface2, borderColor: theme.border }}>
-                <div className="flex items-center justify-between px-3 py-2 border-b" style={{ borderColor: theme.border }}>
-                  <div className="text-sm font-extrabold" style={{ color: theme.text }}>{t('home.regionalPreview')}</div>
-                  <Link href="/regional/gujarat" className="text-xs font-semibold" style={{ color: theme.accent }}>
-                    {t('common.viewAll')} →
-                  </Link>
-                </div>
-                <div className="p-3 grid gap-2">
-                  {(regional.news.slice(0, 3)).map((a: any, idx: number) => (
-                    <button
-                      key={String(a.id || idx)}
-                      type="button"
-                      onClick={() => onToast("Open regional story (planned)")}
-                      className="rounded-xl border px-3 py-2 text-sm hover:opacity-95 text-left w-full"
-                      style={{ background: theme.surface, borderColor: theme.border, color: theme.text }}
-                    >
-                      {a.title}
-                    </button>
-                  ))}
-                  {regional.loading && !regional.news.length ? (
-                    <div className="rounded-xl border px-3 py-7 animate-pulse" style={{ background: theme.surface, borderColor: theme.border }} />
-                  ) : null}
-                </div>
-              </div>
-
-              {/* Youth Pulse trending */}
-              <div className="rounded-2xl border overflow-hidden" style={{ background: theme.surface2, borderColor: theme.border }}>
-                <div className="flex items-center justify-between px-3 py-2 border-b" style={{ borderColor: theme.border }}>
-                  <div className="text-sm font-extrabold" style={{ color: theme.text }}>{t('home.youthPulseTrending')}</div>
-                  <a href="/youth-pulse" className="text-xs font-semibold" style={{ color: theme.accent2 }}>{t('common.viewAll')} →</a>
-                </div>
-                <div className="p-3 grid gap-2">
-                  {(youth.trending.slice(0, 6)).map((y: any) => (
-                    <a key={String(y.id)} href={`/youth-pulse`} className="rounded-xl border px-3 py-2 text-sm hover:opacity-95" style={{ background: theme.surface, borderColor: theme.border, color: theme.text }}>
-                      {y.title}
-                    </a>
-                  ))}
-                  {youth.loading && !youth.trending.length ? (
-                    <div className="rounded-xl border px-3 py-7 animate-pulse" style={{ background: theme.surface, borderColor: theme.border }} />
-                  ) : null}
-                </div>
-              </div>
+              <AdSlot slot="HOME_RIGHT_300x600" variant="right300x600" className="hidden lg:block mt-4" />
+              {youthPulseTrendingBlock}
             </div>
           </aside>
         </div>
