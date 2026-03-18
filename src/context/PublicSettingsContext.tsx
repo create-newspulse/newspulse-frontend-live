@@ -1,5 +1,6 @@
 import React from 'react';
 
+import { subscribePublicDataRefresh } from '../../lib/publicDataRefresh';
 import { isSafeMode } from '../../utils/safeMode';
 
 import {
@@ -23,6 +24,8 @@ export type PublicSettingsContextValue = {
 
 const PublicSettingsContext = React.createContext<PublicSettingsContextValue | undefined>(undefined);
 
+const PUBLIC_SETTINGS_DEDUPE_MS = 5_000;
+
 export function PublicSettingsProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = React.useState<NormalizedPublicSettings | null>(null);
   const [isLoading, setIsLoading] = React.useState<boolean>(true);
@@ -31,15 +34,15 @@ export function PublicSettingsProvider({ children }: { children: React.ReactNode
   const SAFE_MODE = isSafeMode();
 
   const inFlightRef = React.useRef<Promise<void> | null>(null);
+  const lastRefreshAtRef = React.useRef<number>(0);
 
-  const pollSec = (() => {
-    const raw = Number(process.env.NEXT_PUBLIC_PUBLIC_SETTINGS_POLL_SEC || 0);
-    return Number.isFinite(raw) && raw > 0 ? Math.min(300, Math.max(5, raw)) : 0;
-  })();
-
-  const load = React.useCallback(async (opts?: { background?: boolean }) => {
+  const load = React.useCallback(async (opts?: { background?: boolean; force?: boolean }) => {
     // Deduplicate overlapping calls (poll + focus + manual refetch).
     if (inFlightRef.current) return inFlightRef.current;
+
+    const now = Date.now();
+    if (opts?.background && !opts?.force && now - lastRefreshAtRef.current < PUBLIC_SETTINGS_DEDUPE_MS) return;
+    lastRefreshAtRef.current = now;
 
     const shouldShowLoading = !opts?.background && settings == null;
     if (shouldShowLoading) setIsLoading(true);
@@ -77,42 +80,15 @@ export function PublicSettingsProvider({ children }: { children: React.ReactNode
     void load();
   }, [load]);
 
-  // Auto-refresh settings without a full page refresh.
-  // 1) When the tab becomes visible or window gets focus (common after publishing in Admin).
+  // Refresh settings when the shared public version changes.
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
     if (SAFE_MODE) return;
 
-    const onMaybeRefresh = () => {
-      try {
-        if (document.visibilityState && document.visibilityState !== 'visible') return;
-      } catch {}
-      void load({ background: true });
-    };
-
-    window.addEventListener('focus', onMaybeRefresh);
-    document.addEventListener('visibilitychange', onMaybeRefresh);
-    return () => {
-      window.removeEventListener('focus', onMaybeRefresh);
-      document.removeEventListener('visibilitychange', onMaybeRefresh);
-    };
+    return subscribePublicDataRefresh(() => {
+      void load({ background: true, force: true });
+    });
   }, [SAFE_MODE, load]);
-
-  // 2) Optional polling (disabled by default). Set NEXT_PUBLIC_PUBLIC_SETTINGS_POLL_SEC.
-  React.useEffect(() => {
-    if (!pollSec) return;
-    if (typeof window === 'undefined') return;
-    if (SAFE_MODE) return;
-
-    const id = window.setInterval(() => {
-      try {
-        if (document.visibilityState && document.visibilityState !== 'visible') return;
-      } catch {}
-      void load({ background: true });
-    }, pollSec * 1000);
-
-    return () => window.clearInterval(id);
-  }, [SAFE_MODE, pollSec, load]);
 
   const value = React.useMemo<PublicSettingsContextValue>(
     () => ({

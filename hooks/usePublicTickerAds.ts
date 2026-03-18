@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
+import { subscribePublicDataRefresh } from '../lib/publicDataRefresh';
 import type { BroadcastLang } from '../lib/publicBroadcast';
 import {
   normalizePublicTickerAds,
@@ -27,7 +28,7 @@ type CachedTickerAdsEntry = PublicTickerAdsPayload & {
   fetchedAt: number;
 };
 
-const TICKER_ADS_CACHE_TTL_MS = 30_000;
+const TICKER_ADS_CACHE_TTL_MS = 15_000;
 const tickerAdsCache = new Map<string, CachedTickerAdsEntry>();
 const inFlightByKey = new Map<string, Promise<CachedTickerAdsEntry>>();
 
@@ -100,8 +101,9 @@ export function usePublicTickerAds({
   lang,
   channel,
   enabled = true,
-  refreshIntervalMs = TICKER_ADS_CACHE_TTL_MS,
+  refreshIntervalMs = 15_000,
 }: UsePublicTickerAdsOptions): UsePublicTickerAdsResult {
+  void refreshIntervalMs;
   const cacheKey = useMemo(() => buildCacheKey(lang, channel), [lang, channel]);
   const initialCache = enabled ? getFreshCacheEntry(cacheKey, TICKER_ADS_CACHE_TTL_MS) : null;
 
@@ -145,32 +147,15 @@ export function usePublicTickerAds({
 
     refreshOnce(false);
 
-    const pollMs = Number.isFinite(Number(refreshIntervalMs)) && Number(refreshIntervalMs) > 0
-      ? Math.max(TICKER_ADS_CACHE_TTL_MS, Number(refreshIntervalMs))
-      : 0;
-
-    const intervalId = pollMs
-      ? window.setInterval(() => {
-          if (document.visibilityState !== 'visible') return;
-          refreshOnce(false);
-        }, pollMs)
-      : 0;
-
-    const onFocus = () => refreshOnce(false);
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') refreshOnce(false);
-    };
-
-    window.addEventListener('focus', onFocus);
-    document.addEventListener('visibilitychange', onVisibility);
+    const unsubscribe = subscribePublicDataRefresh(() => {
+      refreshOnce(true);
+    });
 
     return () => {
       cancelled = true;
-      if (intervalId) window.clearInterval(intervalId);
-      window.removeEventListener('focus', onFocus);
-      document.removeEventListener('visibilitychange', onVisibility);
+      unsubscribe();
     };
-  }, [ads.length, cacheKey, channel, enabled, lang, refreshIntervalMs]);
+  }, [ads.length, cacheKey, channel, enabled, lang]);
 
   const refetch = (force = true) => {
     if (!enabled) return;

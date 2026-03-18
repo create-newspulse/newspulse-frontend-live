@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { subscribePublicDataRefresh } from '../lib/publicDataRefresh';
 import {
   fetchPublicBroadcast,
   itemToTickerText,
@@ -18,12 +19,7 @@ export type PublicTickerItem = {
   raw: BroadcastItem;
 };
 
-function clampPollMs(raw: unknown, fallback: number): number {
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n <= 0) return fallback;
-  // Keep parity with broadcast hook: avoid hammering the backend.
-  return Math.max(10_000, n);
-}
+const REFETCH_DEDUPE_MS = 5_000;
 
 function itemTimestampMs(it: BroadcastItem): number | null {
   const candidates = [it.publishedAt, it.createdAt, it.updatedAt];
@@ -65,7 +61,7 @@ export function usePublicTicker(options: {
   refetch: (reason?: string) => void;
 } {
   const { kind, lang, enabled = true, todayOnly = false } = options;
-  const pollMs = useMemo(() => clampPollMs(options.pollMs, 45_000), [options.pollMs]);
+  void options.pollMs;
 
   const [items, setItems] = useState<PublicTickerItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -73,8 +69,8 @@ export function usePublicTicker(options: {
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
 
   const inFlightRef = useRef<AbortController | null>(null);
-  const pollTimerRef = useRef<any>(null);
   const mountedRef = useRef(false);
+  const lastFetchStartedAtRef = useRef(0);
 
   const applyItems = useCallback(
     (rawItems: BroadcastItem[]) => {
@@ -116,9 +112,14 @@ export function usePublicTicker(options: {
       if (typeof window === 'undefined') return;
       if (!enabled) return;
 
-      inFlightRef.current?.abort();
+      const force = reason === 'manual' || reason === 'version';
+      const now = Date.now();
+      if (inFlightRef.current) return;
+      if (!force && now - lastFetchStartedAtRef.current < REFETCH_DEDUPE_MS) return;
+
       const controller = new AbortController();
       inFlightRef.current = controller;
+      lastFetchStartedAtRef.current = now;
 
       // Only show loading state when we have nothing yet.
       setIsLoading((prev) => (items.length ? prev : true));
@@ -135,58 +136,32 @@ export function usePublicTicker(options: {
           if (!mountedRef.current || controller.signal.aborted) return;
           setError(String(e?.message || reason || 'TICKER_FETCH_FAILED'));
           setIsLoading(false);
+        })
+        .finally(() => {
+          if (inFlightRef.current === controller) inFlightRef.current = null;
         });
     },
     [applyItems, enabled, items.length, kind, lang]
   );
 
-  // Polling + focus/visibility refetch.
+  // Initial fetch only; version-change events drive background refreshes.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (!enabled) return;
 
     mountedRef.current = true;
-
-    const stop = () => {
-      if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current);
-        pollTimerRef.current = null;
-      }
-    };
-
-    const start = () => {
-      stop();
-      pollTimerRef.current = setInterval(() => {
-        if (document.visibilityState !== 'visible') return;
-        refetch('poll');
-      }, pollMs);
-    };
-
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        refetch('visible');
-        start();
-      } else {
-        stop();
-      }
-    };
-
-    const onFocus = () => refetch('focus');
-
-    start();
     refetch('initial');
 
-    window.addEventListener('focus', onFocus);
-    document.addEventListener('visibilitychange', onVisibility);
+    const unsubscribe = subscribePublicDataRefresh(() => {
+      refetch('version');
+    });
 
     return () => {
       mountedRef.current = false;
-      stop();
-      window.removeEventListener('focus', onFocus);
-      document.removeEventListener('visibilitychange', onVisibility);
+      unsubscribe();
       inFlightRef.current?.abort();
     };
-  }, [enabled, pollMs, refetch]);
+  }, [enabled, refetch]);
 
   return { items, isLoading, error, lastUpdatedAt, refetch };
 }

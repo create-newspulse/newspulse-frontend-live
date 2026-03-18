@@ -1,5 +1,6 @@
 import * as React from 'react';
 
+import { subscribePublicDataRefresh } from '../lib/publicDataRefresh';
 import { getMessagesForLang, normalizeLang, type Lang } from '../src/i18n/LanguageProvider';
 
 type UiLabelsState = {
@@ -52,33 +53,54 @@ function normalizePayload(payload: any): UiLabelsState {
 export function useUiLabels(lang: Lang) {
   const effectiveLang = normalizeLang(lang);
   const [remote, setRemote] = React.useState<UiLabelsState>({ ok: false, labels: {} });
+  const inFlightRef = React.useRef<AbortController | null>(null);
 
   React.useEffect(() => {
-    const controller = new AbortController();
+    let cancelled = false;
 
-    (async () => {
-      try {
-        const res = await fetch(`/public/ui-labels?lang=${encodeURIComponent(effectiveLang)}`, {
-          method: 'GET',
-          headers: { Accept: 'application/json', 'Cache-Control': 'no-store' },
-          cache: 'no-store',
-          signal: controller.signal,
-        });
-        const json = await res.json().catch(() => null);
-        if (controller.signal.aborted) return;
+    const load = (force = false) => {
+      if (inFlightRef.current && !force) return;
 
-        if (!res.ok || !json) {
-          setRemote({ ok: false, labels: {} });
-          return;
+      inFlightRef.current?.abort();
+      const controller = new AbortController();
+      inFlightRef.current = controller;
+
+      void (async () => {
+        try {
+          const res = await fetch(`/public/ui-labels?lang=${encodeURIComponent(effectiveLang)}`, {
+            method: 'GET',
+            headers: { Accept: 'application/json', 'Cache-Control': 'no-store' },
+            cache: 'no-store',
+            signal: controller.signal,
+          });
+          const json = await res.json().catch(() => null);
+          if (cancelled || controller.signal.aborted) return;
+
+          if (!res.ok || !json) {
+            setRemote((prev) => (prev.ok ? prev : { ok: false, labels: {} }));
+            return;
+          }
+          setRemote(normalizePayload(json));
+        } catch {
+          if (cancelled || controller.signal.aborted) return;
+          setRemote((prev) => (prev.ok ? prev : { ok: false, labels: {} }));
+        } finally {
+          if (inFlightRef.current === controller) inFlightRef.current = null;
         }
-        setRemote(normalizePayload(json));
-      } catch {
-        if (controller.signal.aborted) return;
-        setRemote({ ok: false, labels: {} });
-      }
-    })();
+      })();
+    };
 
-    return () => controller.abort();
+    load(true);
+
+    const unsubscribe = subscribePublicDataRefresh(() => {
+      load(true);
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+      inFlightRef.current?.abort();
+    };
   }, [effectiveLang]);
 
   const label = React.useCallback(

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 
+import { subscribePublicDataRefresh } from '../lib/publicDataRefresh';
+
 export type PublicAd = {
   id?: string | number;
   _id?: string;
@@ -57,7 +59,7 @@ type CachedAdSlotEntry = {
   fetchedAt: number;
 };
 
-const AD_SLOT_CACHE_TTL_MS = 30_000;
+const AD_SLOT_CACHE_TTL_MS = 15_000;
 const adSlotCache = new Map<string, CachedAdSlotEntry>();
 const inFlightByKey = new Map<string, Promise<CachedAdSlotEntry>>();
 
@@ -113,10 +115,12 @@ function normalizeAd(ad: any, allowWithoutImage: boolean): PublicAd | null {
   return imageUrl ? { ...(ad as PublicAd), imageUrl } : ({ ...(ad as PublicAd) } as PublicAd);
 }
 
-async function fetchPublicAdSlot(slot: string, lang: string, ttlMs: number): Promise<CachedAdSlotEntry> {
+async function fetchPublicAdSlot(slot: string, lang: string, ttlMs: number, force = false): Promise<CachedAdSlotEntry> {
   const cacheKey = buildCacheKey(slot, lang);
-  const fresh = getFreshCacheEntry(cacheKey, ttlMs);
-  if (fresh) return fresh;
+  if (!force) {
+    const fresh = getFreshCacheEntry(cacheKey, ttlMs);
+    if (fresh) return fresh;
+  }
 
   const existingInFlight = inFlightByKey.get(cacheKey);
   if (existingInFlight) return existingInFlight;
@@ -150,6 +154,9 @@ async function fetchPublicAdSlot(slot: string, lang: string, ttlMs: number): Pro
       adSlotCache.set(cacheKey, entry);
       return entry;
     } catch {
+      const fallback = adSlotCache.get(cacheKey) || null;
+      if (fallback) return fallback;
+
       if (!backendUrl) {
         const entry: CachedAdSlotEntry = {
           enabled: true,
@@ -173,6 +180,9 @@ async function fetchPublicAdSlot(slot: string, lang: string, ttlMs: number): Pro
         adSlotCache.set(cacheKey, entry);
         return entry;
       } catch {
+        const cached = adSlotCache.get(cacheKey) || null;
+        if (cached) return cached;
+
         const entry: CachedAdSlotEntry = {
           enabled: true,
           ad: null,
@@ -194,11 +204,11 @@ export function usePublicAdSlot({
   slot,
   language,
   allowWithoutImage = false,
-  refreshIntervalMs = 10_000,
+  refreshIntervalMs = 15_000,
 }: UsePublicAdSlotOptions): UsePublicAdSlotResult {
   const normalizedSlot = String(slot || '').trim();
   const normalizedLang = normalizeLanguage(language);
-  const pollMs = Number.isFinite(Number(refreshIntervalMs)) && Number(refreshIntervalMs) > 0 ? Number(refreshIntervalMs) : 0;
+  void refreshIntervalMs;
   const initialCache = normalizedSlot ? getFreshCacheEntry(buildCacheKey(normalizedSlot, normalizedLang), AD_SLOT_CACHE_TTL_MS) : null;
   const initialAd = initialCache ? normalizeAd(initialCache.ad, allowWithoutImage) : null;
   const [enabled, setEnabled] = useState(initialCache ? initialCache.enabled : true);
@@ -235,32 +245,19 @@ export function usePublicAdSlot({
       void fetchPublicAdSlot(normalizedSlot, normalizedLang, AD_SLOT_CACHE_TTL_MS).then(applyEntry);
     }
 
-    const refreshOnce = () => {
-      void fetchPublicAdSlot(normalizedSlot, normalizedLang, AD_SLOT_CACHE_TTL_MS).then(applyEntry);
+    const refreshOnce = (force = false) => {
+      void fetchPublicAdSlot(normalizedSlot, normalizedLang, AD_SLOT_CACHE_TTL_MS, force).then(applyEntry);
     };
 
-    const intervalId = pollMs
-      ? window.setInterval(() => {
-          refreshOnce();
-        }, pollMs)
-      : 0;
-
-    const onFocus = () => {
-      refreshOnce();
-    };
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') refreshOnce();
-    };
-    window.addEventListener('focus', onFocus);
-    document.addEventListener('visibilitychange', onVisibility);
+    const unsubscribe = subscribePublicDataRefresh(() => {
+      refreshOnce(true);
+    });
 
     return () => {
       cancelled = true;
-      if (intervalId) window.clearInterval(intervalId);
-      window.removeEventListener('focus', onFocus);
-      document.removeEventListener('visibilitychange', onVisibility);
+      unsubscribe();
     };
-  }, [normalizedSlot, normalizedLang, allowWithoutImage, pollMs]);
+  }, [normalizedSlot, normalizedLang, allowWithoutImage]);
 
   return { enabled, ad, isLoading, hasResolved };
 }

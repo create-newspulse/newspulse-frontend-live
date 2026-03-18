@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { subscribePublicDataRefresh } from '../lib/publicDataRefresh';
 import {
   fetchPublicBroadcast,
   normalizePublicBroadcast,
@@ -21,6 +22,9 @@ export type PublicBroadcastTickerState = {
   breakingSpeedSec: number | null;
   liveSpeedSec: number | null;
 };
+
+const DEFAULT_BROADCAST_POLL_MS = 15_000;
+const BROADCAST_DEDUPE_MS = 5_000;
 
 function clampSpeedSec(raw: unknown, fallback: number): number {
   const n = Number(raw);
@@ -50,14 +54,8 @@ export function usePublicBroadcastTicker(options: {
   enableSse?: boolean;
   enabled?: boolean;
 }): PublicBroadcastTickerState {
-  const { lang, pollMs = 5_000, enableSse = true, enabled = true } = options;
-
-  const effectivePollMs = useMemo(() => {
-    const n = Number(pollMs);
-    if (!Number.isFinite(n) || n <= 0) return 0;
-    // Requirement: throttle polling to at least 10s.
-    return Math.max(10_000, n);
-  }, [pollMs]);
+  const { lang, pollMs = DEFAULT_BROADCAST_POLL_MS, enableSse = true, enabled = true } = options;
+  void pollMs;
 
   const [broadcast, setBroadcast] = useState<PublicBroadcast>(() =>
     normalizePublicBroadcast({
@@ -77,10 +75,10 @@ export function usePublicBroadcastTicker(options: {
 
   const inFlightRef = useRef<AbortController | null>(null);
   const fpRef = useRef<string>('');
-  const pollTimerRef = useRef<any>(null);
   const sseRef = useRef<EventSource | null>(null);
   const sseFailedRef = useRef(false);
   const focusCooldownRef = useRef<number>(0);
+  const lastFetchStartedAtRef = useRef<number>(0);
 
   const applyBroadcast = useCallback(
     (raw: unknown, nextSource: 'poll' | 'sse') => {
@@ -99,9 +97,13 @@ export function usePublicBroadcastTicker(options: {
     async (reason?: string) => {
       if (typeof window === 'undefined') return;
 
-      inFlightRef.current?.abort();
+      const now = Date.now();
+      if (inFlightRef.current) return;
+      if (now - lastFetchStartedAtRef.current < BROADCAST_DEDUPE_MS) return;
+
       const controller = new AbortController();
       inFlightRef.current = controller;
+      lastFetchStartedAtRef.current = now;
 
       // Only show loading spinner on the very first fetch.
       setIsLoading((prev) => prev);
@@ -116,64 +118,30 @@ export function usePublicBroadcastTicker(options: {
         if (controller.signal.aborted) return;
         setError(String(e?.message || reason || 'BROADCAST_FETCH_FAILED'));
         setIsLoading(false);
+      } finally {
+        if (inFlightRef.current === controller) inFlightRef.current = null;
       }
     },
     [applyBroadcast, lang]
   );
 
-  // Polling + focus/visibility refetch
+  // Initial fetch only; periodic checks are centralized in usePublicVersion.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (!enabled) return;
-    if (!effectivePollMs) return;
-
-    const stopPolling = () => {
-      if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current);
-        pollTimerRef.current = null;
-      }
-    };
-
-    const startPolling = () => {
-      stopPolling();
-      pollTimerRef.current = setInterval(() => {
-        if (document.visibilityState !== 'visible') return;
-        // If SSE is active, avoid double-fetch.
-        if (sseRef.current && !sseFailedRef.current) return;
-        refetch('poll');
-      }, effectivePollMs);
-    };
-
-    const onFocusLike = () => {
-      const now = Date.now();
-      if (now - focusCooldownRef.current < 1000) return;
-      focusCooldownRef.current = now;
-      if (document.visibilityState !== 'visible') return;
-      if (sseRef.current && !sseFailedRef.current) return;
-      refetch('focus');
-    };
-
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        onFocusLike();
-        startPolling();
-      } else {
-        stopPolling();
-      }
-    };
-
-    startPolling();
     refetch('initial');
 
-    window.addEventListener('focus', onFocusLike);
-    document.addEventListener('visibilitychange', onVisibility);
+    const unsubscribe = subscribePublicDataRefresh(() => {
+      const now = Date.now();
+      if (now - focusCooldownRef.current < BROADCAST_DEDUPE_MS) return;
+      focusCooldownRef.current = now;
+      refetch('version');
+    });
 
     return () => {
-      stopPolling();
-      window.removeEventListener('focus', onFocusLike);
-      document.removeEventListener('visibilitychange', onVisibility);
+      unsubscribe();
     };
-  }, [effectivePollMs, enabled, refetch]);
+  }, [enabled, refetch]);
 
   // SSE (Phase 2)
   useEffect(() => {

@@ -82,7 +82,6 @@ export default function BreakingPage() {
   const breaking = usePublicTicker({
     kind: 'breaking',
     lang: tickerLang,
-    pollMs: 45_000,
     enabled: true,
     todayOnly: true,
   });
@@ -90,7 +89,6 @@ export default function BreakingPage() {
   const live = usePublicTicker({
     kind: 'live',
     lang: tickerLang,
-    pollMs: 45_000,
     enabled: true,
     todayOnly: true,
   });

@@ -2634,7 +2634,6 @@ export default function UiPreviewV145() {
 
   const broadcastTickers = usePublicBroadcastTicker({
     lang: apiLang,
-    pollMs: 10_000,
     enableSse: true,
     enabled: !SAFE_MODE,
   });

@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import type { PublicMode, PublicModeResponse } from '../lib/publicMode';
-import { fetchPublicMode } from '../lib/publicMode';
+import { clearPublicModeCache, fetchPublicMode } from '../lib/publicMode';
+import { subscribePublicDataRefresh } from '../lib/publicDataRefresh';
 
 type PublicModeContextValue = {
   mode: PublicMode;
@@ -55,6 +56,13 @@ export function PublicModeProvider({
       mounted.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    return subscribePublicDataRefresh(() => {
+      clearPublicModeCache();
+      refresh().catch(() => {});
+    });
   }, []);
 
   // Enforce LOCKDOWN: redirect to /maintenance unless already on exempt route

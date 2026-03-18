@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+
+import { subscribePublicDataRefresh } from '../lib/publicDataRefresh';
 import { isSafeMode } from '../utils/safeMode';
 
 export type AdSlotName = 'HOME_728x90' | 'HOME_RIGHT_300x250' | 'ARTICLE_INLINE';
@@ -26,11 +28,6 @@ function coerceEnabled(value: unknown): boolean {
 
 let cachedSlotEnabled: Record<AdSlotName, boolean> | null = null;
 let inFlight: Promise<Record<AdSlotName, boolean>> | null = null;
-
-function getPollSec(): number {
-  const raw = Number(process.env.NEXT_PUBLIC_PUBLIC_AD_SETTINGS_POLL_SEC || 0);
-  return Number.isFinite(raw) && raw > 0 ? Math.min(300, Math.max(5, raw)) : 0;
-}
 
 async function fetchSlotEnabledOnce(): Promise<Record<AdSlotName, boolean>> {
   if (typeof window === 'undefined') return DEFAULT_SLOT_ENABLED;
@@ -92,8 +89,8 @@ async function refreshSlotEnabled(): Promise<Record<AdSlotName, boolean>> {
       cachedSlotEnabled = next;
       return next;
     } catch {
-      cachedSlotEnabled = DEFAULT_SLOT_ENABLED;
-      return DEFAULT_SLOT_ENABLED;
+      cachedSlotEnabled = cachedSlotEnabled || DEFAULT_SLOT_ENABLED;
+      return cachedSlotEnabled;
     } finally {
       inFlight = null;
     }
@@ -105,7 +102,6 @@ async function refreshSlotEnabled(): Promise<Record<AdSlotName, boolean>> {
 export function useAdSettings() {
   const [slotEnabled, setSlotEnabled] = useState<Record<AdSlotName, boolean> | null>(cachedSlotEnabled);
   const inFlightRef = useRef<Promise<void> | null>(null);
-  const pollSec = useMemo(() => getPollSec(), []);
   const SAFE_MODE = isSafeMode();
 
   const doRefresh = () => {
@@ -130,40 +126,13 @@ export function useAdSettings() {
     };
   }, []);
 
-  // Auto-refresh without a full page reload.
   useEffect(() => {
-    if (typeof window === 'undefined') return;
     if (SAFE_MODE) return;
 
-    const onMaybeRefresh = () => {
-      try {
-        if (document.visibilityState && document.visibilityState !== 'visible') return;
-      } catch {}
+    return subscribePublicDataRefresh(() => {
       doRefresh();
-    };
-
-    window.addEventListener('focus', onMaybeRefresh);
-    document.addEventListener('visibilitychange', onMaybeRefresh);
-    return () => {
-      window.removeEventListener('focus', onMaybeRefresh);
-      document.removeEventListener('visibilitychange', onMaybeRefresh);
-    };
+    });
   }, [SAFE_MODE]);
-
-  useEffect(() => {
-    if (!pollSec) return;
-    if (typeof window === 'undefined') return;
-    if (SAFE_MODE) return;
-
-    const id = window.setInterval(() => {
-      try {
-        if (document.visibilityState && document.visibilityState !== 'visible') return;
-      } catch {}
-      doRefresh();
-    }, pollSec * 1000);
-
-    return () => window.clearInterval(id);
-  }, [SAFE_MODE, pollSec]);
 
   return { slotEnabled };
 }

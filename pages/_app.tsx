@@ -15,6 +15,7 @@ import { useTheme, type ThemeMode } from '../utils/ThemeContext';
 import SeoAlternates from '../components/SeoAlternates';
 import BrandTopHeader from '../src/components/layout/BrandTopHeader';
 import SmartBackButton from '../src/components/navigation/SmartBackButton';
+import { usePublicVersion } from '../hooks/usePublicVersion';
 
 const CATEGORY_ROUTE_SEGMENTS = new Set([
   'breaking',
@@ -215,6 +216,11 @@ function I18nBridge({ Component, pageProps }: { Component: any; pageProps: any }
   );
 }
 
+function PublicVersionWatcher() {
+  usePublicVersion();
+  return null;
+}
+
 function MyApp({ Component, pageProps }) {
   const router = useRouter();
 
@@ -269,6 +275,7 @@ function MyApp({ Component, pageProps }) {
       />
 
       <ThemeProvider>
+        <PublicVersionWatcher />
         <PublicSettingsProvider>
           <PublicModeProvider initialMode={pageProps?.publicMode}>
             <FeatureFlagProvider initialFlags={pageProps?.featureFlags}>
