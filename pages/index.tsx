@@ -2949,12 +2949,6 @@ export default function UiPreviewV145() {
       ),
     },
     {
-      key: 'quickTools',
-      order: effectiveSettings.modules.quickTools.order,
-      enabled: effectiveSettings.modules.quickTools.enabled === true,
-      node: <QuickToolsCard theme={theme} onToast={onToast} />,
-    },
-    {
       key: 'snapshots',
       order: effectiveSettings.modules.snapshots.order,
       enabled: effectiveSettings.modules.snapshots.enabled === true,
