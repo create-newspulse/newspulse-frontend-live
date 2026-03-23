@@ -123,11 +123,13 @@ const CommunityReporterMyStoriesPage: React.FC<FeatureToggleProps> = ({ communit
                 onWithdraw={async (s) => {
                   try {
                     if (typeof window !== 'undefined') {
-                      const proceed = window.confirm('Are you sure you want to withdraw this story?');
+                      const proceed = window.confirm(
+                        'Withdraw submission record?\n\nThis updates your community submission record. It does not directly remove a published NewsPulse article from the live site.'
+                      );
                       if (!proceed) return;
                     }
                     const ok = await withdraw(s);
-                    setToast(ok ? 'Story withdrawn successfully.' : 'Could not withdraw this story.');
+                    setToast(ok ? 'Your community submission record has been updated.' : 'Could not withdraw this submission record.');
                   } finally {
                     setTimeout(() => setToast(null), 2500);
                   }

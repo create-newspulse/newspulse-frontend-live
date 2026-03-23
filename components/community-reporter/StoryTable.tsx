@@ -72,7 +72,7 @@ const StoryTable: React.FC<Props> = ({ stories, loadingId, onView, onWithdraw })
                           disabled={loadingId === refId}
                           className={`text-xs ${loadingId === refId ? 'text-gray-400 cursor-not-allowed' : 'text-red-600 hover:underline'}`}
                         >
-                          Withdraw
+                          Withdraw submission
                         </button>
                       )}
                     </div>

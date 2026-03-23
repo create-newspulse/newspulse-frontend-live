@@ -17,7 +17,12 @@ const MyStoriesHeader: React.FC<Props> = ({ title = 'My Community Stories', repo
           </p>
         )}
         <p className="mt-2 text-xs text-gray-600 dark:text-gray-300">
-          You can withdraw a story only while it is under review. Once approved or published, withdrawal is handled by the editorial team.
+          This page shows your community submission records.
+        </p>
+        <p className="mt-2 text-xs text-gray-600 dark:text-gray-300">
+          You can withdraw a submission only while it is under review.
+          Published NewsPulse articles are managed separately by the editorial team.
+          Withdrawing a submission record does not automatically remove a live article already published on NewsPulse.
         </p>
       </div>
       <Link href="/community-reporter" className="text-sm px-4 py-2 rounded-full border border-blue-600 text-blue-600 hover:bg-blue-50 dark:hover:bg-gray-800">+ Submit new story</Link>

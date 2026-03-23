@@ -331,7 +331,8 @@ const MyCommunityStoriesPage: React.FC<FeatureToggleProps> = ({ communityReporte
                 Update my reporter details
               </button>
               <div className="text-gray-500">
-                If a story is published and you want it changed or removed, contact the News Pulse editorial team.
+                This page shows your community submission records. Published NewsPulse articles are managed separately by the editorial team.
+                Removing a submission record does not automatically remove a live article already published on NewsPulse.
               </div>
             </div>
 

@@ -598,7 +598,7 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
                 href={`/community-reporter/my-stories${signUpData.email ? `?email=${encodeURIComponent(signUpData.email.trim().toLowerCase())}` : ''}`}
                 className="text-sm text-blue-700 hover:underline"
               >
-                Already submitted stories? View My Community Stories
+                Already submitted? View my submission records
               </Link>
             ) : null}
           </div>
@@ -646,7 +646,7 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
                 href={`/community-reporter/my-stories${signUpData.email ? `?email=${encodeURIComponent(signUpData.email.trim().toLowerCase())}` : ''}`}
                 className="text-sm text-blue-700 hover:underline"
               >
-                Already submitted stories? View My Community Stories
+                Already submitted? View my submission records
               </Link>
             ) : null}
           </div>
@@ -1112,6 +1112,9 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
                       <p className="mt-1">Your reference ID: {submitResult.referenceId}</p>
                     )}
                     <p className="mt-1">Status: Under review. Usually reviewed within 24–48 hours.</p>
+                    <p className="mt-1 text-xs">
+                      This confirmation is for your community submission record. Editorial publication decisions and live-site article visibility are handled separately.
+                    </p>
                     <div className="mt-3 flex gap-3">
                       <button
                         type="button"
@@ -1122,7 +1125,7 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
                           router.push(target);
                         }}
                       >
-                        View My Community Stories
+                        View my submission records
                       </button>
                       <button
                         type="button"
