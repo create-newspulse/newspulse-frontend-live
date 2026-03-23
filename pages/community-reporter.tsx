@@ -3,7 +3,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import type { GetServerSideProps } from 'next';
-import { submitCommunityStory, SubmitCommunityStoryResult } from '../src/lib/communityReporterApi';
+import type { SubmitCommunityStoryResult } from '../src/lib/communityReporterApi';
 import { useCommunityReporterConfig } from '../src/hooks/useCommunityReporterConfig';
 import { usePublicMode } from '../utils/PublicModeProvider';
 
@@ -16,10 +16,13 @@ interface ReporterSignUpState {
   fullName: string;
   email: string;
   phone: string;
+  whatsapp: string;
   city: string;
+  district: string;
   state: string;
   country: string;
   preferredLanguages: string[];
+  consentToContact: boolean;
   heardAbout?: string;
   isProfessionalJournalist: boolean;
   communityInterests: string[];
@@ -36,11 +39,14 @@ interface ReporterSignUpState {
 interface StoryFormState {
   ageGroup: string;
   category: string; // Stores slug value e.g. 'regional'
+  coverageScope: '' | 'regional' | 'national' | 'international';
   headline: string;
   story: string;
   mediaLink?: string;
   storyCity?: string;
+  storyDistrict?: string;
   storyState?: string;
+  storyCountry?: string;
   priority?: 'normal' | 'high';
 }
 
@@ -48,10 +54,13 @@ const initialSignUp: ReporterSignUpState = {
   fullName: '',
   email: '',
   phone: '',
+  whatsapp: '',
   city: '',
+  district: '',
   state: '',
   country: 'India',
   preferredLanguages: [],
+  consentToContact: false,
   heardAbout: '',
   isProfessionalJournalist: false,
   communityInterests: [],
@@ -68,11 +77,14 @@ const initialSignUp: ReporterSignUpState = {
 const initialStory: StoryFormState = {
   ageGroup: '',
   category: '',
+  coverageScope: '',
   headline: '',
   story: '',
   mediaLink: '',
   storyCity: '',
+  storyDistrict: '',
   storyState: '',
+  storyCountry: '',
   priority: 'normal',
 };
 
@@ -123,6 +135,87 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
   // Public backend base URL (no prod fallback)
   const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE || '').toString().trim().replace(/\/+$/, '');
 
+  const [reporterAccountId, setReporterAccountId] = useState<string>('');
+
+  const safeRandomId = () => {
+    try {
+      const g = (globalThis as any).crypto;
+      if (g && typeof g.getRandomValues === 'function') {
+        const buf = new Uint8Array(16);
+        g.getRandomValues(buf);
+        return Array.from(buf).map((b) => b.toString(16).padStart(2, '0')).join('');
+      }
+    } catch {}
+    return `${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`;
+  };
+
+  const getOrCreateReporterAccountId = () => {
+    try {
+      if (typeof window === 'undefined') return '';
+      const key = 'np_cr_account_id_v1';
+      const existing = String(window.localStorage.getItem(key) || '').trim();
+      if (existing) return existing;
+      const created = safeRandomId();
+      window.localStorage.setItem(key, created);
+      return created;
+    } catch {
+      return '';
+    }
+  };
+
+  // Prefill profile from localStorage (keeps onboarding reliable across visits)
+  useEffect(() => {
+    try {
+      if (typeof window === 'undefined') return;
+      const id = getOrCreateReporterAccountId();
+      if (id) setReporterAccountId(id);
+
+      const raw = window.localStorage.getItem('np_cr_profile_v1');
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return;
+      setSignUpData((s) => ({
+        ...s,
+        fullName: typeof parsed.fullName === 'string' ? parsed.fullName : s.fullName,
+        email: typeof parsed.email === 'string' ? parsed.email : s.email,
+        phone: typeof parsed.phone === 'string' ? parsed.phone : s.phone,
+        whatsapp: typeof parsed.whatsapp === 'string' ? parsed.whatsapp : s.whatsapp,
+        city: typeof parsed.city === 'string' ? parsed.city : s.city,
+        district: typeof parsed.district === 'string' ? parsed.district : s.district,
+        state: typeof parsed.state === 'string' ? parsed.state : s.state,
+        country: typeof parsed.country === 'string' ? parsed.country : s.country,
+        preferredLanguages: Array.isArray(parsed.preferredLanguages) ? parsed.preferredLanguages : s.preferredLanguages,
+        communityInterests: Array.isArray(parsed.communityInterests) ? parsed.communityInterests : s.communityInterests,
+        consentToContact: typeof parsed.consentToContact === 'boolean' ? parsed.consentToContact : s.consentToContact,
+      }));
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist profile edits for later submissions.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        if (typeof window === 'undefined') return;
+        const payload = {
+          fullName: signUpData.fullName,
+          email: signUpData.email,
+          phone: signUpData.phone,
+          whatsapp: signUpData.whatsapp,
+          city: signUpData.city,
+          district: signUpData.district,
+          state: signUpData.state,
+          country: signUpData.country,
+          preferredLanguages: signUpData.preferredLanguages,
+          communityInterests: signUpData.communityInterests,
+          consentToContact: signUpData.consentToContact,
+        };
+        window.localStorage.setItem('np_cr_profile_v1', JSON.stringify(payload));
+      } catch {}
+    }, 500);
+    return () => clearTimeout(t);
+  }, [signUpData]);
+
   // Fetch public community settings on mount
   useEffect(() => {
     let cancelled = false;
@@ -162,12 +255,13 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
   const validateStep1 = () => {
     const e: Record<string, string> = {};
     if (!signUpData.fullName.trim()) e.fullName = 'Full name is required.';
-    if (!signUpData.email.trim()) e.email = 'Email is required.';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signUpData.email)) e.email = 'Enter a valid email.';
-    if (!signUpData.phone.trim()) e.phone = 'Phone is required.';
-    if (!signUpData.city.trim()) e.city = 'City is required.';
-    if (!signUpData.state.trim()) e.state = 'State is required.';
-    if (!signUpData.country.trim()) e.country = 'Country is required.';
+    const hasEmail = Boolean(signUpData.email.trim());
+    const hasPhone = Boolean(signUpData.phone.trim());
+    const hasWhatsApp = Boolean(signUpData.whatsapp.trim());
+    if (hasEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signUpData.email)) e.email = 'Enter a valid email.';
+    if (!hasEmail && !hasPhone && !hasWhatsApp) {
+      e.email = 'Add at least one contact method (email, phone, or WhatsApp).';
+    }
     if (!signUpData.generalEthicsAccepted) e.generalEthicsAccepted = 'You must accept ethics policy.';
     if (reporterType === 'journalist') {
       if (!signUpData.journalistCharterAccepted) e.journalistCharterAccepted = 'Charter acceptance required.';
@@ -182,6 +276,7 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
     const e: Record<string, string> = {};
     if (!story.ageGroup) e.ageGroup = 'Select an age group.';
     if (!story.category) e.category = 'Select a category.';
+    if (!story.coverageScope) e.coverageScope = 'Select a coverage scope.';
     if (!story.headline.trim()) e.headline = 'Headline is required.';
     if (story.headline.length > 150) e.headline = 'Headline exceeds 150 characters.';
     if (!story.story.trim()) e.story = 'Story is required.';
@@ -189,6 +284,23 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
     setErrors(e);
     return Object.keys(e).length === 0;
   };
+
+  const missingRecommendedProfileFields = useMemo(() => {
+    const missing: string[] = [];
+    const email = signUpData.email.trim();
+    const phone = signUpData.phone.trim();
+    const wa = signUpData.whatsapp.trim();
+    if (!email) missing.push('email');
+    if (!phone && !wa) missing.push('phone/WhatsApp');
+    if (!signUpData.city.trim()) missing.push('city');
+    if (!signUpData.district.trim()) missing.push('district');
+    if (!signUpData.state.trim()) missing.push('state');
+    if (!signUpData.country.trim()) missing.push('country');
+    if (!signUpData.preferredLanguages.length) missing.push('preferred language');
+    if (!signUpData.communityInterests.length && reporterType === 'community') missing.push('beats');
+    if (!signUpData.consentToContact) missing.push('consent to contact');
+    return missing;
+  }, [reporterType, signUpData]);
 
   const handleSubmitStep2: React.FormEventHandler<HTMLFormElement> = async (e) => {
     e.preventDefault();
@@ -225,13 +337,64 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
       const locationState = ((story.storyState || '').trim() || signUpData.state.trim());
       const location = [locationCity, locationState].filter(Boolean).join(', ');
 
+      const storedReporterProfileId = (() => {
+        try {
+          if (typeof window === 'undefined') return '';
+          return String(window.localStorage.getItem('np_communityReporterId') || '').trim();
+        } catch {
+          return '';
+        }
+      })();
+
       const payload = {
+        // Identity anchors
+        reporterAccountId: reporterAccountId || undefined,
+        reporterProfileId: storedReporterProfileId || undefined,
+        reporterType,
+        consentToContact: Boolean(signUpData.consentToContact),
+
+        // Reporter profile fields (flat, backend-friendly)
+        reporterName: signUpData.fullName.trim(),
+        reporterEmail: signUpData.email.trim(),
+        reporterPhone: signUpData.phone.trim(),
+        reporterWhatsApp: signUpData.whatsapp.trim(),
+        reporterCity: signUpData.city.trim(),
+        reporterDistrict: signUpData.district.trim(),
+        reporterState: signUpData.state.trim(),
+        reporterCountry: signUpData.country.trim(),
+        preferredLanguages: signUpData.preferredLanguages,
+        beats: reporterType === 'community' ? signUpData.communityInterests : (signUpData.beatsProfessional || []),
+        heardAbout: (signUpData.heardAbout || '').trim() || undefined,
+
+        // Journalist extras (when applicable)
+        organisationName: (signUpData.organisationName || '').trim() || undefined,
+        organisationType: signUpData.organisationType || undefined,
+        positionTitle: (signUpData.positionTitle || '').trim() || undefined,
+        beatsProfessional: signUpData.beatsProfessional || undefined,
+        yearsExperience: (signUpData.yearsExperience || '').trim() || undefined,
+        professionalJournalistId: (signUpData.professionalJournalistId || '').trim() || undefined,
+        journalistCharterAccepted: Boolean(signUpData.journalistCharterAccepted),
+        generalEthicsAccepted: Boolean(signUpData.generalEthicsAccepted),
+        journalistIdFileId: uploadedIdFileId || undefined,
+
+        // Story fields
+        category: story.category,
+        coverageScope: story.coverageScope,
+        headline: story.headline.trim(),
+        storyText: story.story.trim(),
+        ageGroup: story.ageGroup,
+        priority: story.priority || 'normal',
+        mediaLink: (story.mediaLink || '').trim() || undefined,
+        storyCity: (story.storyCity || '').trim() || undefined,
+        storyDistrict: (story.storyDistrict || '').trim() || undefined,
+        storyState: (story.storyState || '').trim() || undefined,
+        storyCountry: (story.storyCountry || '').trim() || undefined,
+
+        // Back-compat keys (keep existing backend behavior)
         name: signUpData.fullName.trim(),
         email: signUpData.email.trim(),
         location,
-        headline: story.headline.trim(),
         story: story.story.trim(),
-        ageGroup: story.ageGroup,
       };
       const res = await fetch('/api/community-reporter/submit', {
         method: 'POST',
@@ -466,24 +629,33 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
                           {errors.email && <p className="text-red-600 text-xs mt-1">{errors.email}</p>}
                         </div>
                         <div>
-                          <label htmlFor="phone" className="block font-medium mb-1">Phone *</label>
+                          <label htmlFor="phone" className="block font-medium mb-1">Phone</label>
                           <input id="phone" type="tel" value={signUpData.phone} onChange={e => setSignUpData(s => ({ ...s, phone: e.target.value }))} disabled={readonlyMode} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
                           {errors.phone && <p className="text-red-600 text-xs mt-1">{errors.phone}</p>}
                           <p className="text-xs text-gray-500 mt-1">For verification only, never shown publicly.</p>
                         </div>
-                        <div className="grid md:grid-cols-3 gap-4">
+                        <div>
+                          <label htmlFor="whatsapp" className="block font-medium mb-1">WhatsApp (optional)</label>
+                          <input id="whatsapp" type="tel" value={signUpData.whatsapp} onChange={e => setSignUpData(s => ({ ...s, whatsapp: e.target.value }))} disabled={readonlyMode} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                          <p className="text-xs text-gray-500 mt-1">If different from phone.</p>
+                        </div>
+                        <div className="grid md:grid-cols-2 gap-4">
                           <div>
-                            <label htmlFor="city" className="block font-medium mb-1">City *</label>
+                            <label htmlFor="city" className="block font-medium mb-1">City</label>
                             <input id="city" type="text" value={signUpData.city} onChange={e => setSignUpData(s => ({ ...s, city: e.target.value }))} disabled={readonlyMode} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
                             {errors.city && <p className="text-red-600 text-xs mt-1">{errors.city}</p>}
                           </div>
                           <div>
-                            <label htmlFor="state" className="block font-medium mb-1">State *</label>
+                            <label htmlFor="district" className="block font-medium mb-1">District</label>
+                            <input id="district" type="text" value={signUpData.district} onChange={e => setSignUpData(s => ({ ...s, district: e.target.value }))} disabled={readonlyMode} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
+                          </div>
+                          <div>
+                            <label htmlFor="state" className="block font-medium mb-1">State</label>
                             <input id="state" type="text" value={signUpData.state} onChange={e => setSignUpData(s => ({ ...s, state: e.target.value }))} disabled={readonlyMode} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
                             {errors.state && <p className="text-red-600 text-xs mt-1">{errors.state}</p>}
                           </div>
                           <div>
-                            <label htmlFor="country" className="block font-medium mb-1">Country *</label>
+                            <label htmlFor="country" className="block font-medium mb-1">Country</label>
                             <input id="country" type="text" value={signUpData.country} onChange={e => setSignUpData(s => ({ ...s, country: e.target.value }))} disabled={readonlyMode} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
                             {errors.country && <p className="text-red-600 text-xs mt-1">{errors.country}</p>}
                           </div>
@@ -497,6 +669,7 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
                               <button type="button" key={code} onClick={() => setSignUpData(s => ({ ...s, preferredLanguages: s.preferredLanguages.includes(code) ? s.preferredLanguages.filter(l => l !== code) : [...s.preferredLanguages, code] }))} disabled={readonlyMode} className={`px-3 py-1 rounded-full border ${signUpData.preferredLanguages.includes(code) ? 'bg-purple-600 text-white border-purple-600' : 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 border-gray-300 dark:border-gray-600'}`}>{code}</button>
                             ))}
                           </div>
+                          <p className="text-xs text-gray-500 mt-1">Select at least one (used for editor communication).</p>
                         </div>
 
                         {/* Heard about NP */}
@@ -526,12 +699,13 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
 
                         {reporterType === 'community' && (
                           <div>
-                            <label className="block font-medium mb-2">What kind of stories are you interested in?</label>
+                            <label className="block font-medium mb-2">Beats / interests</label>
                             <div className="flex flex-wrap gap-2">
                               {COMMUNITY_INTERESTS.map(i => (
                                 <button type="button" key={i} onClick={() => setSignUpData(s => ({ ...s, communityInterests: s.communityInterests.includes(i) ? s.communityInterests.filter(v => v !== i) : [...s.communityInterests, i] }))} disabled={readonlyMode} className={`px-3 py-1 rounded-full border ${signUpData.communityInterests.includes(i) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 border-gray-300 dark:border-gray-600'}`}>{i}</button>
                               ))}
                             </div>
+                            <p className="text-xs text-gray-500 mt-1">Helps route your tips to the right editor.</p>
                           </div>
                         )}
 
@@ -614,6 +788,10 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
                         {/* Ethics / Charter */}
                         <div className="space-y-3">
                           <div className="flex items-start gap-3">
+                            <input id="consentToContact" type="checkbox" checked={signUpData.consentToContact} onChange={e => setSignUpData(s => ({ ...s, consentToContact: e.target.checked }))} disabled={readonlyMode} className="mt-1 h-5 w-5 rounded border-gray-300 focus:ring-blue-500" />
+                            <label htmlFor="consentToContact" className="text-sm leading-relaxed">I consent to be contacted by the News Pulse editorial team about my submissions and reporter profile.</label>
+                          </div>
+                          <div className="flex items-start gap-3">
                             <input id="ethics" type="checkbox" checked={signUpData.generalEthicsAccepted} onChange={e => setSignUpData(s => ({ ...s, generalEthicsAccepted: e.target.checked }))} disabled={readonlyMode} className="mt-1 h-5 w-5 rounded border-gray-300 focus:ring-blue-500" />
                             <label htmlFor="ethics" className="text-sm leading-relaxed">I agree not to submit fake or unlawful stories and I accept that News Pulse may fact-check and reject my submissions.</label>
                           </div>
@@ -631,6 +809,14 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
                             </p>
                           )}
                         </div>
+
+                          {missingRecommendedProfileFields.length ? (
+                            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                              <p className="font-semibold">Profile incomplete (recommended)</p>
+                              <p className="mt-1">Missing: {missingRecommendedProfileFields.join(', ')}.</p>
+                              <p className="mt-1 text-xs">You can continue, but completing this helps editors verify and follow up.</p>
+                            </div>
+                          ) : null}
 
                         {/* Next */}
                         <div className="pt-2">
@@ -658,6 +844,44 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
                   {errors.category && <p className="text-red-600 text-xs mt-1">{errors.category}</p>}
                 </div>
 
+                {/* Coverage scope */}
+                <div>
+                  <label className="block font-medium mb-2">Coverage scope *</label>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="coverageScope"
+                        checked={story.coverageScope === 'regional'}
+                        onChange={() => setStory((s) => ({ ...s, coverageScope: 'regional' }))}
+                        disabled={readonlyMode}
+                      />
+                      <span>Regional</span>
+                    </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="coverageScope"
+                        checked={story.coverageScope === 'national'}
+                        onChange={() => setStory((s) => ({ ...s, coverageScope: 'national' }))}
+                        disabled={readonlyMode}
+                      />
+                      <span>National</span>
+                    </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="coverageScope"
+                        checked={story.coverageScope === 'international'}
+                        onChange={() => setStory((s) => ({ ...s, coverageScope: 'international' }))}
+                        disabled={readonlyMode}
+                      />
+                      <span>International</span>
+                    </label>
+                  </div>
+                  {errors.coverageScope && <p className="text-red-600 text-xs mt-1">{errors.coverageScope}</p>}
+                </div>
+
                 {/* Location (story-specific) */}
                 <div className="grid md:grid-cols-2 gap-4">
                   <div>
@@ -673,6 +897,18 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
                     />
                   </div>
                   <div>
+                    <label htmlFor="storyDistrict" className="block font-medium mb-1">District</label>
+                    <input
+                      id="storyDistrict"
+                      type="text"
+                      placeholder="e.g., Ahmedabad"
+                      value={story.storyDistrict || ''}
+                      onChange={e => setStory(s => ({ ...s, storyDistrict: e.target.value }))}
+                      disabled={readonlyMode}
+                      className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2"
+                    />
+                  </div>
+                  <div>
                     <label htmlFor="storyState" className="block font-medium mb-1">State</label>
                     <input
                       id="storyState"
@@ -680,6 +916,18 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
                       placeholder="e.g., Gujarat"
                       value={story.storyState || ''}
                       onChange={e => setStory(s => ({ ...s, storyState: e.target.value }))}
+                      disabled={readonlyMode}
+                      className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="storyCountry" className="block font-medium mb-1">Country</label>
+                    <input
+                      id="storyCountry"
+                      type="text"
+                      placeholder="e.g., India"
+                      value={story.storyCountry || ''}
+                      onChange={e => setStory(s => ({ ...s, storyCountry: e.target.value }))}
                       disabled={readonlyMode}
                       className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2"
                     />
@@ -797,6 +1045,23 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
                         Submit another story
                       </button>
                     </div>
+
+                    {missingRecommendedProfileFields.length ? (
+                      <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
+                        <p className="font-semibold">Complete your reporter profile</p>
+                        <p className="mt-1 text-sm">Missing: {missingRecommendedProfileFields.join(', ')}.</p>
+                        <button
+                          type="button"
+                          className="mt-2 inline-flex items-center rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+                          onClick={() => {
+                            setStep(1);
+                            try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch {}
+                          }}
+                        >
+                          Complete profile now
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                 )}
 

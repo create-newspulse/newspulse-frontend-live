@@ -1,16 +1,23 @@
 export interface SubmitCommunityStoryPayload {
+  reporterAccountId?: string;
+  reporterProfileId?: string;
   reporterName: string;
-  reporterEmail: string;
-  reporterPhone: string;
-  city: string;
-  state: string;
-  country: string;
+  reporterEmail?: string;
+  reporterPhone?: string;
+  reporterWhatsApp?: string;
+  city?: string;
+  district?: string;
+  state?: string;
+  country?: string;
   ageGroup: string;
   category: string;
+  coverageScope?: '' | 'regional' | 'national' | 'international';
   headline: string;
   story: string;
   reporterType: 'community' | 'journalist';
   preferredLanguages?: string[];
+  consentToContact?: boolean;
+  beats?: string[];
   communityInterests?: string[];
   journalistCharterAccepted?: boolean;
   generalEthicsAccepted?: boolean;
@@ -40,18 +47,25 @@ export async function submitCommunityStory(
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({
+      reporterAccountId: payload.reporterAccountId,
+      reporterProfileId: payload.reporterProfileId,
       reporterName: payload.reporterName,
-      reporterEmail: payload.reporterEmail,
-      reporterPhone: payload.reporterPhone,
-      reporterCity: payload.city,
-      reporterState: payload.state,
-      reporterCountry: payload.country,
+      reporterEmail: payload.reporterEmail || '',
+      reporterPhone: payload.reporterPhone || '',
+      reporterWhatsApp: payload.reporterWhatsApp || '',
+      reporterCity: payload.city || '',
+      reporterDistrict: payload.district || '',
+      reporterState: payload.state || '',
+      reporterCountry: payload.country || '',
       reporterType: payload.reporterType,
       category: payload.category,
+      coverageScope: payload.coverageScope || '',
       headline: payload.headline,
       storyText: payload.story,
       ageGroup: payload.ageGroup,
       preferredLanguages: payload.preferredLanguages || [],
+      consentToContact: Boolean(payload.consentToContact),
+      beats: payload.beats || payload.communityInterests || payload.beatsProfessional || [],
     }),
   });
 
