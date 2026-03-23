@@ -5,12 +5,11 @@ import { useRouter } from 'next/router';
 
 import AdSlot from '../../src/components/ads/AdSlot';
 import CategoryHeader from '../../src/components/category/CategoryHeader';
-import { resolveArticleBodyHtml, resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../../lib/contentFallback';
+import { getLocalizedArticleFields, type RouteLocale } from '../../lib/localizedArticleFields';
 import { formatArticleBodyHtml } from '../../lib/articleBody';
 import { unwrapArticle, type Article } from '../../lib/publicNewsApi';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { tHeading, toLanguageKey } from '../../utils/localizedNames';
-import { resolveArticleSlug } from '../../lib/articleSlugs';
 import { buildNewsUrl } from '../../lib/newsRoutes';
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
 import StoryImage from '../../src/components/story/StoryImage';
@@ -33,10 +32,6 @@ function ArticleDisplayAd({ slotId }: ArticleDisplayAdProps) {
   );
 }
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL ||
-  'https://newspulse-backend-real.onrender.com';
-
 function sanitizeContent(html: string) {
   return formatArticleBodyHtml(html || '');
 }
@@ -49,7 +44,7 @@ function cleanText(value: unknown): string {
     .trim();
 }
 
-function toUiLang(value: unknown): UiLang {
+function toRouteLocale(value: unknown): RouteLocale {
   const v = String(value || '').toLowerCase().trim();
   const base = v.split(/[-_]/g)[0] || v;
   if (base === 'hi' || base === 'hindi' || base === 'in') return 'hi';
@@ -180,6 +175,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
 
     const params = new URLSearchParams();
     params.set('lang', lang);
+    params.set('language', lang);
     const endpoint = `/api/public/news/${encodeURIComponent(slugToUse)}?${params.toString()}`;
 
     try {
@@ -205,8 +201,15 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
         return;
       }
 
-      const uiLang = toUiLang(lang);
-      const html = resolveArticleBodyHtml(next || {}, uiLang).text;
+      const localizedNext = getLocalizedArticleFields(next || {}, lang);
+      if (!localizedNext.isVisible) {
+        setPendingTranslate(false);
+        setPendingError('Not found');
+        setPendingExhausted(true);
+        return;
+      }
+
+      const html = localizedNext.bodyHtml;
       setResolvedArticle(next);
       setResolvedSafeHtml(sanitizeContent(html));
       setPendingTranslate(false);
@@ -289,14 +292,16 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
     [t]
   );
 
-  const uiLang = toUiLang(lang);
-  const titleRes = resolveArticleTitle(resolvedArticle || {}, uiLang);
-  const summaryRes = resolveArticleSummaryOrExcerpt(resolvedArticle || {}, uiLang);
+  const routeLocale = React.useMemo(() => toRouteLocale(lang), [lang]);
+  const localized = React.useMemo(
+    () => getLocalizedArticleFields(resolvedArticle || {}, routeLocale),
+    [resolvedArticle, routeLocale]
+  );
 
   const analyticsSlug = React.useMemo(() => {
-    if (!resolvedArticle?._id) return String(slug || '').trim();
-    return resolveArticleSlug(resolvedArticle, lang);
-  }, [lang, resolvedArticle, slug]);
+    const id = String(resolvedArticle?._id || '').trim();
+    return String(localized.slug || id || slug || '').trim();
+  }, [localized.slug, resolvedArticle?._id, slug]);
 
   useArticleAnalytics({
     article: resolvedArticle,
@@ -305,9 +310,9 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
     isPendingTranslation: pendingTranslate,
   });
 
-  const rawTitle = cleanText(titleRes.text || (resolvedArticle as any)?.title);
+  const rawTitle = cleanText(localized.title || (resolvedArticle as any)?.title);
   const displayTitle = rawTitle.length > 180 ? `${rawTitle.slice(0, 177).trimEnd()}…` : rawTitle;
-  const displaySummary = cleanText(summaryRes.text || (resolvedArticle as any)?.summary);
+  const displaySummary = cleanText(localized.summary || (resolvedArticle as any)?.summary);
   const displayProvider = cleanText((resolvedArticle as any)?.provider);
   const displayGeneratedAt = cleanText((resolvedArticle as any)?.generatedAt);
 
@@ -366,11 +371,11 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
 
   const canonicalUrl = React.useMemo(() => {
     if (!resolvedArticle?._id) return '';
-    const canonicalSlug = resolveArticleSlug(resolvedArticle, lang);
-    const path = buildNewsUrl({ id: String(resolvedArticle._id || '').trim(), slug: canonicalSlug, lang });
+    const id = String(resolvedArticle._id || '').trim();
+    const path = buildNewsUrl({ id, slug: localized.slug || id, lang });
     const base = typeof window !== 'undefined' ? window.location.origin : '';
     return base ? `${base}${path}` : path;
-  }, [resolvedArticle, lang]);
+  }, [resolvedArticle, lang, localized.slug]);
 
   const shareThis = async () => {
     const url = canonicalUrl || (typeof window !== 'undefined' ? stripQueryHash(window.location.href) : '');
@@ -593,12 +598,12 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                   <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {relatedStories.slice(0, 6).map((s, idx) => {
                       const id = String(s?._id || '').trim();
-                      const slug = resolveArticleSlug(s, lang);
-                      const href = id ? buildNewsUrl({ id, slug, lang }) : '#';
+                      const localizedStory = getLocalizedArticleFields(s || {}, lang);
+                      if (!localizedStory.isVisible) return null;
+                      const href = id ? buildNewsUrl({ id, slug: id, lang }) : '#';
                       const img = resolveCoverImageUrl(s) || COVER_PLACEHOLDER_SRC;
-                      const titleText = cleanText(resolveArticleTitle(s || {}, uiLang).text || (s as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
-                      const excerptRes = resolveArticleSummaryOrExcerpt(s || {}, uiLang);
-                      const excerpt = String(excerptRes.text || (s as any)?.summary || (s as any)?.excerpt || '').trim();
+                      const titleText = cleanText(localizedStory.title || (s as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
+                      const excerpt = String(localizedStory.summary || (s as any)?.summary || (s as any)?.excerpt || '').trim();
                       return (
                         <a
                           key={id || String((s as any)?.slug || idx)}
@@ -639,9 +644,10 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                     {topStories && topStories.length ? (
                       topStories.slice(0, 8).map((s, i) => {
                         const id = String(s?._id || '').trim();
-                        const slug = resolveArticleSlug(s, lang);
-                        const href = id ? buildNewsUrl({ id, slug, lang }) : '#';
-                        const titleText = cleanText(resolveArticleTitle(s || {}, uiLang).text || (s as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
+                        const localizedStory = getLocalizedArticleFields(s || {}, lang);
+                        if (!localizedStory.isVisible) return null;
+                        const href = id ? buildNewsUrl({ id, slug: id, lang }) : '#';
+                        const titleText = cleanText(localizedStory.title || (s as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
                         return (
                           <a
                             key={id || String((s as any)?.slug || i)}
@@ -709,9 +715,10 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                     {relatedStories && relatedStories.length ? (
                       relatedStories.slice(0, 6).map((s, i) => {
                         const id = String(s?._id || '').trim();
-                        const slug = resolveArticleSlug(s, lang);
-                        const href = id ? buildNewsUrl({ id, slug, lang }) : '#';
-                        const titleText = cleanText(resolveArticleTitle(s || {}, uiLang).text || (s as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
+                        const localizedStory = getLocalizedArticleFields(s || {}, lang);
+                        if (!localizedStory.isVisible) return null;
+                        const href = id ? buildNewsUrl({ id, slug: id, lang }) : '#';
+                        const titleText = cleanText(localizedStory.title || (s as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
                         return (
                           <a
                             key={id || String((s as any)?.slug || i)}
@@ -769,19 +776,37 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
     const origin = getRequestOrigin();
     const params = new URLSearchParams();
     params.set('lang', lang);
+    params.set('language', lang);
 
-    const endpoint = `${origin}/api/public/news/${encodeURIComponent(rawSlug)}?${params.toString()}`;
-    const res = await fetch(endpoint, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-        cookie: String(ctx.req.headers.cookie || ''),
-        authorization: String(ctx.req.headers.authorization || ''),
-      },
-      cache: 'no-store',
-    });
+    const headers = {
+      Accept: 'application/json',
+      cookie: String(ctx.req.headers.cookie || ''),
+      authorization: String(ctx.req.headers.authorization || ''),
+    };
 
-    const data = await res.json().catch(() => null);
+    const endpoints = [
+      `${origin}/api/public/news/slug/${encodeURIComponent(rawSlug)}?${params.toString()}`,
+      `${origin}/api/public/news/${encodeURIComponent(rawSlug)}?${params.toString()}`,
+    ];
+
+    let data: any = null;
+    let article: Article | null = null;
+    for (const endpoint of endpoints) {
+      const res = await fetch(endpoint, { method: 'GET', headers, cache: 'no-store' });
+      const next = await res.json().catch(() => null);
+      if (isPendingTranslationPayload(next)) {
+        data = next;
+        article = null;
+        break;
+      }
+      const candidate = unwrapArticle(next);
+      if (candidate?._id) {
+        data = next;
+        article = candidate;
+        break;
+      }
+      data = next;
+    }
 
     if (isPendingTranslationPayload(data)) {
       return {
@@ -800,22 +825,25 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
       };
     }
 
-    const article = unwrapArticle(data);
-
     if (!article?._id) {
       return {
         props: { messages, locale, lang, slug: rawSlug, article: null, safeHtml: '', topStories: [], relatedStories: [], error: 'Not found', pending: false },
       };
     }
 
+    const localized = getLocalizedArticleFields(article, lang);
+    if (!localized.isVisible) {
+      return { notFound: true };
+    }
+
     // Canonicalize slug per language
-    const canonicalSlug = resolveArticleSlug(article, lang);
+    const canonicalSlug = String(localized.slug || '').trim();
     if (canonicalSlug && canonicalSlug !== rawSlug) {
       const destination = buildNewsUrl({ id: String(article._id || '').trim(), slug: canonicalSlug, lang });
       return { redirect: { destination, permanent: true } };
     }
 
-    const html = resolveArticleBodyHtml(article || {}, lang).text;
+    const html = localized.bodyHtml;
 
     const extra = await (async () => {
       try {
@@ -827,8 +855,8 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
         params.set('language', lang);
         params.set('limit', String(limit));
 
-        const endpoint = `${API_BASE}/api/public/news?${params.toString()}`;
-        const res = await fetch(endpoint, { method: 'GET', headers: { Accept: 'application/json' } });
+        const endpoint = `${origin}/api/public/news?${params.toString()}`;
+        const res = await fetch(endpoint, { method: 'GET', headers, cache: 'no-store' });
         const data = await res.json().catch(() => null);
         const itemsRaw =
           Array.isArray(data) ? data :

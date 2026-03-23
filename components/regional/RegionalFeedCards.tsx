@@ -5,6 +5,7 @@ import { buildNewsUrl } from '../../lib/newsRoutes';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
 import StoryImage from '../../src/components/story/StoryImage';
+import { normalizeRouteLocale } from '../../lib/localizedArticleFields';
 
 function classNames(...s: Array<string | false | null | undefined>) {
   return s.filter(Boolean).join(' ');
@@ -162,8 +163,26 @@ function StoryCard({
   requestedLang: 'en' | 'hi' | 'gu';
 }) {
   const id = String(story?._id || story?.id || '').trim();
-  const slug = resolveArticleSlug(story, requestedLang);
-  const href = id ? buildNewsUrl({ id, slug, lang: requestedLang }) : '#';
+
+  const statusRaw = String(story?.status || story?.state || '').toLowerCase().trim();
+  const deleted = story?.deleted === true || story?.isDeleted === true || !!story?.deletedAt;
+  const hasPublishedAt = Boolean(String(story?.publishedAt || '').trim());
+  const isPublishedTrue = story?.isPublished === true || story?.published === true;
+
+  const published =
+    !deleted &&
+    story?.isPublished !== false &&
+    story?.published !== false &&
+    (statusRaw ? statusRaw === 'published' : (hasPublishedAt || isPublishedTrue));
+
+  const rawLang = String(story?.language || story?.lang || story?.sourceLang || story?.sourceLanguage || '').trim();
+  const storyLocale = rawLang ? normalizeRouteLocale(rawLang) : null;
+  const localeOk = !storyLocale || storyLocale === requestedLang;
+
+  if (!id || !published || !localeOk) return null;
+
+  // Use id as the stable route param to avoid stale slugs after updates/unpublish.
+  const href = buildNewsUrl({ id, slug: id, lang: requestedLang });
   const categoryLabel = getStoryCategoryLabel(story?.category) || story?.category || fallbackCategoryLabel;
   const dateIso = getStoryDateIso(story);
   const dateText = dateIso ? new Date(dateIso).toLocaleString() : '';
@@ -226,8 +245,7 @@ function StoryCard({
   const title = typeof story?.title === 'string' ? story.title.trim() : '';
   const summary = typeof story?.summary === 'string' ? story.summary.trim() : '';
 
-  const storyLang = String(story?.language || story?.lang || '').toLowerCase().trim();
-  const isOriginal = !!storyLang && storyLang !== requestedLang;
+  const isOriginal = !!storyLocale && storyLocale !== requestedLang;
 
   const coverUrl = resolveCoverImageUrl(story);
 
@@ -336,18 +354,21 @@ export default function RegionalFeedCards({
 
   return (
     <div className={classNames('grid gap-4 md:grid-cols-2', className)}>
-      {dedupedStories.map((story) => (
-        <StoryCard
-          key={story?._id || story?.slug || story?.title}
-          story={story}
-          requestedLang={requestedLang}
-          showDistrictBadges={showDistrictBadges}
-          getDistrictLabel={getDistrictLabel}
-          readMoreLabel={readMoreLabel}
-          videoPreviewHiddenLabel={videoPreviewHiddenLabel}
-          fallbackCategoryLabel={fallbackCategoryLabel}
-        />
-      ))}
+      {dedupedStories.map((story) => {
+        const card = (
+          <StoryCard
+            key={story?._id || story?.slug || story?.title}
+            story={story}
+            requestedLang={requestedLang}
+            showDistrictBadges={showDistrictBadges}
+            getDistrictLabel={getDistrictLabel}
+            readMoreLabel={readMoreLabel}
+            videoPreviewHiddenLabel={videoPreviewHiddenLabel}
+            fallbackCategoryLabel={fallbackCategoryLabel}
+          />
+        );
+        return card;
+      })}
     </div>
   );
 }

@@ -6,17 +6,45 @@ import {
   filterRegionalFeedPayload,
   unwrapRegionalFeedItems,
 } from '../../../../lib/unwrapRegionalFeed';
+import { normalizeRouteLocale } from '../../../../lib/localizedArticleFields';
 
 const BLOCKED_IDS = new Set<string>([
   '69a9d5f74c3cb9a18ef5a179',
   '69a9ca4a4c3cb9a18ef5a16f',
+  // Proven stale/deleted cards still appearing in public regional feeds.
+  '69c0c4707c7cb68a34add518',
+  '69c029fb7c7cb68a34add2ee',
 ]);
 
 function shouldKeepRegionalItem(item: any): boolean {
   const id = String(item?._id || item?.id || '').trim();
   if (id && BLOCKED_IDS.has(id)) return false;
 
-  return true;
+  // Enforce public visibility.
+  const statusRaw = String(item?.status || item?.state || '').toLowerCase().trim();
+  const deleted = item?.deleted === true || item?.isDeleted === true || !!item?.deletedAt;
+  if (deleted) return false;
+  if (statusRaw === 'deleted' || statusRaw === 'removed' || statusRaw === 'trash') return false;
+  if (item?.isPublished === false || item?.published === false) return false;
+
+  // If an explicit status exists, require it be published.
+  if (statusRaw) return statusRaw === 'published';
+
+  // If status is missing, require some other "published" marker.
+  const hasPublishedAt = Boolean(String(item?.publishedAt || '').trim());
+  const isPublishedTrue = item?.isPublished === true || item?.published === true;
+  if (hasPublishedAt || isPublishedTrue) return true;
+
+  // Unknown status with no publish markers: not safe for public listing.
+  return false;
+
+  // (unreachable)
+}
+
+function isLocaleCompatible(item: any, requestedLocale: 'en' | 'hi' | 'gu'): boolean {
+  const rawLang = String(item?.language || item?.lang || item?.sourceLang || item?.sourceLanguage || '').trim();
+  if (!rawLang) return true;
+  return normalizeRouteLocale(rawLang) === requestedLocale;
 }
 
 function getApiBase(): string {
@@ -234,6 +262,16 @@ function isLowFidelityRegionalFeed(items: any[]): boolean {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Prevent edge/browser caching; regional feeds must reflect deletes/unpublishes quickly.
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
+
+  const debug = String(process.env.DEBUG_PUBLIC_REGIONAL || '').trim() === '1';
+  const debugLog = (...args: any[]) => {
+    if (!debug) return;
+    // eslint-disable-next-line no-console
+    console.log('[api/public/regional]', ...args);
+  };
+
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
     return res.status(405).json({ ok: false, message: 'METHOD_NOT_ALLOWED' });
@@ -251,6 +289,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const langRaw = Array.isArray(req.query.lang) ? req.query.lang[0] : req.query.lang;
   const languageRaw = Array.isArray(req.query.language) ? req.query.language[0] : req.query.language;
   const requestedLang = String(langRaw || languageRaw || '').trim();
+  const requestedLocale = normalizeRouteLocale(requestedLang);
 
   const stateFromQuery = asSingleQueryValue(req.query.state) || asSingleQueryValue(req.query.stateSlug);
   const sanitized = sanitizeRegionalQuery(qs, { state: stateFromQuery, lang: requestedLang });
@@ -286,8 +325,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const primaryUrl = `${base}/api/public/regional${sanitized.qs}`;
 
   try {
+    debugLog('request', {
+      url: req.url,
+      requestedLang,
+      requestedLocale,
+      state: stateSlug || stateFromQuery || null,
+      district: districtSlug || null,
+      city: citySlug || null,
+      primaryUrl,
+    });
+
     const upstream = await fetchWithTimeout(primaryUrl, upstreamInit, timeoutMs);
     const text = await upstream.text().catch(() => '');
+
+    debugLog('upstream', {
+      status: upstream.status,
+      cacheControl: upstream.headers.get('cache-control'),
+      age: upstream.headers.get('age'),
+      via: upstream.headers.get('via'),
+      xCache: upstream.headers.get('x-cache'),
+      xVercelCache: upstream.headers.get('x-vercel-cache'),
+    });
 
     // Backward compatibility: some deployments used /api/public/regional/:state
     // If the query endpoint 404s but we have a state param, try the legacy path endpoint.
@@ -299,14 +357,40 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const legacy = await fetchWithTimeout(legacyUrl, upstreamInit, timeoutMs);
         const legacyText = await legacy.text().catch(() => '');
 
-        res.setHeader('Cache-Control', 'no-store, max-age=0');
+        debugLog('upstream-legacy', {
+          url: legacyUrl,
+          status: legacy.status,
+          cacheControl: legacy.headers.get('cache-control'),
+          age: legacy.headers.get('age'),
+          xVercelCache: legacy.headers.get('x-vercel-cache'),
+        });
         if (!legacy.ok) {
           return res.status(legacy.status).json({ ok: false, message: 'UPSTREAM_ERROR', status: legacy.status });
         }
 
         const legacyJson = safeJson(legacyText);
         const deduped = dedupeRegionalFeedPayload(legacyJson ?? [], requestedLang);
-        const filtered = filterRegionalFeedPayload(deduped, shouldKeepRegionalItem);
+        if (debug) {
+          const rawItems = unwrapRegionalFeedItems(deduped);
+          const keptItems = unwrapRegionalFeedItems(
+            filterRegionalFeedPayload(deduped, (it) => shouldKeepRegionalItem(it) && isLocaleCompatible(it, requestedLocale))
+          );
+          const removed = rawItems
+            .filter((it) => !shouldKeepRegionalItem(it) || !isLocaleCompatible(it, requestedLocale))
+            .slice(0, 12)
+            .map((it) => ({
+              id: String(it?._id || it?.id || '').trim(),
+              status: String(it?.status || it?.state || '').trim(),
+              deleted: Boolean(it?.deleted === true || it?.isDeleted === true || it?.deletedAt),
+              isPublished: it?.isPublished,
+              published: it?.published,
+              lang: String(it?.language || it?.lang || it?.sourceLang || '').trim(),
+              title: String(it?.title || '').slice(0, 80),
+            }));
+          debugLog('filter', { mode: 'legacy', rawCount: rawItems.length, keptCount: keptItems.length, removedPreview: removed });
+        }
+
+        const filtered = filterRegionalFeedPayload(deduped, (it) => shouldKeepRegionalItem(it) && isLocaleCompatible(it, requestedLocale));
 
         // If upstream returns an empty feed, fall back to public stories.
         if (!unwrapRegionalFeedItems(filtered).length) {
@@ -322,7 +406,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           });
           if (fallback) {
             const dedupedFallback = dedupeRegionalFeedPayload(fallback ?? [], requestedLang);
-            const filteredFallback = filterRegionalFeedPayload(dedupedFallback, shouldKeepRegionalItem);
+            const filteredFallback = filterRegionalFeedPayload(dedupedFallback, (it) => shouldKeepRegionalItem(it) && isLocaleCompatible(it, requestedLocale));
             return res.status(200).json(filteredFallback);
           }
         }
@@ -331,15 +415,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    res.setHeader('Cache-Control', 'no-store, max-age=0');
-
     if (!upstream.ok) {
       return res.status(upstream.status).json({ ok: false, message: 'UPSTREAM_ERROR', status: upstream.status });
     }
 
     const json = safeJson(text);
     const deduped = dedupeRegionalFeedPayload(json ?? [], requestedLang);
-    const filtered = filterRegionalFeedPayload(deduped, shouldKeepRegionalItem);
+    if (debug) {
+      const rawItems = unwrapRegionalFeedItems(deduped);
+      const keptItems = unwrapRegionalFeedItems(
+        filterRegionalFeedPayload(deduped, (it) => shouldKeepRegionalItem(it) && isLocaleCompatible(it, requestedLocale))
+      );
+      const removed = rawItems
+        .filter((it) => !shouldKeepRegionalItem(it) || !isLocaleCompatible(it, requestedLocale))
+        .slice(0, 12)
+        .map((it) => ({
+          id: String(it?._id || it?.id || '').trim(),
+          status: String(it?.status || it?.state || '').trim(),
+          deleted: Boolean(it?.deleted === true || it?.isDeleted === true || it?.deletedAt),
+          isPublished: it?.isPublished,
+          published: it?.published,
+          lang: String(it?.language || it?.lang || it?.sourceLang || '').trim(),
+          title: String(it?.title || '').slice(0, 80),
+        }));
+      debugLog('filter', { mode: 'primary', rawCount: rawItems.length, keptCount: keptItems.length, removedPreview: removed });
+    }
+
+    const filtered = filterRegionalFeedPayload(deduped, (it) => shouldKeepRegionalItem(it) && isLocaleCompatible(it, requestedLocale));
 
     // Some upstream deployments return a low-fidelity feed (no tags/status/geo),
     // which breaks district/city pages and client-side filtering.
@@ -359,7 +461,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
       if (fallback) {
         const dedupedFallback = dedupeRegionalFeedPayload(fallback ?? [], requestedLang);
-        const filteredFallback = filterRegionalFeedPayload(dedupedFallback, shouldKeepRegionalItem);
+        const filteredFallback = filterRegionalFeedPayload(dedupedFallback, (it) => shouldKeepRegionalItem(it) && isLocaleCompatible(it, requestedLocale));
         if (unwrapRegionalFeedItems(filteredFallback).length) return res.status(200).json(filteredFallback);
       }
     }
@@ -379,7 +481,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
       if (fallback) {
         const dedupedFallback = dedupeRegionalFeedPayload(fallback ?? [], requestedLang);
-        const filteredFallback = filterRegionalFeedPayload(dedupedFallback, shouldKeepRegionalItem);
+        const filteredFallback = filterRegionalFeedPayload(dedupedFallback, (it) => shouldKeepRegionalItem(it) && isLocaleCompatible(it, requestedLocale));
         return res.status(200).json(filteredFallback);
       }
     }

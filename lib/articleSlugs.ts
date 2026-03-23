@@ -7,6 +7,12 @@ function normalizeLang(value: unknown): NewsLang {
   return 'en';
 }
 
+function getSourceLang(article: any): NewsLang | null {
+  const raw = String(article?.sourceLang || article?.sourceLanguage || article?.language || article?.lang || '').trim();
+  if (!raw) return null;
+  return normalizeLang(raw);
+}
+
 function toSafeString(v: unknown): string {
   if (typeof v === 'string') return v;
   if (typeof v === 'number' || typeof v === 'boolean') return String(v);
@@ -87,6 +93,16 @@ export function resolveArticleSlug(article: any, langInput: unknown): string {
   const lang = normalizeLang(langInput);
   const slugs = resolveArticleSlugs(article);
 
+  const sourceLang = getSourceLang(article);
+
   const picked = lang === 'hi' ? slugs.hi : lang === 'gu' ? slugs.gu : slugs.en;
+
+  // Cross-locale strictness:
+  // If the article has a known source language that differs from the requested locale,
+  // do NOT fall back to a generic/foreign slug. Let callers fall back to the id instead.
+  if (sourceLang && sourceLang !== lang) {
+    return sanitizeSlug(pickFirstNonEmpty(picked));
+  }
+
   return sanitizeSlug(pickFirstNonEmpty(picked, article?.slug, article?.seoSlug, article?._id, article?.id));
 }

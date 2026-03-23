@@ -3,12 +3,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import React, { useMemo, useState } from 'react';
 import { fetchPublicNews, type Article } from '../lib/publicNewsApi';
-import { resolveArticleSummaryOrExcerpt, resolveArticleTitle } from '../lib/contentFallback';
+import { getLocalizedArticleFields } from '../lib/localizedArticleFields';
 import { useLanguage } from '../utils/LanguageContext';
 import { useI18n } from '../src/i18n/LanguageProvider';
-import OriginalTag from './OriginalTag';
 import { buildNewsUrl } from '../lib/newsRoutes';
-import { resolveArticleSlug } from '../lib/articleSlugs';
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../lib/coverImages';
 import StoryImage from '../src/components/story/StoryImage';
 
@@ -85,10 +83,9 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
     const q = String(searchQuery || '').trim().toLowerCase();
     if (!q) return items;
     return (items || []).filter((a) => {
-      const titleRes = resolveArticleTitle(a as any, language);
-      const summaryRes = resolveArticleSummaryOrExcerpt(a as any, language);
-      const hay = `${titleRes.text || ''} ${summaryRes.text || ''} ${(a as any)?.summary || ''} ${(a as any)?.excerpt || ''} ${(a as any)?.content || ''}`
-        .toLowerCase();
+      const localized = getLocalizedArticleFields(a as any, language);
+      if (!localized.isVisible) return false;
+      const hay = `${localized.title || ''} ${localized.summary || ''}`.toLowerCase();
       return hay.includes(q);
     });
   }, [items, language, searchQuery]);
@@ -170,28 +167,27 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
               <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 {filteredItems.map((a) => {
                   const id = String(a._id || '').trim();
-                  const slug = resolveArticleSlug(a, language);
-                  const href = id ? buildNewsUrl({ id, slug, lang: language }) : '#';
+                  const localized = getLocalizedArticleFields(a as any, language);
+                  if (!localized.isVisible) return null;
+
+                  // Use id as stable route token.
+                  const href = id ? buildNewsUrl({ id, slug: id, lang: language }) : '#';
                   const when = formatWhenLabel(a.publishedAt || a.createdAt);
-                  const titleRes = resolveArticleTitle(a as any, language);
-                  const summaryRes = resolveArticleSummaryOrExcerpt(a as any, language);
-                  const summary = summaryRes.text;
+                  const title = localized.title || t('categoryPage.untitled');
+                  const summary = localized.summary;
                   const image = resolveCoverImageUrl(a) || COVER_PLACEHOLDER_SRC;
 
                   return (
                     <li key={a._id} className="group rounded-2xl border border-slate-200 bg-white overflow-hidden">
                       <StoryImage
                         src={image}
-                        alt={titleRes.text || t('categoryPage.articleImageAlt')}
+                        alt={title || t('categoryPage.articleImageAlt')}
                         variant="top"
                       />
 
                       <div className="p-4">
                         <Link href={href} className="block text-lg font-bold text-slate-900 hover:underline">
-                          <span className="inline-flex flex-wrap items-center gap-2">
-                            <span>{titleRes.text || t('categoryPage.untitled')}</span>
-                            {titleRes.isOriginal ? <OriginalTag /> : null}
-                          </span>
+                          <span>{title}</span>
                         </Link>
 
                         {summary ? (
@@ -205,7 +201,6 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
                             }}
                           >
                             <span>{summary}</span>
-                            {summaryRes.isOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
                           </p>
                         ) : null}
 

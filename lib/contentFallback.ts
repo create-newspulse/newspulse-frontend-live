@@ -293,6 +293,7 @@ export function resolveArticleField(
 
   const lang = normLang(requestedLang) || 'en';
   const sourceLang = getSourceLang(item);
+  const isCrossLocale = Boolean(sourceLang && sourceLang !== lang);
 
   const source = getFieldSource(item, field);
   const translated = getTranslatedField(item, field, lang);
@@ -302,6 +303,7 @@ export function resolveArticleField(
   // If backend explicitly requests an accuracy fallback, prefer source/original text,
   // but keep the UI clean (no "Original" badge).
   if (translationFallback) {
+    if (isCrossLocale) return { text: '', isOriginal: false };
     const text = source || translated || pickNonEmpty(item?.[field]);
     return { text, isOriginal: false };
   }
@@ -313,16 +315,21 @@ export function resolveArticleField(
       return { text, isOriginal: false };
     }
 
-    // BLOCKED/PENDING/REJECTED/etc => show source/original (never blank)
+    // BLOCKED/PENDING/REJECTED/etc
+    // Same-locale: show source/original (never blank)
+    // Cross-locale: hide (do not leak a different language into the route)
+    if (isCrossLocale) return { text: '', isOriginal: false };
     const text = source || translated || pickNonEmpty(item?.[field]);
-    const isOriginal = Boolean(sourceLang && sourceLang !== lang);
-    return { text, isOriginal };
+    return { text, isOriginal: false };
   }
 
-  // No status => preserve existing behavior (API already language-filtered in most deployments)
-  // Prefer requested-language translations over the top-level field.
-  // Some backends return a single canonical language in `title/summary` and
-  // place the requested language under `translations[lang]` with no explicit status.
+  // No status:
+  // - Same-locale: preserve existing behavior.
+  // - Cross-locale: only allow explicit requested-language translation.
+  if (isCrossLocale) {
+    return { text: translated, isOriginal: false };
+  }
+
   const best = pickNonEmpty(translated, item?.[field], source);
   return { text: best, isOriginal: false };
 }
@@ -343,6 +350,7 @@ export function resolveArticleBodyHtml(article: unknown, requestedLang: UiLang):
 
   const lang = normLang(requestedLang) || 'en';
   const sourceLang = getSourceLang(item);
+  const isCrossLocale = Boolean(sourceLang && sourceLang !== lang);
 
   const source = getBodySourceHtml(item);
   const translated = getTranslatedBodyHtml(item, lang);
@@ -351,6 +359,7 @@ export function resolveArticleBodyHtml(article: unknown, requestedLang: UiLang):
 
   // Same semantics as resolveArticleField, but for body/html/content.
   if (translationFallback) {
+    if (isCrossLocale) return { text: '', isOriginal: false };
     const text = source || translated || pickNonEmptyTextLike(item?.content, item?.html, item?.body);
     return { text, isOriginal: false };
   }
@@ -361,9 +370,13 @@ export function resolveArticleBodyHtml(article: unknown, requestedLang: UiLang):
       return { text, isOriginal: false };
     }
 
+    if (isCrossLocale) return { text: '', isOriginal: false };
     const text = source || translated || pickNonEmptyTextLike(item?.content, item?.html, item?.body);
-    const isOriginal = Boolean(sourceLang && sourceLang !== lang);
-    return { text, isOriginal };
+    return { text, isOriginal: false };
+  }
+
+  if (isCrossLocale) {
+    return { text: translated, isOriginal: false };
   }
 
   const best = pickNonEmptyTextLike(translated, item?.content, item?.html, item?.body, source);

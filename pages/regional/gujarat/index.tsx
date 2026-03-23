@@ -220,6 +220,11 @@ export default function GujaratIndexPage() {
     setLoading(true);
     setError(null);
 
+    const debugRegional =
+      process.env.NODE_ENV !== 'production' &&
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('debugRegional') === '1';
+
     const run = async () => {
       try {
         const params = buildRegionalFeedSearchParams({ state: 'gujarat', lang: uiLang });
@@ -229,6 +234,18 @@ export default function GujaratIndexPage() {
         if (!res.ok) throw new Error(`Failed to fetch regional feed (${res.status})`);
 
         const data = await res.json().catch(() => null);
+
+        if (debugRegional) {
+          // eslint-disable-next-line no-console
+          console.log('[regional/gujarat] feed debug', {
+            url,
+            status: res.status,
+            cacheControl: res.headers.get('cache-control'),
+            age: res.headers.get('age'),
+            xVercelCache: res.headers.get('x-vercel-cache'),
+            payload: data,
+          });
+        }
         const items = unwrapRegionalFeedItems(data) as AnyStory[];
 
         if (!cancelled) setStories(items);

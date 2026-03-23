@@ -42,7 +42,7 @@ describe('contentFallback resolvers', () => {
     expect(resolveArticleTitle(article, 'hi').text).toBe('हिंदी शीर्षक');
   });
 
-  test('non-approved status falls back to source/original text', () => {
+  test('non-approved status does not leak source/original across locale', () => {
     const article: any = {
       title: 'ગુજરાતી શીર્ષક',
       language: 'en',
@@ -58,7 +58,7 @@ describe('contentFallback resolvers', () => {
     };
 
     const res = resolveArticleTitle(article, 'hi');
-    expect(res.text).toBe('English title');
-    expect(res.isOriginal).toBe(true);
+    expect(res.text).toBe('');
+    expect(res.isOriginal).toBe(false);
   });
 });

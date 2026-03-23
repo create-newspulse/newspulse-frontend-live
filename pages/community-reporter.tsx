@@ -109,9 +109,12 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
   const router = useRouter();
   const { readOnly } = usePublicMode();
   const submitInFlightRef = useRef(false);
+  const skipNextProfilePersistRef = useRef(false);
   const [step, setStep] = useState<1 | 2>(1);
   const [reporterType, setReporterType] = useState<ReporterType>('community');
   const [signUpData, setSignUpData] = useState<ReporterSignUpState>(initialSignUp);
+  const [savedDetailsRestoredFromStorage, setSavedDetailsRestoredFromStorage] = useState(false);
+  const [hasSavedDetailsInStorage, setHasSavedDetailsInStorage] = useState(false);
   const [journalistIdFile, setJournalistIdFile] = useState<File | null>(null);
   const [journalistIdUpload, setJournalistIdUpload] = useState<{ status: 'idle' | 'uploading' | 'success' | 'error'; fileId?: string; message?: string }>({ status: 'idle' });
   const [story, setStory] = useState<StoryFormState>(initialStory);
@@ -163,6 +166,47 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
     }
   };
 
+  const clearSavedReporterDetails = (opts?: { startFresh?: boolean }) => {
+    try {
+      if (typeof window === 'undefined') return;
+      // Profile persistence keys
+      window.localStorage.removeItem('np_cr_profile_v1');
+      window.localStorage.removeItem('np_cr_email');
+
+      // Identity anchors used by My Stories
+      window.localStorage.removeItem('np_communityReporterEmail');
+      window.localStorage.removeItem('np_communityReporterId');
+
+      if (opts?.startFresh) {
+        // Reset the per-browser account id so the next submit is a clean identity.
+        window.localStorage.removeItem('np_cr_account_id_v1');
+      }
+    } catch {}
+
+    setSavedDetailsRestoredFromStorage(false);
+    setHasSavedDetailsInStorage(false);
+
+    // Ensure any pending debounce write doesn't immediately re-create the cleared keys.
+    skipNextProfilePersistRef.current = true;
+
+    if (opts?.startFresh) {
+      setReporterType('community');
+      setSignUpData(initialSignUp);
+      setStory(initialStory);
+      setErrors({});
+      setSubmitStatus('idle');
+      setSubmitError(null);
+      setSubmitResult(null);
+      setJournalistIdFile(null);
+      setJournalistIdUpload({ status: 'idle' });
+      setStep(1);
+      try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch {}
+    } else {
+      // Trigger a render so the next debounce cycle consumes the skip.
+      setSignUpData((s) => ({ ...s }));
+    }
+  };
+
   // Prefill profile from localStorage (keeps onboarding reliable across visits)
   useEffect(() => {
     try {
@@ -174,6 +218,24 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
       if (!raw) return;
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object') return;
+
+      const hasMeaningfulSavedDetails = Boolean(
+        (typeof parsed.fullName === 'string' && parsed.fullName.trim()) ||
+        (typeof parsed.email === 'string' && parsed.email.trim()) ||
+        (typeof parsed.phone === 'string' && parsed.phone.trim()) ||
+        (typeof parsed.whatsapp === 'string' && parsed.whatsapp.trim()) ||
+        (typeof parsed.city === 'string' && parsed.city.trim()) ||
+        (typeof parsed.district === 'string' && parsed.district.trim()) ||
+        (typeof parsed.state === 'string' && parsed.state.trim()) ||
+        (typeof parsed.country === 'string' && parsed.country.trim()) ||
+        (Array.isArray(parsed.preferredLanguages) && parsed.preferredLanguages.length) ||
+        (Array.isArray(parsed.communityInterests) && parsed.communityInterests.length) ||
+        parsed.consentToContact === true
+      );
+      if (hasMeaningfulSavedDetails) {
+        setSavedDetailsRestoredFromStorage(true);
+        setHasSavedDetailsInStorage(true);
+      }
       setSignUpData((s) => ({
         ...s,
         fullName: typeof parsed.fullName === 'string' ? parsed.fullName : s.fullName,
@@ -197,6 +259,10 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
     const t = setTimeout(() => {
       try {
         if (typeof window === 'undefined') return;
+        if (skipNextProfilePersistRef.current) {
+          skipNextProfilePersistRef.current = false;
+          return;
+        }
         const payload = {
           fullName: signUpData.fullName,
           email: signUpData.email,
@@ -617,6 +683,32 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
             )}
                     {step === 1 && (
                       <div className="space-y-6 border-b border-gray-200 dark:border-gray-700 pb-6">
+                        {(savedDetailsRestoredFromStorage || hasSavedDetailsInStorage) && (
+                          <div className="rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+                            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                              <div>
+                                <p className="font-semibold">Using saved reporter details</p>
+                                <p className="text-xs mt-0.5">These details were restored from this browser.</p>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  className="px-3 py-1.5 rounded-lg border border-blue-300 bg-white text-blue-800 text-xs font-semibold"
+                                  onClick={() => clearSavedReporterDetails({ startFresh: false })}
+                                >
+                                  Clear saved details
+                                </button>
+                                <button
+                                  type="button"
+                                  className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold"
+                                  onClick={() => clearSavedReporterDetails({ startFresh: true })}
+                                >
+                                  Start fresh
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                         {/* Identity */}
                         <div>
                           <label htmlFor="fullName" className="block font-medium mb-1">Full name *</label>

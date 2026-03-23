@@ -4,8 +4,7 @@ import Link from 'next/link';
 import React from 'react';
 import { fetchPublicNews, type Article } from '../lib/publicNewsApi';
 import { buildNewsUrl } from '../lib/newsRoutes';
-import { resolveArticleSlug } from '../lib/articleSlugs';
-import { resolveArticleTitle } from '../lib/contentFallback';
+import { getLocalizedArticleFields } from '../lib/localizedArticleFields';
 import { useI18n } from '../src/i18n/LanguageProvider';
 import { useLanguage } from '../utils/LanguageContext';
 import OriginalTag from '../components/OriginalTag';
@@ -200,11 +199,13 @@ export default function LatestPage() {
                   <ul className="grid gap-3">
                     {items.map((a) => {
                       const id = String(a._id || '').trim();
-                      const slug = resolveArticleSlug(a as any, language);
-                      const href = id ? buildNewsUrl({ id, slug, lang: language }) : '#';
-                      const titleRes = resolveArticleTitle(a as any, language);
+                      const localized = getLocalizedArticleFields(a as any, language);
+                      if (!localized.isVisible) return null;
 
-                      const title = String(titleRes.text || '').trim() || t('common.untitled');
+                      // Use id as the stable route token (avoids stale slugs).
+                      const href = id ? buildNewsUrl({ id, slug: id, lang: language }) : '#';
+
+                      const title = String(localized.title || '').trim() || String(t('common.untitled') || 'Untitled');
                       const when = formatTime(a.publishedAt || a.createdAt);
                       const category = String((a as any)?.category || '').trim();
                       const coverSrc = resolveCoverImageUrl(a as any);
@@ -273,7 +274,7 @@ export default function LatestPage() {
                                   >
                                     {title}
                                   </span>
-                                  {titleRes.isOriginal ? <OriginalTag /> : null}
+                                  {localized.isFallback ? <OriginalTag /> : null}
                                 </div>
                               </div>
                             </div>

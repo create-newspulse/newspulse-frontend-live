@@ -1,6 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 import { getPublicApiBaseUrl } from '../../../../../lib/publicApiBase';
+import { getLocalizedArticleFields, normalizeRouteLocale } from '../../../../../lib/localizedArticleFields';
+import { unwrapArticle } from '../../../../../lib/publicNewsApi';
+
+function asSingleQueryValue(value: string | string[] | undefined): string {
+  return String(Array.isArray(value) ? value[0] : value || '').trim();
+}
 
 function getApiBase(): string {
   return String(getPublicApiBaseUrl() || '').trim().replace(/\/+$/, '');
@@ -27,6 +33,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Backend contract: /api/public/news/slug/:slug?lang=...
   const targetUrl = `${base}/api/public/news/slug/${encodeURIComponent(slug)}${qs}`;
 
+  const requestedLocale = normalizeRouteLocale(
+    asSingleQueryValue(req.query.language as any) || asSingleQueryValue(req.query.lang as any)
+  );
+
   try {
     const upstream = await fetch(targetUrl, {
       method: 'GET',
@@ -51,7 +61,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     try {
       const json = text ? JSON.parse(text) : { article: null };
-      res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=30');
+      const article = unwrapArticle(json);
+      const localized = getLocalizedArticleFields(article, requestedLocale);
+      if (!localized.isVisible) {
+        res.setHeader('Cache-Control', 'no-store, max-age=0');
+        return res.status(200).json({ article: null });
+      }
+
+      res.setHeader('Cache-Control', 'no-store, max-age=0');
       return res.status(200).json(json);
     } catch {
       res.setHeader('Cache-Control', 'no-store');

@@ -2,17 +2,22 @@ import type { GetServerSideProps } from 'next';
 
 import { buildNewsUrl } from '../../lib/newsRoutes';
 import { unwrapArticle } from '../../lib/publicNewsApi';
-import { resolveArticleSlug } from '../../lib/articleSlugs';
-
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL ||
-  'https://newspulse-backend-real.onrender.com';
+import { getLocalizedArticleFields, normalizeRouteLocale, type RouteLocale } from '../../lib/localizedArticleFields';
 
 function normalizeLang(value: unknown): 'en' | 'hi' | 'gu' {
   const v = String(value || '').toLowerCase().trim();
   if (v === 'hi' || v === 'hindi' || v === 'in') return 'hi';
   if (v === 'gu' || v === 'gujarati') return 'gu';
   return 'en';
+}
+
+function getRequestOrigin(ctx: any): string {
+  const req = ctx.req;
+  const protoHeader = String(req?.headers?.['x-forwarded-proto'] || '').split(',')[0].trim();
+  const proto = protoHeader || 'http';
+  const host = String(req?.headers?.['x-forwarded-host'] || req?.headers?.host || '').split(',')[0].trim();
+  if (!host) return '';
+  return `${proto}://${host}`;
 }
 
 export default function LegacyNewsRedirectPage() {
@@ -32,49 +37,63 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   const idCandidate = parts[0];
   const slugCandidate = parts[parts.length - 1];
 
-  const tryFetchById = async (): Promise<any | null> => {
-    const qs = new URLSearchParams();
-    qs.set('lang', lang);
-    qs.set('language', lang);
+  const origin = getRequestOrigin(ctx);
+  if (!origin) return { notFound: true };
 
-    const endpoint = `${API_BASE}/api/public/news/${encodeURIComponent(idCandidate)}?${qs.toString()}`;
-    const res = await fetch(endpoint, { method: 'GET', headers: { Accept: 'application/json' } });
-    const data = await res.json().catch(() => null);
+  const attempts: RouteLocale[] = [lang, 'en', 'hi', 'gu'].filter((v, idx, arr) => arr.indexOf(v) === idx) as RouteLocale[];
+
+  const fetchById = async (attemptLang: RouteLocale): Promise<any | null> => {
+    const qs = new URLSearchParams();
+    qs.set('lang', attemptLang);
+    qs.set('language', attemptLang);
+    const endpoint = `${origin}/api/public/news/${encodeURIComponent(idCandidate)}?${qs.toString()}`;
+    const res = await fetch(endpoint, { method: 'GET', headers: { Accept: 'application/json' }, cache: 'no-store' });
     if (!res.ok) return null;
+    const data = await res.json().catch(() => null);
     return unwrapArticle(data);
   };
 
-  const tryFetchBySlug = async (): Promise<any | null> => {
-    const attempt = async (attemptLang: 'en' | 'hi' | 'gu'): Promise<any | null> => {
-      const qs = new URLSearchParams();
-      qs.set('lang', attemptLang);
-      qs.set('language', attemptLang);
-
-      const endpoint = `${API_BASE}/api/public/news/slug/${encodeURIComponent(slugCandidate)}?${qs.toString()}`;
-      const res = await fetch(endpoint, { method: 'GET', headers: { Accept: 'application/json' } });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) return null;
-      return unwrapArticle(data);
-    };
-
-    const attempts: Array<'en' | 'hi' | 'gu'> = [lang, 'en', 'hi', 'gu'].filter(
-      (v, idx, arr) => arr.indexOf(v) === idx
-    ) as Array<'en' | 'hi' | 'gu'>;
-
-    for (const attemptLang of attempts) {
-      const article = await attempt(attemptLang);
-      if (article?._id) return article;
-    }
-
-    return null;
+  const fetchBySlug = async (attemptLang: RouteLocale): Promise<any | null> => {
+    const qs = new URLSearchParams();
+    qs.set('lang', attemptLang);
+    qs.set('language', attemptLang);
+    const endpoint = `${origin}/api/public/news/slug/${encodeURIComponent(slugCandidate)}?${qs.toString()}`;
+    const res = await fetch(endpoint, { method: 'GET', headers: { Accept: 'application/json' }, cache: 'no-store' });
+    const data = await res.json().catch(() => null);
+    return unwrapArticle(data);
   };
 
   try {
-    const article = (await tryFetchById()) || (await tryFetchBySlug());
-    if (!article?._id) return { notFound: true };
+    let found: any | null = null;
+    let foundLang: RouteLocale | null = null;
 
-    const canonicalSlug = resolveArticleSlug(article, lang);
-    const destination = buildNewsUrl({ id: String(article._id || '').trim(), slug: canonicalSlug, lang });
+    for (const attemptLang of attempts) {
+      const article = await fetchById(attemptLang);
+      if (article?._id) {
+        found = article;
+        foundLang = attemptLang;
+        break;
+      }
+    }
+
+    if (!found) {
+      for (const attemptLang of attempts) {
+        const article = await fetchBySlug(attemptLang);
+        if (article?._id) {
+          found = article;
+          foundLang = attemptLang;
+          break;
+        }
+      }
+    }
+
+    if (!found?._id || !foundLang) return { notFound: true };
+
+    const localized = getLocalizedArticleFields(found, foundLang);
+    if (!localized.isVisible) return { notFound: true };
+
+    const id = String(found._id || '').trim();
+    const destination = buildNewsUrl({ id, slug: localized.slug || id, lang: normalizeRouteLocale(foundLang) });
 
     return {
       redirect: {

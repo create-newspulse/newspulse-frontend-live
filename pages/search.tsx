@@ -3,12 +3,10 @@ import Link from 'next/link';
 import type { GetStaticProps } from 'next';
 
 import { fetchPublicNews, type Article } from '../lib/publicNewsApi';
-import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../lib/contentFallback';
-import OriginalTag from '../components/OriginalTag';
+import { getLocalizedArticleFields, type RouteLocale } from '../lib/localizedArticleFields';
 import { useLanguage } from '../utils/LanguageContext';
 import { useI18n } from '../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../lib/newsRoutes';
-import { resolveArticleSlug } from '../lib/articleSlugs';
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../lib/coverImages';
 import StoryImage from '../src/components/story/StoryImage';
 
@@ -20,11 +18,8 @@ import StoryImage from '../src/components/story/StoryImage';
 
 type SearchItem = {
   id: string;
-  slug?: string;
   title: string;
-  titleIsOriginal?: boolean;
   summary?: string;
-  summaryIsOriginal?: boolean;
   category?: string;
   publishedAt?: string;
   coverImageUrl?: string;
@@ -62,28 +57,25 @@ function formatDateLikeUI(d?: string) {
   }
 }
 
-function toSearchItem(a: Article, requestedLang: UiLang): SearchItem | null {
-  const titleRes = resolveArticleTitle(a as any, requestedLang);
-  const title = String(titleRes.text || '').trim();
+function toSearchItem(a: Article, requestedLang: RouteLocale): SearchItem | null {
+  const localized = getLocalizedArticleFields(a as any, requestedLang as RouteLocale);
+  if (!localized.isVisible) return null;
+
+  const title = String(localized.title || '').trim();
   if (!title) return null;
 
-  const slug = typeof a?.slug === 'string' ? a.slug.trim() : '';
-  const id = String(a?._id || slug || '').trim();
+  const id = String(a?._id || '').trim();
   if (!id) return null;
 
-  const summaryRes = resolveArticleSummaryOrExcerpt(a as any, requestedLang);
-  const summary = String(summaryRes.text || '').trim() || undefined;
+  const summary = String(localized.summary || '').trim() || undefined;
   const category = String((a as any)?.category || '').trim() || undefined;
   const publishedAt =
     String((a as any)?.publishedAt || (a as any)?.createdAt || '').trim() || undefined;
 
   return {
     id,
-    slug: slug || undefined,
     title,
-    titleIsOriginal: titleRes.isOriginal,
     summary,
-    summaryIsOriginal: summaryRes.isOriginal,
     category,
     publishedAt,
     coverImageUrl: resolveCoverImageUrl(a) || undefined,
@@ -258,7 +250,7 @@ function SuggestionChips({
 
 function ResultCard({ item, language }: { item: SearchItem; language: 'en' | 'hi' | 'gu' }) {
   const { t } = useI18n();
-  const href = buildNewsUrl({ id: item.id, slug: resolveArticleSlug(item, language), lang: language });
+  const href = buildNewsUrl({ id: item.id, slug: item.id, lang: language });
   return (
     <div className="group rounded-2xl border border-black/10 bg-white p-4 shadow-sm hover:shadow-md transition">
       <div className="flex items-start justify-between gap-3">
@@ -273,12 +265,10 @@ function ResultCard({ item, language }: { item: SearchItem; language: 'en' | 'hi
           <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2 text-base font-semibold leading-snug">
             <span>{item.title}</span>
-            {item.titleIsOriginal ? <OriginalTag /> : null}
           </div>
           {item.summary && (
             <div className="mt-1 text-sm text-black/70">
               <span>{item.summary}</span>
-              {item.summaryIsOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
             </div>
           )}
           </div>
