@@ -14,6 +14,7 @@ import { resolveArticleSlug } from '../../lib/articleSlugs';
 import { buildNewsUrl } from '../../lib/newsRoutes';
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
 import StoryImage from '../../src/components/story/StoryImage';
+import { useArticleAnalytics } from '../../hooks/useArticleAnalytics';
 
 type ArticleDisplayAdProps = {
   slotId: 'ARTICLE_INLINE' | 'ARTICLE_END';
@@ -291,6 +292,18 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
   const uiLang = toUiLang(lang);
   const titleRes = resolveArticleTitle(resolvedArticle || {}, uiLang);
   const summaryRes = resolveArticleSummaryOrExcerpt(resolvedArticle || {}, uiLang);
+
+  const analyticsSlug = React.useMemo(() => {
+    if (!resolvedArticle?._id) return String(slug || '').trim();
+    return resolveArticleSlug(resolvedArticle, lang);
+  }, [lang, resolvedArticle, slug]);
+
+  useArticleAnalytics({
+    article: resolvedArticle,
+    slug: analyticsSlug,
+    lang,
+    isPendingTranslation: pendingTranslate,
+  });
 
   const rawTitle = cleanText(titleRes.text || (resolvedArticle as any)?.title);
   const displayTitle = rawTitle.length > 180 ? `${rawTitle.slice(0, 177).trimEnd()}…` : rawTitle;
