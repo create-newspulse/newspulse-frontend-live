@@ -34,6 +34,8 @@ const CommunityReporterMyStoriesPage: React.FC<FeatureToggleProps> = ({ communit
     settings,
     settingsLoading,
     reporterEmail,
+    reporterProfile,
+    profileWarning,
     stories,
     counts,
     isLoading,
@@ -99,7 +101,7 @@ const CommunityReporterMyStoriesPage: React.FC<FeatureToggleProps> = ({ communit
 
       <section className="py-12 px-4">
         <div className="max-w-4xl mx-auto">
-          <MyStoriesHeader reporterEmail={reporterEmail} />
+          <MyStoriesHeader reporterEmail={reporterEmail} reporterProfile={reporterProfile} profileWarning={profileWarning} />
 
           <Toast message={toast} />
 

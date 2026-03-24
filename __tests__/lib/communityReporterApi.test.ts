@@ -8,6 +8,7 @@ describe('communityReporterApi', () => {
   it('maps stories from different response shapes', async () => {
     (global as any).fetch.mockResolvedValueOnce({
       ok: true,
+      status: 200,
       json: async () => ({ ok: true, stories: [{ id: '1', headline: 'A', category: 'Cat', status: 'pending', createdAt: new Date().toISOString() }] })
     });
     const a = await fetchMyStoriesByEmail('x@y.com');
@@ -15,6 +16,7 @@ describe('communityReporterApi', () => {
 
     (global as any).fetch.mockResolvedValueOnce({
       ok: true,
+      status: 200,
       json: async () => ({ success: true, items: [{ id: '2', headline: 'B', category: 'Cat', status: 'approved', createdAt: new Date().toISOString() }] })
     });
     const b = await fetchMyStoriesByEmail('x@y.com');
@@ -22,10 +24,24 @@ describe('communityReporterApi', () => {
 
     (global as any).fetch.mockResolvedValueOnce({
       ok: true,
+      status: 200,
       json: async () => ({ success: true, data: { stories: [{ id: '3', headline: 'C', category: 'Cat', status: 'rejected', createdAt: new Date().toISOString() }] } })
     });
     const c = await fetchMyStoriesByEmail('x@y.com');
     expect(c[0].id).toBe('3');
+  });
+
+  it('throws typed error on non-OK without stories', async () => {
+    (global as any).fetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      json: async () => ({ message: 'Internal error' }),
+    });
+
+    await expect(fetchMyStoriesByEmail('x@y.com')).rejects.toMatchObject({
+      name: 'CommunityReporterHttpError',
+      status: 500,
+    });
   });
 
   it('withdrawStoryById returns boolean', async () => {

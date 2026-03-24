@@ -1,14 +1,27 @@
 import { useContext, createContext, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import type { CommunitySettingsPublic, CommunityStorySummary } from '../types/community-reporter';
-import { fetchMyStoriesByEmail, fetchPublicSettings, withdrawStoryById } from '../lib/communityReporterApi';
+import { fetchMyStoriesByEmail, fetchPublicSettings, isCommunityReporterHttpError, withdrawStoryById } from '../lib/communityReporterApi';
 import { useI18n } from '../src/i18n/LanguageProvider';
+
+export type ReporterProfileSummary = {
+  fullName?: string;
+  email?: string;
+  phone?: string;
+  whatsapp?: string;
+  city?: string;
+  district?: string;
+  state?: string;
+  country?: string;
+};
 
 export type UseCommunityStoriesValue = {
   settings: CommunitySettingsPublic | null;
   settingsLoading: boolean;
   settingsError: string | null;
   reporterEmail: string | null;
+  reporterProfile: ReporterProfileSummary | null;
+  profileWarning: string | null;
   stories: CommunityStorySummary[];
   counts: { total: number; pending: number; approved: number; rejected: number; withdrawn: number };
   isLoading: boolean;
@@ -33,6 +46,8 @@ export function useCommunityStories(): UseCommunityStoriesValue {
   const [settingsError, setSettingsError] = useState<string | null>(null);
 
   const [reporterEmail, setReporterEmail] = useState<string | null>(null);
+  const [reporterProfile, setReporterProfile] = useState<ReporterProfileSummary | null>(null);
+  const [profileWarning, setProfileWarning] = useState<string | null>(null);
   const [stories, setStories] = useState<CommunityStorySummary[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,6 +102,29 @@ export function useCommunityStories(): UseCommunityStoriesValue {
     } catch {}
   }, [router.isReady, router.query.email]);
 
+  // Resolve reporter profile/contact details from localStorage (safe fallback)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const rawV1 = window.localStorage.getItem('np_cr_profile_v1');
+      const rawLegacy = window.localStorage.getItem('npCommunityReporterProfile');
+      const raw = rawV1 || rawLegacy;
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return;
+      setReporterProfile({
+        fullName: typeof parsed.fullName === 'string' ? parsed.fullName : (typeof parsed.name === 'string' ? parsed.name : undefined),
+        email: typeof parsed.email === 'string' ? parsed.email : undefined,
+        phone: typeof parsed.phone === 'string' ? parsed.phone : undefined,
+        whatsapp: typeof parsed.whatsapp === 'string' ? parsed.whatsapp : (typeof parsed.reporterWhatsApp === 'string' ? parsed.reporterWhatsApp : undefined),
+        city: typeof parsed.city === 'string' ? parsed.city : undefined,
+        district: typeof parsed.district === 'string' ? parsed.district : undefined,
+        state: typeof parsed.state === 'string' ? parsed.state : undefined,
+        country: typeof parsed.country === 'string' ? parsed.country : undefined,
+      });
+    } catch {}
+  }, []);
+
   const counts = useMemo(() => {
     const total = stories.length;
     const pending = stories.filter(s => ['pending', 'under_review'].includes((s.status || '').toLowerCase())).length;
@@ -100,6 +138,7 @@ export function useCommunityStories(): UseCommunityStoriesValue {
     const em = (reporterEmail || '').trim();
     setIsLoading(true);
     setError(null);
+    setProfileWarning(null);
     try {
       const hasEmail = em && em.includes('@');
       if (!hasEmail) {
@@ -115,6 +154,14 @@ export function useCommunityStories(): UseCommunityStoriesValue {
         if (em) window.localStorage.setItem('np_cr_email', em.toLowerCase());
       } catch {}
     } catch (err: any) {
+      // Backend may 500 due to reporter profile/contact issues. Don't blank out the UI.
+      if (isCommunityReporterHttpError(err) && err.status >= 500) {
+        setProfileWarning('REPORTER_PROFILE_UNAVAILABLE');
+        setHasLoadedOnce(true);
+        // Keep any previously-loaded stories in state.
+        return;
+      }
+
       setError(t('communityReporter.errors.loadStoriesFailed'));
       setStories([]);
       setHasLoadedOnce(true);
@@ -151,6 +198,8 @@ export function useCommunityStories(): UseCommunityStoriesValue {
     settingsLoading,
     settingsError,
     reporterEmail,
+    reporterProfile,
+    profileWarning,
     stories,
     counts,
     isLoading,
