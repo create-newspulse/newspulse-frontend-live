@@ -12,7 +12,6 @@ import RegionalFeedCards from '../../../components/regional/RegionalFeedCards';
 
 import { getStoryCategoryLabel } from '../../../lib/publicStories';
 import { GUJARAT_DISTRICTS } from '../../../utils/regions';
-import { useLanguage } from '../../../utils/LanguageContext';
 import { getGujaratDistrictName, getStateName, tHeading, toLanguageKey } from '../../../utils/localizedNames';
 import { normalizeLang, useI18n } from '../../../src/i18n/LanguageProvider';
 import { getActiveRouteLang } from '../../../utils/routeLang';
@@ -161,8 +160,7 @@ function isGujaratTagged(story: AnyStory): boolean {
 
 export default function GujaratDistrictPage() {
   const router = useRouter();
-  const { language } = useLanguage();
-  const { t } = useI18n();
+  const { lang: i18nLang, t } = useI18n();
   const { district } = router.query as { district?: string };
 
   const queryLang = React.useMemo(() => {
@@ -174,8 +172,8 @@ export default function GujaratDistrictPage() {
   const effectiveLang = React.useMemo(() => {
     const active = getActiveRouteLang(router.asPath);
     // Priority: active route prefix -> query -> route locale -> persisted/provider language
-    return normalizeLang(active || queryLang || router.locale || language || 'en');
-  }, [language, queryLang, router.asPath, router.locale]);
+    return normalizeLang(active || queryLang || router.locale || i18nLang || 'en');
+  }, [i18nLang, queryLang, router.asPath, router.locale]);
 
   const pushPath = React.useCallback(
     (path: string) => {
@@ -412,7 +410,7 @@ export default function GujaratDistrictPage() {
                   {t('regionalGujaratPage.regionalPulse')} – {stateName}
                 </div>
                 <div className="text-sm text-slate-600">
-                  {tHeading(language as any, 'regional')} • {entry ? displayDistrictName : t('regionalUI.allGujarat')}
+                  {tHeading(langKey, 'regional')} • {entry ? displayDistrictName : t('regionalUI.allGujarat')}
                 </div>
               </div>
 
@@ -493,7 +491,7 @@ export default function GujaratDistrictPage() {
               onClick={() => setRefreshNonce((n) => n + 1)}
               className="shrink-0 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium hover:bg-slate-50"
             >
-              Retry
+              {t('common.retry')}
             </button>
           </div>
         )}
@@ -578,7 +576,7 @@ export default function GujaratDistrictPage() {
               districtFilterHint={t('regionalUI.districtFilterHint')}
               readMoreLabel={t('regionalUI.readMore')}
               videoPreviewHiddenLabel={t('regionalUI.videoPreviewHidden')}
-              fallbackCategoryLabel={tHeading(language as any, 'regional')}
+              fallbackCategoryLabel={tHeading(langKey, 'regional')}
             />
           </>
         )}

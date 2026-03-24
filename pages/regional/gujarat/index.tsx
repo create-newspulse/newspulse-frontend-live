@@ -12,7 +12,6 @@ import RegionalFeedCards from '../../../components/regional/RegionalFeedCards';
 
 import { getStoryCategoryLabel } from '../../../lib/publicStories';
 import { GUJARAT_DISTRICTS } from '../../../utils/regions';
-import { useLanguage } from '../../../utils/LanguageContext';
 import { getGujaratDistrictName, getStateName, tHeading, toLanguageKey } from '../../../utils/localizedNames';
 import { normalizeLang, useI18n } from '../../../src/i18n/LanguageProvider';
 import { getActiveRouteLang } from '../../../utils/routeLang';
@@ -160,8 +159,7 @@ function isGujaratTagged(story: AnyStory): boolean {
 
 export default function GujaratIndexPage() {
   const router = useRouter();
-  const { language } = useLanguage();
-  const { t } = useI18n();
+  const { lang: i18nLang, t } = useI18n();
 
   const queryLang = React.useMemo(() => {
     const raw = (router.query as any)?.lang;
@@ -172,8 +170,8 @@ export default function GujaratIndexPage() {
   const effectiveLang = React.useMemo(() => {
     const active = getActiveRouteLang(router.asPath);
     // Priority: active route prefix -> query (rare; used by some rewrites) -> route locale -> persisted/provider language
-    return normalizeLang(active || queryLang || router.locale || language || 'en');
-  }, [language, queryLang, router.asPath, router.locale]);
+    return normalizeLang(active || queryLang || router.locale || i18nLang || 'en');
+  }, [i18nLang, queryLang, router.asPath, router.locale]);
 
   const pushPath = React.useCallback(
     (path: string) => {
@@ -337,6 +335,20 @@ export default function GujaratIndexPage() {
 
   const stateName = getStateName(langKey, 'gujarat', 'Gujarat');
 
+  const emptyCopy = React.useMemo(() => {
+    const noData = !stories?.length;
+    if (noData) {
+      return {
+        title: t('regionalUI.noRegionalStoriesFoundTitle', { name: stateName }),
+        hint: t('regionalUI.noRegionalStoriesFoundHint'),
+      };
+    }
+    return {
+      title: t('regionalUI.emptyTitle'),
+      hint: t('regionalUI.emptyHint'),
+    };
+  }, [stateName, stories?.length, t]);
+
   const onSelectCategory = (c: (typeof CATEGORIES)[number]) => {
     setSelectedCategory(c);
     if (c === 'Civic') setTab('Civic');
@@ -378,7 +390,7 @@ export default function GujaratIndexPage() {
                   {t('regionalGujaratPage.regionalPulse')} – {stateName}
                 </div>
                 <div className="text-sm text-slate-600">
-                  {tHeading(language as any, 'regional')} {t('regionalGujaratPage.feedWord')} • {stateName}
+                  {tHeading(langKey, 'regional')} {t('regionalGujaratPage.feedWord')} • {stateName}
                 </div>
               </div>
 
@@ -459,7 +471,7 @@ export default function GujaratIndexPage() {
               onClick={() => setRefreshNonce((n) => n + 1)}
               className="shrink-0 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium hover:bg-slate-50"
             >
-              Retry
+              {t('common.retry')}
             </button>
           </div>
         )}
@@ -533,10 +545,12 @@ export default function GujaratIndexPage() {
               districtFilteringEnabled={districtFilteringEnabled}
               showDistrictBadges={districtFilteringEnabled}
               getDistrictLabel={getLocalizedDistrictFromStory}
-              emptyTitle={t('regionalUI.emptyTitle')}
+              emptyTitle={emptyCopy.title}
+              emptyHint={emptyCopy.hint}
+              districtFilterHint={t('regionalUI.districtFilterHint')}
               readMoreLabel={t('regionalUI.readMore')}
               videoPreviewHiddenLabel={t('regionalUI.videoPreviewHidden')}
-              fallbackCategoryLabel={tHeading(language as any, 'regional')}
+              fallbackCategoryLabel={tHeading(langKey, 'regional')}
             />
           </>
         )}

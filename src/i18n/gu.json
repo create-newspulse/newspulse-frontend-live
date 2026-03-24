@@ -112,7 +112,8 @@
     "minutesShort": "મિન",
     "source": "સ્ત્રોત",
     "untitled": "શીર્ષક નથી",
-    "video": "વીડિયો"
+    "video": "વીડિયો",
+    "retry": "ફરી પ્રયાસ કરો"
   },
   "brand": {
     "name": "News Pulse",
@@ -152,10 +153,14 @@
     "exploreCategories": "કેટેગરીઝ શોધો",
     "tapToFilter": "ફિલ્ટર કરવા ટેપ કરો",
     "freshUpdates": "તાજા અપડેટ્સ",
-    "latest": "તાજું",
+          "noRegionalStoriesFoundTitle": "{{name}} માટે કોઈ પ્રાદેશિક સ્ટોરી મળી નથી",
+          "noRegionalStoriesFoundHint": "બીજો જિલ્લો અથવા કેટેગરી અજમાવો.",
     "regionalPreview": "પ્રાદેશિક પ્રિવ્યૂ",
     "youthPulseTrending": "યુથ પલ્સ ટ્રેન્ડિંગ",
     "liveTvPartnerChannel": "પાર્ટનર ચેનલ (પછી એડમિનથી ટૉગલ)",
+        "regionalCityPage": {
+          "subtitle": "{{regional}} ફીડમાંથી ફિલ્ટર કરેલી આ {{cityType}} અંગેની સ્થાનિક અપડેટ્સ."
+        },
     "liveTvAddEmbedUrl": "સેટિંગ્સમાં Live TV embed URL ઉમેરો (ડેમો)",
     "turnOffWidget": "વિજેટ બંધ કરો",
     "quickToolsTitle": "ક્વિક ટૂલ્સ",

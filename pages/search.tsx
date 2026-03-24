@@ -7,6 +7,7 @@ import { getLocalizedArticleFields, type RouteLocale } from '../lib/localizedArt
 import { useLanguage } from '../utils/LanguageContext';
 import { useI18n } from '../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../lib/newsRoutes';
+import { resolveArticleSlug } from '../lib/articleSlugs';
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../lib/coverImages';
 import StoryImage from '../src/components/story/StoryImage';
 
@@ -18,6 +19,7 @@ import StoryImage from '../src/components/story/StoryImage';
 
 type SearchItem = {
   id: string;
+  slug?: string;
   title: string;
   summary?: string;
   category?: string;
@@ -67,6 +69,8 @@ function toSearchItem(a: Article, requestedLang: RouteLocale): SearchItem | null
   const id = String(a?._id || '').trim();
   if (!id) return null;
 
+  const slug = String(localized.slug || resolveArticleSlug(a, requestedLang) || '').trim() || undefined;
+
   const summary = String(localized.summary || '').trim() || undefined;
   const category = String((a as any)?.category || '').trim() || undefined;
   const publishedAt =
@@ -74,6 +78,7 @@ function toSearchItem(a: Article, requestedLang: RouteLocale): SearchItem | null
 
   return {
     id,
+    slug,
     title,
     summary,
     category,
@@ -250,7 +255,9 @@ function SuggestionChips({
 
 function ResultCard({ item, language }: { item: SearchItem; language: 'en' | 'hi' | 'gu' }) {
   const { t } = useI18n();
-  const href = buildNewsUrl({ id: item.id, slug: item.id, lang: language });
+  const routeId = String(item.id || item.slug || '').trim();
+  const routeSlug = String(item.slug || '').trim();
+  const href = routeId ? buildNewsUrl({ id: routeId, slug: routeSlug || routeId, lang: language }) : '#';
   return (
     <div className="group rounded-2xl border border-black/10 bg-white p-4 shadow-sm hover:shadow-md transition">
       <div className="flex items-start justify-between gap-3">
@@ -288,6 +295,12 @@ function ResultCard({ item, language }: { item: SearchItem; language: 'en' | 'hi
       <div className="mt-3 flex items-center gap-2">
         <Link
           href={href}
+          onClick={() => {
+            if (process.env.NODE_ENV !== 'production') {
+              // eslint-disable-next-line no-console
+              console.debug('[news] click search result', { id: item.id, slug: item.slug, href, lang: language });
+            }
+          }}
           className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:opacity-90 transition"
         >
           {t('common.read')}

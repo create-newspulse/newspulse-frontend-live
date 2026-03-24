@@ -7,6 +7,7 @@ import { getLocalizedArticleFields } from '../lib/localizedArticleFields';
 import { useLanguage } from '../utils/LanguageContext';
 import { useI18n } from '../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../lib/newsRoutes';
+import { resolveArticleSlug } from '../lib/articleSlugs';
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../lib/coverImages';
 import StoryImage from '../src/components/story/StoryImage';
 
@@ -170,8 +171,9 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
                   const localized = getLocalizedArticleFields(a as any, language);
                   if (!localized.isVisible) return null;
 
-                  // Use id as stable route token.
-                  const href = id ? buildNewsUrl({ id, slug: id, lang: language }) : '#';
+                  const storySlug = String(localized.slug || resolveArticleSlug(a, language) || '').trim();
+                  const routeId = id || storySlug;
+                  const href = routeId ? buildNewsUrl({ id: routeId, slug: storySlug || routeId, lang: language }) : '#';
                   const when = formatWhenLabel(a.publishedAt || a.createdAt);
                   const title = localized.title || t('categoryPage.untitled');
                   const summary = localized.summary;
@@ -186,7 +188,16 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
                       />
 
                       <div className="p-4">
-                        <Link href={href} className="block text-lg font-bold text-slate-900 hover:underline">
+                        <Link
+                          href={href}
+                          onClick={() => {
+                            if (process.env.NODE_ENV !== 'production') {
+                              // eslint-disable-next-line no-console
+                              console.debug('[news] click category card', { id, slug: storySlug, href, lang: language });
+                            }
+                          }}
+                          className="block text-lg font-bold text-slate-900 hover:underline"
+                        >
                           <span>{title}</span>
                         </Link>
 

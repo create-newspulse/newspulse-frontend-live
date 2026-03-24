@@ -4,6 +4,7 @@ import Link from 'next/link';
 import React from 'react';
 import { fetchPublicNews, type Article } from '../lib/publicNewsApi';
 import { buildNewsUrl } from '../lib/newsRoutes';
+import { resolveArticleSlug } from '../lib/articleSlugs';
 import { getLocalizedArticleFields } from '../lib/localizedArticleFields';
 import { useI18n } from '../src/i18n/LanguageProvider';
 import { useLanguage } from '../utils/LanguageContext';
@@ -202,8 +203,9 @@ export default function LatestPage() {
                       const localized = getLocalizedArticleFields(a as any, language);
                       if (!localized.isVisible) return null;
 
-                      // Use id as the stable route token (avoids stale slugs).
-                      const href = id ? buildNewsUrl({ id, slug: id, lang: language }) : '#';
+                      const storySlug = String(localized.slug || resolveArticleSlug(a, language) || '').trim();
+                      const routeId = id || storySlug;
+                      const href = routeId ? buildNewsUrl({ id: routeId, slug: storySlug || routeId, lang: language }) : '#';
 
                       const title = String(localized.title || '').trim() || String(t('common.untitled') || 'Untitled');
                       const when = formatTime(a.publishedAt || a.createdAt);
@@ -214,6 +216,12 @@ export default function LatestPage() {
                         <li key={id || href}>
                           <Link
                             href={href}
+                            onClick={() => {
+                              if (process.env.NODE_ENV !== 'production') {
+                                // eslint-disable-next-line no-console
+                                console.debug('[news] click latest', { id, slug: storySlug, href, lang: language });
+                              }
+                            }}
                             className="group relative block overflow-hidden rounded-2xl border border-slate-200/60 bg-white/70 backdrop-blur px-4 py-3 shadow-sm transition will-change-transform hover:-translate-y-0.5 hover:border-slate-300/60 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60"
                           >
                             <div className={`absolute left-0 top-0 h-full w-1.5 ${categoryAccentClasses(category)}`} />

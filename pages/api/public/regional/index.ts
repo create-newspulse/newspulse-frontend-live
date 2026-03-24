@@ -16,12 +16,37 @@ const BLOCKED_IDS = new Set<string>([
   '69c029fb7c7cb68a34add2ee',
 ]);
 
+const KNOWN_PUBLICATION_STATES = new Set<string>([
+  'published',
+  'draft',
+  'unpublished',
+  'inactive',
+  'deleted',
+  'removed',
+  'trash',
+]);
+
+function getPublicationStatusToken(item: any): string {
+  if (!item || typeof item !== 'object') return '';
+
+  const statusRaw = typeof item.status === 'string' ? item.status : '';
+  if (statusRaw) return String(statusRaw).toLowerCase().trim();
+
+  // Some backends used `state` as a publication status.
+  // BUT many feeds use `state` for geo (e.g. Gujarat). Only treat it as a status if it matches known values.
+  const stateRaw = typeof item.state === 'string' ? item.state : '';
+  const stateToken = String(stateRaw || '').toLowerCase().trim();
+  if (stateToken && KNOWN_PUBLICATION_STATES.has(stateToken)) return stateToken;
+
+  return '';
+}
+
 function shouldKeepRegionalItem(item: any): boolean {
   const id = String(item?._id || item?.id || '').trim();
   if (id && BLOCKED_IDS.has(id)) return false;
 
   // Enforce public visibility.
-  const statusRaw = String(item?.status || item?.state || '').toLowerCase().trim();
+  const statusRaw = getPublicationStatusToken(item);
   const deleted = item?.deleted === true || item?.isDeleted === true || !!item?.deletedAt;
   if (deleted) return false;
   if (statusRaw === 'deleted' || statusRaw === 'removed' || statusRaw === 'trash') return false;
@@ -416,6 +441,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (!upstream.ok) {
+      // If the regional upstream is down (common transient 5xx), try /api/public/stories as source-of-truth.
+      // This keeps regional pages usable even when the dedicated endpoint is failing.
+      if (upstream.status >= 500) {
+        const fallback = await fetchRegionalFallbackFromStories({
+          base,
+          qs: sanitized.qs,
+          requestedLang,
+          explicitLanguage,
+          stateSlug,
+          districtSlug,
+          upstreamInit,
+          timeoutMs,
+        });
+        if (fallback) {
+          const dedupedFallback = dedupeRegionalFeedPayload(fallback ?? [], requestedLang);
+          const filteredFallback = filterRegionalFeedPayload(dedupedFallback, (it) => shouldKeepRegionalItem(it) && isLocaleCompatible(it, requestedLocale));
+          if (unwrapRegionalFeedItems(filteredFallback).length) return res.status(200).json(filteredFallback);
+        }
+      }
+
       return res.status(upstream.status).json({ ok: false, message: 'UPSTREAM_ERROR', status: upstream.status });
     }
 
@@ -491,6 +536,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.setHeader('Cache-Control', 'no-store, max-age=0');
     const msg = String(e?.name || '').includes('Abort') ? 'UPSTREAM_TIMEOUT' : 'UPSTREAM_FETCH_FAILED';
     const status = msg === 'UPSTREAM_TIMEOUT' ? 504 : 502;
+
+    // Last-chance fallback: if fetch threw (DNS/TLS transient), try stories endpoint.
+    try {
+      const fallback = await fetchRegionalFallbackFromStories({
+        base,
+        qs: sanitized.qs,
+        requestedLang,
+        explicitLanguage,
+        stateSlug,
+        districtSlug,
+        upstreamInit,
+        timeoutMs,
+      });
+      if (fallback) {
+        const dedupedFallback = dedupeRegionalFeedPayload(fallback ?? [], requestedLang);
+        const filteredFallback = filterRegionalFeedPayload(dedupedFallback, (it) => shouldKeepRegionalItem(it) && isLocaleCompatible(it, requestedLocale));
+        if (unwrapRegionalFeedItems(filteredFallback).length) return res.status(200).json(filteredFallback);
+      }
+    } catch {
+      // ignore; keep the original upstream error response
+    }
+
     return res.status(status).json({ ok: false, message: msg, status });
   }
 }

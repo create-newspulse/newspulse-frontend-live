@@ -11,6 +11,7 @@ import { unwrapArticle, type Article } from '../../lib/publicNewsApi';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { tHeading, toLanguageKey } from '../../utils/localizedNames';
 import { buildNewsUrl } from '../../lib/newsRoutes';
+import { resolveArticleSlug } from '../../lib/articleSlugs';
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
 import StoryImage from '../../src/components/story/StoryImage';
 import { useArticleAnalytics } from '../../hooks/useArticleAnalytics';
@@ -137,6 +138,23 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
   const { t } = useI18n();
   const router = useRouter();
 
+  React.useEffect(() => {
+    if (process.env.NODE_ENV === 'production') return;
+    const slugToUse = String((router.query as any)?.slug || slug || '').trim();
+    if (!slugToUse) return;
+
+    const params = new URLSearchParams();
+    params.set('lang', lang);
+    params.set('language', lang);
+    const endpoints = [
+      `/api/public/news/slug/${encodeURIComponent(slugToUse)}?${params.toString()}`,
+      `/api/public/news/${encodeURIComponent(slugToUse)}?${params.toString()}`,
+    ];
+
+    // eslint-disable-next-line no-console
+    console.debug('[news] detail endpoints', { lang, slug: slugToUse, endpoints });
+  }, [lang, router.query, slug]);
+
   const [resolvedArticle, setResolvedArticle] = React.useState<Article | null>(article);
   const [resolvedSafeHtml, setResolvedSafeHtml] = React.useState<string>(safeHtml || '');
   const [pendingTranslate, setPendingTranslate] = React.useState<boolean>(Boolean(pending));
@@ -173,27 +191,47 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
 
     pendingAttemptsRef.current += 1;
 
-    const params = new URLSearchParams();
-    params.set('lang', lang);
-    params.set('language', lang);
-    const endpoint = `/api/public/news/${encodeURIComponent(slugToUse)}?${params.toString()}`;
-
     try {
-      const res = await fetch(endpoint, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-        cache: 'no-store',
-      });
+      const params = new URLSearchParams();
+      params.set('lang', lang);
+      params.set('language', lang);
 
-      const json = await res.json().catch(() => null);
+      const endpoints = [
+        `/api/public/news/slug/${encodeURIComponent(slugToUse)}?${params.toString()}`,
+        `/api/public/news/${encodeURIComponent(slugToUse)}?${params.toString()}`,
+      ];
 
-      if (isPendingTranslationPayload(json)) {
-        setPendingTranslate(true);
-        schedulePendingRetry(pollOnce);
-        return;
+      if (process.env.NODE_ENV !== 'production') {
+        // eslint-disable-next-line no-console
+        console.debug('[news] pollOnce', { lang, slug: slugToUse, endpoints });
       }
 
-      const next = unwrapArticle(json);
+      let data: any = null;
+      let next: Article | null = null;
+
+      for (const endpoint of endpoints) {
+        const res = await fetch(endpoint, {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          cache: 'no-store',
+        });
+
+        const json = await res.json().catch(() => null);
+        data = json;
+
+        if (isPendingTranslationPayload(json)) {
+          setPendingTranslate(true);
+          schedulePendingRetry(pollOnce);
+          return;
+        }
+
+        const candidate = unwrapArticle(json);
+        if (candidate?._id) {
+          next = candidate;
+          break;
+        }
+      }
+
       if (!next?._id) {
         setPendingTranslate(false);
         setPendingError('Try again');
@@ -600,7 +638,9 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                       const id = String(s?._id || '').trim();
                       const localizedStory = getLocalizedArticleFields(s || {}, lang);
                       if (!localizedStory.isVisible) return null;
-                      const href = id ? buildNewsUrl({ id, slug: id, lang }) : '#';
+                      const storySlug = String(localizedStory.slug || resolveArticleSlug(s, lang) || '').trim();
+                      const routeId = id || storySlug;
+                      const href = routeId ? buildNewsUrl({ id: routeId, slug: storySlug || routeId, lang }) : '#';
                       const img = resolveCoverImageUrl(s) || COVER_PLACEHOLDER_SRC;
                       const titleText = cleanText(localizedStory.title || (s as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
                       const excerpt = String(localizedStory.summary || (s as any)?.summary || (s as any)?.excerpt || '').trim();
@@ -608,6 +648,12 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                         <a
                           key={id || String((s as any)?.slug || idx)}
                           href={href}
+                          onClick={() => {
+                            if (process.env.NODE_ENV !== 'production') {
+                              // eslint-disable-next-line no-console
+                              console.debug('[news] click related', { id, slug: storySlug, href, lang });
+                            }
+                          }}
                           className="group rounded-2xl border border-slate-200 bg-white shadow-sm hover:bg-slate-50 overflow-hidden"
                         >
                           <div className="flex gap-3 p-3">
@@ -646,12 +692,20 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                         const id = String(s?._id || '').trim();
                         const localizedStory = getLocalizedArticleFields(s || {}, lang);
                         if (!localizedStory.isVisible) return null;
-                        const href = id ? buildNewsUrl({ id, slug: id, lang }) : '#';
+                        const storySlug = String(localizedStory.slug || resolveArticleSlug(s, lang) || '').trim();
+                        const routeId = id || storySlug;
+                        const href = routeId ? buildNewsUrl({ id: routeId, slug: storySlug || routeId, lang }) : '#';
                         const titleText = cleanText(localizedStory.title || (s as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
                         return (
                           <a
                             key={id || String((s as any)?.slug || i)}
                             href={href}
+                            onClick={() => {
+                              if (process.env.NODE_ENV !== 'production') {
+                                // eslint-disable-next-line no-console
+                                console.debug('[news] click top', { id, slug: storySlug, href, lang });
+                              }
+                            }}
                             className="flex items-start gap-3 rounded-xl px-2 py-2 hover:bg-slate-50"
                           >
                             <div className="shrink-0 text-xs font-black text-slate-500 w-5 text-right">{i + 1}</div>
@@ -717,12 +771,20 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                         const id = String(s?._id || '').trim();
                         const localizedStory = getLocalizedArticleFields(s || {}, lang);
                         if (!localizedStory.isVisible) return null;
-                        const href = id ? buildNewsUrl({ id, slug: id, lang }) : '#';
+                        const storySlug = String(localizedStory.slug || resolveArticleSlug(s, lang) || '').trim();
+                        const routeId = id || storySlug;
+                        const href = routeId ? buildNewsUrl({ id: routeId, slug: storySlug || routeId, lang }) : '#';
                         const titleText = cleanText(localizedStory.title || (s as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
                         return (
                           <a
                             key={id || String((s as any)?.slug || i)}
                             href={href}
+                            onClick={() => {
+                              if (process.env.NODE_ENV !== 'production') {
+                                // eslint-disable-next-line no-console
+                                console.debug('[news] click related list', { id, slug: storySlug, href, lang });
+                              }
+                            }}
                             className="block rounded-xl px-2 py-2 hover:bg-slate-50"
                           >
                             <div className="line-clamp-2 text-sm font-semibold text-slate-900">{titleText}</div>
