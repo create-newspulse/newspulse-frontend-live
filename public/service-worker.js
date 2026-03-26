@@ -1,6 +1,6 @@
 /* simple, safe SW for Next.js */
-const STATIC_CACHE = "np-static-v2";
-const RUNTIME_CACHE = "np-runtime-v2";
+const STATIC_CACHE = "np-static-v1";
+const RUNTIME_CACHE = "np-runtime-v1";
 const STATIC_ASSETS = ["/", "/offline", "/favicon.ico", "/manifest.webmanifest"];
 
 self.addEventListener("install", (e) => {
@@ -22,19 +22,6 @@ self.addEventListener("fetch", (e) => {
 
   // only GET
   if (request.method !== "GET") return;
-
-  // Dynamic API/data must NEVER be served from SW cache.
-  // This avoids stale feeds when live content is published.
-  if (
-    url.origin === location.origin &&
-    (url.pathname.startsWith("/api/") ||
-      url.pathname.startsWith("/public/") ||
-      url.pathname.startsWith("/admin-api/") ||
-      url.pathname.startsWith("/public-api/"))
-  ) {
-    e.respondWith(fetch(request));
-    return;
-  }
 
   // HTML pages → network first, fallback offline
   if (request.headers.get("accept")?.includes("text/html")) {

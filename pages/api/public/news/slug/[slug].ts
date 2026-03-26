@@ -29,64 +29,51 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const qsIndex = (req.url || '').indexOf('?');
   const qs = qsIndex >= 0 ? (req.url || '').slice(qsIndex) : '';
-  const originalParams = new URLSearchParams(qs.startsWith('?') ? qs.slice(1) : qs);
 
-  const buildTargetUrl = (langOverride: string | null): string => {
-    const params = new URLSearchParams(originalParams);
-    if (langOverride) {
-      params.set('lang', langOverride);
-      params.set('language', langOverride);
-    } else {
-      params.delete('lang');
-      params.delete('language');
-    }
-    const query = params.toString();
-    return `${base}/api/public/news/slug/${encodeURIComponent(slug)}${query ? `?${query}` : ''}`;
-  };
+  // Backend contract: /api/public/news/slug/:slug?lang=...
+  const targetUrl = `${base}/api/public/news/slug/${encodeURIComponent(slug)}${qs}`;
 
   const requestedLocale = normalizeRouteLocale(
     asSingleQueryValue(req.query.language as any) || asSingleQueryValue(req.query.lang as any)
   );
 
   try {
-    const headers = {
-      Accept: 'application/json',
-      cookie: String(req.headers.cookie || ''),
-      authorization: String(req.headers.authorization || ''),
-      'Cache-Control': 'no-store',
-      Pragma: 'no-cache',
-    };
+    const upstream = await fetch(targetUrl, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        cookie: String(req.headers.cookie || ''),
+        authorization: String(req.headers.authorization || ''),
+      },
+    });
 
-    const targetUrl = buildTargetUrl(requestedLocale);
-    const upstream = await fetch(targetUrl, { method: 'GET', headers, cache: 'no-store' as any });
     const text = await upstream.text().catch(() => '');
 
-    if (upstream.status === 404 || !upstream.ok) {
-      res.setHeader('Cache-Control', 'no-store, max-age=0');
+    if (upstream.status === 404) {
+      res.setHeader('Cache-Control', 'no-store');
       return res.status(200).json({ article: null });
     }
 
-    let json: any = null;
+    if (!upstream.ok) {
+      res.setHeader('Cache-Control', 'no-store');
+      return res.status(200).json({ article: null });
+    }
+
     try {
-      json = text ? JSON.parse(text) : { article: null };
+      const json = text ? JSON.parse(text) : { article: null };
+      const article = unwrapArticle(json);
+      const localized = getLocalizedArticleFields(article, requestedLocale);
+      if (!localized.isVisible) {
+        res.setHeader('Cache-Control', 'no-store, max-age=0');
+        return res.status(200).json({ article: null });
+      }
+
+      res.setHeader('Cache-Control', 'no-store, max-age=0');
+      return res.status(200).json(json);
     } catch {
-      json = { article: null };
-    }
-
-    const article = unwrapArticle(json);
-    if (!article?._id) {
-      res.setHeader('Cache-Control', 'no-store, max-age=0');
+      res.setHeader('Cache-Control', 'no-store');
       return res.status(200).json({ article: null });
     }
-
-    const strict = getLocalizedArticleFields(article, requestedLocale);
-    if (!strict.isVisible) {
-      res.setHeader('Cache-Control', 'no-store, max-age=0');
-      return res.status(200).json({ article: null });
-    }
-
-    res.setHeader('Cache-Control', 'no-store, max-age=0');
-    return res.status(200).json(json);
   } catch {
     res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json({ article: null });

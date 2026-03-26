@@ -44,13 +44,11 @@ export function middleware(req: NextRequest) {
           ? 'en'
           : null;
 
+  const nextLocale = normalizeLocale(url.locale);
   const nextDefaultLocale = normalizeLocale(url.defaultLocale) || 'en';
 
-  // IMPORTANT:
-  // Only treat *explicit* locale prefixes as locale-in-path.
-  // `nextUrl.locale` can be influenced by NEXT_LOCALE cookie/locale detection even when
-  // the URL is unprefixed (e.g. "/"), which would cause locale drift across routes.
-  const localeInPath: Locale | null = localeFromPrefix;
+  const localeInPath: Locale | null =
+    localeFromPrefix || (nextLocale && nextLocale !== nextDefaultLocale ? nextLocale : null);
 
   // When URL explicitly sets locale, keep NEXT_LOCALE aligned so Next doesn't mis-detect.
   if (localeInPath) {
@@ -126,11 +124,9 @@ export function middleware(req: NextRequest) {
   }
 
   const res = NextResponse.next();
-
-  // Strict routing: unprefixed URLs render in the default locale.
-  // Keep user preference in our own cookies (np_lang/np_locale), but do not let NEXT_LOCALE
-  // switch locale for unprefixed pages like "/" or "/latest".
-  res.cookies.set(NEXT_LOCALE_COOKIE, nextDefaultLocale, { path: '/', maxAge: 60 * 60 * 24 * 365 });
+  if (pref) {
+    res.cookies.set(NEXT_LOCALE_COOKIE, pref, { path: '/', maxAge: 60 * 60 * 24 * 365 });
+  }
   return res;
 }
 

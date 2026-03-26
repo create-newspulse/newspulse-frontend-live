@@ -5,7 +5,8 @@ import { useEffect, useMemo, useState } from 'react';
 import type { GetStaticProps } from 'next';
 
 import { fetchPublicNews, type Article } from '../../lib/publicNewsApi';
-import { getLocalizedArticleFields } from '../../lib/localizedArticleFields';
+import { resolveArticleSummaryOrExcerpt, resolveArticleTitle } from '../../lib/contentFallback';
+import OriginalTag from '../../components/OriginalTag';
 import { useLanguage } from '../../utils/LanguageContext';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../../lib/newsRoutes';
@@ -115,27 +116,28 @@ export default function TopicPage() {
               <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 {items.map((a) => {
                   const id = String(a._id || '').trim();
-                  const localized = getLocalizedArticleFields(a as any, language);
-                  if (!localized.isVisible) return null;
-
-                  const slug = String(localized.slug || resolveArticleSlug(a, language) || '').trim();
-                  const href = id ? buildNewsUrl({ id, slug: slug || id, lang: language }) : '#';
+                  const slug = resolveArticleSlug(a, language);
+                  const href = id ? buildNewsUrl({ id, slug, lang: language }) : '#';
                   const when = formatWhenLabel(a.publishedAt || a.createdAt);
-                  const title = localized.title || t('categoryPage.untitled');
-                  const summary = localized.summary;
+                  const titleRes = resolveArticleTitle(a as any, language);
+                  const summaryRes = resolveArticleSummaryOrExcerpt(a as any, language);
+                  const summary = summaryRes.text;
                   const image = resolveCoverImageUrl(a) || COVER_PLACEHOLDER_SRC;
 
                   return (
                     <li key={a._id} className="group rounded-2xl border border-slate-200 bg-white overflow-hidden">
                       <StoryImage
                         src={image}
-                        alt={title || t('categoryPage.articleImageAlt')}
+                        alt={titleRes.text || t('categoryPage.articleImageAlt')}
                         variant="top"
                       />
 
                       <div className="p-4">
                         <Link href={href} className="block text-lg font-bold text-slate-900 hover:underline">
-                          <span>{title}</span>
+                          <span className="inline-flex flex-wrap items-center gap-2">
+                            <span>{titleRes.text || t('categoryPage.untitled')}</span>
+                            {titleRes.isOriginal ? <OriginalTag /> : null}
+                          </span>
                         </Link>
 
                         {summary ? (
@@ -149,6 +151,7 @@ export default function TopicPage() {
                             }}
                           >
                             <span>{summary}</span>
+                            {summaryRes.isOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
                           </p>
                         ) : null}
 

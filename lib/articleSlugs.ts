@@ -81,20 +81,6 @@ function sanitizeSlug(raw: string): string {
   return s.replace(/^\/+/, '').replace(/\/+$/, '');
 }
 
-function containsGujaratiScript(value: string): boolean {
-  return /[\u0A80-\u0AFF]/.test(String(value || ''));
-}
-
-function isSafeEnglishSlug(value: string): boolean {
-  const s = sanitizeSlug(value);
-  if (!s) return false;
-  if (containsGujaratiScript(s)) return false;
-  // Conservative: avoid emitting unicode/non-ASCII slugs on English routes.
-  if (!/^[\x20-\x7E]+$/.test(s)) return false;
-  // Typical slug characters.
-  return /^[a-z0-9][a-z0-9-_]*$/i.test(s);
-}
-
 export function resolveArticleSlugs(article: any): { en: string; hi: string; gu: string } {
   const en = sanitizeSlug(pickFirstNonEmpty(pickLangField(article, 'en', ['slug']), article?.slug_en, article?.slugEn));
   const hi = sanitizeSlug(pickFirstNonEmpty(pickLangField(article, 'hi', ['slug']), article?.slug_hi, article?.slugHi, article?.slug_in, article?.slugIn));
@@ -116,16 +102,6 @@ export function resolveArticleSlug(article: any, langInput: unknown): string {
   // do NOT fall back to a generic/foreign slug. Let callers fall back to the id instead.
   if (sourceLang && sourceLang !== lang) {
     return sanitizeSlug(pickFirstNonEmpty(picked));
-  }
-
-  if (lang === 'en') {
-    const direct = sanitizeSlug(pickFirstNonEmpty(picked));
-    if (isSafeEnglishSlug(direct)) return direct;
-
-    const legacy = sanitizeSlug(pickFirstNonEmpty(article?.slug, article?.seoSlug));
-    if (isSafeEnglishSlug(legacy)) return legacy;
-
-    return sanitizeSlug(pickFirstNonEmpty(article?._id, article?.id));
   }
 
   return sanitizeSlug(pickFirstNonEmpty(picked, article?.slug, article?.seoSlug, article?._id, article?.id));

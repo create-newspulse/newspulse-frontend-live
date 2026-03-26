@@ -5,9 +5,11 @@ import { ALL_REGIONS } from '../../utils/india';
 import { useLanguage } from '../../utils/LanguageContext';
 import { getRegionName, tHeading, toLanguageKey } from '../../utils/localizedNames';
 import type { GetStaticProps } from 'next';
-import { getLocalizedArticleFields, type RouteLocale } from '../../lib/localizedArticleFields';
+import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../../lib/contentFallback';
+import OriginalTag from '../../components/OriginalTag';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../../lib/newsRoutes';
+import { localizeArticle } from '../../lib/localizeArticle';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
 import StoryImage from '../../src/components/story/StoryImage';
@@ -41,7 +43,8 @@ export default function RegionPage(props: { lang: 'en' | 'hi' | 'gu'; data?: any
   const { t } = useI18n();
   const effectiveLang = normalizeLang(router.locale || language || props.lang);
   const langKey = toLanguageKey(effectiveLang);
-  const uiLang = effectiveLang as RouteLocale;
+
+  const uiLang: UiLang = effectiveLang;
 
   const entry = ALL_REGIONS.find((r) => r.slug === region);
   const displayName = entry ? getRegionName(langKey, entry.type, entry.slug, entry.name) : 'Region';
@@ -74,30 +77,39 @@ export default function RegionPage(props: { lang: 'en' | 'hi' | 'gu'; data?: any
                 ) : display.length ? (
                   display.map((article: any, idx: number) => {
                     const id = String(article?._id || article?.id || '').trim();
-                    const localized = getLocalizedArticleFields(article || {}, uiLang);
-                    if (!localized.isVisible) return null;
-
-                    const slug = String(localized.slug || resolveArticleSlug(article, effectiveLang) || '').trim();
-                    const href = id ? buildNewsUrl({ id, slug: slug || id, lang: effectiveLang }) : '#';
+                    const slug = resolveArticleSlug(article, effectiveLang);
+                    const href = id ? buildNewsUrl({ id, slug, lang: effectiveLang }) : '#';
                     const coverUrl = resolveCoverImageUrl(article);
-
-                    const safeTitle = localized.title || t('common.untitled');
-                    const desc = localized.summary;
                     return (
                     <a key={idx} href={href} className="group block p-6 rounded-2xl border shadow-sm hover:shadow-md bg-white dark:bg-gray-800 transition">
                       <div className="mb-3 flex items-start gap-3">
                         <StoryImage
                           src={coverUrl || COVER_PLACEHOLDER_SRC}
-                          alt={safeTitle}
+                          alt={String(article?.title || '').trim()}
                           variant="mini"
                           className="border border-gray-200 dark:border-gray-700"
                         />
                         <div className="min-w-0 flex-1">
                       <div className="text-xs text-gray-500 mb-2">{new Date(article.publishedAt).toLocaleString()}</div>
-                      <>
-                        <h3 className="font-bold text-lg mb-2">{safeTitle}</h3>
-                        {desc ? <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3">{desc}</p> : null}
-                      </>
+                      {(() => {
+                        const titleRes = resolveArticleTitle(article, uiLang);
+                        const summaryRes = resolveArticleSummaryOrExcerpt(article, uiLang);
+                        const { title, content } = localizeArticle(article, effectiveLang);
+                        const desc = summaryRes.text || (article.excerpt || (article.content ? String(article.content).slice(0, 160) + '...' : ''));
+                        const safeTitle = title || titleRes.text || article.title || t('common.untitled');
+                        return (
+                          <>
+                            <h3 className="font-bold text-lg mb-2">
+                              {safeTitle}{' '}
+                              {titleRes.isOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
+                            </h3>
+                            <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3">
+                              {desc}
+                              {summaryRes.isOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
+                            </p>
+                          </>
+                        );
+                      })()}
                       <div className="mt-3 text-xs text-gray-400">{t('common.source')}: {article.source || t('brand.name')}</div>
                         </div>
                       </div>

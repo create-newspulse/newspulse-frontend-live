@@ -40,7 +40,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   const origin = getRequestOrigin(ctx);
   if (!origin) return { notFound: true };
 
-  const attempts: RouteLocale[] = [lang] as RouteLocale[];
+  const attempts: RouteLocale[] = [lang, 'en', 'hi', 'gu'].filter((v, idx, arr) => arr.indexOf(v) === idx) as RouteLocale[];
 
   const fetchById = async (attemptLang: RouteLocale): Promise<any | null> => {
     const qs = new URLSearchParams();
