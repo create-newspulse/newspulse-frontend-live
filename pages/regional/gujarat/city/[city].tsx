@@ -1,7 +1,8 @@
 import Head from 'next/head';
 import React from 'react';
 import { useRouter } from 'next/router';
-import { getGujaratCityName, getStateName, tHeading, toLanguageKey } from '../../../../utils/localizedNames';
+import { useLanguage } from '../../../../utils/LanguageContext';
+import { getGujaratCityName, getStateName, tHeading } from '../../../../utils/localizedNames';
 import type { GetStaticProps } from 'next';
 import { normalizeLang, useI18n } from '../../../../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../../../../lib/newsRoutes';
@@ -26,7 +27,8 @@ function matchCity(article: any, cityName: string) {
 export default function GujaratCityPage() {
   const router = useRouter();
   const { city } = router.query as { city?: string };
-  const { lang: i18nLang, t } = useI18n();
+  const { language } = useLanguage();
+  const { t } = useI18n();
 
   const queryLang = (() => {
     const raw = (router.query as any)?.lang;
@@ -35,8 +37,7 @@ export default function GujaratCityPage() {
   })();
 
   const active = getActiveRouteLang(router.asPath);
-  const effectiveLang = normalizeLang(active || queryLang || router.locale || i18nLang || 'en');
-  const langKey = React.useMemo(() => toLanguageKey(effectiveLang), [effectiveLang]);
+  const effectiveLang = normalizeLang(active || queryLang || router.locale || language || 'en');
 
   const [feed, setFeed] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(false);
@@ -79,8 +80,8 @@ export default function GujaratCityPage() {
 
   const slug = (city || '').toString();
   const displayNameFallback = (slug || '').replace(/-/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
-  const displayName = getGujaratCityName(langKey, slug, displayNameFallback || tHeading(langKey, 'city'));
-  const stateName = getStateName(langKey, 'gujarat', 'Gujarat');
+  const displayName = getGujaratCityName(effectiveLang as any, slug, displayNameFallback || 'City');
+  const stateName = getStateName(effectiveLang as any, 'gujarat', 'Gujarat');
 
   return (
     <div className="min-h-screen bg-white dark:bg-dark-primary text-black dark:text-dark-text">
@@ -98,19 +99,14 @@ export default function GujaratCityPage() {
               onClick={() => setRefreshNonce((n) => n + 1)}
               className="shrink-0 rounded-2xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:bg-gray-950"
             >
-              {t('common.retry')}
+              Retry
             </button>
           </div>
         )}
 
         <div className="mb-6">
           <h1 className="text-3xl font-extrabold">🏙️ {displayName} — {stateName}</h1>
-          <p className="text-gray-600">
-            {t('regionalCityPage.subtitle', {
-              cityType: tHeading(langKey, 'city').toLowerCase(),
-              regional: tHeading(langKey, 'regional'),
-            })}
-          </p>
+          <p className="text-gray-600">Local updates mentioning this {tHeading(language as any, 'city').toLowerCase()} filtered from {tHeading(language as any, 'regional')} feed.</p>
         </div>
 
         {(() => {
@@ -146,7 +142,7 @@ export default function GujaratCityPage() {
                 })
               ) : (
                 <div className="col-span-2 text-gray-600">
-                  {error || t('regionalUI.noStoriesFoundTryBroader', { name: displayName, category: tHeading(langKey, 'regional') })}
+                  {error || t('regionalUI.noStoriesFoundTryBroader', { name: displayName, category: tHeading(language as any, 'regional') })}
                 </div>
               )}
             </div>

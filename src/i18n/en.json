@@ -112,8 +112,7 @@
     "minutesShort": "min",
     "source": "Source",
     "untitled": "Untitled",
-    "video": "Video",
-    "retry": "Retry"
+    "video": "Video"
   },
   "brand": {
     "name": "News Pulse",
@@ -361,8 +360,6 @@
     "districtFilterHint": "Tip: select a district to filter stories.",
     "emptyTitle": "No stories yet",
     "emptyHint": "Try changing category or district.",
-    "noRegionalStoriesFoundTitle": "No regional stories found for {{name}}",
-    "noRegionalStoriesFoundHint": "Try another district or category.",
     "failedToLoadStories": "Failed to load stories.",
     "failedToLoad": "Failed to load regional feed.",
     "readMore": "Read more →",
@@ -373,9 +370,6 @@
     "noDistrictsFound": "No districts found.",
     "noStoriesFoundForYet": "No stories found for {{name}} yet.",
     "noStoriesFoundTryBroader": "No stories found for {{name}} yet. Try broader {{category}} news."
-  },
-  "regionalCityPage": {
-    "subtitle": "Local updates mentioning this {{cityType}} filtered from {{regional}} feed."
   },
   "regionalGujaratPage": {
     "headTitle": "Gujarat – Regional",

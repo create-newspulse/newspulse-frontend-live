@@ -6,63 +6,12 @@ import { resolveArticleSlug } from '../../lib/articleSlugs';
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
 import StoryImage from '../../src/components/story/StoryImage';
 import { normalizeRouteLocale } from '../../lib/localizedArticleFields';
-import { useI18n } from '../../src/i18n/LanguageProvider';
 
 function classNames(...s: Array<string | false | null | undefined>) {
   return s.filter(Boolean).join(' ');
 }
 
 type AnyStory = any;
-
-const KNOWN_PUBLICATION_STATES = new Set<string>([
-  'published',
-  'draft',
-  'unpublished',
-  'inactive',
-  'deleted',
-  'removed',
-  'trash',
-]);
-
-function getPublicationStatusToken(story: AnyStory): string {
-  if (!story || typeof story !== 'object') return '';
-
-  const statusRaw = typeof story.status === 'string' ? story.status : '';
-  if (statusRaw) return String(statusRaw).toLowerCase().trim();
-
-  // Some upstreams encode publication status in `state`, but many feeds use `state` for geo.
-  // Only treat it as a status if it matches known publication values.
-  const stateRaw = typeof story.state === 'string' ? story.state : '';
-  const token = String(stateRaw || '').toLowerCase().trim();
-  if (token && KNOWN_PUBLICATION_STATES.has(token)) return token;
-
-  return '';
-}
-
-function canRenderStoryCard(story: AnyStory, requestedLang: 'en' | 'hi' | 'gu'): boolean {
-  const id = String(story?._id || story?.id || '').trim();
-  if (!id) return false;
-
-  const statusRaw = getPublicationStatusToken(story);
-  const deleted = story?.deleted === true || story?.isDeleted === true || !!story?.deletedAt;
-  const hasPublishedAt = Boolean(String(story?.publishedAt || '').trim());
-  const isPublishedTrue = story?.isPublished === true || story?.published === true;
-
-  const published =
-    !deleted &&
-    story?.isPublished !== false &&
-    story?.published !== false &&
-    (statusRaw ? statusRaw === 'published' : (hasPublishedAt || isPublishedTrue));
-
-  if (!published) return false;
-
-  const rawLang = String(story?.language || story?.lang || story?.sourceLang || story?.sourceLanguage || '').trim();
-  const storyLocale = rawLang ? normalizeRouteLocale(rawLang) : null;
-  const localeOk = !storyLocale || storyLocale === requestedLang;
-  if (!localeOk) return false;
-
-  return true;
-}
 
 function normalizeBadgeKey(value: unknown): string {
   return String(value || '')
@@ -215,7 +164,7 @@ function StoryCard({
 }) {
   const id = String(story?._id || story?.id || '').trim();
 
-  const statusRaw = getPublicationStatusToken(story);
+  const statusRaw = String(story?.status || story?.state || '').toLowerCase().trim();
   const deleted = story?.deleted === true || story?.isDeleted === true || !!story?.deletedAt;
   const hasPublishedAt = Boolean(String(story?.publishedAt || '').trim());
   const isPublishedTrue = story?.isPublished === true || story?.published === true;
@@ -232,9 +181,8 @@ function StoryCard({
 
   if (!id || !published || !localeOk) return null;
 
-  const storySlug = String(resolveArticleSlug(story, requestedLang) || '').trim();
-  const routeId = id || storySlug;
-  const href = routeId ? buildNewsUrl({ id: routeId, slug: storySlug || routeId, lang: requestedLang }) : '#';
+  // Use id as the stable route param to avoid stale slugs after updates/unpublish.
+  const href = buildNewsUrl({ id, slug: id, lang: requestedLang });
   const categoryLabel = getStoryCategoryLabel(story?.category) || story?.category || fallbackCategoryLabel;
   const dateIso = getStoryDateIso(story);
   const dateText = dateIso ? new Date(dateIso).toLocaleString() : '';
@@ -304,12 +252,6 @@ function StoryCard({
   return (
     <a
       href={href}
-      onClick={() => {
-        if (process.env.NODE_ENV !== 'production') {
-          // eslint-disable-next-line no-console
-          console.debug('[news] click regional card', { id, slug: storySlug, href, lang: requestedLang });
-        }
-      }}
       className="group block rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:bg-slate-50"
     >
       <div className="mb-3 flex items-start gap-3">
@@ -359,26 +301,17 @@ export default function RegionalFeedCards({
   stories,
   requestedLang = 'en',
   loading,
-  emptyTitle,
-  emptyHint,
-  districtFilterHint,
-  readMoreLabel,
-  videoPreviewHiddenLabel,
-  fallbackCategoryLabel,
+  emptyTitle = 'No stories match your filters.',
+  emptyHint = 'Try another category or clear search.',
+  districtFilterHint = 'District-wise filtering activates when stories include district tags.',
+  readMoreLabel = 'Read more →',
+  videoPreviewHiddenLabel = 'Video preview hidden (embed disabled).',
+  fallbackCategoryLabel = 'Regional',
   districtFilteringEnabled,
   showDistrictBadges,
   getDistrictLabel,
   className,
 }: RegionalFeedCardsProps) {
-  const { t } = useI18n();
-
-  const resolvedEmptyTitle = emptyTitle ?? t('regionalUI.emptyTitle');
-  const resolvedEmptyHint = emptyHint ?? t('regionalUI.emptyHint');
-  const resolvedDistrictFilterHint = districtFilterHint ?? t('regionalUI.districtFilterHint');
-  const resolvedReadMoreLabel = readMoreLabel ?? t('regionalUI.readMore');
-  const resolvedVideoPreviewHiddenLabel = videoPreviewHiddenLabel ?? t('regionalUI.videoPreviewHidden');
-  const resolvedFallbackCategoryLabel = fallbackCategoryLabel ?? t('categories.regional');
-
   const dedupedStories = React.useMemo(() => {
     const input = Array.isArray(stories) ? stories : [];
     if (!input.length) return input;
@@ -400,23 +333,18 @@ export default function RegionalFeedCards({
     return out;
   }, [requestedLang, stories]);
 
-  const renderableStories = React.useMemo(
-    () => (dedupedStories || []).filter((s) => canRenderStoryCard(s, requestedLang)),
-    [dedupedStories, requestedLang]
-  );
-
   // Never render loading skeletons/placeholders.
-  if (loading && !renderableStories?.length) return null;
+  if (loading && !dedupedStories?.length) return null;
 
-  if (!renderableStories?.length) {
+  if (!dedupedStories?.length) {
     return (
       <CardShell>
         <div className="p-6">
-          <div className="text-base font-semibold">{resolvedEmptyTitle}</div>
-          <div className="mt-2 text-sm text-slate-600">{resolvedEmptyHint}</div>
+          <div className="text-base font-semibold">{emptyTitle}</div>
+          <div className="mt-2 text-sm text-slate-600">{emptyHint}</div>
           {districtFilteringEnabled === false && (
             <div className="mt-3 text-sm text-slate-500">
-              {resolvedDistrictFilterHint}
+              {districtFilterHint}
             </div>
           )}
         </div>
@@ -426,7 +354,7 @@ export default function RegionalFeedCards({
 
   return (
     <div className={classNames('grid gap-4 md:grid-cols-2', className)}>
-      {renderableStories.map((story) => {
+      {dedupedStories.map((story) => {
         const card = (
           <StoryCard
             key={story?._id || story?.slug || story?.title}
@@ -434,9 +362,9 @@ export default function RegionalFeedCards({
             requestedLang={requestedLang}
             showDistrictBadges={showDistrictBadges}
             getDistrictLabel={getDistrictLabel}
-            readMoreLabel={resolvedReadMoreLabel}
-            videoPreviewHiddenLabel={resolvedVideoPreviewHiddenLabel}
-            fallbackCategoryLabel={resolvedFallbackCategoryLabel}
+            readMoreLabel={readMoreLabel}
+            videoPreviewHiddenLabel={videoPreviewHiddenLabel}
+            fallbackCategoryLabel={fallbackCategoryLabel}
           />
         );
         return card;

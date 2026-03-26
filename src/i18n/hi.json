@@ -112,8 +112,7 @@
     "minutesShort": "मिन",
     "source": "स्रोत",
     "untitled": "शीर्षक नहीं",
-    "video": "वीडियो",
-    "retry": "फिर से कोशिश करें"
+    "video": "वीडियो"
   },
   "brand": {
     "name": "News Pulse",
@@ -354,8 +353,6 @@
     "districtFilterHint": "टिप: स्टोरीज़ फ़िल्टर करने के लिए ज़िला चुनें।",
     "emptyTitle": "अभी कोई स्टोरी नहीं",
     "emptyHint": "श्रेणी या ज़िला बदलकर देखें।",
-    "noRegionalStoriesFoundTitle": "{{name}} के लिए कोई क्षेत्रीय स्टोरी नहीं मिली।",
-    "noRegionalStoriesFoundHint": "दूसरा ज़िला या श्रेणी आज़माएँ।",
     "failedToLoadStories": "स्टोरीज़ लोड नहीं हो सकीं।",
     "failedToLoad": "क्षेत्रीय फ़ीड लोड नहीं हो सकी।",
     "readMore": "और पढ़ें →",
@@ -366,9 +363,6 @@
     "noDistrictsFound": "कोई ज़िला नहीं मिला।",
     "noStoriesFoundForYet": "{{name}} के लिए अभी कोई स्टोरी नहीं मिली।",
     "noStoriesFoundTryBroader": "{{name}} के लिए अभी कोई स्टोरी नहीं मिली। {{category}} समाचार आज़माएँ।"
-  },
-  "regionalCityPage": {
-    "subtitle": "{{regional}} फ़ीड से फ़िल्टर की गई इस {{cityType}} से जुड़ी स्थानीय अपडेट्स।"
   },
   "regionalGujaratPage": {
     "headTitle": "गुजरात – क्षेत्रीय",

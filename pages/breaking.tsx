@@ -7,7 +7,6 @@ import { usePublicAdSlot } from '../hooks/usePublicAdSlot';
 import { usePublicTicker } from '../hooks/usePublicTicker';
 import { useI18n } from '../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../lib/newsRoutes';
-import { resolveArticleSlug } from '../lib/articleSlugs';
 
 function normalizeTab(value: unknown): 'breaking' | 'live' | null {
   const s = Array.isArray(value) ? String(value[0] || '') : String(value || '');
@@ -154,21 +153,12 @@ export default function BreakingPage() {
               ) : (
                 <div className="space-y-3">
                   {breaking.items.map((it) => {
-                    const raw = it.raw as any;
-                    const rawId = String(raw?._id || raw?.id || it.id || '').trim();
-                    const rawSlug = String(resolveArticleSlug(raw, tickerLang) || '').trim();
-                    const routeId = rawId || rawSlug;
-                    const href = routeId ? buildNewsUrl({ id: routeId, slug: rawSlug || routeId, lang: tickerLang }) : '#';
+                    const rawId = String((it.raw as any)?._id || (it.raw as any)?.id || it.id || '').trim();
+                    const href = rawId ? buildNewsUrl({ id: rawId, lang: tickerLang }) : '#';
                     return (
                       <Link
                         key={it.id}
                         href={href}
-                        onClick={() => {
-                          if (process.env.NODE_ENV !== 'production') {
-                            // eslint-disable-next-line no-console
-                            console.debug('[news] click breaking ticker', { id: rawId, slug: rawSlug, href, lang: tickerLang });
-                          }
-                        }}
                         className="block rounded-xl border border-slate-200 px-4 py-3 hover:bg-slate-50"
                       >
                         <div className="flex items-start gap-3">
