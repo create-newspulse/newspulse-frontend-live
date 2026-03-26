@@ -328,13 +328,13 @@ function CompactFeedRow({ story, lang }: { story: AnyStory; lang: 'en' | 'hi' | 
   const { t } = useI18n();
   const href = storyHref(story, lang);
   const { title, content } = localizeArticle(story, lang);
-  const safeTitle = String(title || story?.title || t('common.untitled')).trim();
+  if (!String(title || '').trim()) return null;
+  const safeTitle = String(title || t('common.untitled')).trim();
   const img = storyImage(story);
   const when = storyDateIso(story);
   const where = storyLocation(story);
   const tags = tagList(story?.tags);
   const tag = tags[0] || String(story?.topic || story?.section || '').trim();
-  const translationStatus = String((story as any)?.translationStatus || '').trim();
 
   return (
     <a
@@ -366,11 +366,6 @@ function CompactFeedRow({ story, lang }: { story: AnyStory; lang: 'en' | 'hi' | 
             {tag ? (
               <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-slate-700 dark:bg-gray-900 dark:text-gray-200">
                 {tag}
-              </span>
-            ) : null}
-            {lang === 'gu' && translationStatus ? (
-              <span className="shrink-0 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-slate-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
-                {translationStatus}
               </span>
             ) : null}
             <span className="truncate text-slate-500 dark:text-gray-400">📍 {where}</span>
@@ -688,7 +683,7 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
   const heroLocalizedTitle = React.useMemo(() => {
     if (!hero) return '';
     const { title, content } = localizeArticle(hero, effectiveLang);
-    return String(title || hero?.title || '').trim();
+    return String(title || '').trim();
   }, [effectiveLang, hero]);
 
   const topStories = React.useMemo(() => {
@@ -1025,24 +1020,27 @@ function NationalSidebar({
         </div>
         <div className="p-2">
           {topStories.length ? (
-            topStories.slice(0, 8).map((s, i) => (
-              <a
-                key={String(s?._id || s?.id || s?.slug || i)}
-                href={storyHref(s, language)}
-                className="flex items-start gap-3 rounded-xl px-2 py-2 hover:bg-slate-50 dark:hover:bg-gray-900/60"
-              >
-                <div className="shrink-0 text-xs font-black text-slate-500 w-5 text-right dark:text-gray-400">{i + 1}</div>
-                <div className="min-w-0">
-                  <div className="line-clamp-2 text-sm font-semibold text-slate-900 dark:text-gray-100">
-                    {(() => {
-                      const { title } = localizeArticle(s, lang);
-                      return String(title || s?.title || t('common.untitled'));
-                    })()}
+            topStories.slice(0, 8).map((s, i) => {
+              const { title } = localizeArticle(s, lang);
+              const safeTitle = String(title || '').trim();
+              if (!safeTitle) return null;
+
+              return (
+                <a
+                  key={String(s?._id || s?.id || s?.slug || i)}
+                  href={storyHref(s, language)}
+                  className="flex items-start gap-3 rounded-xl px-2 py-2 hover:bg-slate-50 dark:hover:bg-gray-900/60"
+                >
+                  <div className="shrink-0 text-xs font-black text-slate-500 w-5 text-right dark:text-gray-400">{i + 1}</div>
+                  <div className="min-w-0">
+                    <div className="line-clamp-2 text-sm font-semibold text-slate-900 dark:text-gray-100">
+                      {safeTitle}
+                    </div>
+                    <div className="mt-1 text-xs text-slate-500 dark:text-gray-400">📍 {storyLocation(s)}</div>
                   </div>
-                  <div className="mt-1 text-xs text-slate-500 dark:text-gray-400">📍 {storyLocation(s)}</div>
-                </div>
-              </a>
-            ))
+                </a>
+              );
+            })
           ) : (
             <div className="p-3 text-sm text-slate-600 dark:text-gray-300">{t('nationalPage.noTopStoriesYet')}</div>
           )}
@@ -1072,26 +1070,33 @@ function NationalSidebar({
         </div>
         <div className="p-4">
           {videoStory ? (
-            <a href={storyHref(videoStory, language)} className="block group">
-              <div className="relative">
-                <StoryImage
-                  src={storyImage(videoStory)}
-                  alt={String(videoStory?.title || '').trim()}
-                  variant="top"
-                  className="border border-slate-200 bg-slate-100 dark:border-gray-800 dark:bg-gray-800"
-                />
-                <div className="absolute left-2 top-2 rounded-full bg-white/90 px-2 py-1 text-xs font-bold text-slate-900">
-                  ▶ {t('common.video')}
-                </div>
-              </div>
-              <div className="mt-2 line-clamp-2 text-sm font-semibold text-slate-900 group-hover:underline dark:text-gray-100">
-                {(() => {
-                  const { title, content } = localizeArticle(videoStory, lang);
-                  return String(title || videoStory?.title || t('nationalPage.watchFallback'));
-                })()}
-              </div>
-              <div className="mt-1 text-xs text-slate-500 dark:text-gray-400">📍 {storyLocation(videoStory)}</div>
-            </a>
+            (() => {
+              const { title } = localizeArticle(videoStory, lang);
+              const safeTitle = String(title || '').trim();
+              if (!safeTitle) {
+                return <div className="text-sm text-slate-600 dark:text-gray-300">{t('nationalPage.noVideoStoriesRightNow')}</div>;
+              }
+
+              return (
+                <a href={storyHref(videoStory, language)} className="block group">
+                  <div className="relative">
+                    <StoryImage
+                      src={storyImage(videoStory)}
+                      alt={safeTitle}
+                      variant="top"
+                      className="border border-slate-200 bg-slate-100 dark:border-gray-800 dark:bg-gray-800"
+                    />
+                    <div className="absolute left-2 top-2 rounded-full bg-white/90 px-2 py-1 text-xs font-bold text-slate-900">
+                      ▶ {t('common.video')}
+                    </div>
+                  </div>
+                  <div className="mt-2 line-clamp-2 text-sm font-semibold text-slate-900 group-hover:underline dark:text-gray-100">
+                    {safeTitle}
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500 dark:text-gray-400">📍 {storyLocation(videoStory)}</div>
+                </a>
+              );
+            })()
           ) : (
             <div className="text-sm text-slate-600 dark:text-gray-300">{t('nationalPage.noVideoStoriesRightNow')}</div>
           )}

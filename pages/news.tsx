@@ -13,7 +13,6 @@ type NewsApiArticle = {
   content?: string;
   provider?: string;
   generatedAt?: string;
-  translationStatus?: string;
 };
 
 const AUTO_REFRESH_MS = 45_000;
@@ -66,7 +65,6 @@ export default function News() {
             const content = typeof raw?.content === 'string' ? raw.content : undefined;
             const provider = String(raw?.provider || '').trim() || undefined;
             const generatedAt = String(raw?.generatedAt || '').trim() || undefined;
-            const translationStatus = String(raw?.translationStatus || '').trim() || undefined;
             const _id = String(raw?._id || '').trim() || undefined;
             const slug = String(raw?.slug || '').trim() || undefined;
 
@@ -80,7 +78,6 @@ export default function News() {
               content,
               provider,
               generatedAt,
-              translationStatus,
             } as NewsApiArticle;
           })
           .filter(Boolean) as NewsApiArticle[];
@@ -120,13 +117,6 @@ export default function News() {
               <h2 className="text-xl font-semibold text-gray-800">
                 {String(article.title || '').trim()}
               </h2>
-              {lang === 'gu' && article.translationStatus ? (
-                <div className="mt-2">
-                  <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-700">
-                    {String(article.translationStatus)}
-                  </span>
-                </div>
-              ) : null}
               {article.provider || article.generatedAt ? (
                 <p className="text-sm text-gray-500">
                   {article.provider ? String(article.provider) : ''}

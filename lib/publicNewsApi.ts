@@ -113,7 +113,8 @@ export async function fetchPublicNews(options: {
   try {
     const res = await fetch(endpoint, {
       method: 'GET',
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', 'Cache-Control': 'no-store', Pragma: 'no-cache' },
+      cache: 'no-store',
       signal: options.signal,
     });
 
@@ -199,7 +200,11 @@ export async function fetchArticleBySlugOrId(options: {
   for (let i = 0; i < endpoints.length; i++) {
     const url = endpoints[i];
     try {
-      const res = await fetch(url);
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: { Accept: 'application/json', 'Cache-Control': 'no-store', Pragma: 'no-cache' },
+        cache: 'no-store',
+      });
       if (res.status === 404) {
         continue;
       }
@@ -251,7 +256,8 @@ export async function fetchPublicNewsById(options: {
   try {
     const res = await fetch(endpoint, {
       method: 'GET',
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', 'Cache-Control': 'no-store', Pragma: 'no-cache' },
+      cache: 'no-store',
       signal: options.signal,
     });
 
@@ -293,7 +299,8 @@ export async function fetchPublicNewsGroup(options: {
   try {
     const res = await fetch(endpoint, {
       method: 'GET',
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', 'Cache-Control': 'no-store', Pragma: 'no-cache' },
+      cache: 'no-store',
       signal: options.signal,
     });
 
@@ -337,7 +344,8 @@ export async function fetchPublicNewsTranslation(options: {
   try {
     const res = await fetch(endpoint, {
       method: 'GET',
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', 'Cache-Control': 'no-store', Pragma: 'no-cache' },
+      cache: 'no-store',
       signal: options.signal,
     });
 

@@ -51,7 +51,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     try {
       const json = text ? JSON.parse(text) : { items: [] };
-      res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=30');
+      // Keep group responses consistent with feeds/details: never serve stale.
+      res.setHeader('Cache-Control', 'no-store, max-age=0');
       return res.status(200).json(json);
     } catch {
       res.setHeader('Cache-Control', 'no-store');

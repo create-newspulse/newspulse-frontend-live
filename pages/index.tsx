@@ -12,8 +12,8 @@ import { usePublicBroadcastTicker } from "../hooks/usePublicBroadcastTicker";
 import { usePublicAdSlot } from "../hooks/usePublicAdSlot";
 import { usePublicTickerAds } from "../hooks/usePublicTickerAds";
 import { isSafeMode } from "../utils/safeMode";
-import { resolveArticleSummaryOrExcerpt, resolveArticleTitle } from "../lib/contentFallback";
 import OriginalTag from "../components/OriginalTag";
+import { getLocalizedArticleFields } from "../lib/localizedArticleFields";
 import { DEFAULT_NORMALIZED_PUBLIC_SETTINGS, sanitizeEmbedUrl } from "../src/lib/publicSettings";
 import AdSlot from "../src/components/ads/AdSlot";
 import { useBookmarks } from "../hooks/useBookmarks";
@@ -541,52 +541,22 @@ function storyLocationLabel(story: any): string {
   return parts.join(', ');
 }
 
-function pickTranslatedField(item: any, lang: 'en' | 'hi' | 'gu', field: string): string {
-  const direct = safeTitle(item?.translations?.[lang]?.[field]);
-  if (direct) return direct;
-  const alt1 = safeTitle(item?.i18n?.[lang]?.[field]);
-  if (alt1) return alt1;
-  const alt2 = safeTitle(item?.localized?.[lang]?.[field]);
-  if (alt2) return alt2;
-  const alt3 = safeTitle(item?.locales?.[lang]?.[field]);
-  if (alt3) return alt3;
-  return '';
-}
-
-function resolveTopStoryTitle(article: any, requestedLang: 'en' | 'hi' | 'gu') {
-  if (requestedLang !== 'en') {
-    const translated = pickTranslatedField(article, requestedLang, 'title');
-    if (translated) return { text: translated, isOriginal: false };
-  }
-  return resolveArticleTitle(article, requestedLang);
-}
-
-function resolveTopStorySummary(article: any, requestedLang: 'en' | 'hi' | 'gu') {
-  if (requestedLang !== 'en') {
-    const translated = pickTranslatedField(article, requestedLang, 'summary');
-    if (translated) return { text: translated, isOriginal: false };
-  }
-
-  // Top Story rule: use summary if present; otherwise generate a dek.
-  const summary = safeTitle(article?.summary);
-  if (summary) return { text: summary, isOriginal: false };
-  return { text: '', isOriginal: false };
-}
-
 function articleToTickerText(a: Article, requestedLang: 'en' | 'hi' | 'gu'): string | null {
-  const { text } = resolveArticleTitle(a as any, requestedLang);
-  const title = safeTitle(text || (a as any)?.title);
+  const localized = getLocalizedArticleFields(a as any, requestedLang);
+  if (!localized.isVisible) return null;
+  const title = safeTitle(localized.title);
   return title ? title : null;
 }
 
 function articleToFeedItem(a: Article, requestedLang: 'en' | 'hi' | 'gu') {
-  const id = safeTitle((a as any)?._id || (a as any)?.id) || undefined;
-  const slug = resolveArticleSlug(a as any, requestedLang) || safeTitle((a as any)?.slug) || undefined;
-  const titleRes = resolveArticleTitle(a as any, requestedLang);
-  const descRes = resolveArticleSummaryOrExcerpt(a as any, requestedLang);
+  const localized = getLocalizedArticleFields(a as any, requestedLang);
+  if (!localized.isVisible) return null;
 
-  const title = safeTitle(titleRes.text || (a as any)?.title) || 'Untitled';
-  const desc = safeTitle(descRes.text || (a as any)?.summary || (a as any)?.excerpt) || '';
+  const id = safeTitle((a as any)?._id || (a as any)?.id) || undefined;
+  const slug = safeTitle(localized.slug || resolveArticleSlug(a as any, requestedLang)) || undefined;
+
+  const title = safeTitle(localized.title) || 'Untitled';
+  const desc = safeTitle(localized.summary) || '';
 
   const iso = safeTitle((a as any)?.publishedAt || (a as any)?.createdAt) || '';
   let time = '';
@@ -611,8 +581,8 @@ function articleToFeedItem(a: Article, requestedLang: 'en' | 'hi' | 'gu') {
     slug,
     title,
     desc,
-    titleIsOriginal: titleRes.isOriginal,
-    descIsOriginal: descRes.isOriginal,
+    titleIsOriginal: false,
+    descIsOriginal: false,
     time: time || '—',
     source,
     category,
@@ -1840,32 +1810,20 @@ function FeaturedCard({ theme, item, onToast }: any) {
   const vm = useMemo(() => {
     if (!article) return null;
 
+    const localized = getLocalizedArticleFields(article as any, requestedLang);
+    if (!localized.isVisible) return null;
+
     const id = safeTitle((article as any)?._id || (article as any)?.id || (article as any)?.slug) || '';
-    const slug = resolveArticleSlug(article as any, requestedLang);
+    const slug = safeTitle(localized.slug || resolveArticleSlug(article as any, requestedLang)) || '';
     const href = buildNewsUrl({ id: id || slug, slug, lang: requestedLang });
 
-    const titleRes = resolveTopStoryTitle(article as any, requestedLang);
-    const summaryRes = resolveTopStorySummary(article as any, requestedLang);
+    const title = safeTitle(localized.title) || t('common.untitled');
+    const summaryFromApi = safeTitle(localized.summary);
 
-    const title = safeTitle(titleRes.text) || t('common.untitled');
-    const summaryFromApi = safeTitle(summaryRes.text);
-
-    const contentFallback = cleanText(
-      pickTranslatedField(article as any, requestedLang, 'content') ||
-        pickTranslatedField(article as any, requestedLang, 'body') ||
-        pickTranslatedField(article as any, requestedLang, 'html') ||
-        (article as any)?.content ||
-        (article as any)?.body ||
-        (article as any)?.html ||
-        (article as any)?.summary ||
-        (article as any)?.excerpt
-    );
+    const contentFallback = cleanText(localized.bodyHtml || localized.summary);
 
     const summaryGenerated = makeDekFromContent(contentFallback);
-    const excerptFallback = safeTitle(
-      pickTranslatedField(article as any, requestedLang, 'excerpt') || (article as any)?.excerpt
-    );
-    const summary = summaryFromApi || summaryGenerated || excerptFallback;
+    const summary = summaryFromApi || summaryGenerated;
 
     const iso = safeTitle((article as any)?.publishedAt || (article as any)?.createdAt) || '';
     let time = '';
@@ -1892,10 +1850,10 @@ function FeaturedCard({ theme, item, onToast }: any) {
     const readMinutes = estimateReadMinutes(`${title} ${summary} ${contentFallback}`);
 
     const coverRaw =
-      pickTranslatedField(article as any, requestedLang, 'imageUrl') || (article as any)?.imageUrl ||
-      pickTranslatedField(article as any, requestedLang, 'coverImage') || (article as any)?.coverImage ||
-      pickTranslatedField(article as any, requestedLang, 'image') || (article as any)?.image ||
-      pickTranslatedField(article as any, requestedLang, 'thumbnail') || (article as any)?.thumbnail ||
+      (article as any)?.imageUrl ||
+      (article as any)?.coverImage ||
+      (article as any)?.image ||
+      (article as any)?.thumbnail ||
       (Array.isArray((article as any)?.images) ? (article as any)?.images?.[0] : null) ||
       null;
 
@@ -1918,8 +1876,8 @@ function FeaturedCard({ theme, item, onToast }: any) {
       href,
       title,
       summary,
-      titleIsOriginal: Boolean(titleRes.isOriginal),
-      summaryIsOriginal: Boolean(summaryFromApi ? summaryRes.isOriginal : false),
+      titleIsOriginal: false,
+      summaryIsOriginal: false,
       time: time || '—',
       iso: iso || '',
       source,
@@ -2785,7 +2743,7 @@ export default function UiPreviewV145() {
       if (controller.signal.aborted) return;
       const latestArticles = latestResp.items || [];
       setTopStory(latestArticles[0] || null);
-      setLatestFromBackend(latestArticles.map((a) => articleToFeedItem(a as any, apiLang)));
+      setLatestFromBackend(latestArticles.map((a) => articleToFeedItem(a as any, apiLang)).filter(Boolean));
       const breakingResp = await fetchPublicNews({ category: 'breaking', language: apiLang, limit: 10, signal: controller.signal });
       if (controller.signal.aborted) return;
 

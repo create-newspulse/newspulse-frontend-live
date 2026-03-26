@@ -45,6 +45,26 @@ function pickNonEmpty(...candidates: unknown[]): string {
   return '';
 }
 
+function stripInlineHtmlToText(value: string): string {
+  return String(value || '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function containsGujaratiScript(value: string): boolean {
+  return /[\u0A80-\u0AFF]/.test(String(value || ''));
+}
+
+function isSafeEnglishSlug(value: string): boolean {
+  const s = String(value || '').trim().replace(/^\/+/, '').replace(/\/+$/, '');
+  if (!s) return false;
+  if (containsGujaratiScript(s)) return false;
+  if (!/^[\x20-\x7E]+$/.test(s)) return false;
+  return /^[a-z0-9][a-z0-9-_]*$/i.test(s);
+}
+
 function getRecord(raw: unknown): Record<string, any> | null {
   if (!raw || typeof raw !== 'object') return null;
   if (Array.isArray(raw)) return null;
@@ -90,13 +110,9 @@ export function getPublicArticleStatus(article: any): LocalizedArticleFields['st
   if (deletedFlag) return 'deleted';
   if (statusRaw === 'deleted' || statusRaw === 'removed' || statusRaw === 'trash') return 'deleted';
 
-  const publishedFlag =
-    article?.isPublished === true ||
-    article?.published === true ||
-    statusRaw === 'published' ||
-    !!String(article?.publishedAt || '').trim();
-
   const explicitlyUnpublished =
+    article?.isDraft === true ||
+    article?.draft === true ||
     article?.isPublished === false ||
     article?.published === false ||
     statusRaw === 'unpublished' ||
@@ -104,8 +120,15 @@ export function getPublicArticleStatus(article: any): LocalizedArticleFields['st
     statusRaw === 'pending' ||
     statusRaw === 'rejected';
 
-  if (publishedFlag) return 'published';
+  const publishedFlag =
+    article?.isPublished === true ||
+    article?.published === true ||
+    statusRaw === 'published' ||
+    !!String(article?.publishedAt || '').trim();
+
+  // IMPORTANT: draft/pending/rejected must never be treated as public even if a timestamp exists.
   if (explicitlyUnpublished) return 'unpublished';
+  if (publishedFlag) return 'published';
 
   // If it's missing both a publish marker and an explicit state, treat as not safe for public listings.
   return 'unknown';
@@ -133,6 +156,30 @@ function hasApprovedTranslation(article: any, locale: RouteLocale): boolean {
 }
 
 function getTranslatedField(article: any, locale: RouteLocale, field: 'title' | 'summary' | 'excerpt' | 'content' | 'html' | 'body' | 'slug'): string {
+  // Prefer explicit locale-specific top-level fields when present.
+  // This prevents leaking the generic/base fields when backend stores per-locale values (e.g. title_en, titleEn).
+  const suffix = locale.toUpperCase();
+  const camel = `${locale[0].toUpperCase()}${locale.slice(1)}`;
+
+  const directCandidates: any[] = [
+    article?.[`${field}_${locale}`],
+    article?.[`${field}_${suffix}`],
+    article?.[`${field}${suffix}`],
+    article?.[`${field}${camel}`],
+    getNested(article, [field, locale]),
+    getNested(article, [locale, field]),
+  ];
+
+  for (const c of directCandidates) {
+    if (typeof c === 'string' && c.trim()) return c.trim();
+    if (c && typeof c === 'object') {
+      const t = pickNonEmpty(c.text, c.value, c.html, c.content, c.body);
+      if (t) return t;
+    }
+    const s = String(c ?? '').trim();
+    if (s) return s;
+  }
+
   const container = getRecord(getTranslationContainer(article));
   if (!container) return '';
 
@@ -204,7 +251,9 @@ function getSlugForLocale(article: any, locale: RouteLocale, sourceLocale: Route
 
   if (sourceLocale && sourceLocale === locale) {
     const fallback = pickNonEmpty(article?.slug, article?.seoSlug);
-    return String(fallback || '').replace(/^\/+/, '').replace(/\/+$/, '');
+    const cleaned = String(fallback || '').replace(/^\/+/, '').replace(/\/+$/, '');
+    if (locale === 'en' && cleaned && !isSafeEnglishSlug(cleaned)) return '';
+    return cleaned;
   }
 
   return '';
@@ -256,7 +305,102 @@ export function getLocalizedArticleFields(
   // We only allow rendering when the article explicitly claims to be in this locale OR has approved translations.
   const isSameAsSource = !!sourceLocale && sourceLocale === requestedLocale;
 
+  // For English routes, we must avoid rendering Gujarati (or other) base fields.
+  // If the backend provides a translation container (or explicit localized fields) but English is missing,
+  // exclude the item rather than showing wrong-locale base text.
+  if (requestedLocale === 'en') {
+    const containerPresent = !!getRecord(getTranslationContainer(item));
+    const enHasAny = !!pickNonEmpty(
+      getTranslatedField(item, 'en', 'title'),
+      getTranslatedField(item, 'en', 'summary'),
+      getTranslatedField(item, 'en', 'excerpt'),
+      getTranslatedField(item, 'en', 'html'),
+      getTranslatedField(item, 'en', 'content'),
+      getTranslatedField(item, 'en', 'body')
+    );
+    const otherHasAny = !!pickNonEmpty(
+      getTranslatedField(item, 'hi', 'title'),
+      getTranslatedField(item, 'gu', 'title'),
+      getTranslatedField(item, 'hi', 'summary'),
+      getTranslatedField(item, 'gu', 'summary'),
+      getTranslatedField(item, 'hi', 'excerpt'),
+      getTranslatedField(item, 'gu', 'excerpt'),
+      getTranslatedField(item, 'hi', 'html'),
+      getTranslatedField(item, 'gu', 'html'),
+      getTranslatedField(item, 'hi', 'content'),
+      getTranslatedField(item, 'gu', 'content'),
+      getTranslatedField(item, 'hi', 'body'),
+      getTranslatedField(item, 'gu', 'body')
+    );
+
+    if (containerPresent && otherHasAny && !enHasAny) {
+      return {
+        requestedLocale,
+        sourceLocale,
+        status,
+        isVisible: false,
+        selectedLocale: requestedLocale,
+        isFallback: false,
+        title: '',
+        summary: '',
+        bodyHtml: '',
+        slug: '',
+      };
+    }
+  }
+
   if (isSameAsSource) {
+    // Prefer explicit localized fields for this locale when present.
+    const explicitTitle = stripInlineHtmlToText(getTranslatedField(item, requestedLocale, 'title'));
+    const explicitSummary = stripInlineHtmlToText(
+      pickNonEmpty(
+        getTranslatedField(item, requestedLocale, 'summary'),
+        getTranslatedField(item, requestedLocale, 'excerpt')
+      )
+    );
+    const explicitBodyHtml = pickNonEmpty(
+      getTranslatedField(item, requestedLocale, 'html'),
+      getTranslatedField(item, requestedLocale, 'content'),
+      getTranslatedField(item, requestedLocale, 'body')
+    );
+
+    const baseTitle = stripInlineHtmlToText(getSourceField(item, 'title'));
+    const title = explicitTitle || baseTitle;
+    const summary =
+      explicitSummary ||
+      stripInlineHtmlToText(pickNonEmpty(getSourceField(item, 'summary'), getSourceField(item, 'excerpt')));
+
+    // English routes must not render Gujarati base content when English fields are expected.
+    if (requestedLocale === 'en' && !explicitTitle && containsGujaratiScript(baseTitle)) {
+      return {
+        requestedLocale,
+        sourceLocale,
+        status,
+        isVisible: false,
+        selectedLocale: requestedLocale,
+        isFallback: false,
+        title: '',
+        summary: '',
+        bodyHtml: '',
+        slug: '',
+      };
+    }
+
+    if (requestedLocale === 'en' && !explicitBodyHtml && containsGujaratiScript(String(getSourceBodyHtml(item) || '').slice(0, 800))) {
+      return {
+        requestedLocale,
+        sourceLocale,
+        status,
+        isVisible: false,
+        selectedLocale: requestedLocale,
+        isFallback: false,
+        title: '',
+        summary: '',
+        bodyHtml: '',
+        slug: '',
+      };
+    }
+
     return {
       requestedLocale,
       sourceLocale,
@@ -264,9 +408,9 @@ export function getLocalizedArticleFields(
       isVisible: true,
       selectedLocale: requestedLocale,
       isFallback: false,
-      title: getSourceField(item, 'title'),
-      summary: pickNonEmpty(getSourceField(item, 'summary'), getSourceField(item, 'excerpt')),
-      bodyHtml: getSourceBodyHtml(item),
+      title,
+      summary,
+      bodyHtml: explicitBodyHtml || getSourceBodyHtml(item),
       slug: getSlugForLocale(item, requestedLocale, sourceLocale),
     };
   }
@@ -275,6 +419,8 @@ export function getLocalizedArticleFields(
   const approved = hasApprovedTranslation(item, requestedLocale);
   if (!approved) {
     if (policy.allowCrossLocaleOriginal) {
+      const title = stripInlineHtmlToText(getSourceField(item, 'title'));
+      const summary = stripInlineHtmlToText(pickNonEmpty(getSourceField(item, 'summary'), getSourceField(item, 'excerpt')));
       // Controlled fallback (not enabled by default).
       return {
         requestedLocale,
@@ -283,8 +429,8 @@ export function getLocalizedArticleFields(
         isVisible: true,
         selectedLocale: sourceLocale || requestedLocale,
         isFallback: true,
-        title: getSourceField(item, 'title'),
-        summary: pickNonEmpty(getSourceField(item, 'summary'), getSourceField(item, 'excerpt')),
+        title,
+        summary,
         bodyHtml: getSourceBodyHtml(item),
         slug: getSlugForLocale(item, sourceLocale || requestedLocale, sourceLocale),
       };
@@ -304,10 +450,12 @@ export function getLocalizedArticleFields(
     };
   }
 
-  const title = getTranslatedField(item, requestedLocale, 'title');
-  const summary = pickNonEmpty(
-    getTranslatedField(item, requestedLocale, 'summary'),
-    getTranslatedField(item, requestedLocale, 'excerpt')
+  const title = stripInlineHtmlToText(getTranslatedField(item, requestedLocale, 'title'));
+  const summary = stripInlineHtmlToText(
+    pickNonEmpty(
+      getTranslatedField(item, requestedLocale, 'summary'),
+      getTranslatedField(item, requestedLocale, 'excerpt')
+    )
   );
   const bodyHtml = pickNonEmpty(
     getTranslatedField(item, requestedLocale, 'html'),

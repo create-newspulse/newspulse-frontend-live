@@ -239,15 +239,15 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
         return;
       }
 
-      const localizedNext = getLocalizedArticleFields(next || {}, lang);
-      if (!localizedNext.isVisible) {
+      const localizedNextStrict = getLocalizedArticleFields(next || {}, lang);
+      if (!localizedNextStrict.isVisible) {
         setPendingTranslate(false);
         setPendingError('Not found');
         setPendingExhausted(true);
         return;
       }
 
-      const html = localizedNext.bodyHtml;
+      const html = localizedNextStrict.bodyHtml;
       setResolvedArticle(next);
       setResolvedSafeHtml(sanitizeContent(html));
       setPendingTranslate(false);
@@ -348,9 +348,9 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
     isPendingTranslation: pendingTranslate,
   });
 
-  const rawTitle = cleanText(localized.title || (resolvedArticle as any)?.title);
+  const rawTitle = cleanText(localized.title);
   const displayTitle = rawTitle.length > 180 ? `${rawTitle.slice(0, 177).trimEnd()}…` : rawTitle;
-  const displaySummary = cleanText(localized.summary || (resolvedArticle as any)?.summary);
+  const displaySummary = cleanText(localized.summary);
   const displayProvider = cleanText((resolvedArticle as any)?.provider);
   const displayGeneratedAt = cleanText((resolvedArticle as any)?.generatedAt);
 
@@ -642,8 +642,8 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                       const routeId = id || storySlug;
                       const href = routeId ? buildNewsUrl({ id: routeId, slug: storySlug || routeId, lang }) : '#';
                       const img = resolveCoverImageUrl(s) || COVER_PLACEHOLDER_SRC;
-                      const titleText = cleanText(localizedStory.title || (s as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
-                      const excerpt = String(localizedStory.summary || (s as any)?.summary || (s as any)?.excerpt || '').trim();
+                      const titleText = cleanText(localizedStory.title) || String(t('common.untitled') || 'Untitled').trim();
+                      const excerpt = String(localizedStory.summary || '').trim();
                       return (
                         <a
                           key={id || String((s as any)?.slug || idx)}
@@ -695,7 +695,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                         const storySlug = String(localizedStory.slug || resolveArticleSlug(s, lang) || '').trim();
                         const routeId = id || storySlug;
                         const href = routeId ? buildNewsUrl({ id: routeId, slug: storySlug || routeId, lang }) : '#';
-                        const titleText = cleanText(localizedStory.title || (s as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
+                        const titleText = cleanText(localizedStory.title) || String(t('common.untitled') || 'Untitled').trim();
                         return (
                           <a
                             key={id || String((s as any)?.slug || i)}
@@ -774,7 +774,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                         const storySlug = String(localizedStory.slug || resolveArticleSlug(s, lang) || '').trim();
                         const routeId = id || storySlug;
                         const href = routeId ? buildNewsUrl({ id: routeId, slug: storySlug || routeId, lang }) : '#';
-                        const titleText = cleanText(localizedStory.title || (s as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
+                        const titleText = cleanText(localizedStory.title) || String(t('common.untitled') || 'Untitled').trim();
                         return (
                           <a
                             key={id || String((s as any)?.slug || i)}
@@ -898,10 +898,15 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
       return { notFound: true };
     }
 
-    // Canonicalize slug per language
+    // Canonicalize URL per language.
+    // If we don't have a locale-safe slug (common when backend stores a Gujarati slug in the base field),
+    // fall back to an id-based URL on English routes.
     const canonicalSlug = String(localized.slug || '').trim();
-    if (canonicalSlug && canonicalSlug !== rawSlug) {
-      const destination = buildNewsUrl({ id: String(article._id || '').trim(), slug: canonicalSlug, lang });
+    const canonicalRouteParam = canonicalSlug || String(article._id || '').trim();
+    if (canonicalRouteParam && canonicalRouteParam !== rawSlug) {
+      const destination = canonicalSlug
+        ? buildNewsUrl({ id: String(article._id || '').trim(), slug: canonicalSlug, lang })
+        : buildNewsUrl({ id: String(article._id || '').trim(), lang });
       return { redirect: { destination, permanent: true } };
     }
 

@@ -1,7 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
-import { filterVisibleArticlesForLocale, normalizeRouteLocale } from '../../../lib/localizedArticleFields';
+import { normalizeRouteLocale } from '../../../lib/localizedArticleFields';
+import { canonicalizePublishedStoryGroups } from '../../../lib/canonicalPublishedGroups';
 
 function asSingleQueryValue(value: string | string[] | undefined): string {
   return String(Array.isArray(value) ? value[0] : value || '').trim();
@@ -44,59 +45,69 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const qsIndex = (req.url || '').indexOf('?');
   const qs = qsIndex >= 0 ? (req.url || '').slice(qsIndex) : '';
-  const targetUrl = `${base}/api/public/news${qs}`;
+
+  const baseUrl = `${base}/api/public/news`;
+  const originalParams = new URLSearchParams(qs.startsWith('?') ? qs.slice(1) : qs);
+
+  const buildTargetUrl = (langOverride: string | null): string => {
+    const params = new URLSearchParams(originalParams);
+    if (langOverride) {
+      params.set('lang', langOverride);
+      params.set('language', langOverride);
+    } else {
+      params.delete('lang');
+      params.delete('language');
+    }
+    const query = params.toString();
+    return `${baseUrl}${query ? `?${query}` : ''}`;
+  };
 
   const requestedLocale = normalizeRouteLocale(
     asSingleQueryValue(req.query.language as any) || asSingleQueryValue(req.query.lang as any)
   );
 
   try {
-    const upstream = await fetch(targetUrl, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-        cookie: String(req.headers.cookie || ''),
-        authorization: String(req.headers.authorization || ''),
-      },
-    });
+    const headers = {
+      Accept: 'application/json',
+      cookie: String(req.headers.cookie || ''),
+      authorization: String(req.headers.authorization || ''),
+      'Cache-Control': 'no-store',
+      Pragma: 'no-cache',
+    };
 
+    // Enforce strict locale-only behavior:
+    // - Always request the requested locale from upstream (defaulting to 'en').
+    // - Never fall back to other locales.
+    const targetUrl = buildTargetUrl(requestedLocale);
+    const upstream = await fetch(targetUrl, { method: 'GET', headers, cache: 'no-store' as any });
     const text = await upstream.text().catch(() => '');
-    // If backend is missing the route (or temporarily down), fail open.
-    if (upstream.status === 404) {
-      res.setHeader('Cache-Control', 'no-store');
-      return res.status(200).json({ items: [] });
-    }
 
-    if (!upstream.ok) {
-      res.setHeader('Cache-Control', 'no-store');
-      return res.status(200).json({ items: [] });
-    }
-
-    try {
-      const json = text ? JSON.parse(text) : { items: [] };
-
-      // Enforce a single public-content contract:
-      // - never return unpublished/deleted items
-      // - never return cross-locale items unless translation is APPROVED
-      const itemsRaw =
-        Array.isArray(json) ? json :
-        Array.isArray(json?.items) ? json.items :
-        Array.isArray(json?.articles) ? json.articles :
-        Array.isArray(json?.data) ? json.data :
-        Array.isArray(json?.data?.items) ? json.data.items :
-        Array.isArray(json?.data?.articles) ? json.data.articles :
-        [];
-
-      const items = filterVisibleArticlesForLocale(Array.isArray(itemsRaw) ? itemsRaw : [], requestedLocale);
-      const normalized = replaceItems(json, items);
-
-      // Avoid stale listings after delete/unpublish; accuracy over cache.
+    if (upstream.status === 404 || !upstream.ok) {
       res.setHeader('Cache-Control', 'no-store, max-age=0');
-      return res.status(200).json(normalized);
-    } catch {
-      res.setHeader('Cache-Control', 'no-store');
-      return res.status(200).json({ items: [] });
+      return res.status(200).json({ items: [], total: 0, page: 1, totalPages: 1, limit: 0 });
     }
+
+    let json: any = null;
+    try {
+      json = text ? JSON.parse(text) : { items: [] };
+    } catch {
+      json = { items: [] };
+    }
+
+    const itemsRaw =
+      Array.isArray(json) ? json :
+      Array.isArray(json?.items) ? json.items :
+      Array.isArray(json?.articles) ? json.articles :
+      Array.isArray(json?.data) ? json.data :
+      Array.isArray(json?.data?.items) ? json.data.items :
+      Array.isArray(json?.data?.articles) ? json.data.articles :
+      [];
+
+    const picked = canonicalizePublishedStoryGroups(Array.isArray(itemsRaw) ? itemsRaw : [], requestedLocale);
+    const normalized = replaceItems(json || { items: [] }, picked);
+    // Accuracy over cache; never serve stale story groups.
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
+    return res.status(200).json(normalized);
   } catch {
     res.setHeader('Cache-Control', 'no-store');
     return res.status(200).json({ items: [] });
