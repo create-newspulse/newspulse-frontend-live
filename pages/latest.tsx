@@ -202,12 +202,11 @@ export default function LatestPage() {
                       const localized = getLocalizedArticleFields(a as any, language);
                       if (!localized.isVisible) return null;
 
-                      // Use id as the stable route token (avoids stale slugs).
-                      const href = id ? buildNewsUrl({ id, slug: id, lang: language }) : '#';
+                      const href = buildNewsUrl({ id, slug: localized.slug || id, lang: language });
 
                       const title = String(localized.title || '').trim() || String(t('common.untitled') || 'Untitled');
                       const when = formatTime(a.publishedAt || a.createdAt);
-                      const category = String((a as any)?.category || '').trim();
+                      const category = String(localized.categoryLabel || (a as any)?.category || '').trim();
                       const coverSrc = resolveCoverImageUrl(a as any);
 
                       return (

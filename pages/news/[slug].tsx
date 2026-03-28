@@ -133,6 +133,11 @@ function isPendingTranslationPayload(payload: any): boolean {
   return nestedStatus === 'pending' || nestedStatus === 'translating';
 }
 
+function debugNewsDetailResolution(stage: string, payload: Record<string, unknown>) {
+  if (process.env.NODE_ENV === 'production') return;
+  console.info('[pages/news/[slug]]', { stage, ...payload });
+}
+
 export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topStories, relatedStories, error, pending }: Props) {
   const { t } = useI18n();
   const router = useRouter();
@@ -297,6 +302,20 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
     () => getLocalizedArticleFields(resolvedArticle || {}, routeLocale),
     [resolvedArticle, routeLocale]
   );
+  const resolvedSlug = React.useMemo(
+    () => String(localized.slug || resolvedArticle?._id || slug || '').trim(),
+    [localized.slug, resolvedArticle?._id, slug]
+  );
+
+  React.useEffect(() => {
+    debugNewsDetailResolution('client', {
+      locale: lang,
+      receivedSlug: slug,
+      resolvedSlug: resolvedSlug || null,
+      articleId: String(resolvedArticle?._id || '').trim() || null,
+      translationFound: localized.translationFound,
+    });
+  }, [lang, localized.translationFound, resolvedArticle?._id, resolvedSlug, slug]);
 
   const analyticsSlug = React.useMemo(() => {
     const id = String(resolvedArticle?._id || '').trim();
@@ -758,6 +777,13 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
 
   const rawSlug = String((ctx.params as any)?.slug || '').trim();
   if (!rawSlug) {
+    debugNewsDetailResolution('ssr-missing-slug', {
+      locale: lang,
+      receivedSlug: rawSlug,
+      resolvedSlug: null,
+      articleId: null,
+      translationFound: false,
+    });
     return {
       props: { messages, locale, lang, slug: '', article: null, safeHtml: '', topStories: [], relatedStories: [], error: 'Not found', pending: false },
     };
@@ -809,6 +835,13 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
     }
 
     if (isPendingTranslationPayload(data)) {
+      debugNewsDetailResolution('ssr-pending', {
+        locale: lang,
+        receivedSlug: rawSlug,
+        resolvedSlug: rawSlug,
+        articleId: null,
+        translationFound: false,
+      });
       return {
         props: {
           messages,
@@ -826,6 +859,13 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
     }
 
     if (!article?._id) {
+      debugNewsDetailResolution('ssr-not-found', {
+        locale: lang,
+        receivedSlug: rawSlug,
+        resolvedSlug: null,
+        articleId: null,
+        translationFound: false,
+      });
       return {
         props: { messages, locale, lang, slug: rawSlug, article: null, safeHtml: '', topStories: [], relatedStories: [], error: 'Not found', pending: false },
       };
@@ -833,8 +873,23 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
 
     const localized = getLocalizedArticleFields(article, lang);
     if (!localized.isVisible) {
+      debugNewsDetailResolution('ssr-hidden', {
+        locale: lang,
+        receivedSlug: rawSlug,
+        resolvedSlug: localized.slug || rawSlug,
+        articleId: String(article._id || '').trim() || null,
+        translationFound: localized.translationFound,
+      });
       return { notFound: true };
     }
+
+    debugNewsDetailResolution('ssr-resolved', {
+      locale: lang,
+      receivedSlug: rawSlug,
+      resolvedSlug: localized.slug || rawSlug,
+      articleId: String(article._id || '').trim() || null,
+      translationFound: localized.translationFound,
+    });
 
     // Canonicalize slug per language
     const canonicalSlug = String(localized.slug || '').trim();

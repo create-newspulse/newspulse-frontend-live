@@ -8,11 +8,13 @@ export type LocalizedArticleFields = {
   isVisible: boolean;
   /** The locale we actually used for text fields (always equals requestedLocale under current policy). */
   selectedLocale: RouteLocale;
-  /** True when we intentionally showed source/original for a different locale (currently always false). */
+  /** True when we intentionally fell back to source/original fields for this locale. */
   isFallback: boolean;
+  translationFound: boolean;
   title: string;
   summary: string;
   bodyHtml: string;
+  categoryLabel: string;
   /** Slug appropriate for the requested locale when available; may be empty. */
   slug: string;
 };
@@ -41,6 +43,25 @@ function pickNonEmpty(...candidates: unknown[]): string {
   for (const c of candidates) {
     const s = typeof c === 'string' ? c.trim() : String(c ?? '').trim();
     if (s) return s;
+  }
+  return '';
+}
+
+function extractTextLike(value: unknown): string {
+  if (value == null) return '';
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value).trim();
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    return pickNonEmpty(
+      (value as any).text,
+      (value as any).value,
+      (value as any).html,
+      (value as any).content,
+      (value as any).body,
+      (value as any).label,
+      (value as any).name,
+      (value as any).slug
+    );
   }
   return '';
 }
@@ -112,45 +133,54 @@ export function getPublicArticleStatus(article: any): LocalizedArticleFields['st
 }
 
 function getTranslationContainer(article: any): any {
-  return article?.translations || article?.i18n || article?.localized || article?.locales || null;
+  return article?.translations || article?.translation || article?.i18n || article?.localized || article?.locales || article?.byLang || article?.textByLang || null;
 }
 
-function hasApprovedTranslation(article: any, locale: RouteLocale): boolean {
-  const direct = normTranslationStatus(article?.translationStatus);
-  if (direct) return direct === 'APPROVED';
-
-  const byLang = normTranslationStatus(article?.translationStatus?.[locale]);
-  if (byLang) return byLang === 'APPROVED';
-
-  const container = getRecord(getTranslationContainer(article));
-  if (!container) return false;
-
-  const candidate = getNested(container, [locale]);
-  const status = normTranslationStatus(candidate?.status || candidate?.translationStatus);
-  if (status) return status === 'APPROVED';
-
-  return false;
+function getLocaleKeys(locale: RouteLocale): string[] {
+  return locale === 'hi' ? ['hi', 'in'] : [locale];
 }
 
-function getTranslatedField(article: any, locale: RouteLocale, field: 'title' | 'summary' | 'excerpt' | 'content' | 'html' | 'body' | 'slug'): string {
+function getLocalizedFieldValue(article: any, locale: RouteLocale, fieldNames: string[]): string {
   const container = getRecord(getTranslationContainer(article));
-  if (!container) return '';
+  const localeKeys = getLocaleKeys(locale);
 
-  const fromLang = getNested(container, [locale, field]);
-  if (typeof fromLang === 'string' && fromLang.trim()) return fromLang.trim();
-  if (fromLang && typeof fromLang === 'object') {
-    const t = pickNonEmpty(fromLang.text, fromLang.value, fromLang.html, fromLang.content, fromLang.body);
-    if (t) return t;
+  if (container) {
+    for (const localeKey of localeKeys) {
+      for (const field of fieldNames) {
+        const fromLocaleFirst = extractTextLike(getNested(container, [localeKey, field]));
+        if (fromLocaleFirst) return fromLocaleFirst;
+      }
+    }
+
+    for (const field of fieldNames) {
+      for (const localeKey of localeKeys) {
+        const fromFieldFirst = extractTextLike(getNested(container, [field, localeKey]));
+        if (fromFieldFirst) return fromFieldFirst;
+      }
+    }
   }
 
-  const byField = getNested(container, [field, locale]);
-  if (typeof byField === 'string' && byField.trim()) return byField.trim();
-  if (byField && typeof byField === 'object') {
-    const t = pickNonEmpty(byField.text, byField.value, byField.html, byField.content, byField.body);
-    if (t) return t;
+  for (const localeKey of localeKeys) {
+    const localeCap = localeKey.charAt(0).toUpperCase() + localeKey.slice(1);
+    for (const field of fieldNames) {
+      const fieldCap = field.charAt(0).toUpperCase() + field.slice(1);
+      const direct = pickNonEmpty(
+        extractTextLike(getNested(article, [field, localeKey])),
+        extractTextLike(getNested(article, [field, 'value', localeKey])),
+        extractTextLike(article?.[`${field}_${localeKey}`]),
+        extractTextLike(article?.[`${field}${localeCap}`]),
+        extractTextLike(article?.[`${localeKey}_${field}`]),
+        extractTextLike(article?.[`${localeKey}${fieldCap}`])
+      );
+      if (direct) return direct;
+    }
   }
 
   return '';
+}
+
+function sanitizeSlug(raw: unknown): string {
+  return String(raw || '').trim().replace(/^\/+/, '').replace(/\/+$/, '');
 }
 
 function getSourceField(article: any, field: 'title' | 'summary' | 'excerpt'): string {
@@ -172,6 +202,7 @@ function getSourceField(article: any, field: 'title' | 'summary' | 'excerpt'): s
 
 function getSourceBodyHtml(article: any): string {
   return pickNonEmpty(
+    extractTextLike(article?.bodyHtml),
     article?.originalContent,
     article?.sourceContent,
     article?.contentOriginal,
@@ -190,24 +221,89 @@ function getSourceBodyHtml(article: any): string {
   );
 }
 
-function getSlugForLocale(article: any, locale: RouteLocale, sourceLocale: RouteLocale | null): string {
-  // Strict: only accept cross-locale slug when this locale is the source locale.
-  const explicit = pickNonEmpty(
-    getTranslatedField(article, locale, 'slug'),
-    getNested(article, ['slugs', locale]),
-    getNested(article, ['slug', locale]),
-    article?.[`slug_${locale}`],
-    article?.[`slug${locale.toUpperCase()}`]
+function getBaseSlug(article: any): string {
+  return sanitizeSlug(
+    pickNonEmpty(
+      article?.slug,
+      article?.seoSlug,
+      article?.originalSlug,
+      article?.sourceSlug,
+      article?.baseSlug,
+      article?.canonicalSlug,
+      article?._id,
+      article?.id
+    )
   );
+}
 
-  if (explicit) return String(explicit).replace(/^\/+/, '').replace(/\/+$/, '');
-
-  if (sourceLocale && sourceLocale === locale) {
-    const fallback = pickNonEmpty(article?.slug, article?.seoSlug);
-    return String(fallback || '').replace(/^\/+/, '').replace(/\/+$/, '');
+function getLocalizedFieldWithFallback(
+  article: any,
+  locale: RouteLocale,
+  localizedFields: string[],
+  baseValue: string
+): { value: string; translationFound: boolean } {
+  const translated = getLocalizedFieldValue(article, locale, localizedFields);
+  if (translated) {
+    return { value: translated, translationFound: true };
   }
 
-  return '';
+  return { value: baseValue, translationFound: false };
+}
+
+export function getLocalizedTitle(article: unknown, localeInput: unknown): string {
+  const locale = normalizeRouteLocale(localeInput);
+  const item = article && typeof article === 'object' ? (article as any) : null;
+  if (!item) return '';
+
+  return getLocalizedFieldWithFallback(item, locale, ['title', 'headline', 'name'], getSourceField(item, 'title')).value;
+}
+
+export function getLocalizedSummary(article: unknown, localeInput: unknown): string {
+  const locale = normalizeRouteLocale(localeInput);
+  const item = article && typeof article === 'object' ? (article as any) : null;
+  if (!item) return '';
+
+  const baseSummary = pickNonEmpty(getSourceField(item, 'summary'), getSourceField(item, 'excerpt'));
+  return getLocalizedFieldWithFallback(item, locale, ['summary', 'excerpt', 'description', 'dek'], baseSummary).value;
+}
+
+export function getLocalizedContent(article: unknown, localeInput: unknown): string {
+  const locale = normalizeRouteLocale(localeInput);
+  const item = article && typeof article === 'object' ? (article as any) : null;
+  if (!item) return '';
+
+  return getLocalizedFieldWithFallback(item, locale, ['html', 'content', 'body'], getSourceBodyHtml(item)).value;
+}
+
+export function getLocalizedSlug(article: unknown, localeInput: unknown): string {
+  const locale = normalizeRouteLocale(localeInput);
+  const item = article && typeof article === 'object' ? (article as any) : null;
+  if (!item) return '';
+
+  const explicit = sanitizeSlug(
+    pickNonEmpty(
+      getLocalizedFieldValue(item, locale, ['slug']),
+      extractTextLike(getNested(item, ['slugs', locale])),
+      extractTextLike(getNested(item, ['slug', locale])),
+      extractTextLike(item?.[`slug_${locale}`]),
+      extractTextLike(item?.[`slug${locale.toUpperCase()}`])
+    )
+  );
+
+  return explicit || getBaseSlug(item);
+}
+
+export function getLocalizedCategoryLabel(article: unknown, localeInput: unknown): string {
+  const locale = normalizeRouteLocale(localeInput);
+  const item = article && typeof article === 'object' ? (article as any) : null;
+  if (!item) return '';
+
+  const baseCategory = pickNonEmpty(
+    article && typeof article === 'object' ? (article as any)?.categoryLabel : '',
+    article && typeof article === 'object' ? (article as any)?.categoryName : '',
+    article && typeof article === 'object' ? (article as any)?.category : ''
+  );
+  return getLocalizedFieldWithFallback(item, locale, ['categoryLabel', 'categoryName', 'category', 'section'], baseCategory).value;
 }
 
 export function getLocalizedArticleFields(
@@ -226,9 +322,11 @@ export function getLocalizedArticleFields(
       isVisible: false,
       selectedLocale: requestedLocale,
       isFallback: false,
+      translationFound: false,
       title: '',
       summary: '',
       bodyHtml: '',
+      categoryLabel: '',
       slug: '',
     };
   }
@@ -245,90 +343,46 @@ export function getLocalizedArticleFields(
       isVisible: false,
       selectedLocale: requestedLocale,
       isFallback: false,
+      translationFound: false,
       title: '',
       summary: '',
       bodyHtml: '',
+      categoryLabel: '',
       slug: '',
     };
   }
 
-  // If we don't know the source language, we still refuse cross-locale leakage.
-  // We only allow rendering when the article explicitly claims to be in this locale OR has approved translations.
-  const isSameAsSource = !!sourceLocale && sourceLocale === requestedLocale;
-
-  if (isSameAsSource) {
-    return {
-      requestedLocale,
-      sourceLocale,
-      status,
-      isVisible: true,
-      selectedLocale: requestedLocale,
-      isFallback: false,
-      title: getSourceField(item, 'title'),
-      summary: pickNonEmpty(getSourceField(item, 'summary'), getSourceField(item, 'excerpt')),
-      bodyHtml: getSourceBodyHtml(item),
-      slug: getSlugForLocale(item, requestedLocale, sourceLocale),
-    };
-  }
-
-  // Cross-locale route: only allow APPROVED translations.
-  const approved = hasApprovedTranslation(item, requestedLocale);
-  if (!approved) {
-    if (policy.allowCrossLocaleOriginal) {
-      // Controlled fallback (not enabled by default).
-      return {
-        requestedLocale,
-        sourceLocale,
-        status,
-        isVisible: true,
-        selectedLocale: sourceLocale || requestedLocale,
-        isFallback: true,
-        title: getSourceField(item, 'title'),
-        summary: pickNonEmpty(getSourceField(item, 'summary'), getSourceField(item, 'excerpt')),
-        bodyHtml: getSourceBodyHtml(item),
-        slug: getSlugForLocale(item, sourceLocale || requestedLocale, sourceLocale),
-      };
-    }
-
-    return {
-      requestedLocale,
-      sourceLocale,
-      status,
-      isVisible: false,
-      selectedLocale: requestedLocale,
-      isFallback: false,
-      title: '',
-      summary: '',
-      bodyHtml: '',
-      slug: '',
-    };
-  }
-
-  const title = getTranslatedField(item, requestedLocale, 'title');
-  const summary = pickNonEmpty(
-    getTranslatedField(item, requestedLocale, 'summary'),
-    getTranslatedField(item, requestedLocale, 'excerpt')
+  const titleResolved = getLocalizedFieldWithFallback(item, requestedLocale, ['title', 'headline', 'name'], getSourceField(item, 'title'));
+  const summaryResolved = getLocalizedFieldWithFallback(
+    item,
+    requestedLocale,
+    ['summary', 'excerpt', 'description', 'dek'],
+    pickNonEmpty(getSourceField(item, 'summary'), getSourceField(item, 'excerpt'))
   );
-  const bodyHtml = pickNonEmpty(
-    getTranslatedField(item, requestedLocale, 'html'),
-    getTranslatedField(item, requestedLocale, 'content'),
-    getTranslatedField(item, requestedLocale, 'body')
+  const bodyResolved = getLocalizedFieldWithFallback(item, requestedLocale, ['html', 'content', 'body'], getSourceBodyHtml(item));
+  const categoryResolved = getLocalizedFieldWithFallback(
+    item,
+    requestedLocale,
+    ['categoryLabel', 'categoryName', 'category', 'section'],
+    pickNonEmpty(item?.categoryLabel, item?.categoryName, item?.category)
   );
 
-  // If translation is marked approved but fields are blank, still treat as invisible.
-  if (!title && !summary && !bodyHtml) {
-    return {
-      requestedLocale,
-      sourceLocale,
-      status,
-      isVisible: false,
-      selectedLocale: requestedLocale,
-      isFallback: false,
-      title: '',
-      summary: '',
-      bodyHtml: '',
-      slug: '',
-    };
+  const localizedSlug = sanitizeSlug(getLocalizedFieldValue(item, requestedLocale, ['slug']));
+  const fallbackSlug = getBaseSlug(item);
+  const slug = localizedSlug || fallbackSlug;
+  const translationFound = Boolean(
+    titleResolved.translationFound ||
+    summaryResolved.translationFound ||
+    bodyResolved.translationFound ||
+    categoryResolved.translationFound ||
+    localizedSlug
+  );
+  const isCrossLocale = Boolean(sourceLocale && sourceLocale !== requestedLocale);
+  const shouldFallback = isCrossLocale && !translationFound;
+
+  if (!translationFound && isCrossLocale && !policy.allowCrossLocaleOriginal) {
+    // Keep the route usable by falling back to the published base article.
+    // This avoids false 404s when a published article exists but locale-specific fields are absent.
   }
 
   return {
@@ -337,11 +391,13 @@ export function getLocalizedArticleFields(
     status,
     isVisible: true,
     selectedLocale: requestedLocale,
-    isFallback: false,
-    title,
-    summary,
-    bodyHtml,
-    slug: getSlugForLocale(item, requestedLocale, sourceLocale),
+    isFallback: shouldFallback,
+    translationFound,
+    title: titleResolved.value,
+    summary: summaryResolved.value,
+    bodyHtml: bodyResolved.value,
+    categoryLabel: categoryResolved.value,
+    slug,
   };
 }
 
