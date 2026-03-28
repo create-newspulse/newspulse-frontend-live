@@ -122,12 +122,17 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
 
       if (process.env.NODE_ENV !== 'production') {
         console.info('[CategoryFeedPage]', {
-          requestedLocale: language,
-          categorySlug: routeCategoryKey,
-          categoryQueryKey: queryCategoryKey,
+          locale: language,
+          routeSlug: routeCategoryKey,
+          normalizedCategory: queryCategoryKey,
           numberOfStoriesReturned: Array.isArray(resp.items) ? resp.items.length : 0,
+          storyIds: (Array.isArray(resp.items) ? resp.items : []).map((item) => String(item?._id || '').trim() || null),
+          translationGroupIds: (Array.isArray(resp.items) ? resp.items : []).map(
+            (item) => String((item as any)?.translationGroupId || '').trim() || null
+          ),
           stories: (Array.isArray(resp.items) ? resp.items : []).map((item) => ({
             id: String(item?._id || '').trim() || null,
+            translationGroupId: String((item as any)?.translationGroupId || '').trim() || null,
             slug: String(item?.slug || '').trim() || null,
             language: String((item as any)?.language || (item as any)?.lang || (item as any)?.sourceLanguage || '').trim() || null,
             status: String((item as any)?.status || (item as any)?.state || '').trim() || null,

@@ -92,7 +92,7 @@ export async function fetchPublicNews(options: {
   }
   const params = new URLSearchParams();
 
-  if (options.category) params.set('category', String(options.category));
+  if (options.category) params.set('category', getCategoryQueryKey(String(options.category)) || String(options.category));
   if (options.language) {
     // Backend compatibility: some deployments use `lang`, others use `language`.
     // Send both so every page stays language-filtered.
