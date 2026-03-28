@@ -25,10 +25,21 @@ export type LocaleFallbackPolicy = {
    * NewsPulse policy for this task: false (do not leak other languages).
    */
   allowCrossLocaleOriginal: boolean;
+  /**
+   * If true, require a locale-specific published variant/translation before the
+   * article is visible on that locale route.
+   */
+  requireLocaleVariant?: boolean;
 };
 
 export const DEFAULT_FALLBACK_POLICY: LocaleFallbackPolicy = {
   allowCrossLocaleOriginal: false,
+  requireLocaleVariant: false,
+};
+
+export const STRICT_LOCALE_POLICY: LocaleFallbackPolicy = {
+  allowCrossLocaleOriginal: false,
+  requireLocaleVariant: true,
 };
 
 export function normalizeRouteLocale(value: unknown): RouteLocale {
@@ -90,6 +101,41 @@ function normTranslationStatus(raw: unknown): 'APPROVED' | 'BLOCKED' | 'PENDING'
   if (v === 'REJECTED') return 'REJECTED';
   if (v === 'DRAFT') return 'DRAFT';
   return 'UNKNOWN';
+}
+
+function getLocaleTranslationStatus(article: any, locale: RouteLocale): 'APPROVED' | 'BLOCKED' | 'PENDING' | 'REJECTED' | 'DRAFT' | 'UNKNOWN' | null {
+  const direct = typeof article?.translationStatus === 'string' ? normTranslationStatus(article?.translationStatus) : null;
+  if (direct) return direct;
+
+  const localeKeys = getLocaleKeys(locale);
+  for (const localeKey of localeKeys) {
+    const byLang = normTranslationStatus(article?.translationStatus?.[localeKey]);
+    if (byLang) return byLang;
+  }
+
+  const container = getRecord(getTranslationContainer(article));
+  if (!container) return null;
+
+  for (const localeKey of localeKeys) {
+    const localeContainer = getNested(container, [localeKey]);
+    const localeStatus = normTranslationStatus(localeContainer?.status || localeContainer?.translationStatus);
+    if (localeStatus) return localeStatus;
+  }
+
+  const fields = ['title', 'summary', 'excerpt', 'html', 'content', 'body', 'slug'];
+  for (const localeKey of localeKeys) {
+    for (const field of fields) {
+      const localeFirst = getNested(container, [localeKey, field]);
+      const localeFirstStatus = normTranslationStatus(localeFirst?.status || localeFirst?.translationStatus);
+      if (localeFirstStatus) return localeFirstStatus;
+
+      const fieldFirst = getNested(container, [field, localeKey]);
+      const fieldFirstStatus = normTranslationStatus(fieldFirst?.status || fieldFirst?.translationStatus);
+      if (fieldFirstStatus) return fieldFirstStatus;
+    }
+  }
+
+  return null;
 }
 
 function getSourceLocale(article: any): RouteLocale | null {
@@ -379,6 +425,26 @@ export function getLocalizedArticleFields(
   );
   const isCrossLocale = Boolean(sourceLocale && sourceLocale !== requestedLocale);
   const shouldFallback = isCrossLocale && !translationFound;
+  const translationStatus = getLocaleTranslationStatus(item, requestedLocale);
+  const isSourceLocale = sourceLocale ? sourceLocale === requestedLocale : requestedLocale === 'en';
+  const hasLocaleVariant = isSourceLocale || (translationStatus ? translationStatus === 'APPROVED' : translationFound);
+
+  if (policy.requireLocaleVariant && !hasLocaleVariant) {
+    return {
+      requestedLocale,
+      sourceLocale,
+      status,
+      isVisible: false,
+      selectedLocale: requestedLocale,
+      isFallback: false,
+      translationFound,
+      title: '',
+      summary: '',
+      bodyHtml: '',
+      categoryLabel: '',
+      slug: '',
+    };
+  }
 
   if (!translationFound && isCrossLocale && !policy.allowCrossLocaleOriginal) {
     // Keep the route usable by falling back to the published base article.
@@ -401,10 +467,10 @@ export function getLocalizedArticleFields(
   };
 }
 
-export function filterVisibleArticlesForLocale<T>(articles: T[], locale: unknown): T[] {
+export function filterVisibleArticlesForLocale<T>(articles: T[], locale: unknown, policy: LocaleFallbackPolicy = DEFAULT_FALLBACK_POLICY): T[] {
   const requested = normalizeRouteLocale(locale);
   const input = Array.isArray(articles) ? articles : [];
-  return input.filter((a) => getLocalizedArticleFields(a as any, requested).isVisible);
+  return input.filter((a) => getLocalizedArticleFields(a as any, requested, policy).isVisible);
 }
 
 export function pickBestLocaleForArticle(article: unknown, preferred: RouteLocale): RouteLocale | null {

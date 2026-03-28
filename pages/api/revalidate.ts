@@ -6,6 +6,8 @@ type RevalidateRequest = {
 
   /** Optional helpers so callers (backend) can send IDs/slugs instead of every path. */
   articleId?: string;
+  articleSlug?: string;
+  articleSlugs?: string[] | Partial<Record<'en' | 'hi' | 'gu', string>>;
   categoryKey?: string;
   state?: string;
 };
@@ -29,6 +31,49 @@ function prefixes(): Array<'' | '/hi' | '/gu'> {
   return ['', '/hi', '/gu'];
 }
 
+function normalizeLocaleKey(value: string): 'en' | 'hi' | 'gu' | null {
+  const raw = String(value || '').toLowerCase().trim();
+  if (raw === 'hi' || raw === 'hindi' || raw === 'in') return 'hi';
+  if (raw === 'gu' || raw === 'gujarati') return 'gu';
+  if (raw === 'en' || raw === 'english') return 'en';
+  return null;
+}
+
+function buildNewsPath(prefix: '' | '/hi' | '/gu', slug: string): string {
+  return `${prefix}/news/${encodeURIComponent(slug)}`;
+}
+
+function deriveArticleSlugPaths(body: RevalidateRequest): string[] {
+  const out: string[] = [];
+  const singleSlug = String(body.articleSlug || '').trim();
+  if (singleSlug) {
+    for (const pre of prefixes()) {
+      out.push(buildNewsPath(pre, singleSlug));
+    }
+  }
+
+  const multi = body.articleSlugs;
+  if (Array.isArray(multi)) {
+    for (const slug of multi.map((item) => String(item || '').trim()).filter(Boolean)) {
+      for (const pre of prefixes()) {
+        out.push(buildNewsPath(pre, slug));
+      }
+    }
+    return out;
+  }
+
+  if (multi && typeof multi === 'object') {
+    for (const [key, value] of Object.entries(multi)) {
+      const locale = normalizeLocaleKey(key);
+      const slug = String(value || '').trim();
+      if (!locale || !slug) continue;
+      out.push(buildNewsPath(locale === 'en' ? '' : `/${locale}`, slug));
+    }
+  }
+
+  return out;
+}
+
 function buildDerivedPaths(body: RevalidateRequest): string[] {
   const out: string[] = [];
 
@@ -38,6 +83,8 @@ function buildDerivedPaths(body: RevalidateRequest): string[] {
       out.push(`${pre}/news/${encodeURIComponent(articleId)}`);
     }
   }
+
+  out.push(...deriveArticleSlugPaths(body));
 
   const categoryKey = String(body.categoryKey || '').trim().replace(/^\/+/, '').replace(/\/+$/, '');
   if (categoryKey) {

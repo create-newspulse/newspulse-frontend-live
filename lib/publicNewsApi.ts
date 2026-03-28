@@ -7,6 +7,10 @@ export type ArticleBase = {
   slug?: string;
   translationGroupId?: string;
   translationKey?: string;
+  updatedAt?: string;
+  version?: string;
+  syncVersion?: string;
+  translationSyncVersion?: string;
   summary?: string;
   excerpt?: string;
   content?: string;
@@ -115,6 +119,7 @@ export async function fetchPublicNews(options: {
     const res = await fetch(endpoint, {
       method: 'GET',
       headers: { Accept: 'application/json' },
+      cache: 'no-store',
       signal: options.signal,
     });
 
@@ -254,6 +259,7 @@ export async function fetchPublicNewsById(options: {
     const res = await fetch(endpoint, {
       method: 'GET',
       headers: { Accept: 'application/json' },
+      cache: 'no-store',
       signal: options.signal,
     });
 

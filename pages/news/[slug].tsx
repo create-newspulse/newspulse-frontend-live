@@ -8,7 +8,9 @@ import CategoryHeader from '../../src/components/category/CategoryHeader';
 import { getCategoryQueryKey, getCategoryRouteKey } from '../../lib/categoryKeys';
 import { getLocalizedArticleFields, type RouteLocale } from '../../lib/localizedArticleFields';
 import { formatArticleBodyHtml } from '../../lib/articleBody';
-import { unwrapArticle, type Article } from '../../lib/publicNewsApi';
+import { fetchPublicNewsGroup, unwrapArticle, type Article } from '../../lib/publicNewsApi';
+import { subscribePublicDataRefresh } from '../../lib/publicDataRefresh';
+import { pickFreshestArticleForLocale, shouldReplaceArticleWithFreshCandidate } from '../../lib/translationGroupSync';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { tHeading, toLanguageKey } from '../../utils/localizedNames';
 import { buildNewsUrl } from '../../lib/newsRoutes';
@@ -163,6 +165,28 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
     }
   }, []);
 
+  const refreshFromTranslationGroup = React.useCallback(async () => {
+    const current = resolvedArticle;
+    const translationGroupId = String((current as any)?.translationGroupId || '').trim();
+    if (!translationGroupId) return;
+
+    const group = await fetchPublicNewsGroup({ translationGroupId, language: lang });
+    if (group.error || !Array.isArray(group.items) || !group.items.length) return;
+
+    const freshest = pickFreshestArticleForLocale({
+      currentArticle: current,
+      groupArticles: group.items,
+      locale: toRouteLocale(lang),
+    });
+    if (!shouldReplaceArticleWithFreshCandidate(current, freshest, toRouteLocale(lang))) return;
+
+    const localizedFreshest = getLocalizedArticleFields(freshest || {}, lang);
+    if (!localizedFreshest.isVisible) return;
+
+    setResolvedArticle(freshest as Article);
+    setResolvedSafeHtml(sanitizeContent(localizedFreshest.bodyHtml || ''));
+  }, [lang, resolvedArticle]);
+
   const schedulePendingRetry = React.useCallback(
     (pollOnce: () => Promise<void>) => {
       clearPendingTimer();
@@ -255,6 +279,15 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
     pendingAttemptsRef.current = 0;
     clearPendingTimer();
   }, [article, clearPendingTimer, error, lang, pending, safeHtml, slug]);
+
+  React.useEffect(() => {
+    if (!resolvedArticle?._id) return;
+
+    void refreshFromTranslationGroup();
+    return subscribePublicDataRefresh(() => {
+      void refreshFromTranslationGroup();
+    });
+  }, [refreshFromTranslationGroup, resolvedArticle?._id]);
 
   const paragraphBlocks = React.useMemo(() => {
     const html = String(resolvedSafeHtml || '').trim();
@@ -771,6 +804,9 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
 export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   const lang = normalizeLang(ctx.locale);
   const locale = String(ctx.locale || lang);
+  ctx.res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  ctx.res.setHeader('Pragma', 'no-cache');
+  ctx.res.setHeader('Expires', '0');
 
   const messages = await (async () => {
     try {
@@ -877,15 +913,43 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
       };
     }
 
+    const translationGroupId = String((article as any)?.translationGroupId || '').trim();
+    if (translationGroupId) {
+      try {
+        const groupEndpoint = `${origin}/api/public/news/group/${encodeURIComponent(translationGroupId)}?${params.toString()}`;
+        const groupRes = await fetch(groupEndpoint, { method: 'GET', headers, cache: 'no-store' });
+        const groupJson = await groupRes.json().catch(() => null);
+        const groupItems = Array.isArray(groupJson?.items)
+          ? groupJson.items
+          : Array.isArray(groupJson?.articles)
+            ? groupJson.articles
+            : Array.isArray(groupJson?.data)
+              ? groupJson.data
+              : [];
+        article = pickFreshestArticleForLocale({
+          currentArticle: article,
+          groupArticles: groupItems,
+          locale: toRouteLocale(lang),
+        }) as Article | null;
+      } catch {
+        // Keep original article when the sync group endpoint is unavailable.
+      }
+    }
+
     const localized = getLocalizedArticleFields(article, lang);
     if (!localized.isVisible) {
       debugNewsDetailResolution('ssr-hidden', {
         locale: lang,
         receivedSlug: rawSlug,
         resolvedSlug: localized.slug || rawSlug,
-        articleId: String(article._id || '').trim() || null,
+        articleId: String(article?._id || '').trim() || null,
         translationFound: localized.translationFound,
       });
+      return { notFound: true };
+    }
+
+    const resolvedArticle = article;
+    if (!resolvedArticle?._id) {
       return { notFound: true };
     }
 
@@ -893,14 +957,14 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
       locale: lang,
       receivedSlug: rawSlug,
       resolvedSlug: localized.slug || rawSlug,
-      articleId: String(article._id || '').trim() || null,
+      articleId: String(resolvedArticle._id || '').trim() || null,
       translationFound: localized.translationFound,
     });
 
     // Canonicalize slug per language
     const canonicalSlug = String(localized.slug || '').trim();
     if (canonicalSlug && canonicalSlug !== rawSlug) {
-      const destination = buildNewsUrl({ id: String(article._id || '').trim(), slug: canonicalSlug, lang });
+      const destination = buildNewsUrl({ id: String(resolvedArticle._id || '').trim(), slug: canonicalSlug, lang });
       return { redirect: { destination, permanent: true } };
     }
 
@@ -927,7 +991,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
           [];
 
         const items: Article[] = Array.isArray(itemsRaw) ? (itemsRaw as Article[]) : [];
-        const currentId = String((article as any)?._id || '').trim();
+        const currentId = String((resolvedArticle as any)?._id || '').trim();
 
         const filtered = items.filter((x) => String((x as any)?._id || '').trim() && String((x as any)?._id || '').trim() !== currentId);
 
@@ -951,7 +1015,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
         locale,
         lang,
         slug: rawSlug,
-        article,
+        article: resolvedArticle,
         safeHtml: sanitizeContent(html),
         topStories: extra.topStories,
         relatedStories: extra.relatedStories,

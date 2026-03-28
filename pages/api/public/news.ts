@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
-import { filterVisibleArticlesForLocale, normalizeRouteLocale } from '../../../lib/localizedArticleFields';
+import { filterVisibleArticlesForLocale, normalizeRouteLocale, STRICT_LOCALE_POLICY } from '../../../lib/localizedArticleFields';
 
 function asSingleQueryValue(value: string | string[] | undefined): string {
   return String(Array.isArray(value) ? value[0] : value || '').trim();
@@ -29,6 +29,11 @@ function getApiBase(): string {
   return String(getPublicApiBaseUrl() || '').trim().replace(/\/+$/, '');
 }
 
+function isTruthyQueryValue(value: string | string[] | undefined): boolean {
+  const normalized = String(Array.isArray(value) ? value[0] : value || '').trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
@@ -49,6 +54,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const requestedLocale = normalizeRouteLocale(
     asSingleQueryValue(req.query.language as any) || asSingleQueryValue(req.query.lang as any)
   );
+  const strictLocale = isTruthyQueryValue(req.query.strictLocale as any);
 
   try {
     const upstream = await fetch(targetUrl, {
@@ -87,7 +93,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         Array.isArray(json?.data?.articles) ? json.data.articles :
         [];
 
-      const items = filterVisibleArticlesForLocale(Array.isArray(itemsRaw) ? itemsRaw : [], requestedLocale);
+      const items = filterVisibleArticlesForLocale(
+        Array.isArray(itemsRaw) ? itemsRaw : [],
+        requestedLocale,
+        strictLocale ? STRICT_LOCALE_POLICY : undefined
+      );
       const normalized = replaceItems(json, items);
 
       // Avoid stale listings after delete/unpublish; accuracy over cache.

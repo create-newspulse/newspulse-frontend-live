@@ -4,7 +4,7 @@ import { useRouter } from 'next/router';
 import React, { useMemo, useState } from 'react';
 import { getCategoryQueryKey, getCategoryRouteKey } from '../lib/categoryKeys';
 import { fetchPublicNews, type Article } from '../lib/publicNewsApi';
-import { getLocalizedArticleFields } from '../lib/localizedArticleFields';
+import { getLocalizedArticleFields, STRICT_LOCALE_POLICY } from '../lib/localizedArticleFields';
 import { useLanguage } from '../utils/LanguageContext';
 import { useI18n } from '../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../lib/newsRoutes';
@@ -66,6 +66,10 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
   const queryKey = useMemo(() => JSON.stringify(extraQuery || {}), [extraQuery]);
   const routeCategoryKey = useMemo(() => getCategoryRouteKey(categoryKey), [categoryKey]);
   const queryCategoryKey = useMemo(() => getCategoryQueryKey(categoryKey), [categoryKey]);
+  const fetchQuery = useMemo(
+    () => ({ ...(extraQuery || {}), strictLocale: '1' }),
+    [extraQuery]
+  );
 
   const localizedTitle = useMemo(() => {
     const key = categoryKeyToI18nKey(routeCategoryKey);
@@ -86,7 +90,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
     const q = String(searchQuery || '').trim().toLowerCase();
     if (!q) return items;
     return (items || []).filter((a) => {
-      const localized = getLocalizedArticleFields(a as any, language);
+      const localized = getLocalizedArticleFields(a as any, language, STRICT_LOCALE_POLICY);
       if (!localized.isVisible) return false;
       const hay = `${localized.title || ''} ${localized.summary || ''}`.toLowerCase();
       return hay.includes(q);
@@ -103,7 +107,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
         category: String(queryCategoryKey || ''),
         language,
         limit: 30,
-        extraQuery: extraQuery || undefined,
+        extraQuery: fetchQuery,
         signal: controller.signal,
       });
 
@@ -114,6 +118,23 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
         setItems([]);
         setLoaded(false);
         return;
+      }
+
+      if (process.env.NODE_ENV !== 'production') {
+        console.info('[CategoryFeedPage]', {
+          requestedLocale: language,
+          categorySlug: routeCategoryKey,
+          categoryQueryKey: queryCategoryKey,
+          numberOfStoriesReturned: Array.isArray(resp.items) ? resp.items.length : 0,
+          stories: (Array.isArray(resp.items) ? resp.items : []).map((item) => ({
+            id: String(item?._id || '').trim() || null,
+            slug: String(item?.slug || '').trim() || null,
+            language: String((item as any)?.language || (item as any)?.lang || (item as any)?.sourceLanguage || '').trim() || null,
+            status: String((item as any)?.status || (item as any)?.state || '').trim() || null,
+            publishedAt: String((item as any)?.publishedAt || '').trim() || null,
+            translationStatus: (item as any)?.translationStatus ?? null,
+          })),
+        });
       }
 
       setItems(Array.isArray(resp.items) ? resp.items : []);
@@ -128,7 +149,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
     return () => {
       controller.abort();
     };
-  }, [language, queryCategoryKey, queryKey]);
+  }, [fetchQuery, language, queryCategoryKey, routeCategoryKey]);
 
   const isUnauthorized = typeof error === 'string' && /\b401\b/.test(error);
   return (
@@ -170,11 +191,10 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
               <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 {filteredItems.map((a) => {
                   const id = String(a._id || '').trim();
-                  const localized = getLocalizedArticleFields(a as any, language);
+                  const localized = getLocalizedArticleFields(a as any, language, STRICT_LOCALE_POLICY);
                   if (!localized.isVisible) return null;
 
-                  // Use id as stable route token.
-                  const href = id ? buildNewsUrl({ id, slug: id, lang: language }) : '#';
+                  const href = buildNewsUrl({ id, slug: localized.slug || id, lang: language });
                   const when = formatWhenLabel(a.publishedAt || a.createdAt);
                   const title = localized.title || t('categoryPage.untitled');
                   const summary = localized.summary;

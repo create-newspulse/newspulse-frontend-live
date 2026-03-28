@@ -3,6 +3,7 @@ import {
   getLocalizedContent,
   getLocalizedSlug,
   getLocalizedSummary,
+  STRICT_LOCALE_POLICY,
   getLocalizedTitle,
 } from '../../lib/localizedArticleFields';
 
@@ -88,5 +89,49 @@ describe('localizedArticleFields', () => {
     expect(getLocalizedSummary(article, 'gu')).toBe('ઑબ્જેક્ટ સારાંશ');
     expect(getLocalizedContent(article, 'gu')).toBe('<p>ઑબ્જેક્ટ બોડી</p>');
     expect(getLocalizedSlug(article, 'gu')).toBe('object-slug-gu');
+  });
+
+  test('strict locale policy hides untranslated cross-locale stories', () => {
+    const article: any = {
+      _id: 'article-4',
+      status: 'published',
+      language: 'en',
+      title: 'English title',
+      summary: 'English summary',
+      content: '<p>English body</p>',
+      slug: 'english-title',
+    };
+
+    expect(getLocalizedArticleFields(article, 'hi', STRICT_LOCALE_POLICY).isVisible).toBe(false);
+    expect(getLocalizedArticleFields(article, 'gu', STRICT_LOCALE_POLICY).isVisible).toBe(false);
+    expect(getLocalizedArticleFields(article, 'en', STRICT_LOCALE_POLICY).isVisible).toBe(true);
+  });
+
+  test('strict locale policy allows approved locale variants', () => {
+    const article: any = {
+      _id: 'article-5',
+      publishedAt: '2026-03-29T10:00:00.000Z',
+      language: 'en',
+      title: 'English title',
+      summary: 'English summary',
+      content: '<p>English body</p>',
+      slug: 'english-title',
+      translationStatus: {
+        hi: 'APPROVED',
+      },
+      translations: {
+        hi: {
+          title: 'हिंदी शीर्षक',
+          summary: 'हिंदी सारांश',
+          content: '<p>हिंदी बॉडी</p>',
+          slug: 'hindi-title',
+        },
+      },
+    };
+
+    const localized = getLocalizedArticleFields(article, 'hi', STRICT_LOCALE_POLICY);
+    expect(localized.isVisible).toBe(true);
+    expect(localized.slug).toBe('hindi-title');
+    expect(localized.title).toBe('हिंदी शीर्षक');
   });
 });
