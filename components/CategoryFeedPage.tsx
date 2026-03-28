@@ -2,6 +2,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import React, { useMemo, useState } from 'react';
+import { getCategoryQueryKey, getCategoryRouteKey } from '../lib/categoryKeys';
 import { fetchPublicNews, type Article } from '../lib/publicNewsApi';
 import { getLocalizedArticleFields } from '../lib/localizedArticleFields';
 import { useLanguage } from '../utils/LanguageContext';
@@ -63,11 +64,13 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
   const [searchQuery, setSearchQuery] = useState('');
 
   const queryKey = useMemo(() => JSON.stringify(extraQuery || {}), [extraQuery]);
+  const routeCategoryKey = useMemo(() => getCategoryRouteKey(categoryKey), [categoryKey]);
+  const queryCategoryKey = useMemo(() => getCategoryQueryKey(categoryKey), [categoryKey]);
 
   const localizedTitle = useMemo(() => {
-    const key = categoryKeyToI18nKey(categoryKey);
+    const key = categoryKeyToI18nKey(routeCategoryKey);
     return key ? t(key) : title;
-  }, [categoryKey, t, title]);
+  }, [routeCategoryKey, t, title]);
 
   // Allow deep-linking into a filtered view (used by article-page category header search).
   React.useEffect(() => {
@@ -97,7 +100,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
 
     (async () => {
       const resp = await fetchPublicNews({
-        category: String(categoryKey || ''),
+        category: String(queryCategoryKey || ''),
         language,
         limit: 30,
         extraQuery: extraQuery || undefined,
@@ -125,7 +128,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
     return () => {
       controller.abort();
     };
-  }, [categoryKey, queryKey, language]);
+  }, [language, queryCategoryKey, queryKey]);
 
   const isUnauthorized = typeof error === 'string' && /\b401\b/.test(error);
   return (

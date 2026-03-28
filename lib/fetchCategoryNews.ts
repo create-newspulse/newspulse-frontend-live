@@ -1,4 +1,5 @@
 import { getApiOrigin, unwrapArticles, type Article } from './publicNewsApi';
+import { getCategoryQueryKey, getCategoryRouteKey } from './categoryKeys';
 
 function normalizeText(value: unknown): string {
   if (typeof value !== 'string') return '';
@@ -117,7 +118,8 @@ export async function fetchCategoryNews(options: {
 }> {
   const origin = getApiOrigin();
   const limit = options.limit ?? 30;
-  const key = options.categoryKey;
+  const routeKey = getCategoryRouteKey(options.categoryKey);
+  const key = getCategoryQueryKey(options.categoryKey);
   const lang = options.language ? String(options.language) : '';
   const langQuery = lang ? `&lang=${encodeURIComponent(lang)}&language=${encodeURIComponent(lang)}` : '';
 
@@ -168,7 +170,7 @@ export async function fetchCategoryNews(options: {
           : (Array.isArray(data) ? data : []);
 
       const normalizedItems = Array.isArray(rawItems) ? (rawItems as Article[]) : unwrapArticles(data);
-      const { matched, total } = scoreCategoryMatch(normalizedItems, key);
+      const { matched, total } = scoreCategoryMatch(normalizedItems, routeKey || key);
       const score = total ? matched / total : 0;
 
       if (!best || score > best.score || (score === best.score && normalizedItems.length > best.items.length)) {

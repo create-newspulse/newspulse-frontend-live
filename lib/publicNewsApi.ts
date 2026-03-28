@@ -1,4 +1,5 @@
 import { getPublicApiBaseUrl } from './publicApiBase';
+import { getCategoryQueryKey } from './categoryKeys';
 
 export type ArticleBase = {
   _id: string;
@@ -156,7 +157,8 @@ export async function fetchPublishedCategoryArticles(options: {
     return { articles: [], error: 'NEXT_PUBLIC_API_BASE not set', endpoint: '' };
   }
   const limit = options.limit ?? 30;
-  const endpoint = `${base}/api/news?category=${encodeURIComponent(options.categoryKey)}&limit=${encodeURIComponent(String(limit))}`;
+  const categoryKey = getCategoryQueryKey(options.categoryKey);
+  const endpoint = `${base}/api/news?category=${encodeURIComponent(categoryKey)}&limit=${encodeURIComponent(String(limit))}`;
 
   try {
     const res = await fetch(endpoint);

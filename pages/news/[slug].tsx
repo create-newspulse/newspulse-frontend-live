@@ -5,6 +5,7 @@ import { useRouter } from 'next/router';
 
 import AdSlot from '../../src/components/ads/AdSlot';
 import CategoryHeader from '../../src/components/category/CategoryHeader';
+import { getCategoryQueryKey, getCategoryRouteKey } from '../../lib/categoryKeys';
 import { getLocalizedArticleFields, type RouteLocale } from '../../lib/localizedArticleFields';
 import { formatArticleBodyHtml } from '../../lib/articleBody';
 import { unwrapArticle, type Article } from '../../lib/publicNewsApi';
@@ -96,13 +97,18 @@ function slugifyTopic(value: string): string {
 function resolveCategoryKey(article: Article | null): string {
   const raw = String((article as any)?.category || '').trim().toLowerCase();
   if (!raw) return '';
-  // Keep only safe path segments.
-  if (!/^[a-z0-9-]+$/.test(raw)) return '';
-  return raw;
+  return getCategoryRouteKey(raw);
+}
+
+function resolveCategoryQueryKey(article: Article | null): string {
+  const raw = String((article as any)?.category || '').trim().toLowerCase();
+  if (!raw) return '';
+  return getCategoryQueryKey(raw);
 }
 
 function categoryLabelFromKey(key: string): string {
   if (!key) return 'News';
+  if (key === 'science-technology') return 'Science & Technology';
   return key
     .split('-')
     .map((part) => (part ? part[0].toUpperCase() + part.slice(1) : part))
@@ -902,7 +908,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
 
     const extra = await (async () => {
       try {
-        const categoryKey = resolveCategoryKey(article);
+        const categoryKey = resolveCategoryQueryKey(article);
         const limit = 24;
         const params = new URLSearchParams();
         if (categoryKey) params.set('category', categoryKey);
