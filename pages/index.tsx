@@ -1462,6 +1462,11 @@ function TopCategoriesStrip({ theme, activeKey, onPick }: any) {
     lifestyle: { en: 'Health, style and living' },
     glamour: { en: 'Bollywood and celebrity buzz' },
     'web-stories': { en: 'Quick visual stories' },
+    'viral-videos': { en: 'Trending clips and viral moments' },
+    editorial: { en: 'Opinions, analysis and insight' },
+    youth: { en: 'Students, careers and youth trends' },
+    inspiration: { en: 'Positive stories and motivation' },
+    community: { en: 'Public voices and local reports' },
   };
 
   return (
@@ -1662,6 +1667,38 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick }: any) {
     lifestyle: { en: 'Health, style and living' },
     glamour: { en: 'Bollywood and celebrity buzz' },
     'web-stories': { en: 'Quick visual stories' },
+    'viral-videos': { en: 'Trending clips and viral moments' },
+    viralVideo: { en: 'Trending clips and viral moments' },
+    viral_videos: { en: 'Trending clips and viral moments' },
+    editorial: { en: 'Opinions, analysis and insight' },
+    youth: { en: 'Students, careers and youth trends' },
+    'youth-pulse': { en: 'Students, careers and youth trends' },
+    youthPulse: { en: 'Students, careers and youth trends' },
+    youth_pulse: { en: 'Students, careers and youth trends' },
+    inspiration: { en: 'Positive stories and motivation' },
+    'inspiration-hub': { en: 'Positive stories and motivation' },
+    inspirationHub: { en: 'Positive stories and motivation' },
+    inspiration_hub: { en: 'Positive stories and motivation' },
+    community: { en: 'Public voices and local reports' },
+    'community-reporter': { en: 'Public voices and local reports' },
+    communityReporter: { en: 'Public voices and local reports' },
+    community_reporter: { en: 'Public voices and local reports' },
+  };
+
+  const getCategorySubtitle = (key: string) => {
+    const rawKey = String(key || '').trim();
+    if (!rawKey) return '';
+
+    const aliasKey = rawKey
+      .replace(/([a-z])([A-Z])/g, '$1-$2')
+      .replace(/_/g, '-')
+      .toLowerCase();
+
+    return (
+      categorySubtitleMap[rawKey]?.en ||
+      categorySubtitleMap[aliasKey]?.en ||
+      ''
+    );
   };
 
   type ExploreTone = {
@@ -1839,12 +1876,12 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick }: any) {
           const active = c.key === activeKey;
           const href = CATEGORY_ROUTES[c.key as string];
           const tone = TONE[c.key as string] ?? DEFAULT_TONE;
-          const subtitle = categorySubtitleMap[c.key as string]?.en || '';
+          const subtitle = getCategorySubtitle(c.key as string);
 
           const content = (
             <div
               className={cx(
-                'group relative flex min-h-[60px] items-center gap-3 rounded-[24px] border px-4 py-3 transition duration-200',
+                'group relative flex min-h-[78px] items-start gap-3 rounded-[24px] border px-4 py-3.5 transition duration-200 sm:min-h-[82px]',
                 'bg-white/90 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.36)] hover:-translate-y-[1px]',
                 active ? 'border-black/20 shadow-[0_24px_48px_-34px_rgba(15,23,42,0.42)]' : 'border-black/10 hover:border-black/15'
               )}
@@ -1854,16 +1891,16 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick }: any) {
 
               <span
                 className={cx(
-                  'grid h-11 w-11 place-items-center rounded-2xl border',
+                  'mt-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-2xl border',
                   tone.iconWrap,
                 )}
               >
                 <c.Icon className="w-5 h-5" />
               </span>
 
-              <span className="flex-1 min-w-0">
-                <span className="flex items-center gap-2 min-w-0">
-                  <span className={["block truncate text-[15px] font-bold tracking-tight", tone.text].join(" ")}>{t(labelKeyForCategory(c.key))}</span>
+              <div className="min-w-0 flex-1 self-stretch pr-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <div className={["min-w-0 truncate text-[15px] font-bold leading-tight tracking-tight", tone.text].join(" ")}>{t(labelKeyForCategory(c.key))}</div>
                   {c.badge ? (
                     <span
                       className={[
@@ -1875,15 +1912,15 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick }: any) {
                       {t('common.new')}
                     </span>
                   ) : null}
-                </span>
+                </div>
                 {subtitle ? (
-                  <span className="mt-1 block text-[12px] font-medium" style={{ color: theme.sub }}>
+                  <div className="mt-1 text-[12px] font-medium leading-[1.35]" style={{ color: theme.sub }}>
                     {subtitle}
-                  </span>
+                  </div>
                 ) : null}
-              </span>
+              </div>
 
-              <ArrowRight className={["ml-auto h-5 w-5", tone.arrow].join(" ")} />
+              <ArrowRight className={["ml-auto mt-0.5 h-5 w-5 shrink-0 self-center", tone.arrow].join(" ")} />
             </div>
           );
 
