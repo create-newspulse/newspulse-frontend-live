@@ -169,6 +169,18 @@ const CATEGORY_ROUTES: Record<string, string> = {
   inspiration: "/inspiration-hub",
 };
 
+const HOME_EDITORIAL_SECTIONS = [
+  { key: 'national', route: '/national', Icon: Flag },
+  { key: 'regional', route: '/regional/gujarat', Icon: MapPin },
+  { key: 'international', route: '/international', Icon: Globe },
+  { key: 'business', route: '/business', Icon: Briefcase },
+  { key: 'science-technology', route: '/science-technology', Icon: Cpu },
+  { key: 'sports', route: '/sports', Icon: Trophy },
+  { key: 'lifestyle', route: '/lifestyle', Icon: Leaf },
+  { key: 'glamour', route: '/glamour', Icon: Sparkles },
+  { key: 'web-stories', route: '/web-stories', Icon: BookOpen },
+] as const;
+
 const CATEGORY_THEME: Record<string, { base: string; icon: string; hover: string; ring: string; active: string; dot: string }> = {
   breaking: {
     base: "bg-red-50 border-red-200 text-red-700",
@@ -573,6 +585,30 @@ function resolveTopStorySummary(article: any, requestedLang: 'en' | 'hi' | 'gu')
   return { text: '', isOriginal: false };
 }
 
+function resolveStoryImageSrc(article: any, requestedLang: 'en' | 'hi' | 'gu') {
+  const coverRaw =
+    pickTranslatedField(article as any, requestedLang, 'imageUrl') || (article as any)?.imageUrl ||
+    pickTranslatedField(article as any, requestedLang, 'coverImage') || (article as any)?.coverImage ||
+    pickTranslatedField(article as any, requestedLang, 'image') || (article as any)?.image ||
+    pickTranslatedField(article as any, requestedLang, 'thumbnail') || (article as any)?.thumbnail ||
+    (Array.isArray((article as any)?.images) ? (article as any)?.images?.[0] : null) ||
+    null;
+
+  const translatedCover = (() => {
+    if (!coverRaw) return '';
+    if (typeof coverRaw === 'string') return coverRaw.trim();
+    if (typeof coverRaw === 'object') {
+      const url = typeof (coverRaw as any)?.url === 'string' ? String((coverRaw as any).url).trim() : '';
+      if (url) return url;
+      const src = typeof (coverRaw as any)?.src === 'string' ? String((coverRaw as any).src).trim() : '';
+      if (src) return src;
+    }
+    return '';
+  })();
+
+  return translatedCover || resolveCoverImageUrl(article as any) || '';
+}
+
 function articleToTickerText(a: Article, requestedLang: 'en' | 'hi' | 'gu'): string | null {
   const { text } = resolveArticleTitle(a as any, requestedLang);
   const title = safeTitle(text || (a as any)?.title);
@@ -605,6 +641,7 @@ function articleToFeedItem(a: Article, requestedLang: 'en' | 'hi' | 'gu') {
 
   const source = safeTitle((a as any)?.source?.name || (a as any)?.source) || 'News Pulse';
   const category = safeTitle((a as any)?.category) || '';
+  const imageSrc = resolveStoryImageSrc(a as any, requestedLang);
 
   return {
     id: id || slug || title,
@@ -614,8 +651,10 @@ function articleToFeedItem(a: Article, requestedLang: 'en' | 'hi' | 'gu') {
     titleIsOriginal: titleRes.isOriginal,
     descIsOriginal: descRes.isOriginal,
     time: time || '—',
+    iso,
     source,
     category,
+    imageSrc,
   };
 }
 
@@ -672,6 +711,12 @@ function labelKeyForTrendingTopic(key: string): string | null {
 // Categories are always LTR by default
 function getCats() {
   return [...CATEGORIES];
+}
+
+function localizePath(path: string, lang: 'en' | 'hi' | 'gu') {
+  const safeLang = lang === 'hi' || lang === 'gu' ? lang : 'en';
+  const normalized = String(path || '/').startsWith('/') ? String(path || '/') : `/${String(path || '/')}`;
+  return safeLang === 'en' ? normalized : `/${safeLang}${normalized === '/' ? '' : normalized}`;
 }
 
 function Surface({ theme, className, children }: any) {
@@ -1406,6 +1451,19 @@ function TopCategoriesStrip({ theme, activeKey, onPick }: any) {
     return `categories.${key}`;
   };
 
+  const categorySubtitleMap: Record<string, { en: string; hi?: string; gu?: string }> = {
+    breaking: { en: 'Latest urgent updates' },
+    regional: { en: 'Gujarat districts and cities' },
+    national: { en: 'India-wide coverage' },
+    international: { en: 'Global top stories' },
+    business: { en: 'Markets and economy' },
+    'science-technology': { en: 'Innovation and tech' },
+    sports: { en: 'Matches and results' },
+    lifestyle: { en: 'Health, style and living' },
+    glamour: { en: 'Bollywood and celebrity buzz' },
+    'web-stories': { en: 'Quick visual stories' },
+  };
+
   return (
     <div className="w-full">
       <div className="mx-auto w-full max-w-[1440px] px-4 md:px-8">
@@ -1508,7 +1566,6 @@ function TopCategoriesStrip({ theme, activeKey, onPick }: any) {
                   <div
                     className={cx(
                       "inline-flex items-center gap-2 whitespace-nowrap h-9 rounded-full border px-3 text-xs font-semibold transition-all duration-200 focus-visible:outline-none",
-                      // Keep colorful text (from CATEGORY_THEME), but force neutral pill background/border.
                       chipTheme.base,
                       "bg-white/90 border-black/10",
                       "hover:bg-black/[0.02]",
@@ -1584,11 +1641,6 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick }: any) {
   const { t } = useI18n();
   const cats = useMemo(() => getCats(), []);
 
-  // Quick revert switch (for review):
-  // - false: simple list styling (matches screenshots 1&2)
-  // - true: current colorful card styling
-  const USE_COLORFUL_CATEGORY_THEME = false as boolean;
-
   const labelKeyForCategory = (key: string): string => {
     if (key === 'science-technology') return 'categories.scienceTechnology';
     if (key === 'web-stories') return 'categories.webStories';
@@ -1597,6 +1649,19 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick }: any) {
     if (key === 'inspiration') return 'categories.inspirationHub';
     if (key === 'community') return 'categories.communityReporter';
     return `categories.${key}`;
+  };
+
+  const categorySubtitleMap: Record<string, { en: string; hi?: string; gu?: string }> = {
+    breaking: { en: 'Latest urgent updates' },
+    regional: { en: 'Gujarat districts and cities' },
+    national: { en: 'India-wide coverage' },
+    international: { en: 'Global top stories' },
+    business: { en: 'Markets and economy' },
+    'science-technology': { en: 'Innovation and tech' },
+    sports: { en: 'Matches and results' },
+    lifestyle: { en: 'Health, style and living' },
+    glamour: { en: 'Bollywood and celebrity buzz' },
+    'web-stories': { en: 'Quick visual stories' },
   };
 
   type ExploreTone = {
@@ -1741,48 +1806,56 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick }: any) {
   };
 
   return (
-    <Surface theme={theme} className="p-4">
-      <div className="text-base font-extrabold" style={{ color: theme.text }}>
-        {t('home.exploreCategories')}
-      </div>
-      <div className="mt-1 text-xs" style={{ color: theme.sub }}>
-        {t('home.tapToFilter')}
+    <Surface theme={theme} className="overflow-hidden">
+      <div
+        className="border-b px-4 py-4 sm:px-5"
+        style={{
+          borderColor: theme.border,
+          background: theme.mode === 'dark'
+            ? 'linear-gradient(135deg, rgba(56,189,248,0.12), rgba(167,139,250,0.10) 55%, transparent 100%)'
+            : 'linear-gradient(135deg, rgba(37,99,235,0.10), rgba(124,58,237,0.08) 55%, rgba(255,255,255,0.72) 100%)',
+        }}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="text-base font-black tracking-tight" style={{ color: theme.text }}>
+              {t('home.exploreCategories')}
+            </div>
+            <div className="mt-1 text-xs font-semibold uppercase tracking-[0.16em]" style={{ color: theme.sub }}>
+              {t('home.tapToFilter')}
+            </div>
+          </div>
+          <span
+            className="inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em]"
+            style={{ background: theme.surface, borderColor: theme.border, color: theme.sub }}
+          >
+            News Desk
+          </span>
+        </div>
       </div>
 
-      <div className="mt-4 grid gap-3">
+      <div className="grid gap-3 p-4 sm:p-5">
         {cats.map((c: any) => {
           const active = c.key === activeKey;
           const href = CATEGORY_ROUTES[c.key as string];
           const tone = TONE[c.key as string] ?? DEFAULT_TONE;
-
-          const wrapClassName = USE_COLORFUL_CATEGORY_THEME
-            ? [
-                'relative flex items-center gap-3 rounded-3xl border transition',
-                'h-14 px-4',
-                tone.wrap,
-                active ? `ring-2 ${tone.activeRing}` : '',
-              ].join(' ')
-            : [
-                'relative flex items-center gap-3 rounded-2xl border transition',
-                'h-14 px-4',
-                'bg-white border-black/10',
-                active ? 'border-black/20 shadow-sm' : '',
-              ].join(' ');
+          const subtitle = categorySubtitleMap[c.key as string]?.en || '';
 
           const content = (
             <div
-              className={wrapClassName}
+              className={cx(
+                'group relative flex min-h-[60px] items-center gap-3 rounded-[24px] border px-4 py-3 transition duration-200',
+                'bg-white/90 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.36)] hover:-translate-y-[1px]',
+                active ? 'border-black/20 shadow-[0_24px_48px_-34px_rgba(15,23,42,0.42)]' : 'border-black/10 hover:border-black/15'
+              )}
+              style={{ background: theme.surface, borderColor: active ? 'rgba(15,23,42,0.18)' : theme.border }}
             >
-              {USE_COLORFUL_CATEGORY_THEME ? (
-                <span className={["absolute left-0 top-3 bottom-3 w-1 rounded-full", tone.leftBar].join(" ")} />
-              ) : null}
+              <span className={["absolute left-0 top-3 bottom-3 w-1 rounded-full", tone.leftBar].join(" ")} />
 
               <span
                 className={cx(
-                  "grid place-items-center w-10 h-10 border",
-                  USE_COLORFUL_CATEGORY_THEME ? "rounded-2xl" : "rounded-full",
+                  'grid h-11 w-11 place-items-center rounded-2xl border',
                   tone.iconWrap,
-                  USE_COLORFUL_CATEGORY_THEME ? null : "border-black/10"
                 )}
               >
                 <c.Icon className="w-5 h-5" />
@@ -1790,12 +1863,12 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick }: any) {
 
               <span className="flex-1 min-w-0">
                 <span className="flex items-center gap-2 min-w-0">
-                  <span className={["block text-[15px] font-bold truncate", tone.text].join(" ")}>{t(labelKeyForCategory(c.key))}</span>
+                  <span className={["block truncate text-[15px] font-bold tracking-tight", tone.text].join(" ")}>{t(labelKeyForCategory(c.key))}</span>
                   {c.badge ? (
                     <span
                       className={[
-                        "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-extrabold",
-                        "bg-white/60 border-black/10",
+                        'inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.16em]',
+                        'bg-white/70 border-black/10',
                         tone.text,
                       ].join(" ")}
                     >
@@ -1803,11 +1876,14 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick }: any) {
                     </span>
                   ) : null}
                 </span>
+                {subtitle ? (
+                  <span className="mt-1 block text-[12px] font-medium" style={{ color: theme.sub }}>
+                    {subtitle}
+                  </span>
+                ) : null}
               </span>
 
-              {USE_COLORFUL_CATEGORY_THEME ? (
-                <ArrowRight className={["ml-auto w-5 h-5", tone.arrow].join(" ")} />
-              ) : null}
+              <ArrowRight className={["ml-auto h-5 w-5", tone.arrow].join(" ")} />
             </div>
           );
 
@@ -1959,6 +2035,22 @@ function FeaturedCard({ theme, item, onToast }: any) {
     overflow: 'hidden',
   };
 
+  const lineClamp3: React.CSSProperties = {
+    display: '-webkit-box',
+    WebkitLineClamp: 3,
+    WebkitBoxOrient: 'vertical',
+    overflow: 'hidden',
+  };
+
+  const lineClamp4: React.CSSProperties = {
+    display: '-webkit-box',
+    WebkitLineClamp: 4,
+    WebkitBoxOrient: 'vertical',
+    overflow: 'hidden',
+    paddingTop: '0.08em',
+    paddingBottom: '0.03em',
+  };
+
   const Chip = ({ children }: { children: React.ReactNode }) => (
     <span
       className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold border"
@@ -1980,9 +2072,9 @@ function FeaturedCard({ theme, item, onToast }: any) {
   }, [router, vm?.href]);
 
   return (
-    <Surface theme={theme} className="group">
+    <Surface theme={theme} className="group overflow-hidden">
       <div
-        className={cx("p-5 sm:p-6", vm ? 'cursor-pointer' : '')}
+        className={cx('relative overflow-hidden px-5 py-5 sm:px-6 sm:py-6 lg:px-7 lg:py-6', vm ? 'cursor-pointer' : '')}
         role={vm ? 'link' : undefined}
         tabIndex={vm ? 0 : undefined}
         aria-label={vm ? (vm.title || t('home.topStory')) : undefined}
@@ -1998,14 +2090,25 @@ function FeaturedCard({ theme, item, onToast }: any) {
             : undefined
         }
       >
-        <div className="flex items-start justify-between gap-3">
-          <span
-            className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-extrabold border"
-            style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}
-          >
-            <span className="inline-block h-2 w-2 rounded-full" style={{ background: theme.live }} />
-            {topStoryLabel}
-          </span>
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background: theme.mode === 'dark'
+              ? 'radial-gradient(circle at top left, rgba(56,189,248,0.16), transparent 36%), radial-gradient(circle at 85% 20%, rgba(167,139,250,0.14), transparent 32%)'
+              : 'radial-gradient(circle at top left, rgba(37,99,235,0.10), transparent 36%), radial-gradient(circle at 85% 20%, rgba(124,58,237,0.09), transparent 32%)',
+          }}
+        />
+
+        <div className="relative flex items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <span
+              className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-extrabold uppercase tracking-[0.16em]"
+              style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}
+            >
+              <span className="inline-block h-2 w-2 rounded-full" style={{ background: theme.live }} />
+              {topStoryLabel}
+            </span>
+          </div>
 
           <div className="flex items-center gap-2">
             {vm ? (
@@ -2020,73 +2123,81 @@ function FeaturedCard({ theme, item, onToast }: any) {
                 <Bookmark className="h-5 w-5" fill={bookmarked ? 'currentColor' : 'none'} />
               </button>
             ) : null}
-
-            <div className="hidden sm:flex items-center gap-2 text-xs" style={{ color: theme.sub }}>
-              <span className="rounded-full px-2.5 py-1 border" style={{ background: theme.chip, borderColor: theme.border }}>
-                {vm ? vm.time : '—'}
-              </span>
-              <span style={{ opacity: 0.55 }}>•</span>
-              <span>{vm ? vm.source : 'News Pulse'}</span>
-            </div>
           </div>
         </div>
 
-        <div className="mt-4 grid gap-4 grid-cols-[140px_1fr] sm:grid-cols-[180px_1fr] md:grid-cols-[220px_1fr] sm:items-start">
-          {vm?.imageSrc ? (
-            <StoryImage
-              src={vm.imageSrc}
-              alt={vm?.title || ''}
-              variant="card"
-              priority
-              fallbackSrc={COVER_PLACEHOLDER_SRC}
-              className="border border-black/10"
-            />
-          ) : (
-            <div className="relative overflow-hidden rounded-2xl shrink-0 w-[140px] h-[90px] sm:w-[180px] sm:h-[110px] md:w-[220px] md:h-[130px] border border-black/10 bg-black/5">
-              <div className="absolute inset-0 grid place-items-center">
-                <div className="text-[11px] font-extrabold tracking-tight text-slate-600/90 select-none">
-                  News <span className="text-slate-800/90">Pulse</span>
+        <div className="relative mt-4">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: theme.sub }}>
+            <span>{vm ? vm.time : '—'}</span>
+            <span aria-hidden="true" style={{ opacity: 0.45 }}>•</span>
+            <span className="truncate">{vm ? vm.source : 'News Pulse'}</span>
+            {vm?.category ? (
+              <>
+                <span aria-hidden="true" style={{ opacity: 0.45 }}>•</span>
+                <span className="truncate" style={{ color: theme.text }}>{vm.category}</span>
+              </>
+            ) : null}
+          </div>
+
+          <div className="mt-4 flex items-start gap-2">
+            <h1 className="min-w-0 text-[1.82rem] font-extrabold leading-[1.18] tracking-[-0.015em] sm:text-[2.15rem] sm:leading-[1.15] md:text-[2.35rem]" style={{ color: theme.text, ...lineClamp4 }}>
+              {vm ? vm.title : fallbackTitle}
+            </h1>
+            {vm?.titleIsOriginal ? <OriginalTag /> : null}
+          </div>
+
+          <div className="mt-5">
+            {vm?.imageSrc ? (
+              <StoryImage
+                src={vm.imageSrc}
+                alt={vm?.title || ''}
+                variant="top"
+                priority
+                fallbackSrc={COVER_PLACEHOLDER_SRC}
+                className="h-[220px] w-full border border-black/10 sm:h-[280px] md:h-[320px]"
+              />
+            ) : (
+              <div className="relative h-[220px] overflow-hidden rounded-[30px] border border-black/10 bg-black/5 sm:h-[280px] md:h-[320px]">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.18),transparent_42%),radial-gradient(circle_at_bottom_right,rgba(124,58,237,0.14),transparent_46%)]" />
+                <div className="absolute inset-0 flex flex-col justify-end p-6">
+                  <div className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-slate-700/90">News Pulse</div>
+                  <div className="mt-3 text-xl font-black tracking-tight text-slate-900">Lead Story</div>
+                  <div className="mt-2 max-w-md text-sm font-medium text-slate-700">Editorially selected top coverage for the current edition.</div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2 text-xl sm:text-2xl font-black tracking-tight" style={{ color: theme.text }}>
-              <span style={lineClamp2}>{vm ? vm.title : fallbackTitle}</span>
-              {vm?.titleIsOriginal ? <OriginalTag /> : null}
-            </div>
+          <div className="mt-5 text-[15px] leading-7 sm:text-[15px] sm:leading-7" style={{ color: theme.sub }}>
+            <span style={lineClamp3}>{vm ? vm.summary : fallbackSummary}</span>
+            {vm?.summaryIsOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
+          </div>
 
-            <div className="mt-1 text-sm" style={{ color: theme.sub }}>
-              <span style={lineClamp2}>{vm ? vm.summary : fallbackSummary}</span>
-              {vm?.summaryIsOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
-            </div>
-
-            {vm ? (
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                {vm.category ? <Chip>{vm.category}</Chip> : null}
-                {vm.location ? (
-                  <Chip>
-                    <MapPin className="h-3.5 w-3.5" /> {vm.location}
-                  </Chip>
-                ) : null}
-                <Chip>
+          <div className="mt-5 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: theme.border }}>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12px] font-medium" style={{ color: theme.sub }}>
+              {vm?.location ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5" /> {vm.location}
+                </span>
+              ) : null}
+              {vm ? (
+                <span className="inline-flex items-center gap-1.5">
                   <BookOpen className="h-3.5 w-3.5" /> {vm.readMinutes} {t('common.minutesShort')}
-                </Chip>
-              </div>
-            ) : null}
+                </span>
+              ) : null}
+            </div>
 
-            <div className="mt-4 flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {vm ? (
                 <Link
                   href={vm.href}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold border transition hover:opacity-[0.98]"
-                  style={{ background: theme.accent, color: "#fff", borderColor: "transparent" }}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold border transition hover:opacity-[0.98]"
+                  style={{ background: theme.accent, color: '#fff', borderColor: 'transparent' }}
                 >
                   {t('common.read')} <ArrowRight className="h-4 w-4" />
                 </Link>
               ) : (
-                <Button theme={theme} variant="solid" onClick={() => onToast("Open top story (planned)")}>
+                <Button theme={theme} variant="solid" onClick={() => onToast('Open top story (planned)')}>
                   {t('common.read')} <ArrowRight className="h-4 w-4" />
                 </Button>
               )}
@@ -2094,10 +2205,11 @@ function FeaturedCard({ theme, item, onToast }: any) {
               <Button
                 theme={theme}
                 variant="soft"
+                className="px-4 py-2.5"
                 onClick={(e: React.MouseEvent) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  onToast("Listen (planned)");
+                  onToast('Listen (planned)');
                 }}
               >
                 <Radio className="h-4 w-4" /> {t('common.listen')}
@@ -2105,6 +2217,290 @@ function FeaturedCard({ theme, item, onToast }: any) {
             </div>
           </div>
         </div>
+      </div>
+    </Surface>
+  );
+}
+
+function CenterStoryFeed({ theme, items, lang }: any) {
+  const { t } = useI18n();
+  const safeLang = lang === 'hi' || lang === 'gu' ? lang : 'en';
+  const prefix = safeLang === 'en' ? '' : `/${safeLang}`;
+  const isLoading = items == null;
+  const listItems: any[] = Array.isArray(items) ? items : [];
+
+  const visibleItems = React.useMemo(() => listItems.slice(0, 6), [listItems]);
+
+  const lineClamp2: React.CSSProperties = {
+    display: '-webkit-box',
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical',
+    overflow: 'hidden',
+  };
+
+  const resolveCategoryLabel = React.useCallback(
+    (raw: unknown) => {
+      const categoryRaw = String(raw || '').trim();
+      const categoryKey = normalizeCategoryKey(categoryRaw);
+      const categoryLabelKey = categoryKey ? labelKeyForCategory(categoryKey) : '';
+      const translated = categoryLabelKey ? t(categoryLabelKey) : '';
+      if (categoryLabelKey && translated && translated !== categoryLabelKey) return translated;
+      return categoryRaw;
+    },
+    [t]
+  );
+
+  if (!isLoading && !visibleItems.length) return null;
+
+  return (
+    <Surface theme={theme} className="overflow-hidden">
+      <div className="border-b px-4 py-4 sm:px-5" style={{ borderColor: theme.border }}>
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[13px] font-extrabold uppercase tracking-[0.18em]" style={{ color: theme.sub }}>
+              {t('home.freshUpdates')}
+            </div>
+            <div className="mt-1 text-lg font-black tracking-tight" style={{ color: theme.text }}>
+              Continuous live homepage flow
+            </div>
+          </div>
+
+          <Link
+            href={`${prefix}/latest`}
+            className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-3 py-2 text-sm font-semibold transition hover:opacity-[0.98]"
+            style={{ color: theme.text, borderColor: theme.border, background: theme.surface }}
+          >
+            {t('common.viewAll')} <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </div>
+
+      <div className="grid gap-3 p-4 sm:p-5">
+        {isLoading
+          ? Array.from({ length: 5 }).map((_, index) => (
+              <div
+                key={`home-center-row-skeleton-${index}`}
+                className="grid grid-cols-[108px_1fr] gap-4 rounded-[26px] border bg-white p-3 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.28)] sm:grid-cols-[132px_1fr] sm:p-4"
+                style={{ borderColor: theme.border }}
+              >
+                <div className="h-[82px] rounded-2xl bg-slate-100 animate-pulse sm:h-[96px]" />
+                <div className="min-w-0">
+                  <div className="h-3 w-28 rounded bg-slate-100 animate-pulse" />
+                  <div className="mt-3 h-5 w-full rounded bg-slate-100 animate-pulse" />
+                  <div className="mt-2 h-5 w-4/5 rounded bg-slate-100 animate-pulse" />
+                  <div className="mt-3 h-4 w-2/3 rounded bg-slate-100 animate-pulse" />
+                </div>
+              </div>
+            ))
+          : visibleItems.map((item: any, index: number) => {
+              const rawId = String(item?.id || '').trim();
+              const rawSlug = String(item?.slug || '').trim();
+              const href = buildNewsUrl({ id: rawId || rawSlug, slug: rawSlug, lang: safeLang });
+              const categoryLabel = resolveCategoryLabel(item?.category);
+              const imageSrc = String(item?.imageSrc || '').trim();
+              const summary = String(item?.desc || '').trim();
+              const readMinutes = estimateReadMinutes(`${String(item?.title || '').trim()} ${summary}`);
+              const showSummary = index < 2 && summary;
+
+              return (
+                <Link
+                  key={String(item?.id || item?.slug || index)}
+                  href={href}
+                  className="group block rounded-[28px] border p-3 shadow-[0_18px_38px_-32px_rgba(15,23,42,0.32)] transition hover:-translate-y-[1px] hover:shadow-[0_24px_46px_-30px_rgba(15,23,42,0.34)] sm:p-4"
+                  style={{ borderColor: theme.border, background: theme.surface }}
+                >
+                  <article className={cx('grid gap-4', showSummary ? 'md:grid-cols-[148px_1fr]' : 'md:grid-cols-[116px_1fr]')}>
+                    {imageSrc ? (
+                      <StoryImage
+                        src={imageSrc}
+                        alt={String(item?.title || '').trim()}
+                        variant="mini"
+                        fallbackSrc={COVER_PLACEHOLDER_SRC}
+                        className={cx(
+                          'w-full border border-black/10',
+                          showSummary ? 'h-[110px] md:h-[120px] md:w-[148px]' : 'h-[84px] md:h-[90px] md:w-[116px]'
+                        )}
+                      />
+                    ) : (
+                      <div
+                        className={cx(
+                          'relative overflow-hidden rounded-2xl border border-black/10 bg-[linear-gradient(135deg,rgba(248,250,252,0.95),rgba(226,232,240,0.9))]',
+                          showSummary ? 'h-[110px] md:h-[120px] md:w-[148px]' : 'h-[84px] md:h-[90px] md:w-[116px]'
+                        )}
+                      >
+                        <div className="absolute inset-0 grid place-items-center text-[10px] font-extrabold tracking-[0.16em] text-slate-600/90">
+                          NP
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: theme.sub }}>
+                        {categoryLabel ? (
+                          <span className="rounded-full border px-2.5 py-1" style={{ borderColor: theme.border, background: theme.surface2, color: theme.text }}>
+                            {categoryLabel}
+                          </span>
+                        ) : null}
+                        {item?.time ? <span>{item.time}</span> : null}
+                        <span>{readMinutes} {t('common.minutesShort')}</span>
+                      </div>
+
+                      <div className="mt-2 flex items-start gap-2">
+                        <h3
+                          className={cx('min-w-0 font-black tracking-tight', showSummary ? 'text-lg leading-snug sm:text-[1.1rem]' : 'text-base leading-snug')}
+                          style={{ color: theme.text, ...lineClamp2 }}
+                        >
+                          {String(item?.title || '').trim()}
+                        </h3>
+                        {item?.titleIsOriginal ? <OriginalTag /> : null}
+                      </div>
+
+                      {showSummary ? (
+                        <div className="mt-2 text-sm leading-6" style={{ color: theme.sub, ...lineClamp2 }}>
+                          {summary}
+                        </div>
+                      ) : null}
+                    </div>
+                  </article>
+                </Link>
+              );
+            })}
+      </div>
+    </Surface>
+  );
+}
+
+function MoreReadsSection({ theme, items, lang }: any) {
+  const { t } = useI18n();
+  const safeLang = lang === 'hi' || lang === 'gu' ? lang : 'en';
+  const prefix = safeLang === 'en' ? '' : `/${safeLang}`;
+  const isLoading = items == null;
+  const listItems: any[] = Array.isArray(items) ? items : [];
+
+  const visibleItems = React.useMemo(() => listItems.slice(0, 3), [listItems]);
+
+  const lineClamp2: React.CSSProperties = {
+    display: '-webkit-box',
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical',
+    overflow: 'hidden',
+  };
+
+  const resolveCategoryLabel = React.useCallback(
+    (raw: unknown) => {
+      const categoryRaw = String(raw || '').trim();
+      const categoryKey = normalizeCategoryKey(categoryRaw);
+      const categoryLabelKey = categoryKey ? labelKeyForCategory(categoryKey) : '';
+      const translated = categoryLabelKey ? t(categoryLabelKey) : '';
+      if (categoryLabelKey && translated && translated !== categoryLabelKey) return translated;
+      return categoryRaw;
+    },
+    [t]
+  );
+
+  if (!isLoading && !visibleItems.length) return null;
+
+  return (
+    <Surface theme={theme} className="overflow-hidden">
+      <div
+        className="flex items-center justify-between gap-3 border-b p-4 sm:p-5"
+        style={{
+          borderColor: theme.border,
+          background: theme.mode === 'dark'
+            ? 'linear-gradient(135deg, rgba(56,189,248,0.08), transparent 58%)'
+            : 'linear-gradient(135deg, rgba(37,99,235,0.08), rgba(255,255,255,0.72) 58%)',
+        }}
+      >
+        <div className="min-w-0">
+          <div className="text-[13px] font-extrabold uppercase tracking-[0.18em]" style={{ color: theme.sub }}>
+            More Reads
+          </div>
+          <div className="mt-1 text-sm font-semibold" style={{ color: theme.text }}>
+            The next set of stories shaping the edition
+          </div>
+        </div>
+
+        <Link
+          href={`${prefix}/latest`}
+          className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full border px-3 py-2 text-sm font-semibold transition hover:opacity-[0.98]"
+          style={{ color: theme.text, borderColor: theme.border, background: theme.surface }}
+        >
+          {t('common.viewAll')} <ArrowRight className="h-4 w-4" />
+        </Link>
+      </div>
+
+      <div className="p-4 sm:p-5">
+        {isLoading ? (
+          <div className="grid gap-4 md:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <div
+                key={`more-reads-skeleton-${index}`}
+                className="rounded-[28px] border bg-white p-3 shadow-[0_14px_34px_-28px_rgba(15,23,42,0.24)]"
+                style={{ borderColor: theme.border }}
+              >
+                <div className="h-[120px] rounded-2xl bg-slate-100 animate-pulse" />
+                <div className="mt-3 h-3 w-24 rounded bg-slate-100 animate-pulse" />
+                <div className="mt-3 h-5 w-full rounded bg-slate-100 animate-pulse" />
+                <div className="mt-2 h-5 w-4/5 rounded bg-slate-100 animate-pulse" />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-3">
+            {visibleItems.map((item: any, index: number) => {
+              const rawId = String(item?.id || '').trim();
+              const rawSlug = String(item?.slug || '').trim();
+              const href = buildNewsUrl({ id: rawId || rawSlug, slug: rawSlug, lang: safeLang });
+              const categoryLabel = resolveCategoryLabel(item?.category);
+              const imageSrc = String(item?.imageSrc || '').trim();
+              const summary = String(item?.desc || '').trim();
+
+              return (
+                <Link
+                  key={String(item?.id || item?.slug || index)}
+                  href={href}
+                  className="group block rounded-[28px] border p-3 shadow-[0_16px_36px_-30px_rgba(15,23,42,0.28)] transition hover:-translate-y-[1px] hover:shadow-[0_22px_46px_-30px_rgba(15,23,42,0.30)] sm:p-4"
+                  style={{ borderColor: theme.border, background: theme.surface }}
+                >
+                  {imageSrc ? (
+                    <StoryImage
+                      src={imageSrc}
+                      alt={String(item?.title || '').trim()}
+                      variant="list"
+                      fallbackSrc={COVER_PLACEHOLDER_SRC}
+                      className="h-[120px] w-full border border-black/10"
+                    />
+                  ) : (
+                    <div className="relative h-[120px] overflow-hidden rounded-2xl border border-black/10 bg-[linear-gradient(135deg,rgba(248,250,252,0.95),rgba(226,232,240,0.9))]">
+                      <div className="absolute inset-0 grid place-items-center text-[11px] font-extrabold tracking-[0.14em] text-slate-600/90 select-none">
+                        News Pulse
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: theme.sub }}>
+                    {categoryLabel ? <span>{categoryLabel}</span> : null}
+                    {categoryLabel && item?.time ? <span>•</span> : null}
+                    {item?.time ? <span>{item.time}</span> : null}
+                  </div>
+
+                  <div className="mt-2 flex items-start gap-2">
+                    <h3 className="min-w-0 text-base font-bold leading-snug tracking-tight" style={{ color: theme.text, ...lineClamp2 }}>
+                      {String(item?.title || '').trim()}
+                    </h3>
+                    {item?.titleIsOriginal ? <OriginalTag /> : null}
+                  </div>
+
+                  {summary ? (
+                    <div className="mt-2 text-sm leading-6" style={{ color: theme.sub, ...lineClamp2 }}>
+                      {summary}
+                    </div>
+                  ) : null}
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </div>
     </Surface>
   );
@@ -2187,33 +2583,43 @@ function FeedList({ theme, title, items, lang }: any) {
     return picked.slice(0, MAX_ITEMS);
   }, [listItems]);
 
+  if (!isLoading && !orderedItems.length) return null;
+
   return (
-    <div className="rounded-2xl border border-slate-200/70 bg-white/80 backdrop-blur shadow-sm hover:shadow-md transition">
-      <div className="p-4">
+    <div className="overflow-hidden rounded-[28px] border border-slate-200/70 bg-white/85 backdrop-blur shadow-[0_22px_48px_-38px_rgba(15,23,42,0.34)] transition hover:shadow-[0_28px_56px_-38px_rgba(15,23,42,0.38)]">
+      <div
+        className="border-b p-4"
+        style={{
+          borderColor: theme.border,
+          background: theme.mode === 'dark'
+            ? 'linear-gradient(135deg, rgba(167,139,250,0.12), transparent 58%)'
+            : 'linear-gradient(135deg, rgba(37,99,235,0.08), rgba(255,255,255,0.70) 58%)',
+        }}
+      >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="inline-block h-2 w-2 rounded-full bg-slate-400" aria-hidden="true" />
-              <div className="text-sm font-extrabold truncate" style={{ color: theme.text }}>
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="inline-block h-2.5 w-2.5 rounded-full" aria-hidden="true" style={{ background: theme.accent }} />
+              <div className="truncate text-sm font-extrabold uppercase tracking-[0.16em]" style={{ color: theme.sub }}>
                 {title}
               </div>
             </div>
-            <div className="mt-0.5 text-xs" style={{ color: theme.sub }}>
-              {t('home.freshUpdates')}
+            <div className="mt-1 text-base font-black tracking-tight" style={{ color: theme.text }}>
+              Real-time homepage desk
             </div>
           </div>
 
           <Link
             href={`${prefix}/latest`}
-            className="shrink-0 whitespace-nowrap text-sm px-3 py-1 rounded-full border border-slate-200 bg-white/70 hover:bg-slate-50 transition"
-            style={{ color: theme.text }}
+            className="shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-semibold transition"
+            style={{ color: theme.text, borderColor: theme.border, background: theme.surface }}
           >
             {t('common.viewAll')}
           </Link>
         </div>
       </div>
 
-      <div className="px-2 pb-2">
+      <div className="px-2 pb-2 pt-2">
         <div className="max-h-[520px] overflow-auto">
           {isLoading ? (
             <div className="px-2">
@@ -2239,11 +2645,11 @@ function FeedList({ theme, title, items, lang }: any) {
                 <Link
                   key={String(f?.id || f?.slug || index)}
                   href={href}
-                  className="block rounded-xl px-3 py-2 transition border-b border-slate-100 last:border-b-0 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                  className="block rounded-[20px] px-3 py-3 transition border-b border-slate-100 last:border-b-0 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     {metaText ? (
-                      <div className="text-[11px] text-slate-500 truncate">{metaText}</div>
+                      <div className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{metaText}</div>
                     ) : null}
 
                     {category ? (
@@ -2280,14 +2686,27 @@ function LiveTVWidget({ theme, enabled = true, onToast, embedUrlOverride }: any)
   const hasUrl = !!effectiveEmbedUrl;
 
   return (
-    <Surface theme={theme} className="p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="text-sm font-extrabold" style={{ color: theme.text }}>
+    <Surface theme={theme} className="overflow-hidden">
+      <div
+        className="border-b px-4 py-4"
+        style={{
+          borderColor: theme.border,
+          background: theme.mode === 'dark'
+            ? 'linear-gradient(135deg, rgba(239,68,68,0.16), rgba(56,189,248,0.10) 68%, transparent 100%)'
+            : 'linear-gradient(135deg, rgba(220,38,38,0.10), rgba(37,99,235,0.07) 68%, rgba(255,255,255,0.74) 100%)',
+        }}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-[12px] font-extrabold uppercase tracking-[0.16em]" style={{ color: theme.sub }}>
+              Broadcast module
+            </div>
+            <div className="mt-1 text-sm font-black tracking-tight" style={{ color: theme.text }}>
             {t('common.liveTv')}
-          </div>
-          <div className="text-xs" style={{ color: theme.sub }}>
+            </div>
+            <div className="mt-1 text-xs" style={{ color: theme.sub }}>
             {t('home.liveTvPartnerChannel')}
+            </div>
           </div>
         </div>
         <span className="rounded-full px-2.5 py-1 text-xs font-extrabold border text-white" style={{ background: theme.live, borderColor: "rgba(255,255,255,0.18)" }}>
@@ -2295,7 +2714,8 @@ function LiveTVWidget({ theme, enabled = true, onToast, embedUrlOverride }: any)
         </span>
       </div>
 
-      <div className="mt-3 rounded-3xl border overflow-hidden" style={{ borderColor: theme.border, background: theme.surface2 }}>
+      <div className="p-4 pt-4">
+      <div className="rounded-3xl border overflow-hidden shadow-[0_20px_46px_-36px_rgba(15,23,42,0.36)]" style={{ borderColor: theme.border, background: theme.surface2 }}>
         <div className="relative w-full" style={{ paddingTop: "56.25%" }}>
           {hasUrl ? (
             <iframe
@@ -2313,19 +2733,288 @@ function LiveTVWidget({ theme, enabled = true, onToast, embedUrlOverride }: any)
         </div>
       </div>
 
-      <div className="mt-3 grid gap-2">
-        <Button theme={theme} variant="soft" className="w-full justify-start" onClick={() => onToast("Live TV full page (planned)")}>
+      <div className="mt-4 grid gap-2">
+        <Button theme={theme} variant="soft" className="w-full justify-start px-4 py-3" onClick={() => onToast("Live TV full page (planned)")}>
           <Play className="h-4 w-4" /> {t('common.openLiveTv')}
         </Button>
 
         <Button
           theme={theme}
           variant="ghost"
-          className="w-full justify-start"
+          className="w-full justify-start px-4 py-3"
           onClick={() => onToast("Live TV visibility is admin-controlled")}
         >
           <X className="h-4 w-4" /> {t('home.turnOffWidget')}
         </Button>
+      </div>
+      </div>
+    </Surface>
+  );
+}
+
+function HomeEditorialSection({ theme, title, href, items, lang, Icon }: any) {
+  const { t } = useI18n();
+  const safeLang = lang === 'hi' || lang === 'gu' ? lang : 'en';
+
+  const lineClamp2: React.CSSProperties = {
+    display: '-webkit-box',
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical',
+    overflow: 'hidden',
+  };
+
+  const resolveCategoryLabel = React.useCallback(
+    (raw: unknown) => {
+      const categoryRaw = String(raw || '').trim();
+      const categoryKey = normalizeCategoryKey(categoryRaw);
+      const categoryLabelKey = categoryKey ? labelKeyForCategory(categoryKey) : '';
+      const translated = categoryLabelKey ? t(categoryLabelKey) : '';
+      if (categoryLabelKey && translated && translated !== categoryLabelKey) return translated;
+      return categoryRaw;
+    },
+    [t]
+  );
+
+  if (!Array.isArray(items) || !items.length) return null;
+
+  const lead = items[0];
+  const secondary = items.slice(1, 5);
+  const localizedHref = localizePath(href, safeLang);
+
+  return (
+    <Surface theme={theme} className="overflow-hidden">
+      <div
+        className="border-b px-4 py-4 sm:px-5"
+        style={{
+          borderColor: theme.border,
+          background: theme.mode === 'dark'
+            ? 'linear-gradient(135deg, rgba(56,189,248,0.10), rgba(167,139,250,0.09) 65%, transparent 100%)'
+            : 'linear-gradient(135deg, rgba(37,99,235,0.07), rgba(124,58,237,0.06) 65%, rgba(255,255,255,0.72) 100%)',
+        }}
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-[12px] font-extrabold uppercase tracking-[0.16em]" style={{ color: theme.sub }}>
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-2xl border" style={{ borderColor: theme.border, background: theme.surface2, color: theme.text }}>
+                <Icon className="h-4 w-4" />
+              </span>
+              Section spotlight
+            </div>
+            <div className="mt-2 text-2xl font-black tracking-tight" style={{ color: theme.text }}>
+              {title}
+            </div>
+          </div>
+
+          <Link
+            href={localizedHref}
+            className="inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold transition hover:opacity-[0.98]"
+            style={{ color: theme.text, borderColor: theme.border, background: theme.surface }}
+          >
+            {t('common.viewAll')} <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </div>
+
+      <div className="grid gap-4 p-4 sm:p-5 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)] xl:items-start">
+        {lead ? (
+          <Link
+            href={buildNewsUrl({ id: String(lead?.id || '').trim() || String(lead?.slug || '').trim(), slug: String(lead?.slug || '').trim(), lang: safeLang })}
+            className="group block overflow-hidden rounded-[28px] border p-4 shadow-[0_18px_42px_-34px_rgba(15,23,42,0.30)] transition hover:-translate-y-[1px] hover:shadow-[0_24px_52px_-34px_rgba(15,23,42,0.34)] sm:p-5"
+            style={{ borderColor: theme.border, background: theme.surface }}
+          >
+            {lead?.imageSrc ? (
+              <StoryImage
+                src={String(lead.imageSrc)}
+                alt={String(lead?.title || '').trim()}
+                variant="top"
+                fallbackSrc={COVER_PLACEHOLDER_SRC}
+                className="h-[220px] w-full border border-black/10"
+              />
+            ) : (
+              <div className="relative h-[220px] overflow-hidden rounded-[24px] border border-black/10 bg-[linear-gradient(135deg,rgba(248,250,252,0.95),rgba(226,232,240,0.9))]">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.12),transparent_42%),radial-gradient(circle_at_bottom_right,rgba(124,58,237,0.10),transparent_46%)]" />
+                <div className="absolute inset-0 flex items-end p-5">
+                  <div className="rounded-full border px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.18em] text-slate-700" style={{ borderColor: 'rgba(15,23,42,0.10)', background: 'rgba(255,255,255,0.72)' }}>
+                    {title}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: theme.sub }}>
+              {lead?.category ? (
+                <span className="rounded-full border px-2.5 py-1" style={{ borderColor: theme.border, background: theme.surface2, color: theme.text }}>
+                  {resolveCategoryLabel(lead.category)}
+                </span>
+              ) : null}
+              {lead?.time ? <span>{lead.time}</span> : null}
+            </div>
+
+            <div className="mt-3 flex items-start gap-2">
+              <h3 className="min-w-0 text-[1.35rem] font-black leading-tight tracking-tight" style={{ color: theme.text, ...lineClamp2 }}>
+                {String(lead?.title || '').trim()}
+              </h3>
+              {lead?.titleIsOriginal ? <OriginalTag /> : null}
+            </div>
+
+            {lead?.desc ? (
+              <div className="mt-3 text-sm leading-6" style={{ color: theme.sub, ...lineClamp2 }}>
+                {String(lead.desc).trim()}
+              </div>
+            ) : null}
+          </Link>
+        ) : null}
+
+        <div className="grid gap-3">
+          {secondary.map((item: any, index: number) => {
+            const rawId = String(item?.id || '').trim();
+            const rawSlug = String(item?.slug || '').trim();
+            const href = buildNewsUrl({ id: rawId || rawSlug, slug: rawSlug, lang: safeLang });
+
+            return (
+              <Link
+                key={String(item?.id || item?.slug || index)}
+                href={href}
+                className="group block rounded-[24px] border p-3 shadow-[0_14px_32px_-28px_rgba(15,23,42,0.28)] transition hover:-translate-y-[1px] hover:shadow-[0_20px_40px_-28px_rgba(15,23,42,0.30)] sm:p-4"
+                style={{ borderColor: theme.border, background: theme.surface }}
+              >
+                <article className="grid grid-cols-[96px_1fr] gap-4 sm:grid-cols-[116px_1fr]">
+                  {item?.imageSrc ? (
+                    <StoryImage
+                      src={String(item.imageSrc)}
+                      alt={String(item?.title || '').trim()}
+                      variant="mini"
+                      fallbackSrc={COVER_PLACEHOLDER_SRC}
+                      className="h-[82px] w-[96px] border border-black/10 sm:h-[90px] sm:w-[116px]"
+                    />
+                  ) : (
+                    <div className="relative h-[82px] w-[96px] overflow-hidden rounded-2xl border border-black/10 bg-[linear-gradient(135deg,rgba(248,250,252,0.95),rgba(226,232,240,0.9))] sm:h-[90px] sm:w-[116px]">
+                      <div className="absolute inset-0 grid place-items-center text-[10px] font-extrabold tracking-[0.16em] text-slate-600/90">NP</div>
+                    </div>
+                  )}
+
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: theme.sub }}>
+                      {item?.category ? <span>{resolveCategoryLabel(item.category)}</span> : null}
+                      {item?.category && item?.time ? <span>•</span> : null}
+                      {item?.time ? <span>{item.time}</span> : null}
+                    </div>
+                    <div className="mt-2 flex items-start gap-2">
+                      <h3 className="min-w-0 text-base font-bold leading-snug tracking-tight" style={{ color: theme.text, ...lineClamp2 }}>
+                        {String(item?.title || '').trim()}
+                      </h3>
+                      {item?.titleIsOriginal ? <OriginalTag /> : null}
+                    </div>
+                  </div>
+                </article>
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+    </Surface>
+  );
+}
+
+function YouthPulseHomepageSection({ theme, items, lang }: any) {
+  const { t } = useI18n();
+  const safeLang = lang === 'hi' || lang === 'gu' ? lang : 'en';
+
+  if (!Array.isArray(items) || !items.length) return null;
+
+  const lead = items[0];
+  const secondary = items.slice(1, 5);
+  const href = localizePath('/youth-pulse', safeLang);
+
+  return (
+    <Surface theme={theme} className="overflow-hidden">
+      <div
+        className="border-b px-4 py-4 sm:px-5"
+        style={{
+          borderColor: theme.border,
+          background: theme.mode === 'dark'
+            ? 'linear-gradient(135deg, rgba(79,70,229,0.16), rgba(56,189,248,0.08) 70%, transparent 100%)'
+            : 'linear-gradient(135deg, rgba(79,70,229,0.10), rgba(37,99,235,0.06) 70%, rgba(255,255,255,0.74) 100%)',
+        }}
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-[12px] font-extrabold uppercase tracking-[0.16em]" style={{ color: theme.sub }}>
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-2xl border" style={{ borderColor: theme.border, background: theme.surface2, color: theme.text }}>
+                <GraduationCap className="h-4 w-4" />
+              </span>
+              Youth desk
+            </div>
+            <div className="mt-2 text-2xl font-black tracking-tight" style={{ color: theme.text }}>
+              {t('categories.youthPulse')}
+            </div>
+          </div>
+
+          <Link
+            href={href}
+            className="inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold transition hover:opacity-[0.98]"
+            style={{ color: theme.text, borderColor: theme.border, background: theme.surface }}
+          >
+            {t('common.viewAll')} <ArrowRight className="h-4 w-4" />
+          </Link>
+        </div>
+      </div>
+
+      <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <Link
+          href={href}
+          className="group block overflow-hidden rounded-[28px] border p-4 shadow-[0_18px_42px_-34px_rgba(15,23,42,0.30)] transition hover:-translate-y-[1px] hover:shadow-[0_24px_52px_-34px_rgba(15,23,42,0.34)] sm:p-5"
+          style={{ borderColor: theme.border, background: theme.surface }}
+        >
+          <div className="grid gap-4 md:grid-cols-[144px_1fr]">
+            {lead?.image ? (
+              <img src={String(lead.image)} alt={String(lead?.title || '')} className="h-[120px] w-full rounded-[24px] object-cover md:w-[144px]" />
+            ) : (
+              <div className="h-[120px] rounded-[24px] bg-[linear-gradient(135deg,rgba(59,130,246,0.14),rgba(139,92,246,0.12))]" />
+            )}
+            <div className="min-w-0">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: theme.sub }}>
+                {String(lead?.category || 'Youth Pulse')}
+              </div>
+              <div className="mt-2 text-xl font-black leading-tight tracking-tight" style={{ color: theme.text }}>
+                {String(lead?.title || '').trim()}
+              </div>
+              {lead?.summary ? (
+                <div className="mt-3 text-sm leading-6" style={{ color: theme.sub }}>
+                  {String(lead.summary).trim()}
+                </div>
+              ) : null}
+              {lead?.date ? (
+                <div className="mt-3 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: theme.sub }}>
+                  {String(lead.date).trim()}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </Link>
+
+        <div className="grid gap-3">
+          {secondary.map((item: any, index: number) => (
+            <Link
+              key={String(item?.id || index)}
+              href={href}
+              className="group block rounded-[24px] border p-3 shadow-[0_14px_32px_-28px_rgba(15,23,42,0.28)] transition hover:-translate-y-[1px] hover:shadow-[0_20px_40px_-28px_rgba(15,23,42,0.30)] sm:p-4"
+              style={{ borderColor: theme.border, background: theme.surface }}
+            >
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: theme.sub }}>
+                {String(item?.category || 'Youth Pulse')}
+              </div>
+              <div className="mt-2 text-base font-bold leading-snug tracking-tight" style={{ color: theme.text }}>
+                {String(item?.title || '').trim()}
+              </div>
+              {item?.date ? (
+                <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: theme.sub }}>
+                  {String(item.date).trim()}
+                </div>
+              ) : null}
+            </Link>
+          ))}
+        </div>
       </div>
     </Surface>
   );
@@ -2392,25 +3081,38 @@ function SnapshotsCard({ theme }: any) {
   }, []);
 
   return (
-    <Surface theme={theme} className="p-4">
-      <div className="text-sm font-extrabold" style={{ color: theme.text }}>
+    <Surface theme={theme} className="overflow-hidden">
+      <div
+        className="border-b px-4 py-4"
+        style={{
+          borderColor: theme.border,
+          background: theme.mode === 'dark'
+            ? 'linear-gradient(135deg, rgba(16,185,129,0.14), rgba(56,189,248,0.08) 72%, transparent 100%)'
+            : 'linear-gradient(135deg, rgba(16,185,129,0.10), rgba(37,99,235,0.05) 72%, rgba(255,255,255,0.72) 100%)',
+        }}
+      >
+        <div className="text-[12px] font-extrabold uppercase tracking-[0.16em]" style={{ color: theme.sub }}>
+          Daily briefing
+        </div>
+        <div className="mt-1 text-sm font-black tracking-tight" style={{ color: theme.text }}>
         {t('home.snapshotsTitle')}
-      </div>
+        </div>
       <div className="mt-1 text-xs" style={{ color: theme.sub }}>
         {t('home.snapshotsSubtitle')}
       </div>
+      </div>
 
-      <div className="mt-3 grid gap-2">
+      <div className="grid gap-3 p-4">
         {[
           { k: t('home.snapshotWeather'), v: weatherValue || '—' },
           { k: t('home.snapshotMarkets'), v: "Stable" },
           { k: t('home.snapshotGold'), v: "₹ — (api)" },
         ].map((x) => (
-          <div key={x.k} className="rounded-2xl border px-3 py-2" style={{ background: theme.surface2, borderColor: theme.border }}>
-            <div className="text-xs" style={{ color: theme.muted }}>
+          <div key={x.k} className="rounded-[22px] border px-3 py-3 shadow-[0_14px_28px_-26px_rgba(15,23,42,0.24)]" style={{ background: theme.surface2, borderColor: theme.border }}>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: theme.muted }}>
               {x.k}
             </div>
-            <div className="text-sm font-extrabold" style={{ color: theme.text }}>
+            <div className="mt-1 text-sm font-extrabold" style={{ color: theme.text }}>
               {x.v}
             </div>
           </div>
@@ -2731,6 +3433,7 @@ export default function UiPreviewV145() {
   const effectiveSettings = settings ?? DEFAULT_NORMALIZED_PUBLIC_SETTINGS;
   const [latestFromBackend, setLatestFromBackend] = useState<any[] | null>(null);
   const [topStory, setTopStory] = useState<Article | null>(null);
+  const [homeSectionNews, setHomeSectionNews] = useState<Record<string, Article[]>>({});
 
   const apiLang = useMemo(() => {
     const code = toUiLangCode(lang);
@@ -2795,6 +3498,36 @@ export default function UiPreviewV145() {
       if (controller.signal.aborted) return;
       setTopStory(null);
       setLatestFromBackend([]);
+    });
+
+    return () => controller.abort();
+  }, [apiLang]);
+
+  React.useEffect(() => {
+    const controller = new AbortController();
+
+    setHomeSectionNews({});
+
+    (async () => {
+      const sectionEntries = await Promise.all(
+        HOME_EDITORIAL_SECTIONS.map(async (section) => {
+          const resp = await fetchPublicNews({
+            category: section.key,
+            language: apiLang,
+            limit: 6,
+            extraQuery: { strictLocale: '1' },
+            signal: controller.signal,
+          });
+
+          return [section.key, Array.isArray(resp?.items) ? resp.items : []] as const;
+        })
+      );
+
+      if (controller.signal.aborted) return;
+      setHomeSectionNews(Object.fromEntries(sectionEntries));
+    })().catch(() => {
+      if (controller.signal.aborted) return;
+      setHomeSectionNews({});
     });
 
     return () => controller.abort();
@@ -3009,24 +3742,181 @@ export default function UiPreviewV145() {
 
   const showAnyTicker = tickerBlocks.length > 0;
 
-  const youthPulseTrendingBlock = (
-    <div className="rounded-2xl border overflow-hidden" style={{ background: theme.surface2, borderColor: theme.border }}>
-      <div className="flex items-center justify-between px-3 py-2 border-b" style={{ borderColor: theme.border }}>
-        <div className="text-sm font-extrabold" style={{ color: theme.text }}>{t('home.youthPulseTrending')}</div>
-        <a href="/youth-pulse" className="text-xs font-semibold shrink-0 whitespace-nowrap" style={{ color: theme.accent2 }}>{t('common.viewAll')} →</a>
+  const localizedYouthPulseHref = localizePath('/youth-pulse', apiLang);
+
+  const youthPulseTrendingBlock = !youth.loading && youth.trending.length === 0 ? null : (
+    <div className="overflow-hidden rounded-[28px] border shadow-[0_18px_42px_-34px_rgba(15,23,42,0.30)]" style={{ background: theme.surface2, borderColor: theme.border }}>
+      <div
+        className="flex items-center justify-between gap-3 border-b px-4 py-4"
+        style={{
+          borderColor: theme.border,
+          background: theme.mode === 'dark'
+            ? 'linear-gradient(135deg, rgba(79,70,229,0.16), rgba(56,189,248,0.08) 70%, transparent 100%)'
+            : 'linear-gradient(135deg, rgba(79,70,229,0.10), rgba(37,99,235,0.05) 70%, rgba(255,255,255,0.72) 100%)',
+        }}
+      >
+        <div className="min-w-0">
+          <div className="text-[12px] font-extrabold uppercase tracking-[0.16em]" style={{ color: theme.sub }}>Youth desk</div>
+          <div className="mt-1 text-sm font-black tracking-tight" style={{ color: theme.text }}>{t('home.youthPulseTrending')}</div>
+        </div>
+        <a href={localizedYouthPulseHref} className="shrink-0 whitespace-nowrap text-xs font-semibold" style={{ color: theme.accent2 }}>{t('common.viewAll')} →</a>
       </div>
-      <div className="p-3 grid gap-2">
+      <div className="grid gap-3 p-4">
         {(youth.trending.slice(0, 6)).map((y: any) => (
-          <a key={String(y.id)} href={`/youth-pulse`} className="rounded-xl border px-3 py-2 text-sm hover:opacity-95" style={{ background: theme.surface, borderColor: theme.border, color: theme.text }}>
+          <a key={String(y.id)} href={localizedYouthPulseHref} className="rounded-[22px] border px-3 py-3 text-sm shadow-[0_14px_28px_-26px_rgba(15,23,42,0.24)] hover:opacity-95" style={{ background: theme.surface, borderColor: theme.border, color: theme.text }}>
             {y.title}
           </a>
         ))}
         {youth.loading && !youth.trending.length ? (
-          <div className="rounded-xl border px-3 py-7 animate-pulse" style={{ background: theme.surface, borderColor: theme.border }} />
+          <div className="rounded-[22px] border px-3 py-7 animate-pulse" style={{ background: theme.surface, borderColor: theme.border }} />
         ) : null}
       </div>
     </div>
   );
+
+  const centerFeedItems = React.useMemo(() => {
+    if (!Array.isArray(latestFromBackend)) return latestFromBackend;
+
+    const topIdentifiers = new Set(
+      [
+        safeTitle((topStory as any)?._id || (topStory as any)?.id),
+        resolveArticleSlug(topStory as any, apiLang),
+        safeTitle((topStory as any)?.slug),
+      ]
+        .map((value) => String(value || '').trim().toLowerCase())
+        .filter(Boolean)
+    );
+
+    const seen = new Set<string>();
+    const withImage: any[] = [];
+    const withoutImage: any[] = [];
+
+    for (const item of latestFromBackend) {
+      const id = String(item?.id || '').trim().toLowerCase();
+      const slug = String(item?.slug || '').trim().toLowerCase();
+      const identity = id || slug || String(item?.title || '').trim().toLowerCase();
+
+      if (!identity || seen.has(identity)) continue;
+      if ((id && topIdentifiers.has(id)) || (slug && topIdentifiers.has(slug))) continue;
+
+      seen.add(identity);
+      if (String(item?.imageSrc || '').trim()) {
+        withImage.push(item);
+      } else {
+        withoutImage.push(item);
+      }
+    }
+
+    return [...withImage, ...withoutImage].slice(0, 6);
+  }, [apiLang, latestFromBackend, topStory]);
+
+  const centerFeedIdentitySet = React.useMemo(() => {
+    const values = Array.isArray(centerFeedItems) ? centerFeedItems : [];
+    return new Set(
+      values
+        .flatMap((item: any) => [String(item?.id || '').trim().toLowerCase(), String(item?.slug || '').trim().toLowerCase()])
+        .filter(Boolean)
+    );
+  }, [centerFeedItems]);
+
+  const moreReadItems = React.useMemo(() => {
+    if (!Array.isArray(latestFromBackend)) return latestFromBackend;
+
+    const topIdentifiers = new Set(
+      [
+        safeTitle((topStory as any)?._id || (topStory as any)?.id),
+        resolveArticleSlug(topStory as any, apiLang),
+        safeTitle((topStory as any)?.slug),
+      ]
+        .map((value) => String(value || '').trim().toLowerCase())
+        .filter(Boolean)
+    );
+
+    const withImage: any[] = [];
+    const withoutImage: any[] = [];
+    const seen = new Set<string>();
+
+    for (const item of latestFromBackend) {
+      const id = String(item?.id || '').trim().toLowerCase();
+      const slug = String(item?.slug || '').trim().toLowerCase();
+      const identity = id || slug || String(item?.title || '').trim().toLowerCase();
+
+      if (!identity || seen.has(identity)) continue;
+      if ((id && topIdentifiers.has(id)) || (slug && topIdentifiers.has(slug))) continue;
+      if ((id && centerFeedIdentitySet.has(id)) || (slug && centerFeedIdentitySet.has(slug))) continue;
+
+      seen.add(identity);
+      if (String(item?.imageSrc || '').trim()) {
+        withImage.push(item);
+      } else {
+        withoutImage.push(item);
+      }
+    }
+
+    return [...withImage, ...withoutImage].slice(0, 3);
+  }, [apiLang, centerFeedIdentitySet, latestFromBackend, topStory]);
+
+  const homepageLeadIdentitySet = React.useMemo(() => {
+    const values = new Set<string>();
+
+    const collect = (item: any) => {
+      [
+        String(item?._id || item?.id || '').trim().toLowerCase(),
+        String(item?.slug || '').trim().toLowerCase(),
+      ]
+        .filter(Boolean)
+        .forEach((value) => values.add(value));
+    };
+
+    collect(topStory);
+    if (Array.isArray(centerFeedItems)) centerFeedItems.forEach(collect);
+    if (Array.isArray(moreReadItems)) moreReadItems.forEach(collect);
+
+    return values;
+  }, [centerFeedItems, moreReadItems, topStory]);
+
+  const editorialSections = React.useMemo(() => {
+    return HOME_EDITORIAL_SECTIONS.map((section) => {
+      const rawItems = Array.isArray(homeSectionNews[section.key]) ? homeSectionNews[section.key] : [];
+      const seen = new Set<string>();
+      const items: any[] = [];
+
+      for (const article of rawItems) {
+        const feedItem = articleToFeedItem(article as any, apiLang);
+        const identifiers = [
+          String((article as any)?._id || (article as any)?.id || feedItem?.id || '').trim().toLowerCase(),
+          String((article as any)?.slug || feedItem?.slug || '').trim().toLowerCase(),
+        ].filter(Boolean);
+
+        if (identifiers.some((value) => homepageLeadIdentitySet.has(value))) continue;
+
+        const identity = identifiers[0] || identifiers[1] || String(feedItem?.title || '').trim().toLowerCase();
+        if (!identity || seen.has(identity)) continue;
+
+        seen.add(identity);
+        items.push(feedItem);
+
+        if (items.length >= 5) break;
+      }
+
+      return {
+        ...section,
+        title: t(labelKeyForCategory(section.key)),
+        items,
+      };
+    }).filter((section) => section.items.length > 0);
+  }, [apiLang, homeSectionNews, homepageLeadIdentitySet, t]);
+
+  const youthHomepageItems = React.useMemo(() => {
+    if (!Array.isArray(youth.trending)) return [];
+    return youth.trending.slice(0, 5);
+  }, [youth.trending]);
+
+  const heroLeftBlocks = sidebarBlocks.filter((b) => b.key === 'explore');
+  const utilityLeftBlocks = sidebarBlocks.filter((b) => b.key !== 'explore');
+  const showUtilityRow = utilityLeftBlocks.length > 0 || moreReadItems == null || (Array.isArray(moreReadItems) && moreReadItems.length > 0) || youthPulseTrendingBlock != null;
+  const heroCenterColClass = heroLeftBlocks.length > 0 ? 'lg:col-span-6' : 'lg:col-span-9';
+  const utilityCenterColClass = utilityLeftBlocks.length > 0 ? 'lg:col-span-6' : 'lg:col-span-9';
 
   const hasSnapshotsBlock = sidebarBlocks.some((b) => b.key === 'snapshots');
 
@@ -3186,44 +4076,102 @@ export default function UiPreviewV145() {
         <TrendingStrip theme={theme} onPick={(t: string) => onToast(`Trending: ${t}`)} />
       ) : null}
 
-      {/* MAIN GRID */}
+      {/* HERO ROW */}
       <div className="mx-auto w-full max-w-[1440px] px-4 md:px-8 pb-10 pt-4">
-        <div className="grid grid-cols-12 gap-6 lg:gap-8">
-          {/* LEFT (Navigation) */}
-          <aside className="col-span-12 lg:col-span-3">
-            <div className="sticky top-4 grid gap-4">
-              {sidebarBlocks.map((b) => (
-                <React.Fragment key={b.key}>
-                  {b.node}
-                </React.Fragment>
-              ))}
+        <div
+          className="relative overflow-hidden rounded-[34px] border p-3 shadow-[0_40px_100px_-82px_rgba(15,23,42,0.46)] sm:p-4 lg:p-5"
+          style={{ background: theme.surface2, borderColor: theme.border }}
+        >
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background: theme.mode === 'dark'
+                ? 'radial-gradient(circle at top left, rgba(56,189,248,0.10), transparent 34%), radial-gradient(circle at 82% 16%, rgba(167,139,250,0.10), transparent 32%), radial-gradient(circle at 52% 100%, rgba(16,185,129,0.08), transparent 34%)'
+                : 'radial-gradient(circle at top left, rgba(37,99,235,0.08), transparent 34%), radial-gradient(circle at 82% 16%, rgba(124,58,237,0.07), transparent 32%), radial-gradient(circle at 52% 100%, rgba(16,185,129,0.06), transparent 34%)',
+            }}
+          />
+
+          <div className="relative grid gap-6">
+            <div className="grid grid-cols-12 gap-6 lg:gap-8">
+              {heroLeftBlocks.length ? (
+                <aside className="col-span-12 order-3 lg:order-1 lg:col-span-3">
+                  <div className="sticky top-4 grid gap-4">
+                    {heroLeftBlocks.map((b) => (
+                      <React.Fragment key={b.key}>
+                        {b.node}
+                      </React.Fragment>
+                    ))}
+                  </div>
+                </aside>
+              ) : null}
+
+              <main className={`col-span-12 order-1 lg:order-2 ${heroCenterColClass}`}>
+                <div className="grid gap-4">
+                  <FeaturedCard theme={theme} item={{ article: topStory, requestedLang: apiLang }} onToast={onToast} />
+                  <CenterStoryFeed theme={theme} items={centerFeedItems} lang={apiLang} />
+                </div>
+              </main>
+
+              <aside className="col-span-12 order-2 lg:order-3 lg:col-span-3">
+                <div className="sticky top-4 grid gap-4">
+                  <AdSlot slot="HOME_RIGHT_300x250" variant="right300" />
+
+                  <FeedList
+                    theme={theme}
+                    title={t('home.latest')}
+                    items={latestFromBackend}
+                    lang={apiLang}
+                  />
+                </div>
+              </aside>
             </div>
-          </aside>
 
-          {/* MIDDLE (News Content) */}
-          <main className="col-span-12 lg:col-span-6">
-            <div className="grid gap-4">
-              <FeaturedCard theme={theme} item={{ article: topStory, requestedLang: apiLang }} onToast={onToast} />
-            </div>
-          </main>
+            {showUtilityRow ? (
+              <div className="grid grid-cols-12 gap-6 lg:gap-8">
+                {utilityLeftBlocks.length ? (
+                  <aside className="col-span-12 order-2 lg:order-1 lg:col-span-3">
+                    <div className="grid gap-4">
+                      {utilityLeftBlocks.map((b) => (
+                        <React.Fragment key={b.key}>
+                          {b.node}
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  </aside>
+                ) : null}
 
-          {/* RIGHT (Advertisements) */}
-          <aside className="col-span-12 lg:col-span-3">
-            <div className="sticky top-4 grid gap-4">
-              <AdSlot slot="HOME_RIGHT_300x250" variant="right300" />
+                <main className={`col-span-12 order-1 lg:order-2 ${utilityCenterColClass}`}>
+                  <MoreReadsSection theme={theme} items={moreReadItems} lang={apiLang} />
+                </main>
 
-              <FeedList
-                theme={theme}
-                title={t('home.latest')}
-                items={latestFromBackend}
-                lang={apiLang}
-              />
-
-              <AdSlot slot="HOME_RIGHT_300x600" variant="right300x600" className="hidden lg:block mt-4" />
-              {youthPulseTrendingBlock}
-            </div>
-          </aside>
+                <aside className="col-span-12 order-3 lg:order-3 lg:col-span-3">
+                  <div className="grid gap-4">
+                    <AdSlot slot="HOME_RIGHT_300x600" variant="right300x600" className="hidden lg:block" />
+                    {youthPulseTrendingBlock}
+                  </div>
+                </aside>
+              </div>
+            ) : null}
+          </div>
         </div>
+
+        {editorialSections.length || youthHomepageItems.length ? (
+          <div className="mt-8 grid gap-6 lg:gap-7">
+            {editorialSections.map((section) => (
+              <HomeEditorialSection
+                key={section.key}
+                theme={theme}
+                title={section.title}
+                href={section.route}
+                items={section.items}
+                lang={apiLang}
+                Icon={section.Icon}
+              />
+            ))}
+
+            <YouthPulseHomepageSection theme={theme} items={youthHomepageItems} lang={apiLang} />
+          </div>
+        ) : null}
       </div>
 
       {/* APP PROMO + FOOTER */}
