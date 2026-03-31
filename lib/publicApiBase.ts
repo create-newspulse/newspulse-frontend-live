@@ -54,6 +54,15 @@ function resolveConfiguredBase(): string {
   return legacy;
 }
 
+function getLocalDevFallbackBase(): string {
+  const explicitFallback = normalizeBase(String(process.env.NEXT_PUBLIC_API_BASE_LOCAL_FALLBACK || ''));
+  if (explicitFallback) return explicitFallback;
+
+  // Local public proxy routes should keep working even when the split dev env var
+  // was not loaded. The backend repo defaults to port 5000.
+  return 'http://localhost:5000';
+}
+
 export function getPublicApiBaseUrl(): string {
   // In the browser, prefer same-origin requests to Next API routes.
   // Those routes proxy to the backend using a server-side base and can fall back
@@ -61,6 +70,10 @@ export function getPublicApiBaseUrl(): string {
   if (typeof window !== 'undefined') return '';
 
   const base = resolveConfiguredBase();
+
+  if (!base && !isProdDeployment()) {
+    return getLocalDevFallbackBase();
+  }
 
   // Safety: local dev should not silently hit production.
   // This prevents accidental cross-environment writes (admin) and reads (public).
@@ -73,7 +86,7 @@ export function getPublicApiBaseUrl(): string {
           `Set NEXT_PUBLIC_API_BASE_DEV to your DEV backend, or set NEXT_PUBLIC_ALLOW_PROD_BACKEND_IN_DEV=true to override.`
       );
     }
-    return '';
+    return getLocalDevFallbackBase();
   }
 
   return base;

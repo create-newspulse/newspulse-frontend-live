@@ -138,20 +138,116 @@ function paragraphizeTextContent(value: string): string {
     .join('');
 }
 
+const TOP_LEVEL_BLOCK_TAGS = new Set([
+  'p',
+  'div',
+  'blockquote',
+  'ul',
+  'ol',
+  'table',
+  'thead',
+  'tbody',
+  'tr',
+  'td',
+  'th',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'hr',
+  'pre',
+]);
+
+function splitParagraphLikeBlock(block: string): string[] {
+  const source = String(block || '').trim();
+  if (!source) return [];
+
+  const match = source.match(/^(<(p|div|blockquote)\b[^>]*>)([\s\S]*)(<\/\2>)$/i);
+  if (!match) return [source];
+
+  const openTag = String(match[1] || '');
+  const tagName = String(match[2] || '').toLowerCase();
+  const innerHtml = String(match[3] || '');
+  const closeTag = String(match[4] || '');
+
+  if (tagName === 'blockquote') return [source];
+  if (!/(?:<br\s*\/?>\s*){2,}/i.test(innerHtml)) return [source];
+
+  const segments = innerHtml
+    .split(/(?:<br\s*\/?>\s*){2,}/i)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  if (segments.length <= 1) return [source];
+
+  return segments.map((segment) => `${openTag}${segment}${closeTag}`);
+}
+
 export function splitArticleBodyBlocks(html: string): string[] {
   const source = String(html || '').trim();
   if (!source) return [];
 
   const blocks: string[] = [];
-  const re = /<p\b[^>]*>[\s\S]*?<\/p>/gi;
+  const re = /<\/?([a-z0-9]+)\b[^>]*>/gi;
+  const stack: string[] = [];
   let lastIndex = 0;
+  let currentBlockStart: number | null = null;
+  let currentBlockTag: string | null = null;
   let match: RegExpExecArray | null = null;
 
   while ((match = re.exec(source))) {
-    const before = source.slice(lastIndex, match.index);
-    if (before.trim()) blocks.push(before);
-    blocks.push(match[0]);
-    lastIndex = re.lastIndex;
+    const rawTag = match[0];
+    const tagName = String(match[1] || '').toLowerCase();
+    const isClosingTag = rawTag.startsWith('</');
+    const isSelfClosingTag = /\/>$/.test(rawTag) || tagName === 'br' || tagName === 'hr' || tagName === 'img';
+
+    if (!isClosingTag) {
+      if (currentBlockStart == null && stack.length === 0 && TOP_LEVEL_BLOCK_TAGS.has(tagName)) {
+        const before = source.slice(lastIndex, match.index);
+        if (before.trim()) blocks.push(before);
+        currentBlockStart = match.index;
+        currentBlockTag = tagName;
+      }
+
+      if (!isSelfClosingTag) {
+        stack.push(tagName);
+      } else if (currentBlockStart != null && currentBlockTag === tagName && stack.length === 0) {
+        const block = source.slice(currentBlockStart, match.index + rawTag.length);
+        if (block.trim()) blocks.push(block);
+        lastIndex = match.index + rawTag.length;
+        currentBlockStart = null;
+        currentBlockTag = null;
+      }
+
+      continue;
+    }
+
+    for (let index = stack.length - 1; index >= 0; index -= 1) {
+      if (stack[index] === tagName) {
+        stack.splice(index, 1);
+        break;
+      }
+    }
+
+    if (currentBlockStart != null && currentBlockTag === tagName && stack.length === 0) {
+      const block = source.slice(currentBlockStart, match.index + rawTag.length);
+      for (const splitBlock of splitParagraphLikeBlock(block)) {
+        if (splitBlock.trim()) blocks.push(splitBlock);
+      }
+      lastIndex = match.index + rawTag.length;
+      currentBlockStart = null;
+      currentBlockTag = null;
+    }
+  }
+
+  if (currentBlockStart != null) {
+    const trailingBlock = source.slice(currentBlockStart);
+    for (const splitBlock of splitParagraphLikeBlock(trailingBlock)) {
+      if (splitBlock.trim()) blocks.push(splitBlock);
+    }
+    lastIndex = source.length;
   }
 
   const rest = source.slice(lastIndex);
