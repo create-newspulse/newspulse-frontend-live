@@ -208,15 +208,9 @@ export default function LatestPage() {
                       const when = formatTime(a.publishedAt || a.createdAt);
                       const category = String(localized.categoryLabel || (a as any)?.category || '').trim();
                       const coverSrc = resolveCoverImageUrl(a as any);
-                      const itemKey = [
-                        id,
-                        String((a as any)?.translationGroupId || '').trim(),
-                        String(localized.slug || '').trim(),
-                        coverSrc,
-                      ].filter(Boolean).join('::');
 
                       return (
-                        <li key={itemKey || href}>
+                        <li key={id || href}>
                           <Link
                             href={href}
                             className="group relative block overflow-hidden rounded-2xl border border-slate-200/60 bg-white/70 backdrop-blur px-4 py-3 shadow-sm transition will-change-transform hover:-translate-y-0.5 hover:border-slate-300/60 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60"

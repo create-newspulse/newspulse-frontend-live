@@ -204,15 +204,9 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
                   const title = localized.title || t('categoryPage.untitled');
                   const summary = localized.summary;
                   const image = resolveCoverImageUrl(a) || COVER_PLACEHOLDER_SRC;
-                  const itemKey = [
-                    id,
-                    String((a as any)?.translationGroupId || '').trim(),
-                    String(localized.slug || '').trim(),
-                    image,
-                  ].filter(Boolean).join('::');
 
                   return (
-                    <li key={itemKey || String(a._id || title)} className="group rounded-2xl border border-slate-200 bg-white overflow-hidden">
+                    <li key={a._id} className="group rounded-2xl border border-slate-200 bg-white overflow-hidden">
                       <StoryImage
                         src={image}
                         alt={title || t('categoryPage.articleImageAlt')}

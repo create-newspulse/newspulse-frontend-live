@@ -617,7 +617,6 @@ function articleToTickerText(a: Article, requestedLang: 'en' | 'hi' | 'gu'): str
 
 function articleToFeedItem(a: Article, requestedLang: 'en' | 'hi' | 'gu') {
   const id = safeTitle((a as any)?._id || (a as any)?.id) || undefined;
-  const translationGroupId = safeTitle((a as any)?.translationGroupId) || undefined;
   const slug = resolveArticleSlug(a as any, requestedLang) || safeTitle((a as any)?.slug) || undefined;
   const titleRes = resolveArticleTitle(a as any, requestedLang);
   const descRes = resolveArticleSummaryOrExcerpt(a as any, requestedLang);
@@ -643,14 +642,9 @@ function articleToFeedItem(a: Article, requestedLang: 'en' | 'hi' | 'gu') {
   const source = safeTitle((a as any)?.source?.name || (a as any)?.source) || 'News Pulse';
   const category = safeTitle((a as any)?.category) || '';
   const imageSrc = resolveStoryImageSrc(a as any, requestedLang);
-  const renderKey = [id, translationGroupId, slug, imageSrc, title]
-    .map((value) => String(value || '').trim())
-    .filter(Boolean)
-    .join('::');
 
   return {
     id: id || slug || title,
-    translationGroupId,
     slug,
     title,
     desc,
@@ -661,7 +655,6 @@ function articleToFeedItem(a: Article, requestedLang: 'en' | 'hi' | 'gu') {
     source,
     category,
     imageSrc,
-    renderKey: renderKey || `feed-item::${title}`,
   };
 }
 
@@ -2193,7 +2186,6 @@ function FeaturedCard({ theme, item, onToast }: any) {
           <div className="mt-5">
             {vm?.imageSrc ? (
               <StoryImage
-                key={String(vm?.id || vm?.href || vm?.imageSrc || 'top-story-image')}
                 src={vm.imageSrc}
                 alt={vm?.title || ''}
                 variant="top"
@@ -2349,7 +2341,7 @@ function CenterStoryFeed({ theme, items, lang }: any) {
 
               return (
                 <Link
-                  key={String(item?.renderKey || item?.id || item?.translationGroupId || item?.slug || item?.imageSrc || index)}
+                  key={String(item?.id || item?.slug || index)}
                   href={href}
                   className="group block rounded-[28px] border p-3 shadow-[0_18px_38px_-32px_rgba(15,23,42,0.32)] transition hover:-translate-y-[1px] hover:shadow-[0_24px_46px_-30px_rgba(15,23,42,0.34)] sm:p-4"
                   style={{ borderColor: theme.border, background: theme.surface }}
@@ -2688,7 +2680,7 @@ function FeedList({ theme, title, items, lang }: any) {
 
               return (
                 <Link
-                  key={String(f?.renderKey || f?.id || f?.translationGroupId || f?.slug || index)}
+                  key={String(f?.id || f?.slug || index)}
                   href={href}
                   className="block rounded-[20px] px-3 py-3 transition border-b border-slate-100 last:border-b-0 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
                 >
@@ -3592,6 +3584,7 @@ export default function UiPreviewV145() {
       appliedPublishedDefaultsRef.current = true;
       return;
     }
+
     const themePreset = (effectiveSettings as any)?.languageTheme?.themePreset;
 
     if (typeof themePreset === 'string') {
