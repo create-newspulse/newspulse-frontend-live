@@ -1,10 +1,5 @@
 export const COVER_PLACEHOLDER_SRC = '/fallback.svg';
 
-export type CoverFitMode = 'photo' | 'graphic';
-export type CoverFitModePreference = CoverFitMode | 'auto';
-
-const GRAPHIC_COVER_HINT_RE = /(infographic|graphic|chart|diagram|poster|scorecard|standings|statistics|stat-card|results-card|fixture|schedule|lineup|table|quote-card|explainer|screenshot)/i;
-
 function isBadCoverUrl(url: string): boolean {
   const u = String(url || '').trim();
   if (!u) return true;
@@ -29,98 +24,6 @@ function isBadCoverUrl(url: string): boolean {
   }
 }
 
-function coercePositiveNumber(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value;
-  if (typeof value === 'string') {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed) && parsed > 0) return parsed;
-  }
-  return null;
-}
-
-function normalizeCoverFitMode(value: unknown): CoverFitMode | null {
-  const normalized = String(value || '').trim().toLowerCase();
-  if (!normalized) return null;
-
-  if (
-    normalized === 'graphic' ||
-    normalized === 'infographic' ||
-    normalized === 'illustration' ||
-    normalized === 'chart' ||
-    normalized === 'diagram' ||
-    normalized === 'poster' ||
-    normalized === 'screenshot' ||
-    normalized === 'contain'
-  ) {
-    return 'graphic';
-  }
-
-  if (
-    normalized === 'photo' ||
-    normalized === 'photograph' ||
-    normalized === 'image' ||
-    normalized === 'cover' ||
-    normalized === 'hero' ||
-    normalized === 'cover-photo' ||
-    normalized === 'coverphoto' ||
-    normalized === 'cover-image' ||
-    normalized === 'coverimage' ||
-    normalized === 'fill' ||
-    normalized === 'cover-fill' ||
-    normalized === 'coverfill' ||
-    normalized === 'cover-fit' ||
-    normalized === 'coverfit' ||
-    normalized === 'cover-mode' ||
-    normalized === 'covermode' ||
-    normalized === 'object-cover' ||
-    normalized === 'cover_photo' ||
-    normalized === 'cover_image' ||
-    normalized === 'cover'
-  ) {
-    return 'photo';
-  }
-
-  return null;
-}
-
-function resolveExplicitCoverFitMode(article: any): CoverFitMode | null {
-  const candidates = [
-    article?.coverFitMode,
-    article?.coverFit,
-    article?.imageFit,
-    article?.heroImageMode,
-    article?.heroImageFit,
-    article?.coverType,
-    article?.coverKind,
-    article?.coverImage?.fit,
-    article?.coverImage?.mode,
-    article?.coverImage?.type,
-    article?.coverImage?.kind,
-  ];
-
-  for (const candidate of candidates) {
-    const normalized = normalizeCoverFitMode(candidate);
-    if (normalized) return normalized;
-  }
-
-  return null;
-}
-
-function resolveCoverDimensions(article: any): { width: number | null; height: number | null } {
-  const width =
-    coercePositiveNumber(article?.coverImage?.width) ??
-    coercePositiveNumber(article?.imageWidth) ??
-    coercePositiveNumber(article?.coverWidth) ??
-    null;
-  const height =
-    coercePositiveNumber(article?.coverImage?.height) ??
-    coercePositiveNumber(article?.imageHeight) ??
-    coercePositiveNumber(article?.coverHeight) ??
-    null;
-
-  return { width, height };
-}
-
 export function resolveCoverImageUrl(article: any): string {
   const candidates = [
     typeof article?.coverImage?.url === 'string' ? article.coverImage.url : '',
@@ -139,40 +42,6 @@ export function resolveCoverImageUrl(article: any): string {
     if (!isBadCoverUrl(url)) return url;
   }
   return '';
-}
-
-export function inferAutoCoverFitMode(options: {
-  src?: string | null;
-  width?: number | null;
-  height?: number | null;
-}): CoverFitMode {
-  const src = String(options.src || '').trim();
-  if (src && GRAPHIC_COVER_HINT_RE.test(src)) return 'graphic';
-
-  const width = coercePositiveNumber(options.width);
-  const height = coercePositiveNumber(options.height);
-  if (!width || !height) return 'photo';
-
-  const aspectRatio = width / height;
-  if (aspectRatio >= 2.1 || aspectRatio <= 0.7) return 'graphic';
-  if (aspectRatio >= 0.92 && aspectRatio <= 1.08) return 'graphic';
-
-  return 'photo';
-}
-
-export function resolveArticleCoverFitPreference(article: any): CoverFitModePreference {
-  const explicit = resolveExplicitCoverFitMode(article);
-  if (explicit) return explicit;
-
-  const coverSrc = resolveCoverImageUrl(article);
-  if (coverSrc && GRAPHIC_COVER_HINT_RE.test(coverSrc)) return 'graphic';
-
-  const { width, height } = resolveCoverDimensions(article);
-  if (width && height) {
-    return inferAutoCoverFitMode({ src: coverSrc, width, height });
-  }
-
-  return 'auto';
 }
 
 export function getCoverImageSrc(article: any): string {

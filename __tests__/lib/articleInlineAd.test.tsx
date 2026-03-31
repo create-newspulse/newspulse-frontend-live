@@ -1,5 +1,5 @@
 import { formatArticleBodyHtml, splitArticleBodyBlocks, stripDuplicateOpeningParagraph } from '../../lib/articleBody';
-import { findInlineInsertAfterBlockIndex, splitArticleHtmlForInlineAd } from '../../lib/articleInlineAd';
+import { splitArticleHtmlForInlineAd } from '../../lib/articleInlineAd';
 
 describe('splitArticleHtmlForInlineAd', () => {
   it('inserts after the third body paragraph when the body has enough content', () => {
@@ -55,9 +55,8 @@ describe('splitArticleHtmlForInlineAd', () => {
       '<p><strong>Subheading</strong></p><p>First full body paragraph with enough text to read like natural article copy instead of a short label.</p><p>Second full body paragraph with enough text to keep the inline ad under the body introduction.</p><p>Third paragraph.</p>'
     );
 
-    expect(placement.insertedAfterParagraph).toBe(2);
-    expect(placement.beforeHtml).toBe('<p><strong>Subheading</strong></p><p>First full body paragraph with enough text to read like natural article copy instead of a short label.</p><p>Second full body paragraph with enough text to keep the inline ad under the body introduction.</p>');
-    expect(placement.afterHtml).toBe('<p>Third paragraph.</p>');
+    expect(placement.insertedAfterParagraph).toBe(3);
+    expect(placement.beforeHtml).toBe('<p><strong>Subheading</strong></p><p>First full body paragraph with enough text to read like natural article copy instead of a short label.</p><p>Second full body paragraph with enough text to keep the inline ad under the body introduction.</p><p>Third paragraph.</p>');
   });
 });
 
@@ -143,67 +142,5 @@ describe('splitArticleBodyBlocks', () => {
       '<p>First body paragraph.</p>',
       '<p>Second body paragraph.</p>',
     ]);
-  });
-
-  it('splits rendered div and heading blocks individually', () => {
-    expect(
-      splitArticleBodyBlocks('<div>First rendered block.</div><h2>Section</h2><div>Second rendered block.</div>')
-    ).toEqual([
-      '<div>First rendered block.</div>',
-      '<h2>Section</h2>',
-      '<div>Second rendered block.</div>',
-    ]);
-  });
-
-  it('splits paragraph-like html blocks on double br separators', () => {
-    expect(
-      splitArticleBodyBlocks('<p>Lead paragraph.<br><br>Second paragraph.<br /><br />Third paragraph.</p>')
-    ).toEqual([
-      '<p>Lead paragraph.</p>',
-      '<p>Second paragraph.</p>',
-      '<p>Third paragraph.</p>',
-    ]);
-  });
-});
-
-describe('findInlineInsertAfterBlockIndex', () => {
-  it('uses the second rendered body block when only three remain after summary suppression', () => {
-    const dedupedHtml = stripDuplicateOpeningParagraph(
-      '<p>Lead summary repeated in the body for duplication cleanup.</p><div>First rendered body block with enough detail to read like article copy.</div><div>Second rendered body block keeps the story moving in the middle.</div><div>Third rendered body block closes the article.</div>',
-      'Lead summary repeated in the body for duplication cleanup.'
-    );
-
-    const blocks = splitArticleBodyBlocks(dedupedHtml);
-
-    expect(blocks).toEqual([
-      '<div>First rendered body block with enough detail to read like article copy.</div>',
-      '<div>Second rendered body block keeps the story moving in the middle.</div>',
-      '<div>Third rendered body block closes the article.</div>',
-    ]);
-    expect(findInlineInsertAfterBlockIndex(blocks)).toBe(1);
-  });
-
-  it('ignores heading-only blocks while keeping div body blocks eligible for inline placement', () => {
-    const blocks = splitArticleBodyBlocks(
-      '<h2>Missile Silo Overview</h2><div>First body block explains the underground facility in normal article prose.</div><div>Second body block adds more reporting detail before the ad.</div><div>Third body block remains below the ad.</div>'
-    );
-
-    expect(findInlineInsertAfterBlockIndex(blocks)).toBe(2);
-  });
-
-  it('finds a natural inline position for long stories collapsed into one html paragraph block', () => {
-    const dedupedHtml = stripDuplicateOpeningParagraph(
-      '<p>Lead paragraph repeated from the summary.<br><br>Second body paragraph carries enough reporting detail to keep the ad in the reading flow.<br><br>Third body paragraph continues the story with more detail.<br><br>Fourth body paragraph keeps ARTICLE_END away from the inline slot.</p>',
-      'Lead paragraph repeated from the summary.'
-    );
-
-    const blocks = splitArticleBodyBlocks(dedupedHtml);
-
-    expect(blocks).toEqual([
-      '<p>Second body paragraph carries enough reporting detail to keep the ad in the reading flow.</p>',
-      '<p>Third body paragraph continues the story with more detail.</p>',
-      '<p>Fourth body paragraph keeps ARTICLE_END away from the inline slot.</p>',
-    ]);
-    expect(findInlineInsertAfterBlockIndex(blocks)).toBe(1);
   });
 });

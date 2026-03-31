@@ -6,7 +6,6 @@ import { useRouter } from 'next/router';
 import AdSlot from '../../src/components/ads/AdSlot';
 import CategoryHeader from '../../src/components/category/CategoryHeader';
 import { getCategoryQueryKey, getCategoryRouteKey } from '../../lib/categoryKeys';
-import { findInlineInsertAfterBlockIndex } from '../../lib/articleInlineAd';
 import { getLocalizedArticleFields, type RouteLocale } from '../../lib/localizedArticleFields';
 import { formatArticleBodyHtml, splitArticleBodyBlocks, stripDuplicateOpeningParagraph } from '../../lib/articleBody';
 import { fetchPublicNewsGroup, unwrapArticle, type Article } from '../../lib/publicNewsApi';
@@ -15,7 +14,7 @@ import { pickFreshestArticleForLocale, shouldReplaceArticleWithFreshCandidate } 
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { tHeading, toLanguageKey } from '../../utils/localizedNames';
 import { buildNewsUrl } from '../../lib/newsRoutes';
-import { COVER_PLACEHOLDER_SRC, resolveArticleCoverFitPreference, resolveCoverImageUrl } from '../../lib/coverImages';
+import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
 import StoryImage from '../../src/components/story/StoryImage';
 import { useArticleAnalytics } from '../../hooks/useArticleAnalytics';
 
@@ -304,11 +303,18 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
     [displaySummary, resolvedSafeHtml]
   );
 
-  const articleBodyBlocks = React.useMemo(() => splitArticleBodyBlocks(articleBodyHtml), [articleBodyHtml]);
+  const paragraphBlocks = React.useMemo(() => splitArticleBodyBlocks(articleBodyHtml), [articleBodyHtml]);
 
   const inlineInsertAfterIndex = React.useMemo(() => {
-    return findInlineInsertAfterBlockIndex(articleBodyBlocks);
-  }, [articleBodyBlocks]);
+    const indices: number[] = [];
+    for (let i = 0; i < paragraphBlocks.length; i += 1) {
+      const b = String(paragraphBlocks[i] || '').trim();
+      if (/^<p\b/i.test(b)) indices.push(i);
+    }
+    if (!indices.length) return null;
+    if (indices.length >= 3) return indices[2];
+    return indices[0];
+  }, [paragraphBlocks]);
 
   const tx = React.useCallback(
     (key: string, fallback: string) => {
@@ -375,7 +381,6 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
   })();
 
   const heroSrc = cover || resolveCoverImageUrl(resolvedArticle) || null;
-  const heroCoverFitMode = React.useMemo(() => resolveArticleCoverFitPreference(resolvedArticle), [resolvedArticle]);
 
   const prefix = React.useMemo(() => localePrefix(lang), [lang]);
   const categoryKey = React.useMemo(() => resolveCategoryKey(resolvedArticle), [resolvedArticle]);
@@ -575,22 +580,20 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                   </div>
                 </div>
 
-                <div className="px-4 md:px-6 pb-6">
+                <div className="px-4 md:px-6 pb-5">
                   {heroSrc ? (
-                    <div className="mt-2">
+                    <div className="relative group hover:z-50">
                       <StoryImage
                         src={heroSrc}
                         fallbackSrc={COVER_PLACEHOLDER_SRC}
                         alt={displayTitle}
                         variant="top"
-                        displayMode="detailHero"
-                        coverFitMode={heroCoverFitMode}
                         priority
-                        className="w-full"
+                        className="border border-slate-200 bg-slate-100 w-full hover:scale-[0.99] active:scale-[0.99]"
                       />
                     </div>
                   ) : (
-                    <div className="mt-2 w-full h-[250px] sm:h-[320px] lg:h-[380px] overflow-hidden rounded-[28px] border border-slate-200 bg-slate-100 shadow-[0_20px_46px_-32px_rgba(15,23,42,0.24)]">
+                    <div className="w-full h-[220px] sm:h-[280px] md:h-[320px] overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
                       <div className="h-full w-full grid place-items-center">
                         <div className="text-xs font-extrabold tracking-tight text-slate-500 select-none">
                           News <span className="text-slate-700">Pulse</span>
@@ -600,7 +603,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                   )}
 
                   {displaySummary ? (
-                    <p className="mt-5 text-base md:text-lg leading-8 text-slate-700">
+                    <p className="mt-4 text-base md:text-lg text-slate-700">
                       {displaySummary}
                     </p>
                   ) : null}
@@ -608,8 +611,8 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
 
                 <div className="px-4 md:px-6 pb-6">
                   <article className="prose prose-slate max-w-none">
-                    {articleBodyBlocks.length ? (
-                      articleBodyBlocks.map((block, idx) => (
+                    {paragraphBlocks.length ? (
+                      paragraphBlocks.map((block, idx) => (
                         <React.Fragment key={`pblock-${idx}`}>
                           <div dangerouslySetInnerHTML={{ __html: block }} />
                           {inlineInsertAfterIndex === idx ? (
