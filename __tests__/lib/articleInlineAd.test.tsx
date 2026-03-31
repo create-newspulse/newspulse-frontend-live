@@ -1,4 +1,4 @@
-import { formatArticleBodyHtml } from '../../lib/articleBody';
+import { formatArticleBodyHtml, splitArticleBodyBlocks, stripDuplicateOpeningParagraph } from '../../lib/articleBody';
 import { splitArticleHtmlForInlineAd } from '../../lib/articleInlineAd';
 
 describe('splitArticleHtmlForInlineAd', () => {
@@ -78,5 +78,69 @@ describe('formatArticleBodyHtml', () => {
     const html = formatArticleBodyHtml('Alpha line one.\\nAlpha line two.\\n\\nBeta paragraph.');
 
     expect(html).toBe('<p>Alpha line one. Alpha line two.</p><p>Beta paragraph.</p>');
+  });
+});
+
+describe('stripDuplicateOpeningParagraph', () => {
+  it('removes the first paragraph when it matches the summary', () => {
+    const html = '<p>Markets opened higher today as investors reacted to fresh policy signals.</p><p>The rally broadened across banking and energy stocks in afternoon trade.</p>';
+
+    expect(
+      stripDuplicateOpeningParagraph(html, 'Markets opened higher today as investors reacted to fresh policy signals.')
+    ).toBe('<p>The rally broadened across banking and energy stocks in afternoon trade.</p>');
+  });
+
+  it('removes the first paragraph when it is a near-duplicate of the summary', () => {
+    const html = '<p>Markets opened higher today as investors reacted to fresh policy signals from the central bank.</p><p>Traders then shifted focus to earnings guidance.</p>';
+
+    expect(
+      stripDuplicateOpeningParagraph(html, 'Markets opened higher today as investors reacted to fresh policy signals.')
+    ).toBe('<p>Traders then shifted focus to earnings guidance.</p>');
+  });
+
+  it('keeps the opening paragraph when the summary is different', () => {
+    const html = '<p>Heavy rain continued across the state on Monday morning.</p><p>Officials said reservoirs remain below warning levels.</p>';
+
+    expect(stripDuplicateOpeningParagraph(html, 'Schools in several districts were closed as a precaution.')).toBe(html);
+  });
+
+  it('keeps the original body when removing the first paragraph would empty the article', () => {
+    const html = '<p>Markets opened higher today as investors reacted to fresh policy signals.</p>';
+
+    expect(
+      stripDuplicateOpeningParagraph(html, 'Markets opened higher today as investors reacted to fresh policy signals.')
+    ).toBe(html);
+  });
+
+  it('keeps the original body when the remaining content is too short to stand alone', () => {
+    const html = '<p>Markets opened higher today as investors reacted to fresh policy signals.</p><p>More soon.</p>';
+
+    expect(
+      stripDuplicateOpeningParagraph(html, 'Markets opened higher today as investors reacted to fresh policy signals.')
+    ).toBe(html);
+  });
+
+  it('does not suppress a first paragraph that only partially overlaps with the summary', () => {
+    const html = '<p>Markets opened higher today as investors reacted to fresh policy signals, while exporters stayed under pressure from currency moves.</p><p>Analysts said sector rotation drove late trading.</p>';
+
+    expect(
+      stripDuplicateOpeningParagraph(html, 'Markets opened higher today as investors reacted to fresh policy signals.')
+    ).toBe(html);
+  });
+
+  it('leaves content unchanged when no summary exists', () => {
+    const html = '<p>Only the story body is available here.</p>';
+
+    expect(stripDuplicateOpeningParagraph(html, '')).toBe(html);
+  });
+});
+
+describe('splitArticleBodyBlocks', () => {
+  it('keeps non-paragraph content around paragraph blocks in order', () => {
+    expect(splitArticleBodyBlocks('<h2>Intro</h2><p>First body paragraph.</p><p>Second body paragraph.</p>')).toEqual([
+      '<h2>Intro</h2>',
+      '<p>First body paragraph.</p>',
+      '<p>Second body paragraph.</p>',
+    ]);
   });
 });

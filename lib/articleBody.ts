@@ -1,5 +1,67 @@
 import sanitizeHtml from 'sanitize-html';
 
+function decodeEntities(value: string): string {
+  return String(value || '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>');
+}
+
+function stripHtml(value: string): string {
+  return decodeEntities(String(value || '').replace(/<[^>]*>/g, ' '));
+}
+
+function normalizeComparisonText(value: string): string {
+  return stripHtml(value)
+    .toLowerCase()
+    .replace(/["'`.,!?;:()[\]{}<>\\/|@#$%^&*_+=~-]+/g, ' ')
+    .replace(/[\u2018\u2019\u201c\u201d\u2013\u2014\u2026\u0964\u0965]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function countMatchingPrefixTokens(leftTokens: string[], rightTokens: string[]): number {
+  const max = Math.min(leftTokens.length, rightTokens.length);
+  let count = 0;
+
+  for (let index = 0; index < max; index += 1) {
+    if (leftTokens[index] !== rightTokens[index]) break;
+    count += 1;
+  }
+
+  return count;
+}
+
+function hasMeaningfulText(value: string): boolean {
+  return normalizeComparisonText(value).length >= 24;
+}
+
+function areNearDuplicateTexts(left: string, right: string): boolean {
+  const normalizedLeft = normalizeComparisonText(left);
+  const normalizedRight = normalizeComparisonText(right);
+
+  if (!normalizedLeft || !normalizedRight) return false;
+  if (normalizedLeft === normalizedRight) return true;
+
+  const leftTokens = normalizedLeft.split(' ').filter(Boolean);
+  const rightTokens = normalizedRight.split(' ').filter(Boolean);
+  const shorterTokens = leftTokens.length <= rightTokens.length ? leftTokens : rightTokens;
+  const longerTokens = shorterTokens === leftTokens ? rightTokens : leftTokens;
+
+  if (shorterTokens.length < 8) return false;
+
+  const prefixMatches = countMatchingPrefixTokens(shorterTokens, longerTokens);
+  if (prefixMatches === shorterTokens.length && shorterTokens.length >= 8) {
+    const extraTokens = longerTokens.length - shorterTokens.length;
+    if (extraTokens <= 4) return true;
+  }
+
+  return false;
+}
+
 function normalizeEscapedNewlines(value: string): string {
   return String(value || '')
     .replace(/\r\n/g, '\n')
@@ -74,6 +136,50 @@ function paragraphizeTextContent(value: string): string {
     })
     .filter(Boolean)
     .join('');
+}
+
+export function splitArticleBodyBlocks(html: string): string[] {
+  const source = String(html || '').trim();
+  if (!source) return [];
+
+  const blocks: string[] = [];
+  const re = /<p\b[^>]*>[\s\S]*?<\/p>/gi;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null = null;
+
+  while ((match = re.exec(source))) {
+    const before = source.slice(lastIndex, match.index);
+    if (before.trim()) blocks.push(before);
+    blocks.push(match[0]);
+    lastIndex = re.lastIndex;
+  }
+
+  const rest = source.slice(lastIndex);
+  if (rest.trim()) blocks.push(rest);
+
+  return blocks;
+}
+
+export function stripDuplicateOpeningParagraph(html: string, summary: string): string {
+  const source = String(html || '').trim();
+  const summaryText = String(summary || '').trim();
+
+  if (!source || !summaryText) return source;
+
+  const blocks = splitArticleBodyBlocks(source);
+  if (!blocks.length) return source;
+
+  const firstParagraphIndex = blocks.findIndex((block) => /^<p\b/i.test(String(block || '').trim()));
+  if (firstParagraphIndex < 0) return source;
+
+  const firstParagraph = blocks[firstParagraphIndex];
+  if (!areNearDuplicateTexts(firstParagraph, summaryText)) return source;
+
+  const remainingHtml = blocks.filter((_, index) => index !== firstParagraphIndex).join('').trim();
+  if (!remainingHtml) return source;
+  if (!hasMeaningfulText(remainingHtml)) return source;
+
+  return remainingHtml;
 }
 
 export function formatArticleBodyHtml(rawContent: string): string {

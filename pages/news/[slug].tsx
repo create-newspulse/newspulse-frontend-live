@@ -7,7 +7,7 @@ import AdSlot from '../../src/components/ads/AdSlot';
 import CategoryHeader from '../../src/components/category/CategoryHeader';
 import { getCategoryQueryKey, getCategoryRouteKey } from '../../lib/categoryKeys';
 import { getLocalizedArticleFields, type RouteLocale } from '../../lib/localizedArticleFields';
-import { formatArticleBodyHtml } from '../../lib/articleBody';
+import { formatArticleBodyHtml, splitArticleBodyBlocks, stripDuplicateOpeningParagraph } from '../../lib/articleBody';
 import { fetchPublicNewsGroup, unwrapArticle, type Article } from '../../lib/publicNewsApi';
 import { subscribePublicDataRefresh } from '../../lib/publicDataRefresh';
 import { pickFreshestArticleForLocale, shouldReplaceArticleWithFreshCandidate } from '../../lib/translationGroupSync';
@@ -158,6 +158,15 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
   const pendingTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingAttemptsRef = React.useRef<number>(0);
 
+  const routeLocale = React.useMemo(() => toRouteLocale(lang), [lang]);
+  const localized = React.useMemo(
+    () => getLocalizedArticleFields(resolvedArticle || {}, routeLocale),
+    [resolvedArticle, routeLocale]
+  );
+  const rawTitle = cleanText(localized.title || (resolvedArticle as any)?.title);
+  const displayTitle = rawTitle.length > 180 ? `${rawTitle.slice(0, 177).trimEnd()}…` : rawTitle;
+  const displaySummary = cleanText(localized.summary || (resolvedArticle as any)?.summary);
+
   const clearPendingTimer = React.useCallback(() => {
     if (pendingTimerRef.current) {
       clearTimeout(pendingTimerRef.current);
@@ -289,27 +298,12 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
     });
   }, [refreshFromTranslationGroup, resolvedArticle?._id]);
 
-  const paragraphBlocks = React.useMemo(() => {
-    const html = String(resolvedSafeHtml || '').trim();
-    if (!html) return [] as string[];
+  const articleBodyHtml = React.useMemo(
+    () => stripDuplicateOpeningParagraph(resolvedSafeHtml, displaySummary),
+    [displaySummary, resolvedSafeHtml]
+  );
 
-    const blocks: string[] = [];
-    const re = /<p\b[^>]*>[\s\S]*?<\/p>/gi;
-    let lastIndex = 0;
-    let match: RegExpExecArray | null = null;
-
-    while ((match = re.exec(html))) {
-      const before = html.slice(lastIndex, match.index);
-      if (before.trim()) blocks.push(before);
-      blocks.push(match[0]);
-      lastIndex = re.lastIndex;
-    }
-
-    const rest = html.slice(lastIndex);
-    if (rest.trim()) blocks.push(rest);
-
-    return blocks;
-  }, [resolvedSafeHtml]);
+  const paragraphBlocks = React.useMemo(() => splitArticleBodyBlocks(articleBodyHtml), [articleBodyHtml]);
 
   const inlineInsertAfterIndex = React.useMemo(() => {
     const indices: number[] = [];
@@ -336,11 +330,6 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
     [t]
   );
 
-  const routeLocale = React.useMemo(() => toRouteLocale(lang), [lang]);
-  const localized = React.useMemo(
-    () => getLocalizedArticleFields(resolvedArticle || {}, routeLocale),
-    [resolvedArticle, routeLocale]
-  );
   const resolvedSlug = React.useMemo(
     () => String(localized.slug || resolvedArticle?._id || slug || '').trim(),
     [localized.slug, resolvedArticle?._id, slug]
@@ -368,9 +357,6 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
     isPendingTranslation: pendingTranslate,
   });
 
-  const rawTitle = cleanText(localized.title || (resolvedArticle as any)?.title);
-  const displayTitle = rawTitle.length > 180 ? `${rawTitle.slice(0, 177).trimEnd()}…` : rawTitle;
-  const displaySummary = cleanText(localized.summary || (resolvedArticle as any)?.summary);
   const displayProvider = cleanText((resolvedArticle as any)?.provider);
   const displayGeneratedAt = cleanText((resolvedArticle as any)?.generatedAt);
 
@@ -560,44 +546,37 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                       </div>
                     ) : null}
 
-                    {displaySummary ? (
-                      <p className="text-base md:text-lg text-slate-700">
-                        {displaySummary}
-                      </p>
-                    ) : null}
-
-                    {displayProvider || displayGeneratedAt ? (
-                      <div className="text-xs font-semibold text-slate-500">
+                    <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                      <div className="min-w-0 text-xs font-semibold text-slate-500">
                         {displayProvider ? displayProvider : null}
                         {displayProvider && displayGeneratedAt ? ' • ' : null}
                         {displayGeneratedAt ? displayGeneratedAt : null}
                       </div>
-                    ) : null}
 
-                    <div className="flex flex-wrap items-center gap-2 pt-1">
                       <button
                         type="button"
                         onClick={shareThis}
-                        className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-50"
+                        className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-50"
                       >
                         {tx('common.share', 'Share')}
                       </button>
-                      {Array.isArray((resolvedArticle as any)?.tags) && (resolvedArticle as any)?.tags?.length ? (
-                        <div className="flex flex-wrap gap-2">
-                          {tagList((resolvedArticle as any)?.tags)
-                            .slice(0, 6)
-                            .map((tag) => (
-                              <a
-                                key={tag}
-                                href={`${prefix}/topic/${encodeURIComponent(slugifyTopic(tag))}?q=${encodeURIComponent(tag)}`.replace(/\/\//g, '/')}
-                                className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-200"
-                              >
-                                #{tag}
-                              </a>
-                            ))}
-                        </div>
-                      ) : null}
                     </div>
+
+                    {Array.isArray((resolvedArticle as any)?.tags) && (resolvedArticle as any)?.tags?.length ? (
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {tagList((resolvedArticle as any)?.tags)
+                          .slice(0, 6)
+                          .map((tag) => (
+                            <a
+                              key={tag}
+                              href={`${prefix}/topic/${encodeURIComponent(slugifyTopic(tag))}?q=${encodeURIComponent(tag)}`.replace(/\/\//g, '/')}
+                              className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-200"
+                            >
+                              #{tag}
+                            </a>
+                          ))}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 
@@ -622,6 +601,12 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                       </div>
                     </div>
                   )}
+
+                  {displaySummary ? (
+                    <p className="mt-4 text-base md:text-lg text-slate-700">
+                      {displaySummary}
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="px-4 md:px-6 pb-6">
@@ -636,7 +621,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                         </React.Fragment>
                       ))
                     ) : (
-                      <div dangerouslySetInnerHTML={{ __html: resolvedSafeHtml }} />
+                      <div dangerouslySetInnerHTML={{ __html: articleBodyHtml }} />
                     )}
                   </article>
                 </div>
