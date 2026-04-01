@@ -11,7 +11,8 @@ import { useI18n } from '../../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../../lib/newsRoutes';
 import { localizeArticle } from '../../lib/localizeArticle';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
-import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
+import { COVER_PLACEHOLDER_SRC, resolveCoverFitMode, resolveCoverImageUrl } from '../../lib/coverImages';
+import { getStoryId } from '../../lib/storyIdentity';
 import StoryImage from '../../src/components/story/StoryImage';
 
 const API_BASE =
@@ -75,16 +76,19 @@ export default function RegionPage(props: { lang: 'en' | 'hi' | 'gu'; data?: any
                     <div key={i} className="p-6 rounded-2xl border shadow-sm animate-pulse bg-gray-50" />
                   ))
                 ) : display.length ? (
-                  display.map((article: any, idx: number) => {
-                    const id = String(article?._id || article?.id || '').trim();
+                  display.map((article: any) => {
+                    const id = getStoryId(article);
                     const slug = resolveArticleSlug(article, effectiveLang);
                     const href = id ? buildNewsUrl({ id, slug, lang: effectiveLang }) : '#';
                     const coverUrl = resolveCoverImageUrl(article);
+                    const fitMode = resolveCoverFitMode(article, { src: coverUrl, altText: article?.title });
                     return (
-                    <a key={idx} href={href} className="group block p-6 rounded-2xl border shadow-sm hover:shadow-md bg-white dark:bg-gray-800 transition">
+                    <a key={id || href} href={href} className="group block p-6 rounded-2xl border shadow-sm hover:shadow-md bg-white dark:bg-gray-800 transition">
                       <div className="mb-3 flex items-start gap-3">
                         <StoryImage
+                          storyId={id}
                           src={coverUrl || COVER_PLACEHOLDER_SRC}
+                          fitMode={fitMode}
                           alt={String(article?.title || '').trim()}
                           variant="mini"
                           className="border border-gray-200 dark:border-gray-700"

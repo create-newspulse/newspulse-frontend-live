@@ -7,7 +7,8 @@ import type { GetStaticProps } from 'next';
 import { normalizeLang, useI18n } from '../../../../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../../../../lib/newsRoutes';
 import { resolveArticleSlug } from '../../../../lib/articleSlugs';
-import { resolveCoverImageUrl } from '../../../../lib/coverImages';
+import { resolveCoverFitMode, resolveCoverImageUrl } from '../../../../lib/coverImages';
+import { getStoryId } from '../../../../lib/storyIdentity';
 import { getActiveRouteLang } from '../../../../utils/routeLang';
 import { unwrapRegionalFeedItems } from '../../../../lib/unwrapRegionalFeed';
 import { buildRegionalFeedSearchParams } from '../../../../lib/regionalFeedQuery';
@@ -114,17 +115,18 @@ export default function GujaratCityPage() {
           return (
             <div className="grid md:grid-cols-2 gap-6">
               {loading && !filtered.length ? null : filtered.length ? (
-                filtered.map((article: any, idx: number) => {
-                  const id = String(article?._id || article?.id || '').trim();
+                filtered.map((article: any) => {
+                  const id = getStoryId(article);
                   const slug = resolveArticleSlug(article, effectiveLang);
                   const href = id ? buildNewsUrl({ id, slug, lang: effectiveLang }) : '#';
                   const coverUrl = resolveCoverImageUrl(article);
+                  const fitMode = resolveCoverFitMode(article, { src: coverUrl, altText: article?.title });
                   const title = String(article?.title || '').trim();
                   const summary = typeof article?.summary === 'string' ? article.summary.trim() : '';
                   return (
-                  <a key={idx} href={href} className="group block rounded-2xl border bg-white p-6 shadow-sm transition hover:shadow-md dark:bg-gray-800">
+                  <a key={id || href} href={href} className="group block rounded-2xl border bg-white p-6 shadow-sm transition hover:shadow-md dark:bg-gray-800">
                     <div className="mb-3 flex items-start gap-3">
-                      <StoryImage src={coverUrl} alt={title || ''} variant="mini" className="rounded-xl" />
+                      <StoryImage storyId={id} src={coverUrl} fitMode={fitMode} alt={title || ''} variant="mini" className="rounded-xl" />
 
                       <div className="min-w-0 flex-1">
                         <div className="text-xs text-gray-500 mb-2">{article.publishedAt ? new Date(article.publishedAt).toLocaleString() : ''}</div>

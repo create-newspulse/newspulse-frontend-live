@@ -7,7 +7,7 @@ import { getLocalizedArticleFields, type RouteLocale } from '../lib/localizedArt
 import { useLanguage } from '../utils/LanguageContext';
 import { useI18n } from '../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../lib/newsRoutes';
-import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../lib/coverImages';
+import { COVER_PLACEHOLDER_SRC, resolveCoverFitMode, resolveCoverImageUrl } from '../lib/coverImages';
 import StoryImage from '../src/components/story/StoryImage';
 
 // Preview-only component you can paste into:
@@ -251,12 +251,15 @@ function SuggestionChips({
 function ResultCard({ item, language }: { item: SearchItem; language: 'en' | 'hi' | 'gu' }) {
   const { t } = useI18n();
   const href = buildNewsUrl({ id: item.id, slug: item.id, lang: language });
+  const fitMode = resolveCoverFitMode(item, { src: item.coverImageUrl, altText: item.title });
   return (
     <div className="group rounded-2xl border border-black/10 bg-white p-4 shadow-sm hover:shadow-md transition">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 gap-3">
           <StoryImage
+            storyId={item.id}
             src={item.coverImageUrl || COVER_PLACEHOLDER_SRC}
+            fitMode={fitMode}
             alt={item.title || ''}
             variant="mini"
             className="border border-black/10"

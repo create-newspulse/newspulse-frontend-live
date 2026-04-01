@@ -14,7 +14,8 @@ import { pickFreshestArticleForLocale, shouldReplaceArticleWithFreshCandidate } 
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { tHeading, toLanguageKey } from '../../utils/localizedNames';
 import { buildNewsUrl } from '../../lib/newsRoutes';
-import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
+import { COVER_PLACEHOLDER_SRC, resolveCoverFitMode, resolveCoverImageUrl } from '../../lib/coverImages';
+import { debugStoryCard, getStoryId, getStoryReactKey } from '../../lib/storyIdentity';
 import StoryImage from '../../src/components/story/StoryImage';
 import { useArticleAnalytics } from '../../hooks/useArticleAnalytics';
 
@@ -381,6 +382,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
   })();
 
   const heroSrc = cover || resolveCoverImageUrl(resolvedArticle) || null;
+  const heroFitMode = resolveCoverFitMode(resolvedArticle, { src: heroSrc, altText: displayTitle });
 
   const prefix = React.useMemo(() => localePrefix(lang), [lang]);
   const categoryKey = React.useMemo(() => resolveCategoryKey(resolvedArticle), [resolvedArticle]);
@@ -582,21 +584,25 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
 
                 <div className="px-4 md:px-6 pb-5">
                   {heroSrc ? (
-                    <div className="relative group hover:z-50">
+                    <div className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white p-2 shadow-[0_18px_38px_-30px_rgba(15,23,42,0.18)] sm:p-3">
                       <StoryImage
+                        storyId={getStoryId(resolvedArticle)}
                         src={heroSrc}
+                        fitMode={heroFitMode}
                         fallbackSrc={COVER_PLACEHOLDER_SRC}
                         alt={displayTitle}
                         variant="top"
                         priority
-                        className="border border-slate-200 bg-slate-100 w-full hover:scale-[0.99] active:scale-[0.99]"
+                        className="w-full rounded-[22px] border border-slate-200/80 bg-slate-100"
                       />
                     </div>
                   ) : (
-                    <div className="w-full h-[220px] sm:h-[280px] md:h-[320px] overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
-                      <div className="h-full w-full grid place-items-center">
-                        <div className="text-xs font-extrabold tracking-tight text-slate-500 select-none">
-                          News <span className="text-slate-700">Pulse</span>
+                    <div className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white p-2 shadow-[0_18px_38px_-30px_rgba(15,23,42,0.18)] sm:p-3">
+                      <div className="h-[220px] w-full overflow-hidden rounded-[22px] border border-slate-200/80 bg-slate-100 sm:h-[280px] md:h-[320px]">
+                        <div className="grid h-full w-full place-items-center">
+                          <div className="text-xs font-extrabold tracking-tight text-slate-500 select-none">
+                            News <span className="text-slate-700">Pulse</span>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -640,21 +646,25 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                 {relatedStories && relatedStories.length ? (
                   <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {relatedStories.slice(0, 6).map((s, idx) => {
-                      const id = String(s?._id || '').trim();
+                      const id = getStoryId(s);
                       const localizedStory = getLocalizedArticleFields(s || {}, lang);
                       if (!localizedStory.isVisible) return null;
                       const href = id ? buildNewsUrl({ id, slug: id, lang }) : '#';
                       const img = resolveCoverImageUrl(s) || COVER_PLACEHOLDER_SRC;
                       const titleText = cleanText(localizedStory.title || (s as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
                       const excerpt = String(localizedStory.summary || (s as any)?.summary || (s as any)?.excerpt || '').trim();
+
+                      debugStoryCard('article-related-grid', s, img);
+
                       return (
                         <a
-                          key={id || String((s as any)?.slug || idx)}
+                          key={getStoryReactKey(s, href)}
                           href={href}
                           className="group rounded-2xl border border-slate-200 bg-white shadow-sm hover:bg-slate-50 overflow-hidden"
                         >
                           <div className="flex gap-3 p-3">
                             <StoryImage
+                              storyId={id}
                               src={img}
                               alt={titleText}
                               variant="list"
@@ -686,14 +696,14 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                   <div className="p-2">
                     {topStories && topStories.length ? (
                       topStories.slice(0, 8).map((s, i) => {
-                        const id = String(s?._id || '').trim();
+                        const id = getStoryId(s);
                         const localizedStory = getLocalizedArticleFields(s || {}, lang);
                         if (!localizedStory.isVisible) return null;
                         const href = id ? buildNewsUrl({ id, slug: id, lang }) : '#';
                         const titleText = cleanText(localizedStory.title || (s as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
                         return (
                           <a
-                            key={id || String((s as any)?.slug || i)}
+                            key={getStoryReactKey(s, href)}
                             href={href}
                             className="flex items-start gap-3 rounded-xl px-2 py-2 hover:bg-slate-50"
                           >
@@ -757,14 +767,14 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                   <div className="p-2">
                     {relatedStories && relatedStories.length ? (
                       relatedStories.slice(0, 6).map((s, i) => {
-                        const id = String(s?._id || '').trim();
+                        const id = getStoryId(s);
                         const localizedStory = getLocalizedArticleFields(s || {}, lang);
                         if (!localizedStory.isVisible) return null;
                         const href = id ? buildNewsUrl({ id, slug: id, lang }) : '#';
                         const titleText = cleanText(localizedStory.title || (s as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
                         return (
                           <a
-                            key={id || String((s as any)?.slug || i)}
+                            key={getStoryReactKey(s, href)}
                             href={href}
                             className="block rounded-xl px-2 py-2 hover:bg-slate-50"
                           >

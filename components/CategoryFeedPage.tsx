@@ -8,7 +8,8 @@ import { getLocalizedArticleFields, STRICT_LOCALE_POLICY } from '../lib/localize
 import { useLanguage } from '../utils/LanguageContext';
 import { useI18n } from '../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../lib/newsRoutes';
-import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../lib/coverImages';
+import { COVER_PLACEHOLDER_SRC, resolveCoverFitMode, resolveCoverImageUrl } from '../lib/coverImages';
+import { debugStoryCard, getStoryId, getStoryReactKey } from '../lib/storyIdentity';
 import StoryImage from '../src/components/story/StoryImage';
 
 export type CategoryFeedPageProps = {
@@ -195,7 +196,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
             <section className="mt-8">
               <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 {filteredItems.map((a) => {
-                  const id = String(a._id || '').trim();
+                  const id = getStoryId(a);
                   const localized = getLocalizedArticleFields(a as any, language, STRICT_LOCALE_POLICY);
                   if (!localized.isVisible) return null;
 
@@ -204,11 +205,16 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
                   const title = localized.title || t('categoryPage.untitled');
                   const summary = localized.summary;
                   const image = resolveCoverImageUrl(a) || COVER_PLACEHOLDER_SRC;
+                  const fitMode = resolveCoverFitMode(a, { src: image, altText: title });
+
+                  debugStoryCard('category-feed', a, image);
 
                   return (
-                    <li key={a._id} className="group rounded-2xl border border-slate-200 bg-white overflow-hidden">
+                    <li key={getStoryReactKey(a, href)} className="group rounded-2xl border border-slate-200 bg-white overflow-hidden">
                       <StoryImage
+                        storyId={id}
                         src={image}
+                        fitMode={fitMode}
                         alt={title || t('categoryPage.articleImageAlt')}
                         variant="top"
                       />

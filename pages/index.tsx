@@ -19,8 +19,9 @@ import AdSlot from "../src/components/ads/AdSlot";
 import { useBookmarks } from "../hooks/useBookmarks";
 import { resolveArticleSlug } from "../lib/articleSlugs";
 import { buildNewsUrl } from "../lib/newsRoutes";
-import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from "../lib/coverImages";
+import { COVER_PLACEHOLDER_SRC, resolveCoverFitMode, resolveCoverImageUrl } from "../lib/coverImages";
 import { fetchCurrentWeather } from "../lib/fetchWeather";
+import { debugStoryCard, getStoryId, getStoryReactKey, getStorySlug, getStoryTranslationGroupId } from "../lib/storyIdentity";
 import StoryImage from "../src/components/story/StoryImage";
 import { getTickerMarqueeText, mergeTickerItemsWithAds, type TickerMarqueeItem } from "../lib/publicTickerAds";
 import type { GetStaticProps } from "next";
@@ -616,7 +617,7 @@ function articleToTickerText(a: Article, requestedLang: 'en' | 'hi' | 'gu'): str
 }
 
 function articleToFeedItem(a: Article, requestedLang: 'en' | 'hi' | 'gu') {
-  const id = safeTitle((a as any)?._id || (a as any)?.id) || undefined;
+  const storyId = getStoryId(a as any) || undefined;
   const slug = resolveArticleSlug(a as any, requestedLang) || safeTitle((a as any)?.slug) || undefined;
   const titleRes = resolveArticleTitle(a as any, requestedLang);
   const descRes = resolveArticleSummaryOrExcerpt(a as any, requestedLang);
@@ -642,10 +643,13 @@ function articleToFeedItem(a: Article, requestedLang: 'en' | 'hi' | 'gu') {
   const source = safeTitle((a as any)?.source?.name || (a as any)?.source) || 'News Pulse';
   const category = safeTitle((a as any)?.category) || '';
   const imageSrc = resolveStoryImageSrc(a as any, requestedLang);
+  const coverFitMode = resolveCoverFitMode(a as any, { src: imageSrc, altText: title });
 
   return {
-    id: id || slug || title,
+    _id: storyId,
+    id: storyId || slug || title,
     slug,
+    translationGroupId: getStoryTranslationGroupId(a as any) || undefined,
     title,
     desc,
     titleIsOriginal: titleRes.isOriginal,
@@ -655,6 +659,7 @@ function articleToFeedItem(a: Article, requestedLang: 'en' | 'hi' | 'gu') {
     source,
     category,
     imageSrc,
+    coverFitMode,
   };
 }
 
@@ -2025,6 +2030,7 @@ function FeaturedCard({ theme, item, onToast }: any) {
     })();
 
     const imageSrc = cover || resolveCoverImageUrl(article as any) || '';
+    const coverFitMode = resolveCoverFitMode(article as any, { src: imageSrc, altText: title });
 
     return {
       id: id || slug || title,
@@ -2040,6 +2046,7 @@ function FeaturedCard({ theme, item, onToast }: any) {
       location,
       readMinutes,
       imageSrc,
+      coverFitMode,
     };
   }, [article, requestedLang, t]);
 
@@ -2186,7 +2193,9 @@ function FeaturedCard({ theme, item, onToast }: any) {
           <div className="mt-5">
             {vm?.imageSrc ? (
               <StoryImage
+                storyId={vm.id}
                 src={vm.imageSrc}
+                fitMode={vm.coverFitMode}
                 alt={vm?.title || ''}
                 variant="top"
                 priority
@@ -2330,18 +2339,21 @@ function CenterStoryFeed({ theme, items, lang }: any) {
               </div>
             ))
           : visibleItems.map((item: any, index: number) => {
-              const rawId = String(item?.id || '').trim();
-              const rawSlug = String(item?.slug || '').trim();
-              const href = buildNewsUrl({ id: rawId || rawSlug, slug: rawSlug, lang: safeLang });
+              const storyId = getStoryId(item);
+              const rawSlug = getStorySlug(item);
+              const href = buildNewsUrl({ id: storyId || rawSlug, slug: rawSlug, lang: safeLang });
               const categoryLabel = resolveCategoryLabel(item?.category);
               const imageSrc = String(item?.imageSrc || '').trim();
               const summary = String(item?.desc || '').trim();
               const readMinutes = estimateReadMinutes(`${String(item?.title || '').trim()} ${summary}`);
               const showSummary = index < 2 && summary;
+              const storyKey = getStoryReactKey(item, href);
+
+              debugStoryCard('home-fresh-updates', item, imageSrc);
 
               return (
                 <Link
-                  key={String(item?.id || item?.slug || index)}
+                  key={storyKey}
                   href={href}
                   className="group block rounded-[28px] border p-3 shadow-[0_18px_38px_-32px_rgba(15,23,42,0.32)] transition hover:-translate-y-[1px] hover:shadow-[0_24px_46px_-30px_rgba(15,23,42,0.34)] sm:p-4"
                   style={{ borderColor: theme.border, background: theme.surface }}
@@ -2349,7 +2361,9 @@ function CenterStoryFeed({ theme, items, lang }: any) {
                   <article className={cx('grid gap-4', showSummary ? 'md:grid-cols-[148px_1fr]' : 'md:grid-cols-[116px_1fr]')}>
                     {imageSrc ? (
                       <StoryImage
+                        storyId={storyId}
                         src={imageSrc}
+                        fitMode={item?.coverFitMode}
                         alt={String(item?.title || '').trim()}
                         variant="mini"
                         fallbackSrc={COVER_PLACEHOLDER_SRC}
@@ -2485,23 +2499,28 @@ function MoreReadsSection({ theme, items, lang }: any) {
         ) : (
           <div className="grid gap-4 md:grid-cols-3">
             {visibleItems.map((item: any, index: number) => {
-              const rawId = String(item?.id || '').trim();
-              const rawSlug = String(item?.slug || '').trim();
-              const href = buildNewsUrl({ id: rawId || rawSlug, slug: rawSlug, lang: safeLang });
+              const storyId = getStoryId(item);
+              const rawSlug = getStorySlug(item);
+              const href = buildNewsUrl({ id: storyId || rawSlug, slug: rawSlug, lang: safeLang });
               const categoryLabel = resolveCategoryLabel(item?.category);
               const imageSrc = String(item?.imageSrc || '').trim();
               const summary = String(item?.desc || '').trim();
+              const storyKey = getStoryReactKey(item, href);
+
+              debugStoryCard('home-more-reads', item, imageSrc);
 
               return (
                 <Link
-                  key={String(item?.id || item?.slug || index)}
+                  key={storyKey}
                   href={href}
                   className="group block rounded-[28px] border p-3 shadow-[0_16px_36px_-30px_rgba(15,23,42,0.28)] transition hover:-translate-y-[1px] hover:shadow-[0_22px_46px_-30px_rgba(15,23,42,0.30)] sm:p-4"
                   style={{ borderColor: theme.border, background: theme.surface }}
                 >
                   {imageSrc ? (
                     <StoryImage
+                      storyId={storyId}
                       src={imageSrc}
+                      fitMode={item?.coverFitMode}
                       alt={String(item?.title || '').trim()}
                       variant="list"
                       fallbackSrc={COVER_PLACEHOLDER_SRC}
@@ -2596,8 +2615,7 @@ function FeedList({ theme, title, items, lang }: any) {
     const pickedIds = new Set<string>();
 
     const getItemId = (it: any): string => {
-      const raw = String(it?.id || it?.slug || '').trim();
-      return raw;
+      return getStoryId(it) || getStorySlug(it);
     };
 
     // 1 per category in fixed order
@@ -2671,16 +2689,19 @@ function FeedList({ theme, title, items, lang }: any) {
             <div className="px-4 pb-4 text-sm text-slate-500">No fresh updates right now</div>
           ) : (
             orderedItems.map((f: any, index: number) => {
-              const rawId = String(f?.id || '').trim();
-              const rawSlug = String(f?.slug || '').trim();
-              const href = buildNewsUrl({ id: rawId || rawSlug, slug: rawSlug, lang: safeLang });
+              const storyId = getStoryId(f);
+              const rawSlug = getStorySlug(f);
+              const href = buildNewsUrl({ id: storyId || rawSlug, slug: rawSlug, lang: safeLang });
               const time = String(f?.time || '').trim();
               const category = String(f?.category || '').trim();
               const metaText = time;
+              const storyKey = getStoryReactKey(f, href);
+
+              debugStoryCard('home-feed-list', f, f?.imageSrc);
 
               return (
                 <Link
-                  key={String(f?.id || f?.slug || index)}
+                  key={storyKey}
                   href={href}
                   className="block rounded-[20px] px-3 py-3 transition border-b border-slate-100 last:border-b-0 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
                 >
@@ -2818,6 +2839,10 @@ function HomeEditorialSection({ theme, title, href, items, lang, Icon }: any) {
   const secondary = items.slice(1, 5);
   const localizedHref = localizePath(href, safeLang);
 
+  if (lead) {
+    debugStoryCard('home-editorial-lead', lead, lead?.imageSrc);
+  }
+
   return (
     <Surface theme={theme} className="overflow-hidden">
       <div
@@ -2855,13 +2880,15 @@ function HomeEditorialSection({ theme, title, href, items, lang, Icon }: any) {
       <div className="grid gap-4 p-4 sm:p-5 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)] xl:items-start">
         {lead ? (
           <Link
-            href={buildNewsUrl({ id: String(lead?.id || '').trim() || String(lead?.slug || '').trim(), slug: String(lead?.slug || '').trim(), lang: safeLang })}
+            href={buildNewsUrl({ id: getStoryId(lead) || getStorySlug(lead), slug: getStorySlug(lead), lang: safeLang })}
             className="group block overflow-hidden rounded-[28px] border p-4 shadow-[0_18px_42px_-34px_rgba(15,23,42,0.30)] transition hover:-translate-y-[1px] hover:shadow-[0_24px_52px_-34px_rgba(15,23,42,0.34)] sm:p-5"
             style={{ borderColor: theme.border, background: theme.surface }}
           >
             {lead?.imageSrc ? (
               <StoryImage
+                storyId={getStoryId(lead)}
                 src={String(lead.imageSrc)}
+                fitMode={lead?.coverFitMode}
                 alt={String(lead?.title || '').trim()}
                 variant="top"
                 fallbackSrc={COVER_PLACEHOLDER_SRC}
@@ -2903,14 +2930,17 @@ function HomeEditorialSection({ theme, title, href, items, lang, Icon }: any) {
         ) : null}
 
         <div className="grid gap-3">
-          {secondary.map((item: any, index: number) => {
-            const rawId = String(item?.id || '').trim();
-            const rawSlug = String(item?.slug || '').trim();
-            const href = buildNewsUrl({ id: rawId || rawSlug, slug: rawSlug, lang: safeLang });
+          {secondary.map((item: any) => {
+            const storyId = getStoryId(item);
+            const rawSlug = getStorySlug(item);
+            const href = buildNewsUrl({ id: storyId || rawSlug, slug: rawSlug, lang: safeLang });
+            const storyKey = getStoryReactKey(item, href);
+
+            debugStoryCard('home-editorial-secondary', item, item?.imageSrc);
 
             return (
               <Link
-                key={String(item?.id || item?.slug || index)}
+                key={storyKey}
                 href={href}
                 className="group block rounded-[24px] border p-3 shadow-[0_14px_32px_-28px_rgba(15,23,42,0.28)] transition hover:-translate-y-[1px] hover:shadow-[0_20px_40px_-28px_rgba(15,23,42,0.30)] sm:p-4"
                 style={{ borderColor: theme.border, background: theme.surface }}
@@ -2918,7 +2948,9 @@ function HomeEditorialSection({ theme, title, href, items, lang, Icon }: any) {
                 <article className="grid grid-cols-[96px_1fr] gap-4 sm:grid-cols-[116px_1fr]">
                   {item?.imageSrc ? (
                     <StoryImage
+                      storyId={storyId}
                       src={String(item.imageSrc)}
+                      fitMode={item?.coverFitMode}
                       alt={String(item?.title || '').trim()}
                       variant="mini"
                       fallbackSrc={COVER_PLACEHOLDER_SRC}
@@ -3031,9 +3063,9 @@ function YouthPulseHomepageSection({ theme, items, lang }: any) {
         </Link>
 
         <div className="grid gap-3">
-          {secondary.map((item: any, index: number) => (
+          {secondary.map((item: any) => (
             <Link
-              key={String(item?.id || index)}
+              key={getStoryReactKey(item, href)}
               href={href}
               className="group block rounded-[24px] border p-3 shadow-[0_14px_32px_-28px_rgba(15,23,42,0.28)] transition hover:-translate-y-[1px] hover:shadow-[0_20px_40px_-28px_rgba(15,23,42,0.30)] sm:p-4"
               style={{ borderColor: theme.border, background: theme.surface }}

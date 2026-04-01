@@ -1,10 +1,12 @@
 import Head from 'next/head';
-import Image from 'next/image';
 import Link from 'next/link';
 import React from 'react';
+import StoryImage from '../src/components/story/StoryImage';
 import { fetchPublicNews, type Article } from '../lib/publicNewsApi';
+import { resolveCoverFitMode } from '../lib/coverImages';
 import { buildNewsUrl } from '../lib/newsRoutes';
 import { getLocalizedArticleFields } from '../lib/localizedArticleFields';
+import { debugStoryCard, getStoryId, getStoryReactKey } from '../lib/storyIdentity';
 import { useI18n } from '../src/i18n/LanguageProvider';
 import { useLanguage } from '../utils/LanguageContext';
 import OriginalTag from '../components/OriginalTag';
@@ -198,7 +200,7 @@ export default function LatestPage() {
                 <section aria-label="Latest stories">
                   <ul className="grid gap-3">
                     {items.map((a) => {
-                      const id = String(a._id || '').trim();
+                      const id = getStoryId(a);
                       const localized = getLocalizedArticleFields(a as any, language);
                       if (!localized.isVisible) return null;
 
@@ -208,9 +210,12 @@ export default function LatestPage() {
                       const when = formatTime(a.publishedAt || a.createdAt);
                       const category = String(localized.categoryLabel || (a as any)?.category || '').trim();
                       const coverSrc = resolveCoverImageUrl(a as any);
+                      const fitMode = resolveCoverFitMode(a as any, { src: coverSrc, altText: title });
+
+                      debugStoryCard('latest-page', a, coverSrc);
 
                       return (
-                        <li key={id || href}>
+                        <li key={getStoryReactKey(a, href)}>
                           <Link
                             href={href}
                             className="group relative block overflow-hidden rounded-2xl border border-slate-200/60 bg-white/70 backdrop-blur px-4 py-3 shadow-sm transition will-change-transform hover:-translate-y-0.5 hover:border-slate-300/60 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60"
@@ -220,13 +225,13 @@ export default function LatestPage() {
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch sm:gap-4">
                               <div className="relative w-full overflow-hidden rounded-xl bg-slate-50 aspect-video sm:aspect-auto sm:h-24 sm:w-32 shrink-0">
                                 {coverSrc ? (
-                                  <Image
+                                  <StoryImage
+                                    storyId={id}
                                     src={coverSrc}
+                                    fitMode={fitMode}
                                     alt={title}
-                                    fill
-                                    sizes="(min-width: 640px) 128px, 100vw"
-                                    className="object-cover"
-                                    unoptimized
+                                    variant="list"
+                                    className="h-full w-full rounded-xl border border-slate-200/70"
                                   />
                                 ) : (
                                   <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-sky-50 to-indigo-50">

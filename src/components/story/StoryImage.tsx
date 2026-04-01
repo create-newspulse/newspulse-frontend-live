@@ -1,5 +1,5 @@
 import React from 'react';
-import { COVER_PLACEHOLDER_SRC } from '../../../lib/coverImages';
+import { COVER_PLACEHOLDER_SRC, resolveImageFitMode, type CoverFitMode } from '../../../lib/coverImages';
 
 export type StoryImageVariant = 'card' | 'list' | 'top' | 'mini';
 
@@ -15,47 +15,53 @@ function cx(...c: Array<string | false | null | undefined>) {
 }
 
 export type StoryImageProps = {
+  storyId?: string | null;
   src?: string | null;
   alt: string;
   variant: StoryImageVariant;
+  fitMode?: CoverFitMode | 'auto' | null;
   priority?: boolean;
   className?: string;
   fallbackSrc?: string;
 };
 
 export function StoryImage({
+  storyId,
   src,
   alt,
   variant,
+  fitMode,
   priority = false,
   className,
   fallbackSrc = COVER_PLACEHOLDER_SRC,
 }: StoryImageProps) {
+  const safeStoryId = String(storyId || '').trim();
   const safeSrc = String(src || '').trim();
   const safeFallbackSrc = String(fallbackSrc || '').trim();
+  const safeFitMode = String(fitMode || '').trim();
 
   const preferredSrc = safeSrc || safeFallbackSrc;
 
   const [currentSrc, setCurrentSrc] = React.useState<string>(preferredSrc);
+  const [currentFitMode, setCurrentFitMode] = React.useState<CoverFitMode>(
+    resolveImageFitMode({ fitMode: safeFitMode, src: preferredSrc, altText: alt })
+  );
 
   React.useEffect(() => {
     setCurrentSrc(preferredSrc);
-  }, [preferredSrc]);
+    setCurrentFitMode(resolveImageFitMode({ fitMode: safeFitMode, src: preferredSrc, altText: alt }));
+  }, [alt, preferredSrc, safeFallbackSrc, safeFitMode, safeSrc, safeStoryId]);
 
   const showImage = Boolean(currentSrc);
 
   return (
     <div
       className={cx(
-        'relative overflow-hidden rounded-2xl shrink-0',
+        'group/story-image relative overflow-hidden rounded-2xl shrink-0 bg-slate-100',
         VARIANT_SIZES[variant],
-        // Hover (desktop): lift + subtle scale + pop above neighbors
-        'transition-[transform,box-shadow] duration-300 ease-out',
-        'group-hover:z-50 group-hover:-translate-y-[2px] group-hover:scale-[1.01] group-hover:shadow-lg',
-        // Mobile tap (and desktop active): subtle press
-        'hover:scale-[0.98] active:scale-[0.98]',
         className
       )}
+      data-fit-mode={currentFitMode}
     >
       {/* Placeholder (always present to avoid layout shift) */}
       <div className="absolute inset-0 bg-gradient-to-br from-slate-900/5 to-slate-900/10" />
@@ -68,17 +74,33 @@ export function StoryImage({
       {showImage ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
+          key={safeStoryId || safeSrc || safeFallbackSrc || alt}
           src={currentSrc}
           alt={alt}
           loading={priority ? 'eager' : 'lazy'}
           className={cx(
-            'absolute inset-0 h-full w-full object-cover',
-            'transition-transform duration-300 ease-out',
-            'group-hover:scale-110'
+            'absolute inset-0 h-full w-full object-center',
+            currentFitMode === 'contain' ? 'object-contain p-2 sm:p-3' : 'object-cover',
+            'transition-transform duration-500 ease-out will-change-transform',
+            'hover:scale-[1.06] group-hover/story-image:scale-[1.06]'
           )}
+          onLoad={(event) => {
+            const img = event.currentTarget;
+            setCurrentFitMode((prev) => {
+              const next = resolveImageFitMode({
+                fitMode: safeFitMode,
+                src: currentSrc,
+                altText: alt,
+                width: img.naturalWidth,
+                height: img.naturalHeight,
+              });
+              return prev === next ? prev : next;
+            });
+          }}
           onError={() => {
             if (safeFallbackSrc && currentSrc !== safeFallbackSrc) {
               setCurrentSrc(safeFallbackSrc);
+              setCurrentFitMode(resolveImageFitMode({ fitMode: safeFitMode, src: safeFallbackSrc, altText: alt }));
               return;
             }
 

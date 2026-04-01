@@ -11,7 +11,7 @@ import { useLanguage } from '../../utils/LanguageContext';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../../lib/newsRoutes';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
-import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
+import { COVER_PLACEHOLDER_SRC, resolveCoverFitMode, resolveCoverImageUrl } from '../../lib/coverImages';
 import StoryImage from '../../src/components/story/StoryImage';
 
 function formatWhenLabel(iso?: string) {
@@ -123,11 +123,14 @@ export default function TopicPage() {
                   const summaryRes = resolveArticleSummaryOrExcerpt(a as any, language);
                   const summary = summaryRes.text;
                   const image = resolveCoverImageUrl(a) || COVER_PLACEHOLDER_SRC;
+                  const fitMode = resolveCoverFitMode(a, { src: image, altText: titleRes.text });
 
                   return (
                     <li key={a._id} className="group rounded-2xl border border-slate-200 bg-white overflow-hidden">
                       <StoryImage
+                        storyId={id}
                         src={image}
+                        fitMode={fitMode}
                         alt={titleRes.text || t('categoryPage.articleImageAlt')}
                         variant="top"
                       />
