@@ -1,5 +1,6 @@
 import { ExternalLink, Play, Radio } from "lucide-react";
 import type { ScenicMediaItem } from "../../data/inspirationHubContent";
+import { useI18n } from "../../src/i18n/LanguageProvider";
 
 type Props = {
   items: ScenicMediaItem[];
@@ -7,6 +8,7 @@ type Props = {
 };
 
 export default function DroneTVSection({ items, videoEmbedUrl }: Props) {
+  const { t } = useI18n();
   const featured = items[0];
   const secondary = items.slice(1);
   const showSettingsFallback = videoEmbedUrl === null;
@@ -22,19 +24,19 @@ export default function DroneTVSection({ items, videoEmbedUrl }: Props) {
           <div className="max-w-3xl">
             <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-500">
               <Radio className="h-4 w-4 text-teal-600" />
-              DroneTV
+              {t("inspirationHub.page.drone.eyebrow")}
             </div>
             <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950 sm:text-[2rem]">
-              Scenic Nature Relaxation
+              {t("inspirationHub.page.drone.title")}
             </h2>
             <p className="mt-3 text-sm leading-6 text-slate-600 sm:text-[15px]">
-              A safe media lane built around supported watch cards instead of blocked embeds, so this section stays useful even when third-party iframe rules change.
+              {t("inspirationHub.page.drone.description")}
             </p>
           </div>
 
           <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-[0.16em] text-emerald-700">
             <Play className="h-3.5 w-3.5" />
-            Supported media cards
+            {t("inspirationHub.page.drone.supportedBadge")}
           </div>
         </div>
       </div>
@@ -45,19 +47,19 @@ export default function DroneTVSection({ items, videoEmbedUrl }: Props) {
             <div className="relative overflow-hidden rounded-[24px] border border-slate-200/70 bg-black shadow-[0_20px_48px_-38px_rgba(15,23,42,0.56)]">
               <div className="pointer-events-none absolute left-4 top-4 z-10 sm:left-5 sm:top-5">
                 <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-slate-950/55 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.16em] text-white backdrop-blur-sm">
-                  DroneTV live embed
+                  {t("inspirationHub.page.drone.liveEmbedBadge")}
                 </div>
               </div>
 
               <div className="pointer-events-none absolute right-4 top-4 z-10 sm:right-5 sm:top-5">
                 <div className="rounded-full border border-white/15 bg-slate-950/45 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.16em] text-white/85 backdrop-blur-sm">
-                  Lazy loaded
+                  {t("inspirationHub.page.drone.lazyLoadedBadge")}
                 </div>
               </div>
 
               <div className="relative aspect-[16/9] w-full overflow-hidden bg-black">
                 <iframe
-                  title="Inspiration Hub DroneTV"
+                  title={t("inspirationHub.page.drone.iframeTitle")}
                   src={videoEmbedUrl}
                   className="absolute inset-0 h-full w-full bg-black"
                   loading="lazy"
@@ -69,9 +71,9 @@ export default function DroneTVSection({ items, videoEmbedUrl }: Props) {
 
               <div className="flex flex-col gap-3 border-t border-slate-200/70 bg-white px-4 py-4 text-slate-700 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                 <div>
-                  <div className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-500">Published DroneTV</div>
+                  <div className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-500">{t("inspirationHub.page.drone.publishedLabel")}</div>
                   <div className="mt-1 text-sm font-semibold leading-6 text-slate-700">
-                    The admin-configured Inspiration Hub video is active, so fallback scenic cards are hidden on this page.
+                    {t("inspirationHub.page.drone.publishedDescription")}
                   </div>
                 </div>
 
@@ -81,7 +83,7 @@ export default function DroneTVSection({ items, videoEmbedUrl }: Props) {
                   rel="noreferrer"
                   className="inline-flex shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
                 >
-                  Open scenic source
+                  {t("inspirationHub.page.drone.openSourceCta")}
                   <ExternalLink className="h-4 w-4" />
                 </a>
               </div>
@@ -91,7 +93,7 @@ export default function DroneTVSection({ items, videoEmbedUrl }: Props) {
 
         {showSettingsFallback ? (
           <article className="rounded-[28px] border border-slate-200/70 bg-slate-50 px-5 py-5 text-sm leading-6 text-slate-600 xl:col-span-2 sm:px-6">
-            DroneTV video is currently disabled or missing in Public Site Settings, so Inspiration Hub continues with stable scenic cards instead of a broken video panel.
+            {t("inspirationHub.page.drone.disabledNotice")}
           </article>
         ) : null}
 
@@ -122,7 +124,7 @@ export default function DroneTVSection({ items, videoEmbedUrl }: Props) {
               <div className="flex flex-col gap-3 border-t border-white/10 px-5 py-4 text-white/88 sm:flex-row sm:items-center sm:justify-between sm:px-6">
                 <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-white/70">
                   <span className="rounded-full border border-white/15 px-2.5 py-1">{featured.duration}</span>
-                  <span className="rounded-full border border-white/15 px-2.5 py-1">Intentional fallback</span>
+                  <span className="rounded-full border border-white/15 px-2.5 py-1">{t("inspirationHub.page.drone.fallbackBadge")}</span>
                 </div>
 
                 <a
@@ -170,7 +172,7 @@ export default function DroneTVSection({ items, videoEmbedUrl }: Props) {
               ))}
 
               <div className="rounded-[26px] border border-slate-200/70 bg-slate-50 px-4 py-4 text-sm leading-6 text-slate-600">
-                If a live scenic source changes its embed policy, this page still renders cleanly because the experience is built from stable media cards and outbound watch actions.
+                {t("inspirationHub.page.drone.fallbackPolicyNote")}
               </div>
             </div>
           </>

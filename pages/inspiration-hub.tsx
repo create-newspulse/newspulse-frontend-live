@@ -4,22 +4,36 @@ import InspirationHero from '../components/inspiration/InspirationHero';
 import DroneTVSection from '../components/inspiration/DroneTVSection';
 import DailyWondersSection from '../components/inspiration/DailyWondersSection';
 import PositiveStoriesSection from '../components/inspiration/PositiveStoriesSection';
-import { dailyWonderQuotes, positiveStoryItems, scenicMediaItems } from '../data/inspirationHubContent';
+import { getInspirationHubContent } from '../data/inspirationHubContent';
 import type { GetStaticProps } from 'next';
 import { usePublicSettings } from '../src/context/PublicSettingsContext';
 import { resolveInspirationHubDroneTvEmbedUrl } from '../src/lib/inspirationHubSettings';
+import { useI18n } from '../src/i18n/LanguageProvider';
 
 export default function InspirationHubPage() {
+  const { lang, t } = useI18n();
   const { settings } = usePublicSettings();
   const droneVideoEmbedUrl = resolveInspirationHubDroneTvEmbedUrl(settings, 'categoryPage');
+  const content = getInspirationHubContent(lang);
+  const voiceText = [
+    t('inspirationHub.voice.intro'),
+    t('categories.inspirationHub'),
+    t('inspirationHub.page.subtitle'),
+    t('inspirationHub.page.drone.title'),
+    ...content.scenicMediaItems.map((item) => `${item.title}. ${item.description}`),
+    t('inspirationHub.page.dailyWonders.title'),
+    ...content.dailyWonderQuotes.map((item) => `${item.quote}. ${item.support}`),
+    t('inspirationHub.page.positiveStories.title'),
+    ...content.positiveStoryItems.map((item) => `${item.title}. ${item.summary}`),
+  ].join(' ');
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f4fbfb_0%,#f8fbff_42%,#ffffff_100%)] text-black dark:bg-dark-primary dark:text-dark-text">
       <Head>
-        <title>Inspiration Hub • NewsPulse</title>
+        <title>{t('inspirationHub.metaTitle')}</title>
         <meta
           name="description"
-          content="Explore scenic relaxation videos, uplifting stories, and visual quotes to refresh your mind."
+          content={t('inspirationHub.metaDescription')}
         />
         <meta name="robots" content="index,follow" />
       </Head>
@@ -34,8 +48,9 @@ export default function InspirationHubPage() {
             transition={{ duration: 0.45 }}
           >
             <InspirationHero
-              title="Inspiration Hub"
-              subtitle="Explore scenic relaxation videos, uplifting stories, and visual quotes to refresh your mind."
+              title={t('categories.inspirationHub')}
+              subtitle={t('inspirationHub.page.subtitle')}
+              voiceText={voiceText}
             />
           </motion.div>
 
@@ -46,7 +61,7 @@ export default function InspirationHubPage() {
               viewport={{ once: true, amount: 0.2 }}
               transition={{ duration: 0.45 }}
             >
-              <DroneTVSection items={scenicMediaItems} videoEmbedUrl={droneVideoEmbedUrl} />
+              <DroneTVSection items={content.scenicMediaItems} videoEmbedUrl={droneVideoEmbedUrl} />
             </motion.div>
 
             <motion.div
@@ -55,7 +70,7 @@ export default function InspirationHubPage() {
               viewport={{ once: true, amount: 0.2 }}
               transition={{ duration: 0.45, delay: 0.05 }}
             >
-              <DailyWondersSection quotes={dailyWonderQuotes} />
+              <DailyWondersSection quotes={content.dailyWonderQuotes} />
             </motion.div>
 
             <motion.div
@@ -64,7 +79,7 @@ export default function InspirationHubPage() {
               viewport={{ once: true, amount: 0.2 }}
               transition={{ duration: 0.45, delay: 0.1 }}
             >
-              <PositiveStoriesSection items={positiveStoryItems} />
+              <PositiveStoriesSection items={content.positiveStoryItems} />
             </motion.div>
           </div>
         </div>

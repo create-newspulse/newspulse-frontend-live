@@ -1,11 +1,13 @@
 import { Quote, Sparkles } from "lucide-react";
 import type { QuoteItem } from "../../data/inspirationHubContent";
+import { useI18n } from "../../src/i18n/LanguageProvider";
 
 type Props = {
   quotes: QuoteItem[];
 };
 
 export default function DailyWondersSection({ quotes }: Props) {
+  const { t } = useI18n();
   const featured = quotes[0];
   const supporting = quotes.slice(1);
 
@@ -16,13 +18,13 @@ export default function DailyWondersSection({ quotes }: Props) {
       <div className="border-b border-slate-200/70 px-5 py-5 sm:px-6">
         <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-500">
           <Sparkles className="h-4 w-4 text-amber-500" />
-          Daily Wonders
+          {t("inspirationHub.page.dailyWonders.eyebrow")}
         </div>
         <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950 sm:text-[2rem]">
-          Uplifting Visual Quotes
+          {t("inspirationHub.page.dailyWonders.title")}
         </h2>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600 sm:text-[15px]">
-          Native quote panels keep the page calm, readable, and reliable without depending on third-party embeds or empty frames.
+          {t("inspirationHub.page.dailyWonders.description")}
         </p>
       </div>
 
@@ -55,7 +57,7 @@ export default function DailyWondersSection({ quotes }: Props) {
               <p className="mt-3 text-sm leading-6 text-slate-600">{quote.support}</p>
               <div className="mt-4 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
                 <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                Card {index + 1}
+                {t("inspirationHub.page.dailyWonders.cardLabel", { index: index + 1 })}
               </div>
             </article>
           ))}

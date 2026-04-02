@@ -2,7 +2,10 @@ import React from "react";
 import Link from "next/link";
 import { ArrowRight, Leaf, Play, Sparkles } from "lucide-react";
 import inspirationData from "../../data/inspiration.json";
+import { getInspirationHubContent } from "../../data/inspirationHubContent";
 import { sanitizeEmbedUrl } from "../../src/lib/publicSettings";
+import { useI18n } from "../../src/i18n/LanguageProvider";
+import InspirationListenButton from "../inspiration/InspirationListenButton";
 
 type InspirationHubHomepageSectionProps = {
   theme: any;
@@ -10,35 +13,30 @@ type InspirationHubHomepageSectionProps = {
   droneVideoEmbedUrl?: string | null;
 };
 
-const DAILY_WONDERS_QUOTES = [
-  {
-    id: "pause",
-    label: "Featured reflection",
-    quote: "Pause long enough to notice what is still good, gentle, and growing around you.",
-  },
-  {
-    id: "light",
-    label: "Visual reset",
-    quote: "Soft light, steady breath, and one quiet thought can reset an entire afternoon.",
-  },
-  {
-    id: "wonder",
-    label: "Daily wonder",
-    quote: "Wonder returns quickly when the mind is given a little room to wander without noise.",
-  },
-];
-
 export default function InspirationHubHomepageSection({ theme, href, droneVideoEmbedUrl }: InspirationHubHomepageSectionProps) {
+  const { lang, t } = useI18n();
+  const content = getInspirationHubContent(lang);
   const sections = Array.isArray((inspirationData as any)?.sections) ? (inspirationData as any).sections : [];
   const drone = sections.find((item: any) => item?.id === "drone-tv") || null;
-  const wonders = sections.find((item: any) => item?.id === "daily-wonders") || null;
   const fallbackEmbedUrl = sanitizeEmbedUrl(drone?.videoUrl);
   const embedUrl = typeof droneVideoEmbedUrl === "string" ? droneVideoEmbedUrl : fallbackEmbedUrl;
   const hasEmbed = !!embedUrl;
   const isSettingsDriven = droneVideoEmbedUrl !== undefined;
 
-  const featuredQuote = DAILY_WONDERS_QUOTES[0];
-  const supportingQuotes = DAILY_WONDERS_QUOTES.slice(1);
+  const featuredMedia = content.scenicMediaItems[0];
+  const featuredQuote = content.dailyWonderQuotes[0];
+  const supportingQuotes = content.dailyWonderQuotes.slice(1, 3);
+  const voiceText = [
+    t("inspirationHub.voice.intro"),
+    t("categories.inspirationHub"),
+    t("inspirationHub.homepage.subtitle"),
+    t("inspirationHub.homepage.drone.title"),
+    featuredMedia ? `${featuredMedia.title}. ${featuredMedia.description}` : "",
+    t("inspirationHub.homepage.wonders.title"),
+    ...content.dailyWonderQuotes.slice(0, 3).map((quote) => quote.quote),
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <section
@@ -64,23 +62,30 @@ export default function InspirationHubHomepageSection({ theme, href, droneVideoE
               >
                 <Leaf className="h-4 w-4" />
               </span>
-              Calm viewing
+              {t("inspirationHub.badge")}
             </div>
             <h2 className="mt-3 text-2xl font-black tracking-tight sm:text-[2rem]" style={{ color: theme.text }}>
-              Inspiration Hub
+              {t("categories.inspirationHub")}
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 sm:text-[15px]" style={{ color: theme.sub }}>
-              Explore scenic relaxation videos, uplifting stories, and visual quotes to refresh your mind.
+              {t("inspirationHub.homepage.subtitle")}
             </p>
           </div>
 
-          <Link
-            href={href}
-            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border px-4 py-2.5 text-sm font-semibold transition hover:opacity-[0.98]"
-            style={{ color: theme.text, borderColor: theme.border, background: theme.surface }}
-          >
-            Open Inspiration Hub <ArrowRight className="h-4 w-4" />
-          </Link>
+          <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+            <InspirationListenButton
+              text={voiceText}
+              className="inline-flex items-center justify-center gap-2 rounded-full border px-4 py-2.5 text-sm font-semibold transition hover:opacity-[0.98]"
+              style={{ color: theme.text, borderColor: theme.border, background: theme.surface }}
+            />
+            <Link
+              href={href}
+              className="inline-flex items-center justify-center gap-2 rounded-full border px-4 py-2.5 text-sm font-semibold transition hover:opacity-[0.98]"
+              style={{ color: theme.text, borderColor: theme.border, background: theme.surface }}
+            >
+              {t("inspirationHub.homepage.openHubCta")} <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -92,13 +97,13 @@ export default function InspirationHubHomepageSection({ theme, href, droneVideoE
           <div className="flex items-start justify-between gap-3 border-b px-4 py-4 sm:px-5" style={{ borderColor: theme.border }}>
             <div className="min-w-0">
               <div className="text-[11px] font-extrabold uppercase tracking-[0.16em]" style={{ color: theme.sub }}>
-                DroneTV
+                {t("inspirationHub.homepage.drone.eyebrow")}
               </div>
               <h3 className="mt-2 text-xl font-black tracking-tight sm:text-2xl" style={{ color: theme.text }}>
-                Scenic Nature Relaxation
+                {t("inspirationHub.homepage.drone.title")}
               </h3>
               <p className="mt-2 max-w-2xl text-sm leading-6" style={{ color: theme.sub }}>
-                A slower, immersive visual space designed for scenic pauses and low-noise viewing.
+                {t("inspirationHub.homepage.drone.description")}
               </p>
             </div>
 
@@ -107,7 +112,11 @@ export default function InspirationHubHomepageSection({ theme, href, droneVideoE
               style={{ color: theme.text, borderColor: theme.border, background: theme.surface2 }}
             >
               <Play className="h-3.5 w-3.5" />
-              {hasEmbed ? (isSettingsDriven ? "Admin video active" : "Auto-embed ready") : "Safe placeholder"}
+              {hasEmbed
+                ? isSettingsDriven
+                  ? t("inspirationHub.homepage.drone.activeBadge")
+                  : t("inspirationHub.homepage.drone.autoEmbedBadge")
+                : t("inspirationHub.homepage.drone.placeholderBadge")}
             </div>
           </div>
 
@@ -119,7 +128,7 @@ export default function InspirationHubHomepageSection({ theme, href, droneVideoE
               <div className="relative aspect-[16/9] w-full overflow-hidden bg-black">
                 {hasEmbed ? (
                   <iframe
-                    title={String(drone?.title || "DroneTV scenic relaxation")}
+                    title={t("inspirationHub.homepage.drone.iframeTitle")}
                     src={embedUrl}
                     className="absolute inset-0 h-full w-full bg-black"
                     loading="lazy"
@@ -141,12 +150,12 @@ export default function InspirationHubHomepageSection({ theme, href, droneVideoE
                     <div className="absolute inset-x-0 bottom-0 h-[45%] bg-[linear-gradient(180deg,transparent,rgba(15,23,42,0.42))]" />
                     <div className="absolute inset-x-6 bottom-6">
                       <div className="max-w-md rounded-[24px] border px-4 py-4 backdrop-blur-md" style={{ borderColor: "rgba(255,255,255,0.16)", background: "rgba(15,23,42,0.18)", color: "#f8fafc" }}>
-                        <div className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-white/80">Scenic placeholder</div>
-                        <div className="mt-2 text-xl font-black tracking-tight">Immersive relaxation view</div>
+                        <div className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-white/80">{t("inspirationHub.homepage.drone.placeholderEyebrow")}</div>
+                        <div className="mt-2 text-xl font-black tracking-tight">{t("inspirationHub.homepage.drone.placeholderTitle")}</div>
                         <div className="mt-2 text-sm leading-6 text-white/80">
                           {isSettingsDriven
-                            ? "DroneTV video is disabled or unavailable in Public Site Settings, so this module falls back to a calm visual card."
-                            : "Embed is not wired right now, so this module stays lightweight with a calm visual placeholder."}
+                            ? t("inspirationHub.homepage.drone.settingsFallback")
+                            : t("inspirationHub.homepage.drone.staticFallback")}
                         </div>
                       </div>
                     </div>
@@ -156,7 +165,7 @@ export default function InspirationHubHomepageSection({ theme, href, droneVideoE
                 {hasEmbed ? (
                   <div className="pointer-events-none absolute left-4 top-4 sm:left-5 sm:top-5">
                     <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-white/90" style={{ borderColor: "rgba(255,255,255,0.18)", background: "rgba(15,23,42,0.32)", backdropFilter: "blur(10px)" }}>
-                      Scenic stream
+                      {t("inspirationHub.homepage.drone.streamBadge")}
                     </div>
                   </div>
                 ) : (
@@ -165,10 +174,10 @@ export default function InspirationHubHomepageSection({ theme, href, droneVideoE
                     <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4 sm:p-5">
                       <div className="min-w-0">
                         <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-white/90" style={{ borderColor: "rgba(255,255,255,0.18)", background: "rgba(15,23,42,0.26)" }}>
-                          Scenic stream
+                          {t("inspirationHub.homepage.drone.streamBadge")}
                         </div>
                         <div className="mt-3 text-lg font-black tracking-tight text-white sm:text-xl">
-                          {String(drone?.title || "DroneTV – Scenic Nature Relaxation")}
+                          {t("inspirationHub.homepage.drone.placeholderTitle")}
                         </div>
                       </div>
                     </div>
@@ -179,14 +188,14 @@ export default function InspirationHubHomepageSection({ theme, href, droneVideoE
 
             <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="max-w-2xl text-sm leading-6" style={{ color: theme.sub }}>
-                {String(drone?.note || "A calm, scenic video lane designed to load safely and stay visually premium.")}
+                {t("inspirationHub.homepage.drone.note")}
               </p>
               <Link
                 href={href}
                 className="inline-flex shrink-0 items-center gap-2 text-sm font-semibold"
                 style={{ color: theme.accent }}
               >
-                View more calm content <ArrowRight className="h-4 w-4" />
+                {t("inspirationHub.homepage.drone.moreCta")} <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
           </div>
@@ -199,13 +208,13 @@ export default function InspirationHubHomepageSection({ theme, href, droneVideoE
           <div className="border-b px-4 py-4 sm:px-5" style={{ borderColor: theme.border }}>
             <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.16em]" style={{ color: theme.sub }}>
               <Sparkles className="h-4 w-4" />
-              Daily Wonders
+              {t("inspirationHub.homepage.wonders.eyebrow")}
             </div>
             <h3 className="mt-2 text-xl font-black tracking-tight" style={{ color: theme.text }}>
-              Uplifting Visual Quotes
+              {t("inspirationHub.homepage.wonders.title")}
             </h3>
             <p className="mt-2 text-sm leading-6" style={{ color: theme.sub }}>
-              A quote-led companion panel built for reflection instead of another repeated news-card grid.
+              {t("inspirationHub.homepage.wonders.description")}
             </p>
           </div>
 
@@ -221,13 +230,13 @@ export default function InspirationHubHomepageSection({ theme, href, droneVideoE
               }}
             >
               <div className="text-[11px] font-extrabold uppercase tracking-[0.16em]" style={{ color: theme.sub }}>
-                {featuredQuote.label}
+                {featuredQuote?.eyebrow}
               </div>
               <p className="mt-4 text-[1.2rem] font-black leading-8 tracking-tight sm:text-[1.35rem]" style={{ color: theme.text }}>
-                &ldquo;{featuredQuote.quote}&rdquo;
+                &ldquo;{featuredQuote?.quote}&rdquo;
               </p>
               <div className="mt-5 text-xs font-semibold uppercase tracking-[0.14em]" style={{ color: theme.sub }}>
-                {String(wonders?.title || "Daily Wonders")}
+                {t("inspirationHub.homepage.wonders.footerLabel")}
               </div>
             </div>
 
@@ -239,7 +248,7 @@ export default function InspirationHubHomepageSection({ theme, href, droneVideoE
                   style={{ borderColor: theme.border, background: theme.surface2 }}
                 >
                   <div className="text-[11px] font-extrabold uppercase tracking-[0.16em]" style={{ color: theme.sub }}>
-                    {quote.label}
+                    {quote.eyebrow}
                   </div>
                   <p className="mt-3 text-sm font-semibold leading-6" style={{ color: theme.text }}>
                     &ldquo;{quote.quote}&rdquo;
@@ -252,7 +261,7 @@ export default function InspirationHubHomepageSection({ theme, href, droneVideoE
               className="rounded-[22px] border px-4 py-4 text-sm leading-6"
               style={{ borderColor: theme.border, background: theme.surface2, color: theme.sub }}
             >
-              {String(wonders?.note || "Visual inspiration and calm moments.")}
+              {t("inspirationHub.homepage.wonders.note")}
             </div>
           </div>
         </div>

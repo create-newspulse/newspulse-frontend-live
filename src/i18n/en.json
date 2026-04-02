@@ -179,6 +179,85 @@
     "appPromoFeatureOfflineReading": "Offline Reading",
     "appPromoNote": "(UI preview only — app links will be connected after launch)"
   },
+  "inspirationHub": {
+    "metaTitle": "Inspiration Hub • News Pulse",
+    "metaDescription": "Explore scenic relaxation videos, uplifting stories, and visual quotes to refresh your mind.",
+    "badge": "Calm viewing",
+    "voice": {
+      "listenTitle": "Listen to Inspiration Hub",
+      "muteTitle": "Stop Inspiration Hub narration",
+      "intro": "Welcome to Inspiration Hub."
+    },
+    "hero": {
+      "primaryAction": "Explore fresh reads",
+      "secondaryAction": "Back to NewsPulse",
+      "cards": {
+        "scenicRelaxationLabel": "Scenic relaxation",
+        "scenicRelaxationValue": "DroneTV",
+        "quotePanelsLabel": "Native quote panels",
+        "quotePanelsValue": "Daily Wonders",
+        "exploreMoreLabel": "Continue exploring",
+        "exploreMoreValue": "Positive stories"
+      }
+    },
+    "homepage": {
+      "subtitle": "Explore scenic relaxation videos, uplifting stories, and visual quotes to refresh your mind.",
+      "openHubCta": "Open Inspiration Hub",
+      "drone": {
+        "eyebrow": "DroneTV",
+        "title": "Scenic Nature Relaxation",
+        "description": "A slower, immersive visual space designed for scenic pauses and low-noise viewing.",
+        "activeBadge": "Admin video active",
+        "autoEmbedBadge": "Auto-embed ready",
+        "placeholderBadge": "Safe placeholder",
+        "iframeTitle": "Inspiration Hub scenic relaxation",
+        "placeholderEyebrow": "Scenic placeholder",
+        "placeholderTitle": "Immersive relaxation view",
+        "settingsFallback": "DroneTV video is disabled or unavailable in Public Site Settings, so this module falls back to a calm visual card.",
+        "staticFallback": "Embed is not wired right now, so this module stays lightweight with a calm visual placeholder.",
+        "streamBadge": "Scenic stream",
+        "note": "A calm, scenic video lane designed to load safely and stay visually premium.",
+        "moreCta": "View more calm content"
+      },
+      "wonders": {
+        "eyebrow": "Daily Wonders",
+        "title": "Uplifting Visual Quotes",
+        "description": "A quote-led companion panel built for reflection instead of another repeated news-card grid.",
+        "footerLabel": "Daily Wonders",
+        "note": "Visual inspiration and calm moments."
+      }
+    },
+    "page": {
+      "subtitle": "Explore scenic relaxation videos, uplifting stories, and visual quotes to refresh your mind.",
+      "drone": {
+        "eyebrow": "DroneTV",
+        "title": "Scenic Nature Relaxation",
+        "description": "A safe media lane built around supported watch cards instead of blocked embeds, so this section stays useful even when third-party iframe rules change.",
+        "supportedBadge": "Supported media cards",
+        "liveEmbedBadge": "DroneTV live embed",
+        "lazyLoadedBadge": "Lazy loaded",
+        "iframeTitle": "Inspiration Hub DroneTV",
+        "publishedLabel": "Published DroneTV",
+        "publishedDescription": "The admin-configured Inspiration Hub video is active, so fallback scenic cards are hidden on this page.",
+        "openSourceCta": "Open scenic source",
+        "disabledNotice": "DroneTV video is currently disabled or missing in Public Site Settings, so Inspiration Hub continues with stable scenic cards instead of a broken video panel.",
+        "fallbackBadge": "Intentional fallback",
+        "fallbackPolicyNote": "If a live scenic source changes its embed policy, this page still renders cleanly because the experience is built from stable media cards and outbound watch actions."
+      },
+      "dailyWonders": {
+        "eyebrow": "Daily Wonders",
+        "title": "Uplifting Visual Quotes",
+        "description": "Native quote panels keep the page calm, readable, and reliable without depending on third-party embeds or empty frames.",
+        "cardLabel": "Card {{index}}"
+      },
+      "positiveStories": {
+        "eyebrow": "Positive Stories",
+        "title": "Keep exploring uplifting coverage",
+        "description": "Continue into feel-good reporting and human-interest reading without dropping into a dead end.",
+        "cta": "Explore this section"
+      }
+    }
+  },
   "footer": {
     "description": "Your trusted source for breaking news, in-depth analysis, and stories that matter. Delivering truth with integrity since our inception.",
     "iconCommunity": "Community",

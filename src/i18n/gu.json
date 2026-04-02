@@ -179,6 +179,85 @@
     "appPromoFeatureOfflineReading": "ઓફલાઇન વાંચન",
     "appPromoNote": "(આ માત્ર UI પ્રિવ્યૂ છે — લોન્ચ પછી એપ લિંક્સ જોડાશે)"
   },
+  "inspirationHub": {
+    "metaTitle": "ઇન્સ્પિરેશન હબ • News Pulse",
+    "metaDescription": "મનને તાજું કરવા માટે શાંત દૃશ્યો, પ્રેરક વાર્તાઓ અને વિઝ્યુઅલ કોટ્સ જુઓ.",
+    "badge": "શાંત દર્શન",
+    "voice": {
+      "listenTitle": "ઇન્સ્પિરેશન હબ સાંભળો",
+      "muteTitle": "ઇન્સ્પિરેશન હબનું વાચન બંધ કરો",
+      "intro": "ઇન્સ્પિરેશન હબમાં આપનું સ્વાગત છે."
+    },
+    "hero": {
+      "primaryAction": "તાજા વાંચન જુઓ",
+      "secondaryAction": "NewsPulse પર પાછા",
+      "cards": {
+        "scenicRelaxationLabel": "શાંત દૃશ્યો",
+        "scenicRelaxationValue": "DroneTV",
+        "quotePanelsLabel": "નેટિવ કોટ પેનલ્સ",
+        "quotePanelsValue": "Daily Wonders",
+        "exploreMoreLabel": "આગળ શોધો",
+        "exploreMoreValue": "Positive Stories"
+      }
+    },
+    "homepage": {
+      "subtitle": "મનને તાજું કરવા માટે શાંત દૃશ્યો, પ્રેરક વાર્તાઓ અને વિઝ્યુઅલ કોટ્સ જુઓ.",
+      "openHubCta": "ઇન્સ્પિરેશન હબ ખોલો",
+      "drone": {
+        "eyebrow": "DroneTV",
+        "title": "શાંત પ્રાકૃતિક દૃશ્યો",
+        "description": "દૃશ્ય વિરામ અને ઓછી અવાજવાળા દર્શન માટે રચાયેલ ધીમું, immersive visual space.",
+        "activeBadge": "એડમિન વિડિયો સક્રિય",
+        "autoEmbedBadge": "ઓટો-એમ્બેડ તૈયાર",
+        "placeholderBadge": "સુરક્ષિત પ્લેસહોલ્ડર",
+        "iframeTitle": "ઇન્સ્પિરેશન હબ શાંત દૃશ્ય",
+        "placeholderEyebrow": "દૃશ્ય પ્લેસહોલ્ડર",
+        "placeholderTitle": "immersive relaxation view",
+        "settingsFallback": "Public Site Settings માં DroneTV વિડિયો બંધ છે અથવા ઉપલબ્ધ નથી, તેથી આ મોડ્યુલ શાંત visual card બતાવે છે.",
+        "staticFallback": "હાલ embed wired નથી, તેથી આ મોડ્યુલ હળવા શાંત placeholder સાથે રહે છે.",
+        "streamBadge": "શાંત સ્ટ્રીમ",
+        "note": "શાંત દૃશ્ય લેન, જેને સુરક્ષિત લોડિંગ અને premium દેખાવ માટે રચાઈ છે.",
+        "moreCta": "વધુ શાંત સામગ્રી જુઓ"
+      },
+      "wonders": {
+        "eyebrow": "Daily Wonders",
+        "title": "પ્રેરક વિઝ્યુઅલ કોટ્સ",
+        "description": "reflection માટે બનાવાયેલ quote-led companion panel, ફરીથી દોહરાતા news-card grid માટે નહીં.",
+        "footerLabel": "Daily Wonders",
+        "note": "દૃશ્ય પ્રેરણા અને શાંત ક્ષણો."
+      }
+    },
+    "page": {
+      "subtitle": "મનને તાજું કરવા માટે શાંત દૃશ્યો, પ્રેરક વાર્તાઓ અને વિઝ્યુઅલ કોટ્સ જુઓ.",
+      "drone": {
+        "eyebrow": "DroneTV",
+        "title": "શાંત પ્રાકૃતિક દૃશ્યો",
+        "description": "આ media lane supported watch cards પર આધારિત છે, જેથી third-party iframe rules બદલાય તો પણ section ઉપયોગી રહે.",
+        "supportedBadge": "supported media cards",
+        "liveEmbedBadge": "DroneTV live embed",
+        "lazyLoadedBadge": "lazy loaded",
+        "iframeTitle": "ઇન્સ્પિરેશન હબ DroneTV",
+        "publishedLabel": "પ્રકાશિત DroneTV",
+        "publishedDescription": "એડમિન દ્વારા સેટ થયેલ Inspiration Hub વિડિયો સક્રિય છે, તેથી fallback scenic cards આ પેજ પર છુપાયેલા રહે છે.",
+        "openSourceCta": "scenic source ખોલો",
+        "disabledNotice": "Public Site Settings માં DroneTV વિડિયો બંધ છે અથવા ગાયબ છે, તેથી Inspiration Hub તૂટેલા વિડિયો પેનલની બદલે સ્થિર scenic cards બતાવે છે.",
+        "fallbackBadge": "intentional fallback",
+        "fallbackPolicyNote": "જો કોઈ live scenic source પોતાની embed policy બદલે તો પણ આ પેજ સ્વચ્છ રીતે દેખાય છે, કારણ કે અનુભવ stable media cards અને outbound watch actions પર બનાવેલો છે."
+      },
+      "dailyWonders": {
+        "eyebrow": "Daily Wonders",
+        "title": "પ્રેરક વિઝ્યુઅલ કોટ્સ",
+        "description": "નેટિવ quote panels પેજને શાંત, વાંચવા યોગ્ય અને વિશ્વસનીય રાખે છે, third-party embeds પર આધાર રાખ્યા વિના.",
+        "cardLabel": "કાર્ડ {{index}}"
+      },
+      "positiveStories": {
+        "eyebrow": "Positive Stories",
+        "title": "પ્રેરક કવરેજ શોધતા રહો",
+        "description": "feel-good reporting અને human-interest reading માં આગળ વધો, કોઈ dead end વગર.",
+        "cta": "આ વિભાગ જુઓ"
+      }
+    }
+  },
   "footer": {
     "description": "બ્રેકિંગ ન્યૂઝ, ઊંડાણપૂર્વકનું વિશ્લેષણ અને મહત્વની વાર્તાઓ માટે તમારો વિશ્વસનીય સ્રોત. શરૂઆતથી સત્ય અને ઈમાનદારી સાથે.",
     "iconCommunity": "સમુદાય",

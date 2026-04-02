@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { ArrowRight, HeartHandshake } from "lucide-react";
 import type { PositiveStoryItem } from "../../data/inspirationHubContent";
+import { useI18n } from "../../src/i18n/LanguageProvider";
 
 type Props = {
   items: PositiveStoryItem[];
 };
 
 export default function PositiveStoriesSection({ items }: Props) {
+  const { t } = useI18n();
   if (!items.length) return null;
 
   return (
@@ -14,13 +16,13 @@ export default function PositiveStoriesSection({ items }: Props) {
       <div className="border-b border-slate-200/70 px-5 py-5 sm:px-6">
         <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-500">
           <HeartHandshake className="h-4 w-4 text-rose-500" />
-          Positive Stories
+          {t("inspirationHub.page.positiveStories.eyebrow")}
         </div>
         <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950 sm:text-[2rem]">
-          Keep exploring uplifting coverage
+          {t("inspirationHub.page.positiveStories.title")}
         </h2>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600 sm:text-[15px]">
-          Continue into feel-good reporting and human-interest reading without dropping into a dead end.
+          {t("inspirationHub.page.positiveStories.description")}
         </p>
       </div>
 
@@ -41,7 +43,7 @@ export default function PositiveStoriesSection({ items }: Props) {
               {item.summary}
             </p>
             <div className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-sky-700 transition group-hover:text-sky-800">
-              Explore this section <ArrowRight className="h-4 w-4" />
+              {t("inspirationHub.page.positiveStories.cta")} <ArrowRight className="h-4 w-4" />
             </div>
           </Link>
         ))}
