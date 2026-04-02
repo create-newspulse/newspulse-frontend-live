@@ -234,8 +234,11 @@ const nextConfig = {
       // ✅ IMPORTANT: allow backend API requests (this fixes your blocked fetch)
       `connect-src 'self'${backend ? ` ${backend}` : ''} https://www.googletagmanager.com https://www.google-analytics.com ws: wss:`,
 
-      // Frames (keep strict; add domains only if you embed content like YouTube)
-      "frame-src 'self'",
+      // Frames: allow our own pages plus approved YouTube embed origins.
+      "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com",
+
+      // Older browsers may still consult child-src for frame/embed loads.
+      "child-src 'self' https://www.youtube.com https://www.youtube-nocookie.com",
 
       // Workers (Next sometimes needs blob:)
       "worker-src 'self' blob:",

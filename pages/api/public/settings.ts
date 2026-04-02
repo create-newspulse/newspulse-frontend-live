@@ -86,6 +86,16 @@ function mapSiteSettingsToPublicSettingsResponse(raw: unknown): PublicSettingsRe
     out.settings.modules.liveTvCard = { ...out.settings.modules.liveTvCard, url: String((settings as any).liveTvUrl) };
   }
 
+  // Optional isolated Inspiration Hub settings pass-through.
+  const inspirationHubRaw = isRecord((settings as any).inspirationHub)
+    ? ((settings as any).inspirationHub as JsonRecord)
+    : isRecord((settings as any)?.homepage?.inspirationHub)
+      ? (((settings as any).homepage.inspirationHub) as JsonRecord)
+      : null;
+  if (inspirationHubRaw) {
+    out.settings.inspirationHub = { ...inspirationHubRaw } as any;
+  }
+
   // Tickers
   const breakingModeRaw = typeof (settings as any).breakingMode === 'string' ? String((settings as any).breakingMode).toLowerCase() : '';
   const liveTickerOn = bool((settings as any).liveTickerOn);

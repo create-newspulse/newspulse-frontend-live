@@ -6,8 +6,13 @@ import DailyWondersSection from '../components/inspiration/DailyWondersSection';
 import PositiveStoriesSection from '../components/inspiration/PositiveStoriesSection';
 import { dailyWonderQuotes, positiveStoryItems, scenicMediaItems } from '../data/inspirationHubContent';
 import type { GetStaticProps } from 'next';
+import { usePublicSettings } from '../src/context/PublicSettingsContext';
+import { resolveInspirationHubDroneTvEmbedUrl } from '../src/lib/inspirationHubSettings';
 
 export default function InspirationHubPage() {
+  const { settings } = usePublicSettings();
+  const droneVideoEmbedUrl = resolveInspirationHubDroneTvEmbedUrl(settings, 'categoryPage');
+
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#f4fbfb_0%,#f8fbff_42%,#ffffff_100%)] text-black dark:bg-dark-primary dark:text-dark-text">
       <Head>
@@ -41,7 +46,7 @@ export default function InspirationHubPage() {
               viewport={{ once: true, amount: 0.2 }}
               transition={{ duration: 0.45 }}
             >
-              <DroneTVSection items={scenicMediaItems} />
+              <DroneTVSection items={scenicMediaItems} videoEmbedUrl={droneVideoEmbedUrl} />
             </motion.div>
 
             <motion.div

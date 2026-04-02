@@ -7,6 +7,7 @@ import { sanitizeEmbedUrl } from "../../src/lib/publicSettings";
 type InspirationHubHomepageSectionProps = {
   theme: any;
   href: string;
+  droneVideoEmbedUrl?: string | null;
 };
 
 const DAILY_WONDERS_QUOTES = [
@@ -27,12 +28,14 @@ const DAILY_WONDERS_QUOTES = [
   },
 ];
 
-export default function InspirationHubHomepageSection({ theme, href }: InspirationHubHomepageSectionProps) {
+export default function InspirationHubHomepageSection({ theme, href, droneVideoEmbedUrl }: InspirationHubHomepageSectionProps) {
   const sections = Array.isArray((inspirationData as any)?.sections) ? (inspirationData as any).sections : [];
   const drone = sections.find((item: any) => item?.id === "drone-tv") || null;
   const wonders = sections.find((item: any) => item?.id === "daily-wonders") || null;
-  const embedUrl = sanitizeEmbedUrl(drone?.videoUrl);
+  const fallbackEmbedUrl = sanitizeEmbedUrl(drone?.videoUrl);
+  const embedUrl = typeof droneVideoEmbedUrl === "string" ? droneVideoEmbedUrl : fallbackEmbedUrl;
   const hasEmbed = !!embedUrl;
+  const isSettingsDriven = droneVideoEmbedUrl !== undefined;
 
   const featuredQuote = DAILY_WONDERS_QUOTES[0];
   const supportingQuotes = DAILY_WONDERS_QUOTES.slice(1);
@@ -104,7 +107,7 @@ export default function InspirationHubHomepageSection({ theme, href }: Inspirati
               style={{ color: theme.text, borderColor: theme.border, background: theme.surface2 }}
             >
               <Play className="h-3.5 w-3.5" />
-              {hasEmbed ? "Auto-embed ready" : "Safe placeholder"}
+              {hasEmbed ? (isSettingsDriven ? "Admin video active" : "Auto-embed ready") : "Safe placeholder"}
             </div>
           </div>
 
@@ -113,12 +116,12 @@ export default function InspirationHubHomepageSection({ theme, href }: Inspirati
               className="relative overflow-hidden rounded-[26px] border shadow-[0_18px_44px_-34px_rgba(15,23,42,0.55)]"
               style={{ borderColor: theme.border, background: theme.mode === "dark" ? "#06121a" : "#dff6f3" }}
             >
-              <div className="relative w-full pt-[60%]">
+              <div className="relative aspect-[16/9] w-full overflow-hidden bg-black">
                 {hasEmbed ? (
                   <iframe
                     title={String(drone?.title || "DroneTV scenic relaxation")}
                     src={embedUrl}
-                    className="absolute inset-0 h-full w-full"
+                    className="absolute inset-0 h-full w-full bg-black"
                     loading="lazy"
                     referrerPolicy="strict-origin-when-cross-origin"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
@@ -141,24 +144,36 @@ export default function InspirationHubHomepageSection({ theme, href }: Inspirati
                         <div className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-white/80">Scenic placeholder</div>
                         <div className="mt-2 text-xl font-black tracking-tight">Immersive relaxation view</div>
                         <div className="mt-2 text-sm leading-6 text-white/80">
-                          Embed is not wired right now, so this module stays lightweight with a calm visual placeholder.
+                          {isSettingsDriven
+                            ? "DroneTV video is disabled or unavailable in Public Site Settings, so this module falls back to a calm visual card."
+                            : "Embed is not wired right now, so this module stays lightweight with a calm visual placeholder."}
                         </div>
                       </div>
                     </div>
                   </div>
                 )}
 
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-[linear-gradient(180deg,transparent,rgba(15,23,42,0.56))]" />
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4 sm:p-5">
-                  <div className="min-w-0">
-                    <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-white/90" style={{ borderColor: "rgba(255,255,255,0.18)", background: "rgba(15,23,42,0.26)" }}>
+                {hasEmbed ? (
+                  <div className="pointer-events-none absolute left-4 top-4 sm:left-5 sm:top-5">
+                    <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-white/90" style={{ borderColor: "rgba(255,255,255,0.18)", background: "rgba(15,23,42,0.32)", backdropFilter: "blur(10px)" }}>
                       Scenic stream
                     </div>
-                    <div className="mt-3 text-lg font-black tracking-tight text-white sm:text-xl">
-                      {String(drone?.title || "DroneTV – Scenic Nature Relaxation")}
-                    </div>
                   </div>
-                </div>
+                ) : (
+                  <>
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-[linear-gradient(180deg,transparent,rgba(15,23,42,0.56))]" />
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4 sm:p-5">
+                      <div className="min-w-0">
+                        <div className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-white/90" style={{ borderColor: "rgba(255,255,255,0.18)", background: "rgba(15,23,42,0.26)" }}>
+                          Scenic stream
+                        </div>
+                        <div className="mt-3 text-lg font-black tracking-tight text-white sm:text-xl">
+                          {String(drone?.title || "DroneTV – Scenic Nature Relaxation")}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 

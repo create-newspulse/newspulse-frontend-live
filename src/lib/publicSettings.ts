@@ -44,6 +44,33 @@ export type PublicSettings = {
   footerText?: string;
   // Optional: default language/theme preset
   languageTheme?: LanguageTheme;
+  // Optional isolated extension for Inspiration Hub.
+  inspirationHub?: PublicInspirationHubSettings;
+};
+
+export type PublicInspirationHubSettings = {
+  enabled?: boolean;
+  droneTv?: {
+    enabled?: boolean;
+    url?: string;
+    videoUrl?: string;
+    youtubeUrl?: string;
+    embedUrl?: string;
+    showOnHomepage?: boolean;
+    homepageEnabled?: boolean;
+    showOnCategoryPage?: boolean;
+    categoryPageEnabled?: boolean;
+  };
+};
+
+export type NormalizedInspirationHubSettings = {
+  enabled: boolean;
+  droneTv: {
+    enabled: boolean;
+    embedUrl: string;
+    homepageEnabled: boolean;
+    categoryPageEnabled: boolean;
+  };
 };
 
 export type PublicSettingsResponse = {
@@ -82,6 +109,7 @@ export type NormalizedPublicSettings = {
   };
   liveTv: { enabled: boolean; embedUrl: string };
   languageTheme: { languages: string[]; themePreset: string | null };
+  inspirationHub?: NormalizedInspirationHubSettings | null;
 };
 
 export const DEFAULT_PUBLIC_SETTINGS: PublicSettings = {
@@ -282,6 +310,163 @@ function normalizeTicker(
   return { enabled, speedSeconds, showWhenEmpty };
 }
 
+function getFirstString(root: JsonRecord | null, keys: string[]): string {
+  if (!root) return '';
+  for (const key of keys) {
+    const value = (root as any)[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return '';
+}
+
+function getFirstBoolean(root: JsonRecord | null, keys: string[]): boolean | undefined {
+  if (!root) return undefined;
+  for (const key of keys) {
+    const value = (root as any)[key];
+    if (typeof value === 'boolean') return value;
+  }
+  return undefined;
+}
+
+export function toSafeYouTubeEmbedUrl(
+  raw: unknown,
+  options?: { autoplay?: boolean; muted?: boolean }
+): string {
+  if (typeof raw !== 'string') return '';
+  const input = raw.trim();
+  if (!input) return '';
+
+  try {
+    const url = new URL(input);
+    const hostname = url.hostname.toLowerCase();
+    let videoId = '';
+
+    if (hostname === 'youtu.be' || hostname.endsWith('.youtu.be')) {
+      videoId = url.pathname.replace(/^\/+/, '').split('/')[0] || '';
+    } else if (hostname === 'youtube.com' || hostname === 'www.youtube.com' || hostname === 'm.youtube.com' || hostname === 'music.youtube.com') {
+      if (url.pathname === '/watch') {
+        videoId = url.searchParams.get('v') || '';
+      } else if (url.pathname.startsWith('/embed/')) {
+        videoId = url.pathname.split('/')[2] || '';
+      } else if (url.pathname.startsWith('/shorts/')) {
+        videoId = url.pathname.split('/')[2] || '';
+      } else if (url.pathname.startsWith('/live/')) {
+        videoId = url.pathname.split('/')[2] || '';
+      }
+    } else if (hostname === 'www.youtube-nocookie.com' || hostname === 'youtube-nocookie.com') {
+      if (url.pathname.startsWith('/embed/')) {
+        videoId = url.pathname.split('/')[2] || '';
+      }
+    }
+
+    videoId = String(videoId || '').trim();
+    if (!videoId || !/^[A-Za-z0-9_-]{6,}$/.test(videoId)) return '';
+
+    const embed = new URL(`https://www.youtube-nocookie.com/embed/${videoId}`);
+    embed.searchParams.set('rel', '0');
+    embed.searchParams.set('modestbranding', '1');
+    embed.searchParams.set('playsinline', '1');
+
+    if (options?.autoplay) {
+      embed.searchParams.set('autoplay', '1');
+      if (options?.muted) embed.searchParams.set('mute', '1');
+    }
+
+    return sanitizeEmbedUrl(embed.toString());
+  } catch {
+    return '';
+  }
+}
+
+function normalizePreferredYouTubeEmbedUrl(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  const input = raw.trim();
+  if (!input) return '';
+
+  const direct = sanitizeEmbedUrl(input);
+  if (direct) {
+    try {
+      const parsed = new URL(direct);
+      const hostname = parsed.hostname.toLowerCase();
+      const pathname = parsed.pathname.toLowerCase();
+      if (
+        (hostname === 'www.youtube.com' || hostname === 'youtube.com' || hostname === 'www.youtube-nocookie.com' || hostname === 'youtube-nocookie.com') &&
+        pathname.startsWith('/embed/')
+      ) {
+        return direct;
+      }
+    } catch {}
+  }
+
+  return toSafeYouTubeEmbedUrl(input);
+}
+
+function normalizeInspirationHubSettings(raw: unknown): PublicInspirationHubSettings | undefined {
+  if (!isRecord(raw)) return undefined;
+
+  const droneTv = getRecord(raw, 'droneTv') ?? getRecord(raw, 'droneTV');
+  const out: PublicInspirationHubSettings = {};
+
+  const enabled = getFirstBoolean(raw, ['enabled']);
+  if (typeof enabled === 'boolean') out.enabled = enabled;
+
+  const rootDroneEnabled = getFirstBoolean(raw, ['droneTvEnabled', 'droneTVEnabled']);
+  const rootRawUrl = getFirstString(raw, ['embedUrl', 'videoUrl', 'youtubeUrl', 'url']);
+  const rootHomepageEnabled = getFirstBoolean(raw, ['showOnHomepage', 'homepageEnabled']);
+  const rootCategoryPageEnabled = getFirstBoolean(raw, ['showOnCategoryPage', 'categoryPageEnabled']);
+
+  if (droneTv || typeof rootDroneEnabled === 'boolean' || !!rootRawUrl || typeof rootHomepageEnabled === 'boolean' || typeof rootCategoryPageEnabled === 'boolean') {
+    out.droneTv = {};
+
+    const droneEnabled = getFirstBoolean(droneTv, ['enabled']) ?? rootDroneEnabled;
+    if (typeof droneEnabled === 'boolean') out.droneTv.enabled = droneEnabled;
+
+    const rawUrl = getFirstString(droneTv, ['embedUrl', 'videoUrl', 'youtubeUrl', 'url']) || rootRawUrl;
+    if (rawUrl) out.droneTv.url = rawUrl;
+
+    const homepageEnabled = getFirstBoolean(droneTv, ['showOnHomepage', 'homepageEnabled']) ?? rootHomepageEnabled;
+    if (typeof homepageEnabled === 'boolean') out.droneTv.showOnHomepage = homepageEnabled;
+
+    const categoryPageEnabled = getFirstBoolean(droneTv, ['showOnCategoryPage', 'categoryPageEnabled']) ?? rootCategoryPageEnabled;
+    if (typeof categoryPageEnabled === 'boolean') out.droneTv.showOnCategoryPage = categoryPageEnabled;
+  }
+
+  return Object.keys(out).length ? out : undefined;
+}
+
+function normalizeInspirationHubFrom(raw: unknown): NormalizedInspirationHubSettings | null {
+  if (!isRecord(raw)) return null;
+
+  const droneTv = getRecord(raw, 'droneTv') ?? getRecord(raw, 'droneTV');
+  const blockEnabled = normalizeEnabled((raw as any).enabled, true);
+  const droneEnabled = normalizeEnabled(
+    (droneTv as any)?.enabled ?? (raw as any).droneTvEnabled ?? (raw as any).droneTVEnabled,
+    true
+  );
+  const homepageEnabled = normalizeEnabled(
+    (droneTv as any)?.showOnHomepage ?? (droneTv as any)?.homepageEnabled ?? (raw as any).showOnHomepage ?? (raw as any).homepageEnabled,
+    true
+  );
+  const categoryPageEnabled = normalizeEnabled(
+    (droneTv as any)?.showOnCategoryPage ?? (droneTv as any)?.categoryPageEnabled ?? (raw as any).showOnCategoryPage ?? (raw as any).categoryPageEnabled,
+    true
+  );
+  const embedUrl = normalizePreferredYouTubeEmbedUrl(
+    getFirstString(droneTv, ['embedUrl', 'videoUrl', 'youtubeUrl', 'url']) ||
+      getFirstString(raw, ['embedUrl', 'videoUrl', 'youtubeUrl', 'url'])
+  );
+
+  return {
+    enabled: blockEnabled,
+    droneTv: {
+      enabled: droneEnabled,
+      embedUrl,
+      homepageEnabled,
+      categoryPageEnabled,
+    },
+  };
+}
+
 export function mergePublicSettingsWithDefaults(raw: unknown, defaults: PublicSettings = DEFAULT_PUBLIC_SETTINGS): PublicSettings {
   const root = isRecord(raw) ? raw : {};
 
@@ -336,6 +521,12 @@ export function mergePublicSettingsWithDefaults(raw: unknown, defaults: PublicSe
           ? String((publishedRaw as any).footerText)
           : defaults.footerText,
     languageTheme: normalizeLanguageTheme((payload as any).languageTheme) ?? normalizeLanguageTheme((publishedRaw as any)?.languageTheme) ?? defaults.languageTheme,
+    inspirationHub:
+      normalizeInspirationHubSettings((payload as any).inspirationHub) ??
+      normalizeInspirationHubSettings((payload as any)?.homepage?.inspirationHub) ??
+      normalizeInspirationHubSettings((publishedRaw as any)?.inspirationHub) ??
+      normalizeInspirationHubSettings((publishedRaw as any)?.homepage?.inspirationHub) ??
+      defaults.inspirationHub,
   };
 
   (Object.keys(defaults.modules) as HomeModuleKey[]).forEach((key) => {
@@ -543,6 +734,13 @@ export function normalizePublicSettings(raw: unknown, defaults: NormalizedPublic
     getRecord(root, 'languageTheme') ??
     ({} as JsonRecord);
 
+  const inspirationHub =
+    getRecord(published, 'inspirationHub') ??
+    getRecord(published, 'homepage', 'inspirationHub') ??
+    getRecord(root, 'inspirationHub') ??
+    getRecord(root, 'homepage', 'inspirationHub') ??
+    null;
+
   const languagesRaw = (languageTheme as any).languages ?? (languageTheme as any).langs;
   const themePresetRaw = (languageTheme as any).themePreset ?? (languageTheme as any).preset;
 
@@ -578,6 +776,7 @@ export function normalizePublicSettings(raw: unknown, defaults: NormalizedPublic
       languages: normalizeLanguages(languagesRaw, defaults.languageTheme.languages),
       themePreset: normalizeThemePreset(themePresetRaw) ?? defaults.languageTheme.themePreset,
     },
+    inspirationHub: normalizeInspirationHubFrom(inspirationHub),
   };
 
   return out;

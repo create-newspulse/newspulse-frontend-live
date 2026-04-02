@@ -28,6 +28,7 @@ import InspirationHubHomepageSection from "../components/home/InspirationHubHome
 import type { GetStaticProps } from "next";
 import { AnimatePresence, motion } from "framer-motion";
 import { useI18n } from "../src/i18n/LanguageProvider";
+import { resolveInspirationHubDroneTvEmbedUrl } from "../src/lib/inspirationHubSettings";
 import {
   ArrowRight,
   Bell,
@@ -3551,6 +3552,7 @@ export default function UiPreviewV145() {
 
   const liveTvEnabled = effectiveSettings.liveTv.enabled === true;
   const liveTvEmbedUrl = effectiveSettings.liveTv.embedUrl;
+  const inspirationHomepageDroneTvEmbedUrl = resolveInspirationHubDroneTvEmbedUrl(effectiveSettings, 'homepage');
 
   const moduleState = {
     categoryStrip: showCategoryStrip,
@@ -4082,6 +4084,7 @@ export default function UiPreviewV145() {
           <InspirationHubHomepageSection
             theme={theme}
             href={localizePath('/inspiration-hub', apiLang)}
+            droneVideoEmbedUrl={inspirationHomepageDroneTvEmbedUrl}
           />
         </div>
       </div>
