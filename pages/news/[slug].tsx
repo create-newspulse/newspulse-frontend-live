@@ -361,27 +361,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
   const displayProvider = cleanText((resolvedArticle as any)?.provider);
   const displayGeneratedAt = cleanText((resolvedArticle as any)?.generatedAt);
 
-  const coverRaw =
-    (resolvedArticle as any)?.imageUrl ||
-    (resolvedArticle as any)?.image ||
-    (resolvedArticle as any)?.coverImage ||
-    (resolvedArticle as any)?.thumbnail ||
-    null;
-
-  const cover = (() => {
-    if (!coverRaw) return null;
-    if (typeof coverRaw === 'string') {
-      const v = coverRaw.trim();
-      return v || null;
-    }
-    if (typeof coverRaw === 'object') {
-      const url = typeof (coverRaw as any)?.url === 'string' ? String((coverRaw as any).url).trim() : '';
-      return url || null;
-    }
-    return null;
-  })();
-
-  const heroSrc = cover || resolveCoverImageUrl(resolvedArticle) || null;
+  const heroSrc = resolveCoverImageUrl(resolvedArticle) || null;
   const heroFitMode = resolveCoverFitMode(resolvedArticle, { src: heroSrc, altText: displayTitle });
 
   const prefix = React.useMemo(() => localePrefix(lang), [lang]);
