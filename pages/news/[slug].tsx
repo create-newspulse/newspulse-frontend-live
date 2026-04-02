@@ -593,12 +593,12 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                         alt={displayTitle}
                         variant="top"
                         priority
-                        className="w-full rounded-[22px] border border-slate-200/80 bg-slate-100"
+                        className="rounded-[22px] border border-slate-200/80 bg-slate-100"
                       />
                     </div>
                   ) : (
                     <div className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white p-2 shadow-[0_18px_38px_-30px_rgba(15,23,42,0.18)] sm:p-3">
-                      <div className="h-[220px] w-full overflow-hidden rounded-[22px] border border-slate-200/80 bg-slate-100 sm:h-[280px] md:h-[320px]">
+                      <div className="aspect-[16/9] w-full overflow-hidden rounded-[22px] border border-slate-200/80 bg-slate-100">
                         <div className="grid h-full w-full place-items-center">
                           <div className="text-xs font-extrabold tracking-tight text-slate-500 select-none">
                             News <span className="text-slate-700">Pulse</span>

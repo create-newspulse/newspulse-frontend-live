@@ -2378,14 +2378,14 @@ function CenterStoryFeed({ theme, items, lang }: any) {
                         fallbackSrc={COVER_PLACEHOLDER_SRC}
                         className={cx(
                           'w-full border border-black/10',
-                          showSummary ? 'h-[110px] md:h-[120px] md:w-[148px]' : 'h-[84px] md:h-[90px] md:w-[116px]'
+                          showSummary ? 'md:w-[148px]' : 'md:w-[116px]'
                         )}
                       />
                     ) : (
                       <div
                         className={cx(
-                          'relative overflow-hidden rounded-2xl border border-black/10 bg-[linear-gradient(135deg,rgba(248,250,252,0.95),rgba(226,232,240,0.9))]',
-                          showSummary ? 'h-[110px] md:h-[120px] md:w-[148px]' : 'h-[84px] md:h-[90px] md:w-[116px]'
+                          'relative aspect-[4/3] overflow-hidden rounded-2xl border border-black/10 bg-[linear-gradient(135deg,rgba(248,250,252,0.95),rgba(226,232,240,0.9))] w-full',
+                          showSummary ? 'md:w-[148px]' : 'md:w-[116px]'
                         )}
                       >
                         <div className="absolute inset-0 grid place-items-center text-[10px] font-extrabold tracking-[0.16em] text-slate-600/90">
@@ -2531,12 +2531,12 @@ function MoreReadsSection({ theme, items, lang }: any) {
                       src={imageSrc}
                       fitMode={item?.coverFitMode}
                       alt={String(item?.title || '').trim()}
-                      variant="list"
+                      variant="card"
                       fallbackSrc={COVER_PLACEHOLDER_SRC}
-                      className="h-[120px] w-full border border-black/10"
+                      className="border border-black/10"
                     />
                   ) : (
-                    <div className="relative h-[120px] overflow-hidden rounded-2xl border border-black/10 bg-[linear-gradient(135deg,rgba(248,250,252,0.95),rgba(226,232,240,0.9))]">
+                    <div className="relative aspect-[16/10] overflow-hidden rounded-2xl border border-black/10 bg-[linear-gradient(135deg,rgba(248,250,252,0.95),rgba(226,232,240,0.9))]">
                       <div className="absolute inset-0 grid place-items-center text-[11px] font-extrabold tracking-[0.14em] text-slate-600/90 select-none">
                         News Pulse
                       </div>
@@ -2901,10 +2901,10 @@ function HomeEditorialSection({ theme, title, href, items, lang, Icon }: any) {
                 alt={String(lead?.title || '').trim()}
                 variant="top"
                 fallbackSrc={COVER_PLACEHOLDER_SRC}
-                className="h-[220px] w-full border border-black/10"
+                className="border border-black/10"
               />
             ) : (
-              <div className="relative h-[220px] overflow-hidden rounded-[24px] border border-black/10 bg-[linear-gradient(135deg,rgba(248,250,252,0.95),rgba(226,232,240,0.9))]">
+              <div className="relative aspect-[16/9] overflow-hidden rounded-[24px] border border-black/10 bg-[linear-gradient(135deg,rgba(248,250,252,0.95),rgba(226,232,240,0.9))]">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.12),transparent_42%),radial-gradient(circle_at_bottom_right,rgba(124,58,237,0.10),transparent_46%)]" />
                 <div className="absolute inset-0 flex items-end p-5">
                   <div className="rounded-full border px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.18em] text-slate-700" style={{ borderColor: 'rgba(15,23,42,0.10)', background: 'rgba(255,255,255,0.72)' }}>
@@ -2963,10 +2963,10 @@ function HomeEditorialSection({ theme, title, href, items, lang, Icon }: any) {
                       alt={String(item?.title || '').trim()}
                       variant="mini"
                       fallbackSrc={COVER_PLACEHOLDER_SRC}
-                      className="h-[82px] w-[96px] border border-black/10 sm:h-[90px] sm:w-[116px]"
+                      className="border border-black/10"
                     />
                   ) : (
-                    <div className="relative h-[82px] w-[96px] overflow-hidden rounded-2xl border border-black/10 bg-[linear-gradient(135deg,rgba(248,250,252,0.95),rgba(226,232,240,0.9))] sm:h-[90px] sm:w-[116px]">
+                    <div className="relative w-[96px] aspect-[4/3] overflow-hidden rounded-2xl border border-black/10 bg-[linear-gradient(135deg,rgba(248,250,252,0.95),rgba(226,232,240,0.9))] sm:w-[116px]">
                       <div className="absolute inset-0 grid place-items-center text-[10px] font-extrabold tracking-[0.16em] text-slate-600/90">NP</div>
                     </div>
                   )}

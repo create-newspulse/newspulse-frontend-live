@@ -21,7 +21,7 @@ const TrendingStories = ({ articles }) => {
           return (
             <div
               key={getStoryReactKey(article, article?.title)}
-              className="group shrink-0 bg-white rounded-xl shadow-md snap-start"
+              className="group w-[220px] shrink-0 bg-white rounded-xl shadow-md snap-start sm:w-[240px]"
             >
               <StoryImage
                 storyId={storyId}

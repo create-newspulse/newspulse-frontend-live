@@ -29,7 +29,7 @@ const TopNewsCard = ({ article }) => {
         src={resolveCoverImageUrl(article)}
         alt={article?.title || ''}
         variant="top"
-        className="w-full h-48 rounded-md"
+        className="rounded-md"
       />
       <h3 className="text-lg font-semibold mt-3 mb-2">{article.title}</h3>
       <div className="flex justify-between items-center text-sm text-gray-600">

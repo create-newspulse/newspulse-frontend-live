@@ -206,7 +206,7 @@ export default function LatestPage() {
                             <div className={`absolute left-0 top-0 h-full w-1.5 ${categoryAccentClasses(category)}`} />
 
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch sm:gap-4">
-                              <div className="relative w-full overflow-hidden rounded-xl bg-slate-50 aspect-video sm:aspect-auto sm:h-24 sm:w-32 shrink-0">
+                              <div className="relative w-full overflow-hidden rounded-xl bg-slate-50 shrink-0 sm:w-[160px]">
                                 {coverSrc ? (
                                   <StoryImage
                                     storyId={id}
@@ -214,10 +214,10 @@ export default function LatestPage() {
                                     fitMode={fitMode}
                                     alt={title}
                                     variant="list"
-                                    className="h-full w-full rounded-xl border border-slate-200/70"
+                                    className="w-full rounded-xl border border-slate-200/70 sm:w-[160px]"
                                   />
                                 ) : (
-                                  <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-sky-50 to-indigo-50">
+                                  <div className="relative aspect-[16/10] w-full bg-gradient-to-br from-slate-50 via-sky-50 to-indigo-50 sm:w-[160px]">
                                     <div className="absolute inset-0 opacity-70 bg-gradient-to-tr from-emerald-100/40 via-transparent to-rose-100/35" />
                                     <div className="absolute bottom-2 right-2 rounded-md border border-white/60 bg-white/50 px-2 py-1 text-[10px] font-semibold tracking-wide text-slate-700">
                                       NewsPulse

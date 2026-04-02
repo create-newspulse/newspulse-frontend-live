@@ -3,11 +3,11 @@ import { COVER_PLACEHOLDER_SRC, resolveImageFitMode, type CoverFitMode } from '.
 
 export type StoryImageVariant = 'card' | 'list' | 'top' | 'mini';
 
-const VARIANT_SIZES: Record<StoryImageVariant, string> = {
-  card: 'w-[140px] h-[90px] sm:w-[180px] sm:h-[110px] md:w-[220px] md:h-[130px]',
-  list: 'w-[120px] h-[80px] sm:w-[160px] sm:h-[100px]',
-  top: 'w-full h-[220px] sm:h-[280px] md:h-[320px]',
-  mini: 'w-[96px] h-[64px]',
+const VARIANT_FRAME_CLASSES: Record<StoryImageVariant, string> = {
+  card: 'w-full aspect-[16/10]',
+  list: 'w-[120px] aspect-[16/10] sm:w-[160px]',
+  top: 'w-full aspect-[16/9]',
+  mini: 'w-[96px] aspect-[4/3] sm:w-[116px]',
 };
 
 function cx(...c: Array<string | false | null | undefined>) {
@@ -76,9 +76,10 @@ export function StoryImage({
     <div
       className={cx(
         'group/story-image relative overflow-hidden rounded-2xl shrink-0 bg-slate-100',
-        VARIANT_SIZES[variant],
+        VARIANT_FRAME_CLASSES[variant],
         className
       )}
+      data-variant={variant}
       data-fit-mode={currentFitMode}
     >
       {/* Placeholder (always present to avoid layout shift) */}
@@ -98,7 +99,11 @@ export function StoryImage({
           loading={priority ? 'eager' : 'lazy'}
           className={cx(
             'absolute inset-0 h-full w-full object-center transform-gpu',
-            currentFitMode === 'contain' ? 'object-contain p-2 sm:p-3' : 'object-cover',
+            currentFitMode === 'contain'
+              ? 'object-contain p-2 sm:p-3'
+              : variant === 'top'
+                ? 'object-cover object-[center_28%]'
+                : 'object-cover',
             'motion-safe:transition-transform motion-safe:duration-300 motion-safe:ease-out will-change-transform',
             'motion-safe:hover:scale-[1.04] motion-safe:group-hover/story-image:scale-[1.04]',
             'motion-reduce:transform-none motion-reduce:transition-none'

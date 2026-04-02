@@ -216,7 +216,8 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
                         src={image}
                         fitMode={fitMode}
                         alt={title || t('categoryPage.articleImageAlt')}
-                        variant="top"
+                        variant="card"
+                        className="border-b border-slate-200/70"
                       />
 
                       <div className="p-4">

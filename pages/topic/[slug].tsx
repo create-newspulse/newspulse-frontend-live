@@ -132,7 +132,8 @@ export default function TopicPage() {
                         src={image}
                         fitMode={fitMode}
                         alt={titleRes.text || t('categoryPage.articleImageAlt')}
-                        variant="top"
+                        variant="card"
+                        className="border-b border-slate-200/70"
                       />
 
                       <div className="p-4">
