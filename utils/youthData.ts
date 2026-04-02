@@ -13,7 +13,8 @@ export type YouthStory = {
   id: number;
   title: string;
   summary: string;
-  category: string; // should match one of YouthCategory.slug or title
+  category: string; // backend/admin slug
+  categoryLabel: string;
   image: string;    // URL or path
   date: string;
 };
@@ -69,80 +70,98 @@ export const youthCategories: YouthCategory[] = [
     fromHex: '#F59E0B',
     toHex: '#EC4899',
   },
+  {
+    slug: 'student-voices',
+    title: 'Student Voices',
+    emoji: '🎙️',
+    description: 'Real student opinions, campus life, study pressure, habits, and everyday youth perspectives.',
+    gradientFrom: 'fuchsia-500',
+    gradientTo: 'indigo-500',
+    fromHex: '#D946EF',
+    toHex: '#6366F1',
+  },
 ];
 
 export const youthStories: YouthStory[] = [
   {
     id: 100,
-    title: 'DroneTV – Scenic Nature Relaxation (Auto Embed)',
+    title: 'DroneTV - Scenic Nature Relaxation',
     summary:
       'Soothing aerial journeys to help you pause and recharge. Curated for safe viewing.',
-    category: 'Inspiration Hub',
+    category: 'inspiration-hub',
+    categoryLabel: 'Inspiration Hub',
     image:
       'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?q=80&w=1600&auto=format&fit=crop',
-    date: 'Nov 2025',
+    date: 'Featured',
   },
   {
     id: 1,
-    title: 'AI Tools That Help Students Study Smarter in 2025',
+    title: 'AI Tools Helping Students Study Smarter',
     summary:
-      'From Notion AI to prompt engineering — see the tools transforming learning.',
-    category: 'Youth Pulse',
+      'A practical look at note-taking, revision, and research tools students are using right now.',
+    category: 'youth-pulse',
+    categoryLabel: 'Youth Pulse',
     image:
       'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?q=80&w=1600&auto=format&fit=crop',
-    date: 'Nov 2025',
+    date: 'Trending now',
   },
   {
     id: 2,
-    title: 'Campus Fests Are Back: How IITs Are Going Hybrid',
+    title: 'Campus Events Are Evolving With Hybrid Participation',
     summary:
-      'Student clubs blend IRL energy with online reach; best practices from top campuses.',
-    category: 'Campus Buzz',
+      'Student organizers are mixing in-person energy with digital reach to keep events more accessible.',
+    category: 'campus-buzz',
+    categoryLabel: 'Campus Buzz',
     image:
       'https://images.unsplash.com/photo-1540575467063-178a50c2df87?q=80&w=1600&auto=format&fit=crop',
-    date: 'Nov 2025',
+    date: 'Campus watch',
   },
   {
     id: 3,
-    title: 'SSC CGL 2025 Calendar: What Changes For You',
+    title: 'How To Track Government Exam Updates Without Missing Key Changes',
     summary:
-      'All key dates, revised patterns, and smart prep tips collected in one place.',
-    category: 'Govt Exam Updates',
+      'A simple prep workflow for notifications, syllabus changes, and revision windows.',
+    category: 'govt-exam-updates',
+    categoryLabel: 'Govt Exam Updates',
     image:
       'https://images.unsplash.com/photo-1513258496099-48168024aec0?q=80&w=1600&auto=format&fit=crop',
-    date: 'Nov 2025',
+    date: 'Exam prep',
   },
   {
     id: 4,
     title: 'First Internship? 7 Portfolio Tips That Actually Work',
     summary:
       'Simple ways to stand out: impact bullets, tiny projects, and focused case studies.',
-    category: 'Career Boosters',
+    category: 'career-boosters',
+    categoryLabel: 'Career Boosters',
     image:
       'https://images.unsplash.com/photo-1522071820081-009f0129c71c?q=80&w=1600&auto=format&fit=crop',
-    date: 'Nov 2025',
+    date: 'Career tips',
   },
   {
     id: 5,
     title: 'Meet the Teen Who Built a Low-Cost Braille Printer',
     summary:
       'A 17-year-old inventor’s journey from school lab to national recognition.',
-    category: 'Young Achievers',
+    category: 'young-achievers',
+    categoryLabel: 'Young Achievers',
     image:
       'https://images.unsplash.com/photo-1531974586759-3fd55f7b39a3?q=80&w=1600&auto=format&fit=crop',
-    date: 'Nov 2025',
+    date: 'Spotlight',
+  },
+  {
+    id: 6,
+    title: 'What Students Wish Adults Understood About Campus Pressure',
+    summary:
+      'A closer look at workload, routines, social pressure, and the small habits students use to stay balanced.',
+    category: 'student-voices',
+    categoryLabel: 'Student Voices',
+    image:
+      'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?q=80&w=1600&auto=format&fit=crop',
+    date: 'Student lens',
   },
 ];
 
 export const getStoriesByCategory = (slug: string): YouthStory[] => {
-  const map: Record<string, string> = {
-    'youth-pulse': 'Youth Pulse',
-    'inspiration-hub': 'Inspiration Hub',
-    'campus-buzz': 'Campus Buzz',
-    'govt-exam-updates': 'Govt Exam Updates',
-    'career-boosters': 'Career Boosters',
-    'young-achievers': 'Young Achievers',
-  };
-  const display = map[slug] || slug;
-  return youthStories.filter((s) => s.category.toLowerCase() === display.toLowerCase());
+  return youthStories.filter((s) => s.category.toLowerCase() === String(slug || '').toLowerCase());
 };

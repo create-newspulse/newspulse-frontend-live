@@ -21,6 +21,16 @@ function humanizeSlug(value: string): string {
   return s.replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
+function toCategorySlug(value: unknown): string {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[_\s/]+/g, '-')
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .trim();
+}
+
 function asStringList(value: unknown): string[] {
   if (!value) return [];
   if (Array.isArray(value)) return value.map((v) => (typeof v === 'string' ? v : '')).filter(Boolean);
@@ -46,6 +56,30 @@ function formatDateLabel(iso?: string): string {
   } catch {
     return d.toISOString();
   }
+}
+
+function extractYears(value: unknown): number[] {
+  const matches = String(value || '').match(/\b(19|20)\d{2}\b/g) || [];
+  return matches
+    .map((item) => Number(item))
+    .filter((item) => Number.isFinite(item));
+}
+
+function isFreshFallbackStory(story: YouthStory, now: Date = new Date()): boolean {
+  const currentYear = now.getFullYear();
+  const years = [...extractYears(story.title), ...extractYears(story.summary), ...extractYears(story.date)];
+  if (!years.length) return true;
+  return years.every((year) => year >= currentYear);
+}
+
+function getFallbackYouthStories(category?: string): YouthStory[] {
+  const normalizedCategory = toCategorySlug(category);
+  return youthStories.filter((story) => {
+    const storyCategory = toCategorySlug(story.category);
+    if (!isFreshFallbackStory(story)) return false;
+    if (!normalizedCategory) return storyCategory !== 'inspiration-hub';
+    return storyCategory === normalizedCategory;
+  });
 }
 
 async function fetchYouthPulseArticles(limit: number, language?: string, opts: FetchOpts = {}): Promise<any[]> {
@@ -83,11 +117,10 @@ function toYouthStory(raw: any, fallbackCategoryLabel?: string): YouthStory {
   const date = formatDateLabel(when) || '';
 
   const backendCategory = String(raw?.category || '').trim();
-  const category =
-    fallbackCategoryLabel ||
-    (backendCategory ? humanizeSlug(backendCategory) : 'Youth Pulse');
+  const category = toCategorySlug(backendCategory || fallbackCategoryLabel || 'youth-pulse') || 'youth-pulse';
+  const categoryLabel = fallbackCategoryLabel || (backendCategory ? humanizeSlug(backendCategory) : 'Youth Pulse');
 
-  return { id, title, summary, category, image, date };
+  return { id, title, summary, category, categoryLabel, image, date };
 }
 
 export async function getYouthTopics(): Promise<YouthCategory[]> {
@@ -109,9 +142,8 @@ export async function getYouthTrending(limit = 12): Promise<YouthStory[]> {
   const items = await fetchYouthPulseArticles(limit);
   if (items.length) return items.map((raw) => toYouthStory(raw));
 
-  // Fallback: keep existing curated Youth stories until backend has data.
-  // Exclude Inspiration Hub from trending.
-  const list = youthStories.filter((s) => String(s.category || '').toLowerCase() !== 'inspiration hub');
+  // Fallback: only use evergreen local stories and reject year-stamped stale mock items.
+  const list = getFallbackYouthStories();
   return list.slice(0, limit);
 }
 
@@ -123,7 +155,7 @@ export async function getYouthTrendingByLanguage(
   const items = await fetchYouthPulseArticles(limit, language, opts);
   if (items.length) return items.map((raw) => toYouthStory(raw));
 
-  const list = youthStories.filter((s) => String(s.category || '').toLowerCase() !== 'inspiration hub');
+  const list = getFallbackYouthStories();
   return list.slice(0, limit);
 }
 
@@ -136,28 +168,18 @@ export async function getYouthByCategory(slug: string, language?: string, opts: 
   if (normalizeText(slug) === 'youth pulse' || normalizeText(slug) === 'youth-pulse') {
     const items = await fetchYouthPulseArticles(30, language, opts);
     if (items.length) return items.map((raw) => toYouthStory(raw, 'Youth Pulse'));
-    return youthStories.filter((s) => String(s.category || '').toLowerCase() !== 'inspiration hub');
+    return getFallbackYouthStories();
   }
 
   const items = await fetchYouthPulseArticles(30, language, opts);
   const filtered = items.filter((raw) => {
     const tags = extractTags(raw);
-    const cat = normalizeText(raw?.category);
+    const cat = normalizeText(toCategorySlug(raw?.category));
     const text = normalizeText(`${raw?.title || ''} ${raw?.summary || ''} ${raw?.excerpt || ''}`);
     return needles.some((n) => (n && (tags.includes(n) || cat.includes(n) || text.includes(n))));
   });
 
   if (filtered.length) return filtered.map((raw) => toYouthStory(raw, display || 'Youth Pulse'));
 
-  // Fallback: previous static category mapping
-  const map: Record<string, string> = {
-    'youth-pulse': 'Youth Pulse',
-    'inspiration-hub': 'Inspiration Hub',
-    'campus-buzz': 'Campus Buzz',
-    'govt-exam-updates': 'Govt Exam Updates',
-    'career-boosters': 'Career Boosters',
-    'young-achievers': 'Young Achievers',
-  };
-  const displayLabel = map[slug] || display || slug;
-  return youthStories.filter((s) => String(s.category || '').toLowerCase() === String(displayLabel).toLowerCase());
+  return getFallbackYouthStories(slug);
 }

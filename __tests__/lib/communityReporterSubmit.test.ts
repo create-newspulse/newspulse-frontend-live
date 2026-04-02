@@ -1,4 +1,4 @@
-import { submitCommunityStory } from '../../src/lib/communityReporterApi';
+import { submitCommunityStory, submitYouthPulseStory } from '../../src/lib/communityReporterApi';
 
 describe('submitCommunityStory (identity anchors)', () => {
   beforeEach(() => {
@@ -43,5 +43,27 @@ describe('submitCommunityStory (identity anchors)', () => {
     expect(body.consentToContact).toBe(true);
     expect(body.coverageScope).toBe('regional');
     expect(Array.isArray(body.beats)).toBe(true);
+  });
+
+  it('tags Youth Pulse submissions for the Youth Pulse Desk workflow', async () => {
+    await submitYouthPulseStory({
+      reporterName: 'Student Reporter',
+      college: 'GLS University',
+      headline: 'Campus clean-up drive draws 200 volunteers',
+      story: 'Students organized a clean-up drive across campus and nearby public areas.',
+      track: 'campus-buzz',
+    });
+
+    expect((global as any).fetch).toHaveBeenCalledTimes(1);
+    const [, init] = (global as any).fetch.mock.calls[0];
+    const body = JSON.parse(init.body);
+
+    expect(body.desk).toBe('youth-pulse');
+    expect(body.track).toBe('campus-buzz');
+    expect(body.category).toBe('Campus Buzz');
+    expect(body.submissionType).toBe('youth-pulse');
+    expect(body.autoPublish).toBe(false);
+    expect(body.publishRequested).toBe(false);
+    expect(body.storyText).toContain('clean-up drive');
   });
 });

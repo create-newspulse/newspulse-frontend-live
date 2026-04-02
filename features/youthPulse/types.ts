@@ -14,6 +14,7 @@ export type YouthStory = {
   title: string;
   summary: string;
   category: string;
+  categoryLabel?: string;
   image: string;
   date: string;
 };

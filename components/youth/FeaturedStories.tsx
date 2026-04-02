@@ -43,7 +43,7 @@ export default function FeaturedStories({ stories, error }: Props) {
             />
             <div className="p-5">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-indigo-600">
-                <span>#{s.category}</span>
+                <span>#{s.categoryLabel || s.category}</span>
                 <span className="text-gray-400">•</span>
                 <span className="text-gray-500 dark:text-gray-400">{s.date}</span>
               </div>

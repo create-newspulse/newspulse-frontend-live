@@ -56,7 +56,7 @@ export default function YouthCategoryPage() {
               >
                 <StoryImage src={s.image} alt={s.title} variant="top" />
                 <div className="p-5">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-indigo-600">{s.category}</div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-indigo-600">{s.categoryLabel || s.category}</div>
                   <h3 className="mt-2 text-lg font-bold">{s.title}</h3>
                   <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">{s.summary}</p>
                   <div className="mt-3 text-xs text-gray-500">{s.date}</div>
