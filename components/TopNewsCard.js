@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { resolveCoverImageUrl } from '../lib/coverImages';
-import { StoryImage } from '../src/components/story/StoryImage';
+import { TopStoryImage } from '../src/components/story/StoryImage';
 
 const TopNewsCard = ({ article }) => {
   const [saved, setSaved] = useState(false);
@@ -25,11 +25,10 @@ const TopNewsCard = ({ article }) => {
 
   return (
     <div className="group bg-white rounded-xl shadow-md p-4 hover:shadow-lg transition-all duration-300 relative">
-      <StoryImage
+      <TopStoryImage
+        storyId={String(article?._id || article?.id || article?.slug || '').trim() || undefined}
         src={resolveCoverImageUrl(article)}
         alt={article?.title || ''}
-        variant="top"
-        className="rounded-md"
       />
       <h3 className="text-lg font-semibold mt-3 mb-2">{article.title}</h3>
       <div className="flex justify-between items-center text-sm text-gray-600">

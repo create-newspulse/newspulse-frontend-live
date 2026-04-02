@@ -5,10 +5,17 @@ import { COVER_PLACEHOLDER_SRC, resolveImageFitMode, type CoverFitMode } from '.
 export type StoryImageVariant = 'card' | 'list' | 'top' | 'mini';
 
 const VARIANT_FRAME_CLASSES: Record<StoryImageVariant, string> = {
-  card: 'w-full aspect-[16/10]',
-  list: 'w-[120px] aspect-[16/10] sm:w-[160px]',
-  top: 'w-full aspect-[16/9]',
-  mini: 'w-[96px] aspect-[4/3] sm:w-[116px]',
+  card: 'w-full',
+  list: 'w-[120px] sm:w-[160px]',
+  top: 'w-full',
+  mini: 'w-[96px] sm:w-[116px]',
+};
+
+const VARIANT_ASPECT_RATIOS: Record<StoryImageVariant, string> = {
+  card: '16 / 10',
+  list: '16 / 10',
+  top: '16 / 9',
+  mini: '4 / 3',
 };
 
 const VARIANT_IMAGE_SIZES: Record<StoryImageVariant, string> = {
@@ -38,7 +45,33 @@ export type StoryImageProps = {
   priority?: boolean;
   className?: string;
   fallbackSrc?: string;
+  allowLowResContainFallback?: boolean;
 };
+
+export type ArticleHeroImageProps = {
+  storyId?: string | null;
+  src?: string | null;
+  alt: string;
+  priority?: boolean;
+  fallbackSrc?: string;
+};
+
+export type TopStoryImageProps = {
+  storyId?: string | null;
+  src?: string | null;
+  alt: string;
+  priority?: boolean;
+  fallbackSrc?: string;
+};
+
+export const ARTICLE_HERO_IMAGE_CLASSES =
+  'rounded-[30px] bg-slate-100 shadow-[0_24px_54px_-36px_rgba(15,23,42,0.26)] ring-1 ring-slate-200/70';
+
+export const TOP_STORY_IMAGE_CLASSES =
+  'w-full rounded-[30px] bg-slate-100 shadow-[0_24px_54px_-36px_rgba(15,23,42,0.26)] ring-1 ring-slate-200/70';
+
+const ARTICLE_HERO_PLACEHOLDER_CLASSES = `w-full ${ARTICLE_HERO_IMAGE_CLASSES}`;
+const TOP_STORY_PLACEHOLDER_CLASSES = TOP_STORY_IMAGE_CLASSES;
 
 export function StoryImage({
   storyId,
@@ -49,6 +82,7 @@ export function StoryImage({
   priority = false,
   className,
   fallbackSrc = COVER_PLACEHOLDER_SRC,
+  allowLowResContainFallback = true,
 }: StoryImageProps) {
   const safeStoryId = String(storyId || '').trim();
   const safeSrc = String(src || '').trim();
@@ -86,10 +120,11 @@ export function StoryImage({
   );
 
   const shouldAvoidUpscale = React.useMemo(() => {
+    if (!allowLowResContainFallback) return false;
     if (variant !== 'top') return false;
     if (!loadedSize?.width || !loadedSize?.height) return false;
     return loadedSize.width < 1200 || loadedSize.height < 675;
-  }, [loadedSize?.height, loadedSize?.width, variant]);
+  }, [allowLowResContainFallback, loadedSize?.height, loadedSize?.width, variant]);
 
   const effectiveFitMode: CoverFitMode = shouldAvoidUpscale && currentFitMode === 'cover' ? 'contain' : currentFitMode;
 
@@ -104,6 +139,7 @@ export function StoryImage({
         VARIANT_FRAME_CLASSES[variant],
         className
       )}
+      style={{ aspectRatio: VARIANT_ASPECT_RATIOS[variant] }}
       data-variant={variant}
       data-fit-mode={currentFitMode}
     >
@@ -159,6 +195,78 @@ export function StoryImage({
         />
       ) : null}
     </div>
+  );
+}
+
+export function ArticleHeroImage({
+  storyId,
+  src,
+  alt,
+  priority = false,
+  fallbackSrc = COVER_PLACEHOLDER_SRC,
+}: ArticleHeroImageProps) {
+  const safeSrc = String(src || '').trim();
+
+  if (!safeSrc) {
+    return (
+      <div className={ARTICLE_HERO_PLACEHOLDER_CLASSES} style={{ aspectRatio: VARIANT_ASPECT_RATIOS.top }}>
+        <div className="grid h-full w-full place-items-center">
+          <div className="text-xs font-extrabold tracking-tight text-slate-500 select-none">
+            News <span className="text-slate-700">Pulse</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <StoryImage
+      storyId={storyId}
+      src={safeSrc}
+      alt={alt}
+      variant="top"
+      fitMode="cover"
+      priority={priority}
+      fallbackSrc={fallbackSrc}
+      allowLowResContainFallback={false}
+      className={ARTICLE_HERO_IMAGE_CLASSES}
+    />
+  );
+}
+
+export function TopStoryImage({
+  storyId,
+  src,
+  alt,
+  priority = false,
+  fallbackSrc = COVER_PLACEHOLDER_SRC,
+}: TopStoryImageProps) {
+  const safeSrc = String(src || '').trim();
+
+  if (!safeSrc) {
+    return (
+      <div className={TOP_STORY_PLACEHOLDER_CLASSES} style={{ aspectRatio: VARIANT_ASPECT_RATIOS.top }}>
+        <div className="grid h-full w-full place-items-center">
+          <div className="text-xs font-extrabold tracking-tight text-slate-500 select-none">
+            News <span className="text-slate-700">Pulse</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <StoryImage
+      storyId={storyId}
+      src={safeSrc}
+      alt={alt}
+      variant="top"
+      fitMode="cover"
+      priority={priority}
+      fallbackSrc={fallbackSrc}
+      allowLowResContainFallback={false}
+      className={TOP_STORY_IMAGE_CLASSES}
+    />
   );
 }
 

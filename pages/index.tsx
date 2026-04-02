@@ -22,7 +22,7 @@ import { buildNewsUrl } from "../lib/newsRoutes";
 import { COVER_PLACEHOLDER_SRC, resolveCoverFitMode, resolveCoverImageUrl } from "../lib/coverImages";
 import { fetchCurrentWeather } from "../lib/fetchWeather";
 import { debugStoryCard, getStoryId, getStoryReactKey, getStorySlug, getStoryTranslationGroupId } from "../lib/storyIdentity";
-import StoryImage from "../src/components/story/StoryImage";
+import StoryImage, { TopStoryImage } from "../src/components/story/StoryImage";
 import { getTickerMarqueeText, mergeTickerItemsWithAds, type TickerMarqueeItem } from "../lib/publicTickerAds";
 import type { GetStaticProps } from "next";
 import { AnimatePresence, motion } from "framer-motion";
@@ -555,15 +555,20 @@ function storyLocationLabel(story: any): string {
 }
 
 function pickTranslatedField(item: any, lang: 'en' | 'hi' | 'gu', field: string): string {
-  const direct = safeTitle(item?.translations?.[lang]?.[field]);
-  if (direct) return direct;
-  const alt1 = safeTitle(item?.i18n?.[lang]?.[field]);
-  if (alt1) return alt1;
-  const alt2 = safeTitle(item?.localized?.[lang]?.[field]);
-  if (alt2) return alt2;
-  const alt3 = safeTitle(item?.locales?.[lang]?.[field]);
-  if (alt3) return alt3;
-  return '';
+  const direct = pickTranslatedValue(item, lang, field);
+  return safeTitle(direct);
+}
+
+function pickTranslatedValue(item: any, lang: 'en' | 'hi' | 'gu', field: string): unknown {
+  const direct = item?.translations?.[lang]?.[field];
+  if (direct !== undefined && direct !== null && direct !== '') return direct;
+  const alt1 = item?.i18n?.[lang]?.[field];
+  if (alt1 !== undefined && alt1 !== null && alt1 !== '') return alt1;
+  const alt2 = item?.localized?.[lang]?.[field];
+  if (alt2 !== undefined && alt2 !== null && alt2 !== '') return alt2;
+  const alt3 = item?.locales?.[lang]?.[field];
+  if (alt3 !== undefined && alt3 !== null && alt3 !== '') return alt3;
+  return undefined;
 }
 
 function resolveTopStoryTitle(article: any, requestedLang: 'en' | 'hi' | 'gu') {
@@ -587,27 +592,7 @@ function resolveTopStorySummary(article: any, requestedLang: 'en' | 'hi' | 'gu')
 }
 
 function resolveStoryImageSrc(article: any, requestedLang: 'en' | 'hi' | 'gu') {
-  const coverRaw =
-    pickTranslatedField(article as any, requestedLang, 'coverImage') || (article as any)?.coverImage ||
-    pickTranslatedField(article as any, requestedLang, 'coverImageUrl') || (article as any)?.coverImageUrl ||
-    pickTranslatedField(article as any, requestedLang, 'imageUrl') || (article as any)?.imageUrl ||
-    pickTranslatedField(article as any, requestedLang, 'heroImage') || (article as any)?.heroImage ||
-    pickTranslatedField(article as any, requestedLang, 'image') || (article as any)?.image ||
-    null;
-
-  const translatedCover = (() => {
-    if (!coverRaw) return '';
-    if (typeof coverRaw === 'string') return coverRaw.trim();
-    if (typeof coverRaw === 'object') {
-      const url = typeof (coverRaw as any)?.url === 'string' ? String((coverRaw as any).url).trim() : '';
-      if (url) return url;
-      const src = typeof (coverRaw as any)?.src === 'string' ? String((coverRaw as any).src).trim() : '';
-      if (src) return src;
-    }
-    return '';
-  })();
-
-  return translatedCover || resolveCoverImageUrl(article as any) || '';
+  return resolveCoverImageUrl(article as any, { lang: requestedLang }) || '';
 }
 
 function articleToTickerText(a: Article, requestedLang: 'en' | 'hi' | 'gu'): string | null {
@@ -2010,28 +1995,8 @@ function FeaturedCard({ theme, item, onToast }: any) {
     const location = storyLocationLabel(article as any);
     const readMinutes = estimateReadMinutes(`${title} ${summary} ${contentFallback}`);
 
-    const coverRaw =
-      pickTranslatedField(article as any, requestedLang, 'coverImage') || (article as any)?.coverImage ||
-      pickTranslatedField(article as any, requestedLang, 'coverImageUrl') || (article as any)?.coverImageUrl ||
-      pickTranslatedField(article as any, requestedLang, 'imageUrl') || (article as any)?.imageUrl ||
-      pickTranslatedField(article as any, requestedLang, 'heroImage') || (article as any)?.heroImage ||
-      pickTranslatedField(article as any, requestedLang, 'image') || (article as any)?.image ||
-      null;
-
-    const cover = (() => {
-      if (!coverRaw) return '';
-      if (typeof coverRaw === 'string') return coverRaw.trim();
-      if (typeof coverRaw === 'object') {
-        const url = typeof (coverRaw as any)?.url === 'string' ? String((coverRaw as any).url).trim() : '';
-        if (url) return url;
-        const src = typeof (coverRaw as any)?.src === 'string' ? String((coverRaw as any).src).trim() : '';
-        if (src) return src;
-      }
-      return '';
-    })();
-
-    const imageSrc = cover || resolveCoverImageUrl(article as any) || '';
-    const coverFitMode = resolveCoverFitMode(article as any, { src: imageSrc, altText: title });
+    const imageSrc = resolveStoryImageSrc(article as any, requestedLang);
+    const coverFitMode = resolveCoverFitMode(article as any, { src: imageSrc, altText: title, lang: requestedLang });
 
     return {
       id: id || slug || title,
@@ -2200,27 +2165,13 @@ function FeaturedCard({ theme, item, onToast }: any) {
           </div>
 
           <div className="mt-5">
-            {vm?.imageSrc ? (
-              <StoryImage
-                storyId={vm.id}
-                src={vm.imageSrc}
-                fitMode={vm.coverFitMode}
-                alt={vm?.title || ''}
-                variant="top"
-                priority
-                fallbackSrc={COVER_PLACEHOLDER_SRC}
-                className="h-[220px] w-full border border-black/10 sm:h-[280px] md:h-[320px]"
-              />
-            ) : (
-              <div className="relative h-[220px] overflow-hidden rounded-[30px] border border-black/10 bg-black/5 sm:h-[280px] md:h-[320px]">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.18),transparent_42%),radial-gradient(circle_at_bottom_right,rgba(124,58,237,0.14),transparent_46%)]" />
-                <div className="absolute inset-0 flex flex-col justify-end p-6">
-                  <div className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-slate-700/90">News Pulse</div>
-                  <div className="mt-3 text-xl font-black tracking-tight text-slate-900">Lead Story</div>
-                  <div className="mt-2 max-w-md text-sm font-medium text-slate-700">Editorially selected top coverage for the current edition.</div>
-                </div>
-              </div>
-            )}
+            <TopStoryImage
+              storyId={vm?.id}
+              src={vm?.imageSrc}
+              alt={vm?.title || fallbackTitle}
+              priority
+              fallbackSrc={COVER_PLACEHOLDER_SRC}
+            />
           </div>
 
           <div className="mt-5 text-[15px] leading-7 sm:text-[15px] sm:leading-7" style={{ color: theme.sub }}>
@@ -2893,26 +2844,12 @@ function HomeEditorialSection({ theme, title, href, items, lang, Icon }: any) {
             className="group block overflow-hidden rounded-[28px] border p-4 shadow-[0_18px_42px_-34px_rgba(15,23,42,0.30)] transition hover:-translate-y-[1px] hover:shadow-[0_24px_52px_-34px_rgba(15,23,42,0.34)] sm:p-5"
             style={{ borderColor: theme.border, background: theme.surface }}
           >
-            {lead?.imageSrc ? (
-              <StoryImage
-                storyId={getStoryId(lead)}
-                src={String(lead.imageSrc)}
-                fitMode={lead?.coverFitMode}
-                alt={String(lead?.title || '').trim()}
-                variant="top"
-                fallbackSrc={COVER_PLACEHOLDER_SRC}
-                className="border border-black/10"
-              />
-            ) : (
-              <div className="relative aspect-[16/9] overflow-hidden rounded-[24px] border border-black/10 bg-[linear-gradient(135deg,rgba(248,250,252,0.95),rgba(226,232,240,0.9))]">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.12),transparent_42%),radial-gradient(circle_at_bottom_right,rgba(124,58,237,0.10),transparent_46%)]" />
-                <div className="absolute inset-0 flex items-end p-5">
-                  <div className="rounded-full border px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.18em] text-slate-700" style={{ borderColor: 'rgba(15,23,42,0.10)', background: 'rgba(255,255,255,0.72)' }}>
-                    {title}
-                  </div>
-                </div>
-              </div>
-            )}
+            <TopStoryImage
+              storyId={lead ? getStoryId(lead) : undefined}
+              src={lead?.imageSrc ? String(lead.imageSrc) : undefined}
+              alt={String(lead?.title || title || '').trim()}
+              fallbackSrc={COVER_PLACEHOLDER_SRC}
+            />
 
             <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: theme.sub }}>
               {lead?.category ? (

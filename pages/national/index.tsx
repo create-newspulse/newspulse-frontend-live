@@ -16,7 +16,7 @@ import { buildNewsUrl } from '../../lib/newsRoutes';
 import { localizeArticle } from '../../lib/localizeArticle';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
-import StoryImage from '../../src/components/story/StoryImage';
+import StoryImage, { TopStoryImage } from '../../src/components/story/StoryImage';
 
 type AnyStory = any;
 
@@ -869,12 +869,12 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
               ) : hero ? (
                 <div className="p-4">
                   <a href={storyHref(hero, effectiveLang)} className="block group">
-                    <StoryImage
+                    <TopStoryImage
+                      storyId={String(hero?._id || hero?.id || '').trim() || undefined}
                       src={storyImage(hero)}
                       alt={heroLocalizedTitle || ''}
-                      variant="top"
                       priority
-                      className="border border-slate-200 bg-slate-100 dark:border-gray-800 dark:bg-gray-800"
+                      fallbackSrc={COVER_PLACEHOLDER_SRC}
                     />
                     <div className="mt-3">
                       <div className="flex items-center justify-between gap-3">

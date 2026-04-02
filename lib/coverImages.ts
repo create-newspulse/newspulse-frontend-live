@@ -2,6 +2,14 @@ export const COVER_PLACEHOLDER_SRC = '/fallback.svg';
 
 export type CoverFitMode = 'cover' | 'contain';
 
+function normalizeImageLang(value: unknown): 'en' | 'hi' | 'gu' | '' {
+  const raw = String(value || '').toLowerCase().trim();
+  if (raw === 'hi' || raw === 'hindi' || raw === 'in') return 'hi';
+  if (raw === 'gu' || raw === 'gujarati') return 'gu';
+  if (raw === 'en' || raw === 'english') return 'en';
+  return '';
+}
+
 function readText(value: unknown): string {
   return String(value || '').trim();
 }
@@ -16,6 +24,70 @@ function readImageCandidate(value: unknown): string {
     if (src) return src;
   }
   return '';
+}
+
+function collectLocalizedImageContainers(article: any, lang?: unknown): any[] {
+  const preferredLang = normalizeImageLang(lang);
+  const groups = [article?.translations, article?.i18n, article?.localized, article?.locales];
+  const containers: any[] = [];
+
+  const pushValue = (value: any) => {
+    if (!value || typeof value !== 'object') return;
+    if (containers.includes(value)) return;
+    containers.push(value);
+  };
+
+  if (preferredLang) {
+    for (const group of groups) pushValue(group?.[preferredLang]);
+  }
+
+  for (const group of groups) {
+    if (!group || typeof group !== 'object') continue;
+    for (const value of Object.values(group)) pushValue(value);
+  }
+
+  return containers;
+}
+
+function collectPreferredLocalizedImageContainers(article: any, lang?: unknown): any[] {
+  const preferredLang = normalizeImageLang(lang);
+  if (!preferredLang) return [];
+
+  const groups = [article?.translations, article?.i18n, article?.localized, article?.locales];
+  const containers: any[] = [];
+
+  for (const group of groups) {
+    const value = group?.[preferredLang];
+    if (!value || typeof value !== 'object') continue;
+    if (containers.includes(value)) continue;
+    containers.push(value);
+  }
+
+  return containers;
+}
+
+function collectImageCandidates(source: any): unknown[] {
+  const media = source?.media;
+  const media0 = Array.isArray(media) ? media[0] : media;
+
+  return [
+    source?.coverImage,
+    source?.coverImageUrl,
+    source?.imageUrl,
+    source?.imageURL,
+    source?.heroImage,
+    source?.image,
+    source?.featuredImage,
+    source?.featuredImageUrl,
+    source?.thumbnail,
+    source?.media?.cover,
+    source?.media?.image,
+    source?.media?.thumbnail,
+    media0?.cover,
+    media0?.image,
+    media0?.thumbnail,
+    media0,
+  ];
 }
 
 export function normalizeCoverFitMode(value: unknown): CoverFitMode | null {
@@ -109,9 +181,9 @@ export function resolveImageFitMode(options?: {
   return normalizeCoverFitMode(options?.fitMode) || inferCoverFitMode(options);
 }
 
-export function resolveCoverFitMode(article: any, options?: { src?: unknown; altText?: unknown }): CoverFitMode {
+export function resolveCoverFitMode(article: any, options?: { src?: unknown; altText?: unknown; lang?: unknown }): CoverFitMode {
   const meta = extractImageMeta(article);
-  const src = readText(options?.src) || resolveCoverImageUrl(article);
+  const src = readText(options?.src) || resolveCoverImageUrl(article, { lang: options?.lang });
 
   return resolveImageFitMode({
     fitMode: meta.explicitFitMode,
@@ -146,20 +218,19 @@ function isBadCoverUrl(url: string): boolean {
   }
 }
 
-export function resolveCoverImageUrl(article: any): string {
-  const candidates = [
-    article?.coverImage,
-    article?.coverImageUrl,
-    article?.imageUrl,
-    article?.imageURL,
-    article?.heroImage,
-    article?.image,
-  ];
+export function resolveCoverImageUrl(article: any, options?: { lang?: unknown }): string {
+  const preferredLocalizedSources = collectPreferredLocalizedImageContainers(article, options?.lang);
+  const fallbackLocalizedSources = collectLocalizedImageContainers(article, options?.lang).filter(
+    (source) => !preferredLocalizedSources.includes(source)
+  );
+  const sources = [...preferredLocalizedSources, article, ...fallbackLocalizedSources];
 
-  for (const raw of candidates) {
-    const url = readImageCandidate(raw);
-    if (!url) continue;
-    if (!isBadCoverUrl(url)) return url;
+  for (const source of sources) {
+    for (const raw of collectImageCandidates(source)) {
+      const url = readImageCandidate(raw);
+      if (!url) continue;
+      if (!isBadCoverUrl(url)) return url;
+    }
   }
   return '';
 }

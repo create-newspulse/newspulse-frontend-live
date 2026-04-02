@@ -14,9 +14,9 @@ import { pickFreshestArticleForLocale, shouldReplaceArticleWithFreshCandidate } 
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { tHeading, toLanguageKey } from '../../utils/localizedNames';
 import { buildNewsUrl } from '../../lib/newsRoutes';
-import { COVER_PLACEHOLDER_SRC, resolveCoverFitMode, resolveCoverImageUrl } from '../../lib/coverImages';
+import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
 import { debugStoryCard, getStoryId, getStoryReactKey } from '../../lib/storyIdentity';
-import StoryImage from '../../src/components/story/StoryImage';
+import StoryImage, { ArticleHeroImage } from '../../src/components/story/StoryImage';
 import { useArticleAnalytics } from '../../hooks/useArticleAnalytics';
 
 type ArticleDisplayAdProps = {
@@ -361,8 +361,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
   const displayProvider = cleanText((resolvedArticle as any)?.provider);
   const displayGeneratedAt = cleanText((resolvedArticle as any)?.generatedAt);
 
-  const heroSrc = resolveCoverImageUrl(resolvedArticle) || null;
-  const heroFitMode = resolveCoverFitMode(resolvedArticle, { src: heroSrc, altText: displayTitle });
+  const heroSrc = resolveCoverImageUrl(resolvedArticle, { lang }) || null;
 
   const prefix = React.useMemo(() => localePrefix(lang), [lang]);
   const categoryKey = React.useMemo(() => resolveCategoryKey(resolvedArticle), [resolvedArticle]);
@@ -563,30 +562,13 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                 </div>
 
                 <div className="px-4 md:px-6 pb-5">
-                  {heroSrc ? (
-                    <div className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white p-2 shadow-[0_18px_38px_-30px_rgba(15,23,42,0.18)] sm:p-3">
-                      <StoryImage
-                        storyId={getStoryId(resolvedArticle)}
-                        src={heroSrc}
-                        fitMode={heroFitMode}
-                        fallbackSrc={COVER_PLACEHOLDER_SRC}
-                        alt={displayTitle}
-                        variant="top"
-                        priority
-                        className="rounded-[22px] border border-slate-200/80 bg-slate-100"
-                      />
-                    </div>
-                  ) : (
-                    <div className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white p-2 shadow-[0_18px_38px_-30px_rgba(15,23,42,0.18)] sm:p-3">
-                      <div className="aspect-[16/9] w-full overflow-hidden rounded-[22px] border border-slate-200/80 bg-slate-100">
-                        <div className="grid h-full w-full place-items-center">
-                          <div className="text-xs font-extrabold tracking-tight text-slate-500 select-none">
-                            News <span className="text-slate-700">Pulse</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                  <ArticleHeroImage
+                    storyId={getStoryId(resolvedArticle)}
+                    src={heroSrc}
+                    fallbackSrc={COVER_PLACEHOLDER_SRC}
+                    alt={displayTitle}
+                    priority
+                  />
 
                   {displaySummary ? (
                     <p className="mt-4 text-base md:text-lg text-slate-700">
