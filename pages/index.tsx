@@ -648,6 +648,7 @@ function articleToFeedItem(a: Article, requestedLang: 'en' | 'hi' | 'gu') {
   return {
     _id: storyId,
     id: storyId || slug || title,
+    lang: String((a as any)?.lang || (a as any)?.language || (a as any)?.sourceLang || (a as any)?.sourceLanguage || '').trim(),
     slug,
     translationGroupId: getStoryTranslationGroupId(a as any) || undefined,
     title,

@@ -85,6 +85,8 @@ export function inferCoverFitMode(options?: {
   return 'cover';
 }
 
+export const inferAutoCoverFitMode = inferCoverFitMode;
+
 export function resolveImageFitMode(options?: {
   fitMode?: unknown;
   src?: unknown;

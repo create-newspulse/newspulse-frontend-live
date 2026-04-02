@@ -42,15 +42,33 @@ export function StoryImage({
 
   const preferredSrc = safeSrc || safeFallbackSrc;
 
-  const [currentSrc, setCurrentSrc] = React.useState<string>(preferredSrc);
-  const [currentFitMode, setCurrentFitMode] = React.useState<CoverFitMode>(
-    resolveImageFitMode({ fitMode: safeFitMode, src: preferredSrc, altText: alt })
-  );
+  const [loadedSize, setLoadedSize] = React.useState<{ width: number; height: number } | null>(null);
+  const [isUsingFallback, setIsUsingFallback] = React.useState(false);
+  const [isBroken, setIsBroken] = React.useState(false);
 
   React.useEffect(() => {
-    setCurrentSrc(preferredSrc);
-    setCurrentFitMode(resolveImageFitMode({ fitMode: safeFitMode, src: preferredSrc, altText: alt }));
+    setLoadedSize(null);
+    setIsUsingFallback(false);
+    setIsBroken(false);
   }, [alt, preferredSrc, safeFallbackSrc, safeFitMode, safeSrc, safeStoryId]);
+
+  const currentSrc = React.useMemo(() => {
+    if (isBroken) return '';
+    if (isUsingFallback && safeFallbackSrc) return safeFallbackSrc;
+    return preferredSrc;
+  }, [isBroken, isUsingFallback, preferredSrc, safeFallbackSrc]);
+
+  const currentFitMode = React.useMemo(
+    () =>
+      resolveImageFitMode({
+        fitMode: safeFitMode,
+        src: currentSrc || preferredSrc,
+        altText: alt,
+        width: loadedSize?.width,
+        height: loadedSize?.height,
+      }),
+    [alt, currentSrc, loadedSize?.height, loadedSize?.width, preferredSrc, safeFitMode]
+  );
 
   const showImage = Boolean(currentSrc);
 
@@ -74,37 +92,35 @@ export function StoryImage({
       {showImage ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          key={safeStoryId || safeSrc || safeFallbackSrc || alt}
+          key={[safeStoryId, currentSrc, alt].filter(Boolean).join('|')}
           src={currentSrc}
           alt={alt}
           loading={priority ? 'eager' : 'lazy'}
           className={cx(
-            'absolute inset-0 h-full w-full object-center',
+            'absolute inset-0 h-full w-full object-center transform-gpu',
             currentFitMode === 'contain' ? 'object-contain p-2 sm:p-3' : 'object-cover',
-            'transition-transform duration-500 ease-out will-change-transform',
-            'hover:scale-[1.06] group-hover/story-image:scale-[1.06]'
+            'motion-safe:transition-transform motion-safe:duration-300 motion-safe:ease-out will-change-transform',
+            'motion-safe:hover:scale-[1.04] motion-safe:group-hover/story-image:scale-[1.04]',
+            'motion-reduce:transform-none motion-reduce:transition-none'
           )}
           onLoad={(event) => {
             const img = event.currentTarget;
-            setCurrentFitMode((prev) => {
-              const next = resolveImageFitMode({
-                fitMode: safeFitMode,
-                src: currentSrc,
-                altText: alt,
-                width: img.naturalWidth,
-                height: img.naturalHeight,
-              });
-              return prev === next ? prev : next;
+            const width = Number(img.naturalWidth) || 0;
+            const height = Number(img.naturalHeight) || 0;
+            setLoadedSize((prev) => {
+              if (prev?.width === width && prev?.height === height) return prev;
+              return { width, height };
             });
           }}
           onError={() => {
+            setLoadedSize(null);
+
             if (safeFallbackSrc && currentSrc !== safeFallbackSrc) {
-              setCurrentSrc(safeFallbackSrc);
-              setCurrentFitMode(resolveImageFitMode({ fitMode: safeFitMode, src: safeFallbackSrc, altText: alt }));
+              setIsUsingFallback(true);
               return;
             }
 
-            setCurrentSrc('');
+            setIsBroken(true);
           }}
         />
       ) : null}

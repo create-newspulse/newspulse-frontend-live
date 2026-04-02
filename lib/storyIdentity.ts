@@ -8,6 +8,10 @@ export function getStoryId(story: any): string {
   return readText(story?._id) || readText(story?.id);
 }
 
+export function getStoryLang(story: any): string {
+  return readText(story?.lang) || readText(story?.language) || readText(story?.sourceLang) || readText(story?.sourceLanguage);
+}
+
 export function getStorySlug(story: any): string {
   return readText(story?.slug);
 }
@@ -17,7 +21,16 @@ export function getStoryTranslationGroupId(story: any): string {
 }
 
 export function getStoryReactKey(story: any, fallback?: unknown): string {
-  return getStoryId(story) || getStorySlug(story) || readText(fallback);
+  const id = getStoryId(story);
+  const lang = getStoryLang(story);
+
+  if (id) return lang ? `${id}-${lang}` : id;
+
+  const slug = getStorySlug(story);
+  if (slug) return lang ? `${slug}-${lang}` : slug;
+
+  const fallbackKey = readText(fallback);
+  return lang && fallbackKey ? `${fallbackKey}-${lang}` : fallbackKey;
 }
 
 export function debugStoryCard(scope: string, story: any, coverImageUrl?: unknown) {
