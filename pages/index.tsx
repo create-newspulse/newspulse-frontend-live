@@ -24,6 +24,7 @@ import { fetchCurrentWeather } from "../lib/fetchWeather";
 import { debugStoryCard, getStoryId, getStoryReactKey, getStorySlug, getStoryTranslationGroupId } from "../lib/storyIdentity";
 import StoryImage, { TopStoryImage } from "../src/components/story/StoryImage";
 import { getTickerMarqueeText, mergeTickerItemsWithAds, type TickerMarqueeItem } from "../lib/publicTickerAds";
+import InspirationHubHomepageSection from "../components/home/InspirationHubHomepageSection";
 import type { GetStaticProps } from "next";
 import { AnimatePresence, motion } from "framer-motion";
 import { useI18n } from "../src/i18n/LanguageProvider";
@@ -2931,110 +2932,6 @@ function HomeEditorialSection({ theme, title, href, items, lang, Icon }: any) {
   );
 }
 
-function YouthPulseHomepageSection({ theme, items, lang }: any) {
-  const { t } = useI18n();
-  const safeLang = lang === 'hi' || lang === 'gu' ? lang : 'en';
-
-  if (!Array.isArray(items) || !items.length) return null;
-
-  const lead = items[0];
-  const secondary = items.slice(1, 5);
-  const href = localizePath('/youth-pulse', safeLang);
-
-  return (
-    <Surface theme={theme} className="overflow-hidden">
-      <div
-        className="border-b px-4 py-4 sm:px-5"
-        style={{
-          borderColor: theme.border,
-          background: theme.mode === 'dark'
-            ? 'linear-gradient(135deg, rgba(79,70,229,0.16), rgba(56,189,248,0.08) 70%, transparent 100%)'
-            : 'linear-gradient(135deg, rgba(79,70,229,0.10), rgba(37,99,235,0.06) 70%, rgba(255,255,255,0.74) 100%)',
-        }}
-      >
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 text-[12px] font-extrabold uppercase tracking-[0.16em]" style={{ color: theme.sub }}>
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-2xl border" style={{ borderColor: theme.border, background: theme.surface2, color: theme.text }}>
-                <GraduationCap className="h-4 w-4" />
-              </span>
-              Youth desk
-            </div>
-            <div className="mt-2 text-2xl font-black tracking-tight" style={{ color: theme.text }}>
-              {t('categories.youthPulse')}
-            </div>
-          </div>
-
-          <Link
-            href={href}
-            className="inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold transition hover:opacity-[0.98]"
-            style={{ color: theme.text, borderColor: theme.border, background: theme.surface }}
-          >
-            {t('common.viewAll')} <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
-      </div>
-
-      <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <Link
-          href={href}
-          className="group block overflow-hidden rounded-[28px] border p-4 shadow-[0_18px_42px_-34px_rgba(15,23,42,0.30)] transition hover:-translate-y-[1px] hover:shadow-[0_24px_52px_-34px_rgba(15,23,42,0.34)] sm:p-5"
-          style={{ borderColor: theme.border, background: theme.surface }}
-        >
-          <div className="grid gap-4 md:grid-cols-[144px_1fr]">
-            {lead?.image ? (
-              <img src={String(lead.image)} alt={String(lead?.title || '')} className="h-[120px] w-full rounded-[24px] object-cover md:w-[144px]" />
-            ) : (
-              <div className="h-[120px] rounded-[24px] bg-[linear-gradient(135deg,rgba(59,130,246,0.14),rgba(139,92,246,0.12))]" />
-            )}
-            <div className="min-w-0">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: theme.sub }}>
-                {String(lead?.category || 'Youth Pulse')}
-              </div>
-              <div className="mt-2 text-xl font-black leading-tight tracking-tight" style={{ color: theme.text }}>
-                {String(lead?.title || '').trim()}
-              </div>
-              {lead?.summary ? (
-                <div className="mt-3 text-sm leading-6" style={{ color: theme.sub }}>
-                  {String(lead.summary).trim()}
-                </div>
-              ) : null}
-              {lead?.date ? (
-                <div className="mt-3 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: theme.sub }}>
-                  {String(lead.date).trim()}
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </Link>
-
-        <div className="grid gap-3">
-          {secondary.map((item: any) => (
-            <Link
-              key={getStoryReactKey(item, href)}
-              href={href}
-              className="group block rounded-[24px] border p-3 shadow-[0_14px_32px_-28px_rgba(15,23,42,0.28)] transition hover:-translate-y-[1px] hover:shadow-[0_20px_40px_-28px_rgba(15,23,42,0.30)] sm:p-4"
-              style={{ borderColor: theme.border, background: theme.surface }}
-            >
-              <div className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: theme.sub }}>
-                {String(item?.category || 'Youth Pulse')}
-              </div>
-              <div className="mt-2 text-base font-bold leading-snug tracking-tight" style={{ color: theme.text }}>
-                {String(item?.title || '').trim()}
-              </div>
-              {item?.date ? (
-                <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: theme.sub }}>
-                  {String(item.date).trim()}
-                </div>
-              ) : null}
-            </Link>
-          ))}
-        </div>
-      </div>
-    </Surface>
-  );
-}
-
 function QuickToolsCard({ theme, onToast }: any) {
   const { t } = useI18n();
   return (
@@ -3922,11 +3819,6 @@ export default function UiPreviewV145() {
     }).filter((section) => section.items.length > 0);
   }, [apiLang, homeSectionNews, homepageLeadIdentitySet, t]);
 
-  const youthHomepageItems = React.useMemo(() => {
-    if (!Array.isArray(youth.trending)) return [];
-    return youth.trending.slice(0, 5);
-  }, [youth.trending]);
-
   const heroLeftBlocks = sidebarBlocks.filter((b) => b.key === 'explore');
   const utilityLeftBlocks = sidebarBlocks.filter((b) => b.key !== 'explore');
   const showUtilityRow = utilityLeftBlocks.length > 0 || moreReadItems == null || (Array.isArray(moreReadItems) && moreReadItems.length > 0) || youthPulseTrendingBlock != null;
@@ -4170,7 +4062,7 @@ export default function UiPreviewV145() {
           </div>
         </div>
 
-        {editorialSections.length || youthHomepageItems.length ? (
+        {editorialSections.length ? (
           <div className="mt-8 grid gap-6 lg:gap-7">
             {editorialSections.map((section) => (
               <HomeEditorialSection
@@ -4183,10 +4075,15 @@ export default function UiPreviewV145() {
                 Icon={section.Icon}
               />
             ))}
-
-            <YouthPulseHomepageSection theme={theme} items={youthHomepageItems} lang={apiLang} />
           </div>
         ) : null}
+
+        <div className="mt-8">
+          <InspirationHubHomepageSection
+            theme={theme}
+            href={localizePath('/inspiration-hub', apiLang)}
+          />
+        </div>
       </div>
 
       {/* APP PROMO + FOOTER */}
