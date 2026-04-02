@@ -1,4 +1,3 @@
-import Image from 'next/image';
 import React from 'react';
 import { COVER_PLACEHOLDER_SRC, resolveImageFitMode, type CoverFitMode } from '../../../lib/coverImages';
 
@@ -9,20 +8,6 @@ const VARIANT_FRAME_CLASSES: Record<StoryImageVariant, string> = {
   list: 'w-[120px] aspect-[16/10] sm:w-[160px]',
   top: 'w-full aspect-[16/9]',
   mini: 'w-[96px] aspect-[4/3] sm:w-[116px]',
-};
-
-const VARIANT_IMAGE_SIZES: Record<StoryImageVariant, string> = {
-  card: '(min-width: 1024px) 32vw, (min-width: 640px) 48vw, 100vw',
-  list: '(min-width: 640px) 160px, 100vw',
-  top: '(min-width: 1280px) 960px, (min-width: 768px) 92vw, 100vw',
-  mini: '(min-width: 640px) 116px, 96px',
-};
-
-const VARIANT_IMAGE_QUALITY: Record<StoryImageVariant, number> = {
-  card: 78,
-  list: 76,
-  top: 90,
-  mini: 74,
 };
 
 function cx(...c: Array<string | false | null | undefined>) {
@@ -85,16 +70,6 @@ export function StoryImage({
     [alt, currentSrc, loadedSize?.height, loadedSize?.width, preferredSrc, safeFitMode]
   );
 
-  const shouldAvoidUpscale = React.useMemo(() => {
-    if (variant !== 'top') return false;
-    if (!loadedSize?.width || !loadedSize?.height) return false;
-    return loadedSize.width < 1200 || loadedSize.height < 675;
-  }, [loadedSize?.height, loadedSize?.width, variant]);
-
-  const effectiveFitMode: CoverFitMode = shouldAvoidUpscale && currentFitMode === 'cover' ? 'contain' : currentFitMode;
-
-  const isUnoptimizedSource = React.useMemo(() => /\.svg($|\?)/i.test(currentSrc), [currentSrc]);
-
   const showImage = Boolean(currentSrc);
 
   return (
@@ -116,29 +91,25 @@ export function StoryImage({
       </div>
 
       {showImage ? (
-        <Image
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
           key={[safeStoryId, currentSrc, alt].filter(Boolean).join('|')}
           src={currentSrc}
           alt={alt}
-          fill
-          priority={priority}
-          sizes={VARIANT_IMAGE_SIZES[variant]}
-          quality={VARIANT_IMAGE_QUALITY[variant]}
-          unoptimized={isUnoptimizedSource}
-          style={{ objectPosition: effectiveFitMode === 'cover' && variant === 'top' ? 'center 28%' : 'center' }}
+          loading={priority ? 'eager' : 'lazy'}
           className={cx(
             'absolute inset-0 h-full w-full object-center transform-gpu',
-            effectiveFitMode === 'contain'
+            currentFitMode === 'contain'
               ? 'object-contain p-2 sm:p-3'
               : variant === 'top'
-                ? 'object-cover'
+                ? 'object-cover object-[center_28%]'
                 : 'object-cover',
             'motion-safe:transition-transform motion-safe:duration-300 motion-safe:ease-out will-change-transform',
             'motion-safe:hover:scale-[1.04] motion-safe:group-hover/story-image:scale-[1.04]',
             'motion-reduce:transform-none motion-reduce:transition-none'
           )}
           onLoad={(event) => {
-            const img = event.currentTarget as HTMLImageElement;
+            const img = event.currentTarget;
             const width = Number(img.naturalWidth) || 0;
             const height = Number(img.naturalHeight) || 0;
             setLoadedSize((prev) => {
