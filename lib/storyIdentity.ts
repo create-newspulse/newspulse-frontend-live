@@ -39,8 +39,9 @@ export function debugStoryCard(scope: string, story: any, coverImageUrl?: unknow
   const id = getStoryId(story) || null;
   const slug = getStorySlug(story) || null;
   const translationGroupId = getStoryTranslationGroupId(story) || null;
+  const title = readText(story?.title) || null;
   const coverUrl = readText(coverImageUrl) || resolveCoverImageUrl(story) || null;
-  const cacheKey = `${scope}|${id || ''}|${slug || ''}|${translationGroupId || ''}|${coverUrl || ''}`;
+  const cacheKey = `${scope}|${id || ''}|${slug || ''}|${translationGroupId || ''}|${title || ''}|${coverUrl || ''}`;
   const globalKey = '__NEWSPULSE_STORY_CARD_DEBUG__';
   const globalStore = window as typeof window & { [key: string]: Set<string> | undefined };
   const seen = globalStore[globalKey] || new Set<string>();
@@ -51,6 +52,7 @@ export function debugStoryCard(scope: string, story: any, coverImageUrl?: unknow
   globalStore[globalKey] = seen;
 
   console.debug(`[story-card:${scope}]`, {
+    title,
     _id: id,
     slug,
     translationGroupId,

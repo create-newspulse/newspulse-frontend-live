@@ -6,6 +6,18 @@ function readText(value: unknown): string {
   return String(value || '').trim();
 }
 
+function readImageCandidate(value: unknown): string {
+  if (!value) return '';
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'object') {
+    const url = typeof (value as any)?.url === 'string' ? String((value as any).url).trim() : '';
+    if (url) return url;
+    const src = typeof (value as any)?.src === 'string' ? String((value as any).src).trim() : '';
+    if (src) return src;
+  }
+  return '';
+}
+
 export function normalizeCoverFitMode(value: unknown): CoverFitMode | null {
   const raw = readText(value).toLowerCase();
   if (!raw) return null;
@@ -136,18 +148,16 @@ function isBadCoverUrl(url: string): boolean {
 
 export function resolveCoverImageUrl(article: any): string {
   const candidates = [
-    typeof article?.coverImage?.url === 'string' ? article.coverImage.url : '',
-    typeof article?.coverImageUrl === 'string' ? article.coverImageUrl : '',
-    typeof article?.imageUrl === 'string' ? article.imageUrl : '',
-    typeof article?.imageURL === 'string' ? article.imageURL : '',
-    typeof article?.image?.url === 'string' ? article.image.url : '',
-    typeof article?.image === 'string' ? article.image : '',
-    typeof article?.urlToImage === 'string' ? article.urlToImage : '',
-    typeof article?.thumbnailUrl === 'string' ? article.thumbnailUrl : '',
+    article?.coverImage,
+    article?.coverImageUrl,
+    article?.imageUrl,
+    article?.imageURL,
+    article?.heroImage,
+    article?.image,
   ];
 
   for (const raw of candidates) {
-    const url = String(raw || '').trim();
+    const url = readImageCandidate(raw);
     if (!url) continue;
     if (!isBadCoverUrl(url)) return url;
   }

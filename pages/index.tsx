@@ -588,11 +588,11 @@ function resolveTopStorySummary(article: any, requestedLang: 'en' | 'hi' | 'gu')
 
 function resolveStoryImageSrc(article: any, requestedLang: 'en' | 'hi' | 'gu') {
   const coverRaw =
-    pickTranslatedField(article as any, requestedLang, 'imageUrl') || (article as any)?.imageUrl ||
     pickTranslatedField(article as any, requestedLang, 'coverImage') || (article as any)?.coverImage ||
+    pickTranslatedField(article as any, requestedLang, 'coverImageUrl') || (article as any)?.coverImageUrl ||
+    pickTranslatedField(article as any, requestedLang, 'imageUrl') || (article as any)?.imageUrl ||
+    pickTranslatedField(article as any, requestedLang, 'heroImage') || (article as any)?.heroImage ||
     pickTranslatedField(article as any, requestedLang, 'image') || (article as any)?.image ||
-    pickTranslatedField(article as any, requestedLang, 'thumbnail') || (article as any)?.thumbnail ||
-    (Array.isArray((article as any)?.images) ? (article as any)?.images?.[0] : null) ||
     null;
 
   const translatedCover = (() => {
@@ -2011,11 +2011,11 @@ function FeaturedCard({ theme, item, onToast }: any) {
     const readMinutes = estimateReadMinutes(`${title} ${summary} ${contentFallback}`);
 
     const coverRaw =
-      pickTranslatedField(article as any, requestedLang, 'imageUrl') || (article as any)?.imageUrl ||
       pickTranslatedField(article as any, requestedLang, 'coverImage') || (article as any)?.coverImage ||
+      pickTranslatedField(article as any, requestedLang, 'coverImageUrl') || (article as any)?.coverImageUrl ||
+      pickTranslatedField(article as any, requestedLang, 'imageUrl') || (article as any)?.imageUrl ||
+      pickTranslatedField(article as any, requestedLang, 'heroImage') || (article as any)?.heroImage ||
       pickTranslatedField(article as any, requestedLang, 'image') || (article as any)?.image ||
-      pickTranslatedField(article as any, requestedLang, 'thumbnail') || (article as any)?.thumbnail ||
-      (Array.isArray((article as any)?.images) ? (article as any)?.images?.[0] : null) ||
       null;
 
     const cover = (() => {
@@ -2115,6 +2115,14 @@ function FeaturedCard({ theme, item, onToast }: any) {
     if (!vm?.href) return;
     void router.push(vm.href);
   }, [router, vm?.href]);
+
+  if (article && vm?.imageSrc) {
+    debugStoryCard(
+      'home-top-story',
+      { ...(article as any), title: vm.title, slug: resolveArticleSlug(article as any, requestedLang) },
+      vm.imageSrc
+    );
+  }
 
   return (
     <Surface theme={theme} className="group overflow-hidden">

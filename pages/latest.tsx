@@ -3,7 +3,7 @@ import Link from 'next/link';
 import React from 'react';
 import StoryImage from '../src/components/story/StoryImage';
 import { fetchPublicNews, type Article } from '../lib/publicNewsApi';
-import { resolveCoverFitMode } from '../lib/coverImages';
+import { resolveCoverFitMode, resolveCoverImageUrl } from '../lib/coverImages';
 import { buildNewsUrl } from '../lib/newsRoutes';
 import { getLocalizedArticleFields } from '../lib/localizedArticleFields';
 import { debugStoryCard, getStoryId, getStoryReactKey } from '../lib/storyIdentity';
@@ -74,23 +74,6 @@ function categoryBadgeClasses(raw: unknown): string {
   if (key === 'lifestyle') return 'bg-pink-50 text-pink-900 border-pink-200/70';
   if (key === 'glamour') return 'bg-rose-50 text-rose-900 border-rose-200/70';
   return 'bg-slate-50 text-slate-800 border-slate-200/70';
-}
-
-function pickFirstImageUrl(raw: unknown): string {
-  const v = typeof raw === 'string' ? raw : (raw as any)?.url;
-  return String(v || '').trim();
-}
-
-function resolveCoverImageUrl(item: any): string {
-  const media0 = Array.isArray(item?.media) ? item.media?.[0] : undefined;
-  return (
-    pickFirstImageUrl(item?.coverImage) ||
-    pickFirstImageUrl(item?.image) ||
-    pickFirstImageUrl(item?.imageUrl) ||
-    pickFirstImageUrl(item?.thumbnail) ||
-    pickFirstImageUrl(media0?.url) ||
-    pickFirstImageUrl(item?.featuredImage)
-  );
 }
 
 export default function LatestPage() {
