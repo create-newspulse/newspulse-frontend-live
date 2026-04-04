@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import type { GetServerSideProps } from 'next';
 import { useI18n } from '../src/i18n/LanguageProvider';
-import { normalizePublicFounderToggles } from '../lib/publicFounderToggles';
+import { fetchServerPublicFounderToggles } from '../lib/publicFounderToggles';
 
 type StoryStatus = 'pending' | 'approved' | 'rejected';
 
@@ -396,20 +396,7 @@ const MyCommunityStoriesPage: React.FC<FeatureToggleProps> = ({ communityReporte
 export default MyCommunityStoriesPage;
 
 export const getServerSideProps: GetServerSideProps<FeatureToggleProps> = async ({ locale }) => {
-  const base = (process.env.NEXT_PUBLIC_API_BASE || '').replace(/\/+$/, '');
-  let communityReporterClosed = false;
-  let reporterPortalClosed = false;
-  if (base) {
-    try {
-      const resp = await fetch(`${base}/api/public/feature-toggles`, { headers: { Accept: 'application/json' } });
-      const data = await resp.json().catch(() => null as any);
-      if (resp.ok && data) {
-        const normalized = normalizePublicFounderToggles(data);
-        communityReporterClosed = normalized.communityReporterClosed;
-        reporterPortalClosed = normalized.reporterPortalClosed;
-      }
-    } catch {}
-  }
+  const toggles = await fetchServerPublicFounderToggles();
   const { getMessages } = await import('../lib/getMessages');
-  return { props: { communityReporterClosed, reporterPortalClosed, messages: await getMessages(locale as string) } };
+  return { props: { communityReporterClosed: toggles.communityReporterClosed, reporterPortalClosed: toggles.reporterPortalClosed, messages: await getMessages(locale as string) } };
 };

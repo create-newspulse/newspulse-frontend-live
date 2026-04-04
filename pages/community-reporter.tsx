@@ -6,7 +6,7 @@ import type { GetServerSideProps } from 'next';
 import type { SubmitCommunityStoryResult } from '../src/lib/communityReporterApi';
 import { useCommunityReporterConfig } from '../src/hooks/useCommunityReporterConfig';
 import { usePublicMode } from '../utils/PublicModeProvider';
-import { normalizePublicFounderToggles } from '../lib/publicFounderToggles';
+import { fetchServerPublicFounderToggles } from '../lib/publicFounderToggles';
 
 // Phase 1 Community Reporter Submission Page
 // Route: /community-reporter
@@ -1182,18 +1182,7 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
 export default CommunityReporterPage;
 
 export const getServerSideProps: GetServerSideProps<FeatureToggleProps> = async ({ locale }) => {
-  const base = (process.env.NEXT_PUBLIC_API_BASE || '').replace(/\/+$/, '');
-  let communityReporterClosed = false;
-  let reporterPortalClosed = false;
-  try {
-    const resp = await fetch(`${base}/api/public/feature-toggles`, { headers: { Accept: 'application/json' } });
-    const data = await resp.json().catch(() => null as any);
-    if (resp.ok && data) {
-      const normalized = normalizePublicFounderToggles(data);
-      communityReporterClosed = normalized.communityReporterClosed;
-      reporterPortalClosed = normalized.reporterPortalClosed;
-    }
-  } catch {}
+  const toggles = await fetchServerPublicFounderToggles();
   const { getMessages } = await import('../lib/getMessages');
-  return { props: { communityReporterClosed, reporterPortalClosed, messages: await getMessages(locale as string) } };
+  return { props: { communityReporterClosed: toggles.communityReporterClosed, reporterPortalClosed: toggles.reporterPortalClosed, messages: await getMessages(locale as string) } };
 };

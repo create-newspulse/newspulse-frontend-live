@@ -1,3 +1,5 @@
+import { getPublicApiBaseUrl } from './publicApiBase';
+
 export type PublicFounderToggles = {
   communityReporterClosed: boolean;
   reporterPortalClosed: boolean;
@@ -50,4 +52,16 @@ export async function fetchPublicFounderToggles(
   } catch {
     return DEFAULT_PUBLIC_FOUNDER_TOGGLES;
   }
+}
+
+export async function fetchServerPublicFounderToggles(fetchImpl: typeof fetch = fetch): Promise<PublicFounderToggles> {
+  const base = getPublicApiBaseUrl().trim().replace(/\/+$/, '');
+  if (!base) {
+    return DEFAULT_PUBLIC_FOUNDER_TOGGLES;
+  }
+
+  return fetchPublicFounderToggles({
+    endpoint: `${base}/api/public/feature-toggles`,
+    fetchImpl,
+  });
 }

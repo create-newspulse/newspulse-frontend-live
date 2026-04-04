@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Head from 'next/head';
 import type { GetServerSideProps } from 'next';
-import { normalizePublicFounderToggles } from '../lib/publicFounderToggles';
+import { fetchServerPublicFounderToggles } from '../lib/publicFounderToggles';
 
 type OrgType = 'print' | 'tv' | 'radio' | 'digital' | 'freelance' | 'other';
 
@@ -324,27 +324,13 @@ const JournalistDeskPage: React.FC<JournalistDeskProps> = ({ communityReporterCl
 export default JournalistDeskPage;
 
 export const getServerSideProps: GetServerSideProps<JournalistDeskProps> = async ({ locale }) => {
-  const base = (process.env.NEXT_PUBLIC_API_BASE || '').replace(/\/+$/, '');
-  let communityReporterClosed = false;
-  let reporterPortalClosed = false;
-
-  if (base) {
-    try {
-      const resp = await fetch(`${base}/api/public/feature-toggles`, { headers: { Accept: 'application/json' } });
-      const data = await resp.json().catch(() => null as any);
-      if (resp.ok && data) {
-        const normalized = normalizePublicFounderToggles(data);
-        communityReporterClosed = normalized.communityReporterClosed;
-        reporterPortalClosed = normalized.reporterPortalClosed;
-      }
-    } catch {}
-  }
+  const toggles = await fetchServerPublicFounderToggles();
 
   const { getMessages } = await import('../lib/getMessages');
   return {
     props: {
-      communityReporterClosed,
-      reporterPortalClosed,
+      communityReporterClosed: toggles.communityReporterClosed,
+      reporterPortalClosed: toggles.reporterPortalClosed,
       messages: await getMessages(locale as string),
     },
   };

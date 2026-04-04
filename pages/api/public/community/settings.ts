@@ -1,41 +1,72 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 
-type CommunitySettings = {
-  communityReporterClosed: boolean;
-  reporterPortalClosed: boolean;
-  updatedAt: string | null;
+import { getPublicApiBaseUrl } from '../../../../lib/publicApiBase'
+
+type CommunitySettingsPublic = {
+  communityReporterEnabled: boolean;
+  allowNewSubmissions: boolean;
+  allowMyStoriesPortal: boolean;
+  allowJournalistApplications: boolean;
 };
+
+type CommunitySettingsResponse = {
+  ok: boolean;
+  settings: CommunitySettingsPublic;
+};
+
+const DEFAULT_SETTINGS: CommunitySettingsResponse = {
+  ok: true,
+  settings: {
+    communityReporterEnabled: true,
+    allowNewSubmissions: true,
+    allowMyStoriesPortal: true,
+    allowJournalistApplications: true,
+  },
+};
+
+function noStore(res: NextApiResponse) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+  res.setHeader('Pragma', 'no-cache')
+  res.setHeader('Expires', '0')
+}
 
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse<CommunitySettings | { error: string }>,
+  res: NextApiResponse<CommunitySettingsResponse | { error: string }>,
 ) {
+  noStore(res)
+
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
   try {
-    const base = process.env.NEXT_PUBLIC_API_BASE
-
-    // Default: everything open
-    let toggles: CommunitySettings = {
-      communityReporterClosed: false,
-      reporterPortalClosed: false,
-      updatedAt: null,
-    }
+    const base = getPublicApiBaseUrl().trim().replace(/\/+$/, '')
 
     try {
       if (!base) {
-        console.warn('[api/public/community/settings] NEXT_PUBLIC_API_BASE not set; using defaults')
+        console.warn('[api/public/community/settings] public API base not set; using defaults')
       } else {
-        const r = await fetch(`${base.replace(/\/+$/, '')}/api/public/feature-toggles`, { cache: 'no-store' })
+        const r = await fetch(`${base}/api/public/community/settings`, {
+          headers: {
+            Accept: 'application/json',
+            'Cache-Control': 'no-store',
+            Pragma: 'no-cache',
+          },
+          cache: 'no-store',
+        })
         if (r.ok) {
           const data = await r.json()
-          const s = (data && (data.settings ?? null)) || data
-          toggles = {
-            communityReporterClosed: !!s.communityReporterClosed,
-            reporterPortalClosed: !!s.reporterPortalClosed,
-            updatedAt: s.updatedAt ?? null,
+          if (data && data.ok === true && data.settings) {
+            return res.status(200).json({
+              ok: true,
+              settings: {
+                communityReporterEnabled: Boolean(data.settings.communityReporterEnabled),
+                allowNewSubmissions: Boolean(data.settings.allowNewSubmissions),
+                allowMyStoriesPortal: Boolean(data.settings.allowMyStoriesPortal),
+                allowJournalistApplications: Boolean(data.settings.allowJournalistApplications),
+              },
+            })
           }
         } else {
           console.warn('[api/public/community/settings] backend status', r.status, r.statusText)
@@ -46,14 +77,9 @@ export default async function handler(
       // keep defaults, don't throw
     }
 
-    // Always return 200 with a safe JSON payload
-    return res.status(200).json(toggles)
+    return res.status(200).json(DEFAULT_SETTINGS)
   } catch (err) {
     console.error('[api/public/community/settings] error:', err)
-    return res.status(200).json({
-      communityReporterClosed: false,
-      reporterPortalClosed: false,
-      updatedAt: null,
-    })
+    return res.status(200).json(DEFAULT_SETTINGS)
   }
 }

@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || ''
+import { getPublicApiBaseUrl } from '../../../lib/publicApiBase'
 
 function noStore(res: NextApiResponse) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
@@ -19,9 +19,9 @@ export default async function handler(
     return res.status(405).json({ ok: false, message: 'METHOD_NOT_ALLOWED' })
   }
 
-  const base = (API_BASE_URL || '').replace(/\/+$/, '')
+  const base = getPublicApiBaseUrl().trim().replace(/\/+$/, '')
   if (!base) {
-    return res.status(200).json({ ok: false, message: 'NEXT_PUBLIC_API_BASE not set' })
+    return res.status(200).json({ ok: false, message: 'PUBLIC_API_BASE_NOT_CONFIGURED' })
   }
   const targetUrl = `${base}/api/public/feature-toggles`
 
