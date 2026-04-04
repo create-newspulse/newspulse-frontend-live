@@ -1,7 +1,8 @@
 import { useContext, createContext, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
-import type { CommunitySettingsPublic, CommunityStorySummary } from '../types/community-reporter';
+import type { CommunitySettingsPublic, CommunityStorySummary, CommunitySubmissionCounts } from '../types/community-reporter';
 import { fetchMyStoriesByEmail, fetchPublicSettings, isCommunityReporterHttpError, withdrawStoryById } from '../lib/communityReporterApi';
+import { getSubmissionCounts } from '../lib/reporterPortal';
 import { useI18n } from '../src/i18n/LanguageProvider';
 
 export type ReporterProfileSummary = {
@@ -23,7 +24,7 @@ export type UseCommunityStoriesValue = {
   reporterProfile: ReporterProfileSummary | null;
   profileWarning: string | null;
   stories: CommunityStorySummary[];
-  counts: { total: number; pending: number; approved: number; rejected: number; withdrawn: number };
+  counts: CommunitySubmissionCounts;
   isLoading: boolean;
   error: string | null;
   hasLoadedOnce: boolean;
@@ -35,7 +36,7 @@ export type UseCommunityStoriesValue = {
 const CommunityStoriesOverrideContext = createContext<UseCommunityStoriesValue | null>(null);
 export const CommunityStoriesProvider = CommunityStoriesOverrideContext.Provider;
 
-export function useCommunityStories(): UseCommunityStoriesValue {
+export function useCommunityStories(opts?: { reporterEmail?: string | null }): UseCommunityStoriesValue {
   const override = useContext(CommunityStoriesOverrideContext);
   if (override) return override;
   const router = useRouter();
@@ -78,6 +79,11 @@ export function useCommunityStories(): UseCommunityStoriesValue {
 
   // Resolve reporter email from query/localStorage/profile
   useEffect(() => {
+    const preferredEmail = String(opts?.reporterEmail || '').trim();
+    if (preferredEmail) {
+      setReporterEmail(preferredEmail);
+      return;
+    }
     if (router.isReady) {
       const qEmail = typeof router.query.email === 'string' ? router.query.email.trim() : '';
       if (qEmail) {
@@ -100,7 +106,7 @@ export function useCommunityStories(): UseCommunityStoriesValue {
         } catch {}
       }
     } catch {}
-  }, [router.isReady, router.query.email]);
+  }, [opts?.reporterEmail, router.isReady, router.query.email]);
 
   // Resolve reporter profile/contact details from localStorage (safe fallback)
   useEffect(() => {
@@ -125,14 +131,7 @@ export function useCommunityStories(): UseCommunityStoriesValue {
     } catch {}
   }, []);
 
-  const counts = useMemo(() => {
-    const total = stories.length;
-    const pending = stories.filter(s => ['pending', 'under_review'].includes((s.status || '').toLowerCase())).length;
-    const approved = stories.filter(s => ['approved', 'published'].includes((s.status || '').toLowerCase())).length;
-    const rejected = stories.filter(s => (s.status || '').toLowerCase() === 'rejected').length;
-    const withdrawn = stories.filter(s => (s.status || '').toLowerCase() === 'withdrawn').length;
-    return { total, pending, approved, rejected, withdrawn };
-  }, [stories]);
+  const counts = useMemo(() => getSubmissionCounts(stories), [stories]);
 
   const loadStories = async () => {
     const em = (reporterEmail || '').trim();

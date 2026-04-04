@@ -13,6 +13,15 @@ export type CommunityStorySummary = {
   [key: string]: any;
 };
 
+export type CommunitySubmissionCounts = {
+  total: number;
+  pending: number;
+  approved: number;
+  rejected: number;
+  published: number;
+  withdrawn: number;
+};
+
 export type CommunitySettingsPublic = {
   communityReporterEnabled: boolean;
   allowNewSubmissions: boolean;
