@@ -2,10 +2,18 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || ''
 
+function noStore(res: NextApiResponse) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+  res.setHeader('Pragma', 'no-cache')
+  res.setHeader('Expires', '0')
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse,
 ) {
+  noStore(res)
+
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET')
     return res.status(405).json({ ok: false, message: 'METHOD_NOT_ALLOWED' })
@@ -20,7 +28,12 @@ export default async function handler(
   try {
     const upstream = await fetch(targetUrl, {
       method: 'GET',
-      headers: { Accept: 'application/json' },
+      headers: {
+        Accept: 'application/json',
+        'Cache-Control': 'no-store',
+        Pragma: 'no-cache',
+      },
+      cache: 'no-store',
     })
 
     const text = await upstream.text().catch(() => '')
