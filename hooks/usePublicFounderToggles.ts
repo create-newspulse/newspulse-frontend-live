@@ -10,9 +10,9 @@ import { subscribePublicDataRefresh } from '../lib/publicDataRefresh';
 const FOUNDER_TOGGLE_DEDUPE_MS = 5_000;
 const FOUNDER_TOGGLE_POLL_MS = 15_000;
 
-export function usePublicFounderToggles() {
-  const [toggles, setToggles] = useState<PublicFounderToggles>(DEFAULT_PUBLIC_FOUNDER_TOGGLES);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+export function usePublicFounderToggles(initialToggles?: PublicFounderToggles | null) {
+  const [toggles, setToggles] = useState<PublicFounderToggles>(initialToggles ?? DEFAULT_PUBLIC_FOUNDER_TOGGLES);
+  const [isLoading, setIsLoading] = useState<boolean>(!initialToggles);
   const inFlightRef = useRef<Promise<void> | null>(null);
   const lastRefreshAtRef = useRef<number>(0);
 
@@ -53,8 +53,8 @@ export function usePublicFounderToggles() {
   }, []);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    void refresh({ background: Boolean(initialToggles), force: Boolean(initialToggles) });
+  }, [initialToggles, refresh]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;

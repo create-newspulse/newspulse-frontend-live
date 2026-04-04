@@ -7,6 +7,7 @@ import type { SubmitCommunityStoryResult } from '../src/lib/communityReporterApi
 import { useCommunityReporterConfig } from '../src/hooks/useCommunityReporterConfig';
 import { usePublicMode } from '../utils/PublicModeProvider';
 import { fetchServerPublicFounderToggles } from '../lib/publicFounderToggles';
+import { usePublicFounderToggles } from '../hooks/usePublicFounderToggles';
 
 // Phase 1 Community Reporter Submission Page
 // Route: /community-reporter
@@ -109,6 +110,11 @@ type FeatureToggleProps = {
 const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporterClosed, reporterPortalClosed }) => {
   const router = useRouter();
   const { readOnly } = usePublicMode();
+  const { toggles: liveToggles } = usePublicFounderToggles({
+    communityReporterClosed,
+    reporterPortalClosed,
+    updatedAt: null,
+  });
   const submitInFlightRef = useRef(false);
   const skipNextProfilePersistRef = useRef(false);
   const [step, setStep] = useState<1 | 2>(1);
@@ -134,6 +140,8 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
   const [settings, setSettings] = useState<CommunitySettingsPublic | null>(null);
   const [settingsLoading, setSettingsLoading] = useState<boolean>(true);
   const [settingsError, setSettingsError] = useState<string | null>(null);
+  const effectiveCommunityReporterClosed = liveToggles.communityReporterClosed;
+  const effectiveReporterPortalClosed = liveToggles.reporterPortalClosed;
   // Category values already use stable slugs; no mapping required.
 
   // Public backend base URL (no prod fallback)
@@ -521,7 +529,7 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
   };
 
   // If globally closed via feature toggle, show closed message immediately
-  if (communityReporterClosed) {
+  if (effectiveCommunityReporterClosed) {
     return (
       <div className="min-h-screen bg-white dark:bg-dark-primary text-black dark:text-dark-text">
         <Head>
@@ -594,7 +602,7 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
             Share impactful local stories, emerging issues, campus updates, and verified tips. Every submission is manually reviewed by our editorial team before publishing.
           </p>
           <div className="mb-4">
-            {(!reporterPortalClosed && myStoriesEnabled) ? (
+            {(!effectiveReporterPortalClosed && myStoriesEnabled) ? (
               <Link
                 href={`/community-reporter/my-stories${signUpData.email ? `?email=${encodeURIComponent(signUpData.email.trim().toLowerCase())}` : ''}`}
                 className="text-sm text-blue-700 hover:underline"
@@ -642,7 +650,7 @@ const CommunityReporterPage: React.FC<FeatureToggleProps> = ({ communityReporter
             Share impactful local stories, emerging issues, campus updates, and verified tips. Every submission is manually reviewed by our editorial team before publishing.
           </p>
           <div className="mb-4">
-            {(!reporterPortalClosed && myStoriesEnabled) ? (
+            {(!effectiveReporterPortalClosed && myStoriesEnabled) ? (
               <Link
                 href={`/community-reporter/my-stories${signUpData.email ? `?email=${encodeURIComponent(signUpData.email.trim().toLowerCase())}` : ''}`}
                 className="text-sm text-blue-700 hover:underline"

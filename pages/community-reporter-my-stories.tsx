@@ -6,6 +6,7 @@ import { useRouter } from 'next/router';
 import type { GetServerSideProps } from 'next';
 import { useI18n } from '../src/i18n/LanguageProvider';
 import { fetchServerPublicFounderToggles } from '../lib/publicFounderToggles';
+import { usePublicFounderToggles } from '../hooks/usePublicFounderToggles';
 
 type StoryStatus = 'pending' | 'approved' | 'rejected';
 
@@ -71,6 +72,11 @@ type FeatureToggleProps = {
 const MyCommunityStoriesPage: React.FC<FeatureToggleProps> = ({ communityReporterClosed, reporterPortalClosed }) => {
   const router = useRouter();
   const { t } = useI18n();
+  const { toggles: liveToggles } = usePublicFounderToggles({
+    communityReporterClosed,
+    reporterPortalClosed,
+    updatedAt: null,
+  });
   const [stories, setStories] = useState<ReporterStory[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -141,7 +147,7 @@ const MyCommunityStoriesPage: React.FC<FeatureToggleProps> = ({ communityReporte
   }, [reporterEmail]);
 
   // Closed state if reporter portal or entire program is closed
-  if (communityReporterClosed || reporterPortalClosed) {
+  if (liveToggles.communityReporterClosed || liveToggles.reporterPortalClosed) {
     return (
       <div className="min-h-screen bg-white text-black">
         <Head>

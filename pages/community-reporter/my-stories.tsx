@@ -13,6 +13,7 @@ import StoryTable from '../../components/community-reporter/StoryTable';
 import ViewModal from '../../components/community-reporter/ViewModal';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { fetchServerPublicFounderToggles } from '../../lib/publicFounderToggles';
+import { usePublicFounderToggles } from '../../hooks/usePublicFounderToggles';
 
 // Types moved to types/community-reporter.ts
 
@@ -31,6 +32,11 @@ const statusColor = (s: string) => {
 
 const CommunityReporterMyStoriesPage: React.FC<FeatureToggleProps> = ({ communityReporterClosed, reporterPortalClosed }) => {
   const { t } = useI18n();
+  const { toggles: liveToggles } = usePublicFounderToggles({
+    communityReporterClosed,
+    reporterPortalClosed,
+    updatedAt: null,
+  });
   const {
     settings,
     settingsLoading,
@@ -51,7 +57,7 @@ const CommunityReporterMyStoriesPage: React.FC<FeatureToggleProps> = ({ communit
   const canUsePortal = settings ? (settings.communityReporterEnabled && settings.allowMyStoriesPortal) : false;
 
   // Hard-close via feature toggle
-  if (communityReporterClosed || reporterPortalClosed) {
+  if (liveToggles.communityReporterClosed || liveToggles.reporterPortalClosed) {
     return (
       <div className="min-h-screen bg-white dark:bg-dark-primary text-black dark:text-dark-text">
         <Head>

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Head from 'next/head';
 import type { GetServerSideProps } from 'next';
 import { fetchServerPublicFounderToggles } from '../lib/publicFounderToggles';
+import { usePublicFounderToggles } from '../hooks/usePublicFounderToggles';
 
 type OrgType = 'print' | 'tv' | 'radio' | 'digital' | 'freelance' | 'other';
 
@@ -52,13 +53,18 @@ type JournalistDeskProps = {
 };
 
 const JournalistDeskPage: React.FC<JournalistDeskProps> = ({ communityReporterClosed, reporterPortalClosed }) => {
+  const { toggles: liveToggles } = usePublicFounderToggles({
+    communityReporterClosed,
+    reporterPortalClosed,
+    updatedAt: null,
+  });
   const [form, setForm] = useState<FormState>(initialForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
-  if (communityReporterClosed || reporterPortalClosed) {
+  if (liveToggles.communityReporterClosed || liveToggles.reporterPortalClosed) {
     return (
       <div className="min-h-screen bg-white dark:bg-dark-primary text-black dark:text-dark-text">
         <Head>
