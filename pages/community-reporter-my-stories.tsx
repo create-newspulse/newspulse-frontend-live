@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import type { GetServerSideProps } from 'next';
 import { useI18n } from '../src/i18n/LanguageProvider';
+import { normalizePublicFounderToggles } from '../lib/publicFounderToggles';
 
 type StoryStatus = 'pending' | 'approved' | 'rejected';
 
@@ -403,8 +404,9 @@ export const getServerSideProps: GetServerSideProps<FeatureToggleProps> = async 
       const resp = await fetch(`${base}/api/public/feature-toggles`, { headers: { Accept: 'application/json' } });
       const data = await resp.json().catch(() => null as any);
       if (resp.ok && data) {
-        communityReporterClosed = Boolean(data.communityReporterClosed);
-        reporterPortalClosed = Boolean(data.reporterPortalClosed);
+        const normalized = normalizePublicFounderToggles(data);
+        communityReporterClosed = normalized.communityReporterClosed;
+        reporterPortalClosed = normalized.reporterPortalClosed;
       }
     } catch {}
   }

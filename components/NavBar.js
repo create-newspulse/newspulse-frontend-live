@@ -3,6 +3,7 @@ import { useI18n } from '../src/i18n/LanguageProvider';
 import { LanguageDropdown } from '../src/i18n/language';
 import { getPublicApiBaseUrl } from '../lib/publicApiBase';
 import { useUiLabels } from '../hooks/useUiLabels';
+import { normalizePublicFounderToggles } from '../lib/publicFounderToggles';
 
 export default function NavBar() {
   const { t, lang } = useI18n();
@@ -18,7 +19,8 @@ export default function NavBar() {
         const res = await fetch(`${base}/api/public/feature-toggles`, { headers: { Accept: 'application/json' } });
         const data = await res.json().catch(() => null);
         if (!cancelled && res.ok && data) {
-          setHideCommunityReporter(Boolean(data.communityReporterClosed));
+          const toggles = normalizePublicFounderToggles(data);
+          setHideCommunityReporter(toggles.communityReporterClosed);
         }
       } catch {}
     };

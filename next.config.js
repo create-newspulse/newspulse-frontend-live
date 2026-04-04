@@ -185,6 +185,10 @@ const nextConfig = {
       ...regionalLocaleRewrites,
       ...localAliases,
       {
+        source: '/admin-api/admin/:path*',
+        destination: '/api/admin/:path*',
+      },
+      {
         source: '/admin-api/public/:path*',
         destination: `${backend}/admin-api/public/:path*`,
       },

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import Head from 'next/head';
-import type { GetStaticProps } from 'next';
+import type { GetServerSideProps } from 'next';
+import { normalizePublicFounderToggles } from '../lib/publicFounderToggles';
 
 type OrgType = 'print' | 'tv' | 'radio' | 'digital' | 'freelance' | 'other';
 
@@ -45,12 +46,41 @@ const initialForm: FormState = {
 const BEATS = ['Politics','Crime','Business','Education','Civic','Sports','Entertainment','Tech','Other'];
 const LANG_OPTIONS = ['en','hi','gu'];
 
-const JournalistDeskPage: React.FC = () => {
+type JournalistDeskProps = {
+  communityReporterClosed: boolean;
+  reporterPortalClosed: boolean;
+};
+
+const JournalistDeskPage: React.FC<JournalistDeskProps> = ({ communityReporterClosed, reporterPortalClosed }) => {
   const [form, setForm] = useState<FormState>(initialForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+
+  if (communityReporterClosed || reporterPortalClosed) {
+    return (
+      <div className="min-h-screen bg-white dark:bg-dark-primary text-black dark:text-dark-text">
+        <Head>
+          <title>Journalist Desk – Temporarily Closed | News Pulse</title>
+          <meta name="description" content="Reporter access is temporarily unavailable on News Pulse." />
+        </Head>
+
+        <section className="relative py-16 px-4 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-800 dark:to-gray-900">
+          <div className="max-w-4xl mx-auto">
+            <h1 className="text-4xl md:text-5xl font-black mb-6 bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">
+              Journalist Desk – Join the News Pulse Network
+            </h1>
+            <div className="max-w-3xl rounded-2xl border border-gray-200 bg-white p-8 shadow-lg dark:border-gray-700 dark:bg-gray-800">
+              <p className="text-lg text-gray-700 dark:text-gray-300">
+                Reporter access is temporarily closed. Please check back soon.
+              </p>
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   const setField = (name: keyof FormState, value: any) => {
     setForm(prev => ({ ...prev, [name]: value }));
@@ -293,10 +323,28 @@ const JournalistDeskPage: React.FC = () => {
 
 export default JournalistDeskPage;
 
-export const getStaticProps: GetStaticProps = async ({ locale }) => {
+export const getServerSideProps: GetServerSideProps<JournalistDeskProps> = async ({ locale }) => {
+  const base = (process.env.NEXT_PUBLIC_API_BASE || '').replace(/\/+$/, '');
+  let communityReporterClosed = false;
+  let reporterPortalClosed = false;
+
+  if (base) {
+    try {
+      const resp = await fetch(`${base}/api/public/feature-toggles`, { headers: { Accept: 'application/json' } });
+      const data = await resp.json().catch(() => null as any);
+      if (resp.ok && data) {
+        const normalized = normalizePublicFounderToggles(data);
+        communityReporterClosed = normalized.communityReporterClosed;
+        reporterPortalClosed = normalized.reporterPortalClosed;
+      }
+    } catch {}
+  }
+
   const { getMessages } = await import('../lib/getMessages');
   return {
     props: {
+      communityReporterClosed,
+      reporterPortalClosed,
       messages: await getMessages(locale as string),
     },
   };

@@ -12,6 +12,7 @@ import EmptyState from '../../components/community-reporter/EmptyState';
 import StoryTable from '../../components/community-reporter/StoryTable';
 import ViewModal from '../../components/community-reporter/ViewModal';
 import { useI18n } from '../../src/i18n/LanguageProvider';
+import { normalizePublicFounderToggles } from '../../lib/publicFounderToggles';
 
 // Types moved to types/community-reporter.ts
 
@@ -164,8 +165,9 @@ export const getServerSideProps: GetServerSideProps<FeatureToggleProps> = async 
       const resp = await fetch(`${base}/api/public/feature-toggles`, { headers: { Accept: 'application/json' } });
       const data = await resp.json().catch(() => null as any);
       if (resp.ok && data) {
-        communityReporterClosed = Boolean(data.communityReporterClosed);
-        reporterPortalClosed = Boolean(data.reporterPortalClosed);
+        const normalized = normalizePublicFounderToggles(data);
+        communityReporterClosed = normalized.communityReporterClosed;
+        reporterPortalClosed = normalized.reporterPortalClosed;
       }
     } catch {}
   }

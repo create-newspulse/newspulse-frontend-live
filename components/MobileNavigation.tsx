@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/router';
 import { BookmarkCounter } from './BookmarkButton';
+import { usePublicFounderToggles } from '../hooks/usePublicFounderToggles';
 // Reverted: remove react-i18next usage and inline LanguageSelector
 
 interface MobileNavigationProps {
@@ -15,6 +16,7 @@ export const MobileNavigation: React.FC<MobileNavigationProps> = ({
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const router = useRouter();
+  const { toggles } = usePublicFounderToggles();
 
   const menuItems = [
     { label: 'Home', icon: '🏠', href: '/', active: router.pathname === '/' },
@@ -24,7 +26,7 @@ export const MobileNavigation: React.FC<MobileNavigationProps> = ({
     { label: 'Bookmarks', icon: '🔖', href: '/bookmarks', active: false },
     { label: 'Settings', icon: '⚙️', href: '/settings', active: false },
     { label: 'Journalist Desk', icon: '📝', href: '/journalist-desk', active: router.pathname === '/journalist-desk' }
-  ];
+  ].filter((item) => !(toggles.reporterPortalClosed && item.href === '/journalist-desk'));
 
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);

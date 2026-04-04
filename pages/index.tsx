@@ -29,6 +29,8 @@ import type { GetStaticProps } from "next";
 import { AnimatePresence, motion } from "framer-motion";
 import { useI18n } from "../src/i18n/LanguageProvider";
 import { resolveInspirationHubDroneTvEmbedUrl } from "../src/lib/inspirationHubSettings";
+import { usePublicFounderToggles } from "../hooks/usePublicFounderToggles";
+import { DEFAULT_PUBLIC_FOUNDER_TOGGLES, type PublicFounderToggles } from "../lib/publicFounderToggles";
 import {
   ArrowRight,
   Bell,
@@ -703,6 +705,14 @@ function labelKeyForTrendingTopic(key: string): string | null {
 
 // Categories are always LTR by default
 function getCats() {
+  return [...CATEGORIES];
+}
+
+function getVisibleCats(founderToggles: PublicFounderToggles = DEFAULT_PUBLIC_FOUNDER_TOGGLES) {
+  if (founderToggles.communityReporterClosed) {
+    return CATEGORIES.filter((category) => category.key !== 'community');
+  }
+
   return [...CATEGORIES];
 }
 
@@ -1394,9 +1404,9 @@ function TrendingStrip({ theme, onPick }: any) {
   );
 }
 
-function TopCategoriesStrip({ theme, activeKey, onPick }: any) {
+function TopCategoriesStrip({ theme, activeKey, onPick, founderToggles }: any) {
   const { t } = useI18n();
-  const cats = useMemo(() => [...CATEGORIES], []);
+  const cats = useMemo(() => getVisibleCats(founderToggles), [founderToggles]);
 
   // IMPORTANT: the ref must be on the *scroll container* (the overflow-x-auto element).
   // If it's attached to the inner inline-flex, mouse drag won't scroll on some desktops.
@@ -1635,9 +1645,9 @@ function TopCategoriesStrip({ theme, activeKey, onPick }: any) {
   );
 }
 
-function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick }: any) {
+function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick, founderToggles }: any) {
   const { t } = useI18n();
-  const cats = useMemo(() => getCats(), []);
+  const cats = useMemo(() => getVisibleCats(founderToggles), [founderToggles]);
 
   const labelKeyForCategory = (key: string): string => {
     if (key === 'science-technology') return 'categories.scienceTechnology';
@@ -3288,6 +3298,7 @@ function SiteFooter({ theme, onToast, footerTextOverride }: any) {
 export default function UiPreviewV145() {
   const { t, lang, setLang } = useI18n();
   const router = useRouter();
+  const { toggles: founderToggles } = usePublicFounderToggles();
   const SAFE_MODE = isSafeMode();
   const [prefs, setPrefs] = useState<any>(() => {
     const saved = readSavedStyleId();
@@ -3574,6 +3585,7 @@ export default function UiPreviewV145() {
         <ExploreCategoriesPanel
           theme={theme}
           prefs={prefs}
+          founderToggles={founderToggles}
           activeKey={activeCatKey}
           onPick={(k: string) => {
             setActiveCatKey(k);
@@ -3859,6 +3871,7 @@ export default function UiPreviewV145() {
         <div className="sticky top-0 z-40 mt-4">
           <TopCategoriesStrip
             theme={theme}
+            founderToggles={founderToggles}
             activeKey={activeCatKey}
             onPick={(k: string) => {
               setActiveCatKey(k);
@@ -4158,7 +4171,7 @@ export default function UiPreviewV145() {
           </div>
 
           <div className="grid gap-1">
-            {getCats().map((c: any) => {
+            {getVisibleCats(founderToggles).map((c: any) => {
               const tone = CATEGORY_THEME[c.key] || CATEGORY_THEME.__default;
               const active = activeCatKey === c.key;
               const href = CATEGORY_ROUTES[c.key as string];

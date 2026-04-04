@@ -6,6 +6,7 @@ import type { GetServerSideProps } from 'next';
 import type { SubmitCommunityStoryResult } from '../src/lib/communityReporterApi';
 import { useCommunityReporterConfig } from '../src/hooks/useCommunityReporterConfig';
 import { usePublicMode } from '../utils/PublicModeProvider';
+import { normalizePublicFounderToggles } from '../lib/publicFounderToggles';
 
 // Phase 1 Community Reporter Submission Page
 // Route: /community-reporter
@@ -1188,8 +1189,9 @@ export const getServerSideProps: GetServerSideProps<FeatureToggleProps> = async 
     const resp = await fetch(`${base}/api/public/feature-toggles`, { headers: { Accept: 'application/json' } });
     const data = await resp.json().catch(() => null as any);
     if (resp.ok && data) {
-      communityReporterClosed = Boolean(data.communityReporterClosed);
-      reporterPortalClosed = Boolean(data.reporterPortalClosed);
+      const normalized = normalizePublicFounderToggles(data);
+      communityReporterClosed = normalized.communityReporterClosed;
+      reporterPortalClosed = normalized.reporterPortalClosed;
     }
   } catch {}
   const { getMessages } = await import('../lib/getMessages');
