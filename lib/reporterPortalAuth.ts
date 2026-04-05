@@ -26,6 +26,26 @@ export type ReporterMagicLinkPayload = SignedPayload & {
   kind: 'magic-link';
 };
 
+function firstEnv(...keys: string[]): string {
+  for (const key of keys) {
+    const value = String(process.env[key] || '').trim();
+    if (value) return value;
+  }
+  return '';
+}
+
+function safeProviderErrorBody(input: string): string {
+  return String(input || '').trim().slice(0, 500);
+}
+
+function reporterAuthLog(event: string, details?: Record<string, unknown>) {
+  console.info(`[reporter-auth] ${event}`, details || {});
+}
+
+function reporterAuthError(event: string, details?: Record<string, unknown>) {
+  console.error(`[reporter-auth] ${event}`, details || {});
+}
+
 function base64urlEncode(input: string | Buffer): string {
   return Buffer.from(input).toString('base64url');
 }
@@ -36,6 +56,14 @@ function base64urlDecode(input: string): string {
 
 export function normalizeReporterAuthEmail(email: string | null | undefined): string {
   return String(email || '').trim().toLowerCase();
+}
+
+export function maskReporterEmail(email: string | null | undefined): string {
+  const normalized = normalizeReporterAuthEmail(email);
+  const [localPart, domain] = normalized.split('@');
+  if (!localPart || !domain) return normalized;
+  if (localPart.length <= 2) return `${localPart[0] || '*'}***@${domain}`;
+  return `${localPart.slice(0, 2)}***@${domain}`;
 }
 
 function getAuthSecret(): string {
@@ -193,18 +221,45 @@ export function getMagicLinkFromToken(token: string | null | undefined): Reporte
 }
 
 export function isOtpDeliveryConfigured(): boolean {
-  return Boolean(String(process.env.RESEND_API_KEY || '').trim() && String(process.env.REPORTER_PORTAL_FROM_EMAIL || '').trim());
+  return Boolean(resolveReporterPortalResendKey() && resolveReporterPortalFromEmail());
+}
+
+export function resolveReporterPortalResendKey(): string {
+  return firstEnv('RESEND_API_KEY', 'REPORTER_PORTAL_RESEND_API_KEY');
+}
+
+export function resolveReporterPortalFromEmail(): string {
+  return firstEnv(
+    'REPORTER_PORTAL_FROM_EMAIL',
+    'RESEND_FROM_EMAIL',
+    'REPORTER_PORTAL_EMAIL_FROM',
+    'FROM_EMAIL',
+    'EMAIL_FROM'
+  );
 }
 
 export async function sendReporterPortalLoginEmail(input: { email: string; code: string; magicLink: string }) {
   const to = normalizeReporterAuthEmail(input.email);
-  const resendKey = String(process.env.RESEND_API_KEY || '').trim();
-  const from = String(process.env.REPORTER_PORTAL_FROM_EMAIL || '').trim();
+  const resendKey = resolveReporterPortalResendKey();
+  const from = resolveReporterPortalFromEmail();
+
+  reporterAuthLog('mail transport initialized', {
+    provider: 'resend',
+    hasResendKey: Boolean(resendKey),
+    hasFromEmail: Boolean(from),
+    fromDomain: from.includes('@') ? from.split('@')[1] : '',
+    recipient: maskReporterEmail(to),
+  });
 
   if (!resendKey || !from) {
     if (process.env.NODE_ENV !== 'production') {
+      reporterAuthLog('mail transport fallback debug code', { recipient: maskReporterEmail(to) });
       return { delivered: false, debugCode: input.code } as const;
     }
+    reporterAuthError('mail transport misconfigured', {
+      hasResendKey: Boolean(resendKey),
+      hasFromEmail: Boolean(from),
+    });
     throw new Error('REPORTER_PORTAL_EMAIL_NOT_CONFIGURED');
   }
 
@@ -234,8 +289,20 @@ export async function sendReporterPortalLoginEmail(input: { email: string; code:
 
   if (!response.ok) {
     const text = await response.text().catch(() => '');
-    throw new Error(text || 'REPORTER_PORTAL_EMAIL_SEND_FAILED');
+    reporterAuthError('mail send failed', {
+      provider: 'resend',
+      status: response.status,
+      body: safeProviderErrorBody(text),
+      recipient: maskReporterEmail(to),
+    });
+    throw new Error('REPORTER_PORTAL_EMAIL_SEND_FAILED');
   }
+
+  reporterAuthLog('mail send success', {
+    provider: 'resend',
+    status: response.status,
+    recipient: maskReporterEmail(to),
+  });
 
   return { delivered: true } as const;
 }
