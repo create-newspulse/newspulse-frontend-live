@@ -14,7 +14,8 @@ export default function ReporterSubmissionsPage({ communityReporterClosed, repor
   const router = useRouter();
   const { toggles } = usePublicFounderToggles({ communityReporterClosed, reporterPortalClosed, updatedAt: null });
   const { session, isReady, logout, reason } = useReporterPortalSession({ reportUnauthorizedReason: true });
-  const { settings, settingsLoading, stories, isLoading } = useCommunityStories({ reporterEmail: session?.email });
+  const { settings, settingsLoading, stories, isLoading, error, errorStatus, hasLoadedOnce } = useCommunityStories({ reporterEmail: session?.email, reporterAuth: true });
+  const hasSessionIssue = errorStatus === 401 || errorStatus === 403;
 
   if (toggles.communityReporterClosed || toggles.reporterPortalClosed) {
     return <ReporterPortalLayout title="My Submissions" description="Reporter submissions are blocked by toggle." active="submissions"><PortalRouteState title="Reporter Portal is closed" description="The Reporter Portal toggle is off, so submission tracking routes are blocked." actionHref="/community-reporter" actionLabel="Back to Community Reporter" /></ReporterPortalLayout>;
@@ -43,10 +44,11 @@ export default function ReporterSubmissionsPage({ communityReporterClosed, repor
           <Link href="/reporter/submit" className="rounded-full bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Submit a Story</Link>
         </div>
 
-        {isLoading && stories.length === 0 ? <div className="mt-6 text-sm text-slate-600">Loading submissions…</div> : null}
-        {!isLoading && stories.length === 0 ? <div className="mt-6 rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-600">No submission records yet. Submit a story to populate your Reporter Portal.</div> : null}
+        {!hasLoadedOnce || (isLoading && stories.length === 0) ? <div className="mt-6 text-sm text-slate-600">Loading submissions…</div> : null}
+        {hasLoadedOnce && !isLoading && error ? <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-6 text-sm text-amber-900">{hasSessionIssue ? 'Your reporter session could not be confirmed for submission records. Sign in again and retry.' : 'Submission records are temporarily unavailable for this verified reporter email. Please try again shortly.'}</div> : null}
+        {hasLoadedOnce && !isLoading && !error && stories.length === 0 ? <div className="mt-6 rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-600">No submissions yet.</div> : null}
 
-        {stories.length > 0 ? (
+        {!error && stories.length > 0 ? (
           <div className="mt-6 overflow-x-auto">
             <table className="min-w-full text-left text-sm">
               <thead>

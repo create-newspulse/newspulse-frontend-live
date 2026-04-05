@@ -74,7 +74,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   });
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     authRouteLog('final response sent', { status: 400, message: 'VALID_EMAIL_REQUIRED' });
-    return res.status(400).json({ ok: false, message: 'VALID_EMAIL_REQUIRED' });
+    return res.status(400).json({ ok: false, code: 'INVALID_EMAIL', message: 'VALID_EMAIL_REQUIRED' });
   }
 
   try {
@@ -145,6 +145,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       sendsViaBackend: false,
     });
     authRouteLog('final response sent', { status: 503, message: 'REPORTER_PORTAL_EMAIL_SEND_FAILED', category: classifiedError.category });
-    return res.status(503).json({ ok: false, message: 'REPORTER_PORTAL_EMAIL_SEND_FAILED' });
+    return res.status(503).json({ ok: false, code: classifiedError.code || 'REPORTER_EMAIL_UNAVAILABLE', message: classifiedError.message || 'REPORTER_PORTAL_EMAIL_SEND_FAILED' });
   }
 }

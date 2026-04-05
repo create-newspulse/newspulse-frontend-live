@@ -14,7 +14,7 @@ export default function ReporterSubmissionDetailPage({ communityReporterClosed, 
   const router = useRouter();
   const { toggles } = usePublicFounderToggles({ communityReporterClosed, reporterPortalClosed, updatedAt: null });
   const { session, isReady, logout, reason } = useReporterPortalSession({ reportUnauthorizedReason: true });
-  const { settings, settingsLoading, stories, isLoading } = useCommunityStories({ reporterEmail: session?.email });
+  const { settings, settingsLoading, stories, isLoading, error, errorStatus, hasLoadedOnce } = useCommunityStories({ reporterEmail: session?.email, reporterAuth: true });
   const storyId = String(router.query.id || '').trim();
   const story = stories.find((item) => getStoryIdentity(item) === storyId) || null;
   const notes = getStoryNotes(story);
@@ -35,7 +35,12 @@ export default function ReporterSubmissionDetailPage({ communityReporterClosed, 
     return <ReporterPortalLayout title="Submission Detail" description="Portal settings are disabled." active="submissions" session={session} onLogout={() => { void logout().finally(() => router.push('/reporter/login').catch(() => {})); }}><PortalRouteState title="Reporter Portal is unavailable" description="Public settings currently disable submission detail views in the Reporter Portal." actionHref="/community-reporter" actionLabel="Back to Community Reporter" /></ReporterPortalLayout>;
   }
 
-  if (!isLoading && !story) {
+  if (hasLoadedOnce && !isLoading && error) {
+    const isSessionIssue = errorStatus === 401 || errorStatus === 403;
+    return <ReporterPortalLayout title="Submission Detail" description={isSessionIssue ? 'Reporter session issue.' : 'Submission records are temporarily unavailable.'} active="submissions" session={session} onLogout={() => { void logout().finally(() => router.push('/reporter/login').catch(() => {})); }}>{isSessionIssue ? <PortalRouteState title="Session issue" description="Your reporter session could not be confirmed for this submission record. Sign in again and retry." actionHref="/reporter/login" actionLabel="Login to Reporter Portal" /> : <PortalRouteState title="Submission records unavailable" description="The Reporter Portal could not load submission records for this verified reporter email. Please try again shortly." actionHref="/reporter/submissions" actionLabel="Back to Submissions" />}</ReporterPortalLayout>;
+  }
+
+  if (hasLoadedOnce && !isLoading && !story) {
     return <ReporterPortalLayout title="Submission Detail" description="Submission record not found." active="submissions" session={session} onLogout={() => { void logout().finally(() => router.push('/reporter/login').catch(() => {})); }}><PortalRouteState title="Submission not found" description="This submission record could not be matched against the existing community reporter history for your verified email." actionHref="/reporter/submissions" actionLabel="Back to Submissions" /></ReporterPortalLayout>;
   }
 

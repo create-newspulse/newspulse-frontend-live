@@ -3,6 +3,17 @@ import { fetchMyStoriesByEmail, withdrawStoryById, fetchPublicSettings } from '.
 describe('communityReporterApi', () => {
   beforeEach(() => {
     (global as any).fetch = jest.fn();
+    const store: Record<string, string> = {};
+    (global as any).window = {
+      localStorage: {
+        getItem: (key: string) => store[key] || null,
+        setItem: (key: string, value: string) => { store[key] = value; },
+        removeItem: (key: string) => { delete store[key]; },
+      },
+      location: {
+        origin: 'http://localhost:3000',
+      },
+    } as any;
   });
 
   it('maps stories from different response shapes', async () => {
@@ -35,13 +46,63 @@ describe('communityReporterApi', () => {
     (global as any).fetch.mockResolvedValueOnce({
       ok: false,
       status: 500,
-      json: async () => ({ message: 'Internal error' }),
+      json: async () => ({ code: 'UPSTREAM_ERROR', message: 'Internal error' }),
     });
 
     await expect(fetchMyStoriesByEmail('x@y.com')).rejects.toMatchObject({
       name: 'CommunityReporterHttpError',
       status: 500,
+      code: 'UPSTREAM_ERROR',
     });
+  });
+
+  it('treats a 200 empty items array as an empty state instead of an outage', async () => {
+    (global as any).fetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ items: [] }),
+    });
+
+    await expect(fetchMyStoriesByEmail('x@y.com')).resolves.toEqual([]);
+  });
+
+  it('uses same-origin proxy auth when reporter auth is required', async () => {
+    window.localStorage.setItem('np_reporter_portal_session_token', 'signed-token');
+    (global as any).fetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, stories: [] }),
+    });
+
+    await fetchMyStoriesByEmail('Reporter@Example.com', { reporterAuth: true, useProxy: true });
+
+    expect((global as any).fetch).toHaveBeenCalledWith(
+      '/api/community-reporter/my-stories?email=reporter%40example.com',
+      expect.objectContaining({
+        credentials: 'include',
+        headers: expect.objectContaining({
+          Accept: 'application/json',
+          Authorization: 'Bearer signed-token',
+        }),
+      })
+    );
+  });
+
+  it('does not enable credentials for public my-stories requests', async () => {
+    (global as any).fetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, stories: [] }),
+    });
+
+    await fetchMyStoriesByEmail('Reporter@Example.com');
+
+    expect((global as any).fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/community-reporter/my-stories?email=reporter%40example.com'),
+      expect.objectContaining({
+        credentials: undefined,
+      })
+    );
   });
 
   it('withdrawStoryById returns boolean', async () => {

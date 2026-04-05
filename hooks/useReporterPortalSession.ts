@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import {
+  clearReporterPortalSessionToken,
+  getReporterPortalAuthHeaders,
+  loadReporterPortalSessionToken,
   loadReporterPortalProfile,
   type ReporterPortalProfile,
   type ReporterPortalSession,
@@ -8,6 +11,30 @@ import {
 type UseReporterPortalSessionOptions = {
   reportUnauthorizedReason?: boolean;
 };
+
+function shouldLogReporterSessionDebug(): boolean {
+  const isJest = Boolean((globalThis as any)?.jest) || (typeof process !== 'undefined' && Boolean((process.env as any)?.JEST_WORKER_ID));
+  return typeof window !== 'undefined' && process.env.NODE_ENV === 'development' && !isJest;
+}
+
+function logReporterSessionDebug(event: string, details: Record<string, unknown>) {
+  if (!shouldLogReporterSessionDebug()) {
+    return;
+  }
+  // eslint-disable-next-line no-console
+  console.info(`[Reporter Portal] ${event}`, details);
+}
+
+function clearReporterTokenIfUnchanged(requestToken: string | null) {
+  if (!requestToken) {
+    return;
+  }
+
+  const latestToken = loadReporterPortalSessionToken();
+  if (latestToken === requestToken) {
+    clearReporterPortalSessionToken();
+  }
+}
 
 export function useReporterPortalSession(options?: UseReporterPortalSessionOptions) {
   const reportUnauthorizedReason = Boolean(options?.reportUnauthorizedReason);
@@ -20,9 +47,28 @@ export function useReporterPortalSession(options?: UseReporterPortalSessionOptio
     let cancelled = false;
 
     const loadSession = async () => {
+      const requestHeaders: Record<string, string> = {
+        Accept: 'application/json',
+        ...getReporterPortalAuthHeaders(),
+      };
+      const requestToken = String(requestHeaders.Authorization || requestHeaders.authorization || '').trim().replace(/^Bearer\s+/i, '') || null;
       try {
-        const res = await fetch('/api/reporter-auth/session', { method: 'GET', headers: { Accept: 'application/json' } });
+        logReporterSessionDebug('session request', {
+          url: '/api/reporter-auth/session',
+          credentialsEnabled: true,
+        });
+        const res = await fetch('/api/reporter-auth/session', {
+          method: 'GET',
+          headers: requestHeaders,
+          credentials: 'include',
+        });
         const data = await res.json().catch(() => null as any);
+        logReporterSessionDebug('session response', {
+          url: '/api/reporter-auth/session',
+          status: res.status,
+          responseCode: String(data?.code || '').trim() || null,
+          credentialsEnabled: true,
+        });
         if (cancelled) return;
         const storedProfile = loadReporterPortalProfile();
         setProfile(storedProfile);
@@ -36,6 +82,7 @@ export function useReporterPortalSession(options?: UseReporterPortalSessionOptio
           setReason(null);
         } else {
           setSession(null);
+          clearReporterTokenIfUnchanged(requestToken);
           if (res.status === 401 && data?.message === 'SESSION_EXPIRED' && !reportUnauthorizedReason) {
             setReason(null);
           } else {
@@ -45,6 +92,7 @@ export function useReporterPortalSession(options?: UseReporterPortalSessionOptio
       } catch {
         if (!cancelled) {
           setSession(null);
+          clearReporterTokenIfUnchanged(requestToken);
           setProfile(loadReporterPortalProfile());
           setReason('SESSION_CHECK_FAILED');
         }
@@ -61,8 +109,16 @@ export function useReporterPortalSession(options?: UseReporterPortalSessionOptio
 
   const logout = async () => {
     try {
-      await fetch('/api/reporter-auth/logout', { method: 'POST', headers: { Accept: 'application/json' } });
+      await fetch('/api/reporter-auth/logout', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          ...getReporterPortalAuthHeaders(),
+        },
+        credentials: 'include',
+      });
     } catch {}
+    clearReporterPortalSessionToken();
     setSession(null);
     setReason(null);
   };

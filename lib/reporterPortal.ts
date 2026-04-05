@@ -19,6 +19,7 @@ export type ReporterPortalProfile = {
 
 const REPORTER_PROFILE_KEY = 'np_cr_profile_v1';
 const REPORTER_EMAIL_KEY = 'np_cr_email';
+const REPORTER_SESSION_TOKEN_KEY = 'np_reporter_portal_session_token';
 
 function readStorage(key: string): string | null {
   if (typeof window === 'undefined') return null;
@@ -45,6 +46,30 @@ function removeStorage(key: string) {
 
 export function normalizeReporterEmail(email: string | null | undefined): string {
   return String(email || '').trim().toLowerCase();
+}
+
+export function loadReporterPortalSessionToken(): string | null {
+  const raw = readStorage(REPORTER_SESSION_TOKEN_KEY);
+  const token = String(raw || '').trim();
+  return token || null;
+}
+
+export function saveReporterPortalSessionToken(token: string | null | undefined) {
+  const normalizedToken = String(token || '').trim();
+  if (!normalizedToken) {
+    removeStorage(REPORTER_SESSION_TOKEN_KEY);
+    return;
+  }
+  writeStorage(REPORTER_SESSION_TOKEN_KEY, normalizedToken);
+}
+
+export function clearReporterPortalSessionToken() {
+  removeStorage(REPORTER_SESSION_TOKEN_KEY);
+}
+
+export function getReporterPortalAuthHeaders(): Record<string, string> {
+  const token = loadReporterPortalSessionToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 export function getStoryIdentity(story: CommunityStorySummary | null | undefined): string {

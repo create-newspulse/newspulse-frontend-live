@@ -1,14 +1,36 @@
 import type { CommunitySettingsPublic, CommunityStorySummary } from "../types/community-reporter";
+import { getPublicApiBaseUrl } from './publicApiBase';
+import { getReporterPortalAuthHeaders, normalizeReporterEmail } from './reporterPortal';
+
+type FetchMyStoriesOptions = {
+  reporterAuth?: boolean;
+  useProxy?: boolean;
+};
+
+function shouldLogReporterDebug(): boolean {
+  const isJest = Boolean((globalThis as any)?.jest) || (typeof process !== 'undefined' && Boolean((process.env as any)?.JEST_WORKER_ID));
+  return process.env.NODE_ENV === 'development' && !isJest;
+}
+
+function logReporterDebug(event: string, details: Record<string, unknown>) {
+  if (!shouldLogReporterDebug()) {
+    return;
+  }
+  // eslint-disable-next-line no-console
+  console.info(`[Reporter Portal] ${event}`, details);
+}
 
 export class CommunityReporterHttpError extends Error {
   status: number;
   url: string;
+  code?: string;
 
-  constructor(opts: { status: number; url: string; message: string }) {
+  constructor(opts: { status: number; url: string; message: string; code?: string }) {
     super(opts.message);
     this.name = 'CommunityReporterHttpError';
     this.status = opts.status;
     this.url = opts.url;
+    this.code = opts.code;
     // Ensure instanceof works when targeting ES5/ES2015 and extending Error.
     Object.setPrototypeOf(this, CommunityReporterHttpError.prototype);
   }
@@ -20,12 +42,12 @@ export function isCommunityReporterHttpError(err: unknown): err is CommunityRepo
     typeof err === 'object' &&
     (err as any).name === 'CommunityReporterHttpError' &&
     typeof (err as any).status === 'number' &&
-    typeof (err as any).url === 'string'
+      typeof (err as any).url === 'string'
   );
 }
 
 function getApiBase(): string {
-  return String(process.env.NEXT_PUBLIC_API_BASE || '').trim().replace(/\/+$/, '');
+  return String(getPublicApiBaseUrl() || '').trim().replace(/\/+$/, '');
 }
 
 export async function fetchPublicSettings(): Promise<CommunitySettingsPublic | null> {
@@ -45,23 +67,39 @@ export async function fetchPublicSettings(): Promise<CommunitySettingsPublic | n
   return null;
 }
 
-export async function fetchMyStoriesByEmail(email: string): Promise<CommunityStorySummary[]> {
+export async function fetchMyStoriesByEmail(email: string, options?: FetchMyStoriesOptions): Promise<CommunityStorySummary[]> {
   if (!email) return [];
   const base = getApiBase();
-  const normalizedEmail = email.trim().toLowerCase();
-  const url = `${base}/api/community-reporter/my-stories?email=${encodeURIComponent(normalizedEmail)}`;
-  const res: any = await fetch(url, { headers: { Accept: 'application/json' } });
+  const normalizedEmail = normalizeReporterEmail(email);
+  const useProxy = Boolean(options?.useProxy);
+  const url = useProxy
+    ? `/api/community-reporter/my-stories?email=${encodeURIComponent(normalizedEmail)}`
+    : `${base}/api/community-reporter/my-stories?email=${encodeURIComponent(normalizedEmail)}`;
+  const credentialsEnabled = Boolean(options?.reporterAuth);
+  logReporterDebug('reporter submissions request', {
+    endpoint: url,
+    credentialsEnabled,
+  });
+  const res: any = await fetch(url, {
+    headers: {
+      Accept: 'application/json',
+      ...(options?.reporterAuth ? getReporterPortalAuthHeaders() : {}),
+    },
+    credentials: credentialsEnabled ? 'include' : undefined,
+  });
   const status: number = typeof res?.status === 'number' ? res.status : (res?.ok ? 200 : 500);
 
-  const isJest = Boolean((globalThis as any)?.jest) || (typeof process !== 'undefined' && Boolean((process.env as any)?.JEST_WORKER_ID));
-  if (process.env.NODE_ENV === 'development' && !isJest) {
-    // Dev-only: helps trace backend 500s without breaking UI.
-    // Intentionally logs only route + status (no response body).
-    // eslint-disable-next-line no-console
-    console.log('[communityReporterApi] GET', '/api/community-reporter/my-stories?email=…', '->', status);
-  }
-
   const data = await res.json().catch(() => null as any);
+  const responseCode = String(data?.code || '').trim() || null;
+  const responseMessage = String(data?.message || '').trim() || null;
+  logReporterDebug('reporter submissions response', {
+    endpoint: url,
+    status,
+    responseCode,
+    responseMessage,
+    credentialsEnabled,
+  });
+
   const items = Array.isArray(data?.stories)
     ? data.stories
     : Array.isArray(data?.items)
@@ -69,18 +107,20 @@ export async function fetchMyStoriesByEmail(email: string): Promise<CommunitySto
     : Array.isArray(data?.data?.stories)
     ? data.data.stories
     : [];
+  const hasCollectionShape = Array.isArray(data?.stories) || Array.isArray(data?.items) || Array.isArray(data?.data?.stories);
 
   // Prefer returning stories if present, even if upstream returns a non-2xx.
   if (items.length) return items as CommunityStorySummary[];
 
-  if (res.ok && (data?.ok === true || data?.success === true)) {
+  if (res.ok && (data?.ok === true || data?.success === true || hasCollectionShape)) {
     return [];
   }
 
   throw new CommunityReporterHttpError({
     status,
     url,
-    message: data?.message || 'STORIES_FETCH_FAILED',
+    message: responseMessage || responseCode || 'STORIES_FETCH_FAILED',
+    code: responseCode || undefined,
   });
 }
 

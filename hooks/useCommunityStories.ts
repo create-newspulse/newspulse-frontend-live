@@ -2,7 +2,7 @@ import { useContext, createContext, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import type { CommunitySettingsPublic, CommunityStorySummary, CommunitySubmissionCounts } from '../types/community-reporter';
 import { fetchMyStoriesByEmail, fetchPublicSettings, isCommunityReporterHttpError, withdrawStoryById } from '../lib/communityReporterApi';
-import { getSubmissionCounts } from '../lib/reporterPortal';
+import { getSubmissionCounts, normalizeReporterEmail } from '../lib/reporterPortal';
 import { useI18n } from '../src/i18n/LanguageProvider';
 
 export type ReporterProfileSummary = {
@@ -27,20 +27,28 @@ export type UseCommunityStoriesValue = {
   counts: CommunitySubmissionCounts;
   isLoading: boolean;
   error: string | null;
+  errorCode: string | null;
+  errorStatus: number | null;
   hasLoadedOnce: boolean;
   loadingId: string | null;
   loadStories: () => Promise<void>;
   withdraw: (story: CommunityStorySummary) => Promise<boolean>;
 };
 
+type UseCommunityStoriesOptions = {
+  reporterEmail?: string | null;
+  reporterAuth?: boolean;
+};
+
 const CommunityStoriesOverrideContext = createContext<UseCommunityStoriesValue | null>(null);
 export const CommunityStoriesProvider = CommunityStoriesOverrideContext.Provider;
 
-export function useCommunityStories(opts?: { reporterEmail?: string | null }): UseCommunityStoriesValue {
+export function useCommunityStories(opts?: UseCommunityStoriesOptions): UseCommunityStoriesValue {
   const override = useContext(CommunityStoriesOverrideContext);
   if (override) return override;
   const router = useRouter();
   const { t } = useI18n();
+  const hasExplicitReporterEmail = Object.prototype.hasOwnProperty.call(opts || {}, 'reporterEmail');
 
   const [settings, setSettings] = useState<CommunitySettingsPublic | null>(null);
   const [settingsLoading, setSettingsLoading] = useState<boolean>(true);
@@ -52,6 +60,8 @@ export function useCommunityStories(opts?: { reporterEmail?: string | null }): U
   const [stories, setStories] = useState<CommunityStorySummary[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
+  const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
@@ -79,15 +89,21 @@ export function useCommunityStories(opts?: { reporterEmail?: string | null }): U
 
   // Resolve reporter email from query/localStorage/profile
   useEffect(() => {
-    const preferredEmail = String(opts?.reporterEmail || '').trim();
-    if (preferredEmail) {
-      setReporterEmail(preferredEmail);
+    const preferredEmail = normalizeReporterEmail(opts?.reporterEmail);
+    if (hasExplicitReporterEmail) {
+      setReporterEmail(preferredEmail || null);
+      setStories([]);
+      setError(null);
+      setErrorCode(null);
+      setErrorStatus(null);
+      setProfileWarning(null);
+      setHasLoadedOnce(false);
       return;
     }
     if (router.isReady) {
       const qEmail = typeof router.query.email === 'string' ? router.query.email.trim() : '';
       if (qEmail) {
-        setReporterEmail(qEmail);
+        setReporterEmail(normalizeReporterEmail(qEmail));
         return;
       }
     }
@@ -95,18 +111,18 @@ export function useCommunityStories(opts?: { reporterEmail?: string | null }): U
     try {
       const stored = window.localStorage.getItem('np_cr_email');
       if (stored && stored.trim()) {
-        setReporterEmail(stored.trim());
+        setReporterEmail(normalizeReporterEmail(stored));
         return;
       }
       const profileRaw = window.localStorage.getItem('npCommunityReporterProfile');
       if (profileRaw) {
         try {
           const p = JSON.parse(profileRaw);
-          if (p && p.email) setReporterEmail(String(p.email).trim());
+          if (p && p.email) setReporterEmail(normalizeReporterEmail(p.email));
         } catch {}
       }
     } catch {}
-  }, [opts?.reporterEmail, router.isReady, router.query.email]);
+  }, [hasExplicitReporterEmail, opts?.reporterEmail, router.isReady, router.query.email]);
 
   // Resolve reporter profile/contact details from localStorage (safe fallback)
   useEffect(() => {
@@ -134,31 +150,42 @@ export function useCommunityStories(opts?: { reporterEmail?: string | null }): U
   const counts = useMemo(() => getSubmissionCounts(stories), [stories]);
 
   const loadStories = async () => {
-    const em = (reporterEmail || '').trim();
+    const em = normalizeReporterEmail(reporterEmail);
     setIsLoading(true);
+    setHasLoadedOnce(false);
     setError(null);
+    setErrorCode(null);
+    setErrorStatus(null);
     setProfileWarning(null);
     try {
       const hasEmail = em && em.includes('@');
       if (!hasEmail) {
         setError(t('communityReporter.errors.missingEmail'));
+        setErrorCode('MISSING_EMAIL');
+        setErrorStatus(400);
         setStories([]);
         setHasLoadedOnce(true);
         return;
       }
-      const items = await fetchMyStoriesByEmail(em);
+      const items = await fetchMyStoriesByEmail(em, {
+        reporterAuth: Boolean(opts?.reporterAuth),
+        useProxy: Boolean(opts?.reporterAuth),
+      });
       setStories(items);
       setHasLoadedOnce(true);
       try {
         if (em) window.localStorage.setItem('np_cr_email', em.toLowerCase());
       } catch {}
     } catch (err: any) {
-      // Backend may 500 due to reporter profile/contact issues. Don't blank out the UI.
-      if (isCommunityReporterHttpError(err) && err.status >= 500) {
-        setProfileWarning('REPORTER_PROFILE_UNAVAILABLE');
-        setHasLoadedOnce(true);
-        // Keep any previously-loaded stories in state.
-        return;
+      if (isCommunityReporterHttpError(err)) {
+        setErrorCode(String(err.code || err.message || 'STORIES_FETCH_FAILED'));
+        setErrorStatus(err.status);
+        if (err.status >= 500) {
+          setProfileWarning('REPORTER_PROFILE_UNAVAILABLE');
+        }
+      } else {
+        setErrorCode('STORIES_FETCH_FAILED');
+        setErrorStatus(null);
       }
 
       setError(t('communityReporter.errors.loadStoriesFailed'));
@@ -188,9 +215,16 @@ export function useCommunityStories(opts?: { reporterEmail?: string | null }): U
   // Auto-load on reporterEmail change
   useEffect(() => {
     if (reporterEmail) loadStories();
-    else setHasLoadedOnce(true);
+    else {
+      setStories([]);
+      setError(null);
+      setErrorCode(null);
+      setErrorStatus(null);
+      setProfileWarning(null);
+      setHasLoadedOnce(true);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reporterEmail]);
+  }, [opts?.reporterAuth, reporterEmail]);
 
   return {
     settings,
@@ -203,6 +237,8 @@ export function useCommunityStories(opts?: { reporterEmail?: string | null }): U
     counts,
     isLoading,
     error,
+    errorCode,
+    errorStatus,
     hasLoadedOnce,
     loadingId,
     loadStories,
