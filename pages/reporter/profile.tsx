@@ -12,7 +12,7 @@ import type { FeatureToggleProps } from '../../types/community-reporter';
 export default function ReporterProfilePage({ communityReporterClosed, reporterPortalClosed }: FeatureToggleProps) {
   const router = useRouter();
   const { toggles } = usePublicFounderToggles({ communityReporterClosed, reporterPortalClosed, updatedAt: null });
-  const { session, isReady, logout, reason } = useReporterPortalSession();
+  const { session, isReady, logout, reason } = useReporterPortalSession({ reportUnauthorizedReason: true });
   const [form, setForm] = useState({ fullName: '', email: '', phone: '', whatsapp: '', city: '', district: '', state: '', country: 'India' });
   const [saved, setSaved] = useState(false);
 

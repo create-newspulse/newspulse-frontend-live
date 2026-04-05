@@ -136,7 +136,15 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
               });
               const data = await res.json().catch(() => null as any);
               if (!res.ok || data?.ok !== true) {
-                setError(data?.message === 'REPORTER_PORTAL_EMAIL_NOT_CONFIGURED' ? 'Reporter email verification is not configured yet on this environment.' : 'Could not send a verification code right now.');
+                if (data?.message === 'REPORTER_PORTAL_EMAIL_NOT_CONFIGURED') {
+                  setError('Reporter email verification is not configured yet on this environment.');
+                  return;
+                }
+                if (res.status === 503) {
+                  setError('Verification email is temporarily unavailable. Please try again shortly.');
+                  return;
+                }
+                setError('Could not send a verification code right now.');
                 return;
               }
               saveReporterPortalProfile({ ...(loadReporterPortalProfile() || {}), email: normalizedEmail });

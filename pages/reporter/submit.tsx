@@ -10,7 +10,7 @@ import type { FeatureToggleProps } from '../../types/community-reporter';
 
 export default function ReporterSubmitPage({ communityReporterClosed, reporterPortalClosed }: FeatureToggleProps) {
   const { toggles } = usePublicFounderToggles({ communityReporterClosed, reporterPortalClosed, updatedAt: null });
-  const { session, isReady, reason } = useReporterPortalSession();
+  const { session, isReady, reason } = useReporterPortalSession({ reportUnauthorizedReason: true });
 
   if (toggles.communityReporterClosed || toggles.reporterPortalClosed) {
     return <ReporterPortalLayout title="Submit Story" description="Reporter submission access is blocked by toggle." active="submit"><PortalRouteState title="Reporter Portal is closed" description="The Reporter Portal toggle is off, so story submission through the portal is blocked." actionHref="/community-reporter" actionLabel="Back to Community Reporter" /></ReporterPortalLayout>;

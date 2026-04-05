@@ -5,7 +5,12 @@ import {
   type ReporterPortalSession,
 } from '../lib/reporterPortal';
 
-export function useReporterPortalSession() {
+type UseReporterPortalSessionOptions = {
+  reportUnauthorizedReason?: boolean;
+};
+
+export function useReporterPortalSession(options?: UseReporterPortalSessionOptions) {
+  const reportUnauthorizedReason = Boolean(options?.reportUnauthorizedReason);
   const [session, setSession] = useState<ReporterPortalSession | null>(null);
   const [profile, setProfile] = useState<ReporterPortalProfile | null>(null);
   const [isReady, setIsReady] = useState(false);
@@ -31,7 +36,11 @@ export function useReporterPortalSession() {
           setReason(null);
         } else {
           setSession(null);
-          setReason(typeof data?.message === 'string' ? data.message : null);
+          if (res.status === 401 && data?.message === 'SESSION_EXPIRED' && !reportUnauthorizedReason) {
+            setReason(null);
+          } else {
+            setReason(typeof data?.message === 'string' ? data.message : null);
+          }
         }
       } catch {
         if (!cancelled) {

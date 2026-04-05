@@ -13,7 +13,7 @@ import type { FeatureToggleProps } from '../../../types/community-reporter';
 export default function ReporterSubmissionDetailPage({ communityReporterClosed, reporterPortalClosed }: FeatureToggleProps) {
   const router = useRouter();
   const { toggles } = usePublicFounderToggles({ communityReporterClosed, reporterPortalClosed, updatedAt: null });
-  const { session, isReady, logout, reason } = useReporterPortalSession();
+  const { session, isReady, logout, reason } = useReporterPortalSession({ reportUnauthorizedReason: true });
   const { settings, settingsLoading, stories, isLoading } = useCommunityStories({ reporterEmail: session?.email });
   const storyId = String(router.query.id || '').trim();
   const story = stories.find((item) => getStoryIdentity(item) === storyId) || null;
