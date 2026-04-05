@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { forwardReporterProxyCookies, getReporterForwardCookieHeader, readReporterProxyBody, resolveReporterAuthProxyUrl } from '../../../lib/reporterAuthProxy';
 import {
   clearOtpCookie,
   createOtpCookie,
@@ -21,6 +22,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const email = normalizeReporterAuthEmail(req.body?.email);
   const code = String(req.body?.code || '').trim();
+  const backendUrl = resolveReporterAuthProxyUrl('/api/reporter-auth/verify-code');
+
+  if (backendUrl) {
+    try {
+      const upstream = await fetch(backendUrl, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          ...(getReporterForwardCookieHeader(req) ? { cookie: getReporterForwardCookieHeader(req) } : {}),
+        },
+        body: JSON.stringify({ email, code }),
+      });
+      const { data, text } = await readReporterProxyBody(upstream);
+      forwardReporterProxyCookies(res, upstream.headers);
+
+      if (!upstream.ok) {
+        return res.status(upstream.status || 500).json(data || { ok: false, message: text || 'REPORTER_VERIFY_CODE_FAILED' });
+      }
+
+      return res.status(200).json({ ...(data || {}), ok: data?.ok !== false, email: data?.email || email });
+    } catch {
+      return res.status(503).json({ ok: false, code: 'REPORTER_VERIFY_CODE_FAILED', message: 'REPORTER_VERIFY_CODE_FAILED' });
+    }
+  }
+
   const otpCookie = String(req.cookies?.np_reporter_portal_otp || '');
   const otpPayload = getOtpFromCookie(otpCookie);
 

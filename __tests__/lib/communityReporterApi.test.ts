@@ -67,7 +67,6 @@ describe('communityReporterApi', () => {
   });
 
   it('uses same-origin proxy auth when reporter auth is required', async () => {
-    window.localStorage.setItem('np_reporter_portal_session_token', 'signed-token');
     (global as any).fetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
@@ -82,7 +81,6 @@ describe('communityReporterApi', () => {
         credentials: 'include',
         headers: expect.objectContaining({
           Accept: 'application/json',
-          Authorization: 'Bearer signed-token',
         }),
       })
     );

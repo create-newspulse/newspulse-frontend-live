@@ -3,15 +3,13 @@ jest.mock('../../../../lib/publicApiBase', () => ({
 }));
 
 import handler from '../../../../pages/api/community-reporter/my-stories';
-import { createSessionToken } from '../../../../lib/reporterPortalAuth';
 
 describe('pages/api/community-reporter/my-stories', () => {
   beforeEach(() => {
-    process.env.REPORTER_PORTAL_AUTH_SECRET = 'test-reporter-secret';
     (global as any).fetch = jest.fn();
   });
 
-  it('forwards reporter auth headers to the upstream backend', async () => {
+  it('forwards browser cookies to the backend stories endpoint', async () => {
     (global as any).fetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
@@ -22,8 +20,7 @@ describe('pages/api/community-reporter/my-stories', () => {
       method: 'GET',
       query: { email: 'Reporter@Example.com' },
       headers: {
-        cookie: 'np_reporter_portal_session=session-cookie',
-        authorization: 'Bearer local-session-token',
+        cookie: 'backend-reporter-session=backend-cookie-value',
       },
       cookies: {},
     } as any;
@@ -36,35 +33,30 @@ describe('pages/api/community-reporter/my-stories', () => {
       'http://localhost:3010/api/community-reporter/my-stories?email=reporter%40example.com',
       expect.objectContaining({
         method: 'GET',
-        headers: expect.objectContaining({
+        headers: {
           Accept: 'application/json',
-          cookie: 'np_reporter_portal_session=session-cookie',
-          authorization: 'Bearer local-session-token',
-        }),
+          cookie: 'backend-reporter-session=backend-cookie-value',
+        },
       })
     );
     expect(res.statusCode).toBe(200);
     expect(res.body).toEqual({ ok: true, stories: [] });
   });
 
-  it('falls back to bearer auth when a stale cookie is present locally', async () => {
-    const validBearerToken = createSessionToken('reporter@example.com');
+  it('passes through upstream 401 auth failures from the backend', async () => {
     (global as any).fetch.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ ok: true, items: [] }),
+      ok: false,
+      status: 401,
+      text: async () => JSON.stringify({ ok: false, code: 'REPORTER_SESSION_MISSING', message: 'Reporter session missing or expired.' }),
     });
 
     const req = {
       method: 'GET',
       query: { email: 'Reporter@Example.com' },
       headers: {
-        cookie: 'np_reporter_portal_session=stale-cookie-token',
-        authorization: `Bearer ${validBearerToken}`,
+        cookie: 'backend-reporter-session=stale-cookie-token',
       },
-      cookies: {
-        np_reporter_portal_session: 'stale-cookie-token',
-      },
+      cookies: {},
     } as any;
 
     const res = createMockResponse();
@@ -72,8 +64,8 @@ describe('pages/api/community-reporter/my-stories', () => {
     await handler(req, res as any);
 
     expect((global as any).fetch).toHaveBeenCalledTimes(1);
-    expect(res.statusCode).toBe(200);
-    expect(res.body).toEqual({ ok: true, stories: [] });
+    expect(res.statusCode).toBe(401);
+    expect(res.body).toEqual({ ok: false, code: 'REPORTER_SESSION_MISSING', message: 'Reporter session missing or expired.' });
   });
 });
 

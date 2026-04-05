@@ -38,6 +38,7 @@ export type UseCommunityStoriesValue = {
 type UseCommunityStoriesOptions = {
   reporterEmail?: string | null;
   reporterAuth?: boolean;
+  debugContexts?: string[];
 };
 
 const CommunityStoriesOverrideContext = createContext<UseCommunityStoriesValue | null>(null);
@@ -170,6 +171,7 @@ export function useCommunityStories(opts?: UseCommunityStoriesOptions): UseCommu
       const items = await fetchMyStoriesByEmail(em, {
         reporterAuth: Boolean(opts?.reporterAuth),
         useProxy: Boolean(opts?.reporterAuth),
+        debugContexts: opts?.debugContexts,
       });
       setStories(items);
       setHasLoadedOnce(true);

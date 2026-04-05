@@ -7,7 +7,7 @@ import { usePublicFounderToggles } from '../../hooks/usePublicFounderToggles';
 import { useReporterPortalSession } from '../../hooks/useReporterPortalSession';
 import { fetchPublicSettings } from '../../lib/communityReporterApi';
 import { getReporterPortalPageServerProps } from '../../lib/reporterPortalPage';
-import { loadReporterPortalProfile, normalizeReporterEmail, saveReporterPortalProfile, saveReporterPortalSessionToken } from '../../lib/reporterPortal';
+import { loadReporterPortalProfile, normalizeReporterEmail, saveReporterPortalProfile } from '../../lib/reporterPortal';
 import type { FeatureToggleProps } from '../../types/community-reporter';
 
 const DEFAULT_PORTAL_TARGET = '/reporter/dashboard';
@@ -46,7 +46,10 @@ function getReporterResponseCode(data: any): string | null {
   return code || null;
 }
 
-function getRequestCodeErrorMessage(code: string | null): string {
+function getRequestCodeErrorMessage(code: string | null, status: number | null): string {
+  if (status === 429 || (code && /RATE|TOO_MANY/i.test(code))) {
+    return 'Please wait a moment before requesting another verification code.';
+  }
   if (code === 'INVALID_EMAIL' || code === 'VALID_EMAIL_REQUIRED') {
     return 'Enter the same valid email address you use for community reporter submissions.';
   }
@@ -121,7 +124,6 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
         logReporterAuthEvent('verify-link success', { url: requestUrl, status: res.status, backendCode: responseCode, nextTarget });
 
         saveReporterPortalProfile({ ...(loadReporterPortalProfile() || {}), email: data.email });
-        saveReporterPortalSessionToken(typeof data?.sessionToken === 'string' ? data.sessionToken : null);
         setStep('success');
         setNotice('Email verified. Opening Reporter Portal…');
         await router.replace(nextTarget);
@@ -173,7 +175,7 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
             }
             setIsSending(true);
             const requestUrl = resolveReporterAuthUrl('/api/reporter-auth/request-code');
-            logReporterAuthEvent('request-code request', { url: requestUrl, email: normalizedEmail });
+            logReporterAuthEvent('request-code request', { url: requestUrl, credentialsIncluded: true });
             try {
                 const res = await fetch(requestUrl, {
                 method: 'POST',
@@ -184,11 +186,11 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
               const data = await res.json().catch(() => null as any);
               const responseCode = getReporterResponseCode(data);
               if (!res.ok || data?.ok !== true) {
-                  logReporterAuthFailure('request-code failed', { url: requestUrl, status: res.status, backendCode: responseCode });
-                setError(getRequestCodeErrorMessage(responseCode));
+                  logReporterAuthFailure('request-code failed', { url: requestUrl, status: res.status, backendCode: responseCode, credentialsIncluded: true });
+                setError(getRequestCodeErrorMessage(responseCode, res.status));
                 return;
               }
-                logReporterAuthEvent('request-code success', { url: requestUrl, status: res.status, backendCode: responseCode, email: normalizedEmail });
+                logReporterAuthEvent('request-code success', { url: requestUrl, status: res.status, backendCode: responseCode, credentialsIncluded: true });
               saveReporterPortalProfile({ ...(loadReporterPortalProfile() || {}), email: normalizedEmail });
               setEmail(normalizedEmail);
               setExpiresAt(typeof data?.expiresAt === 'string' ? data.expiresAt : null);
@@ -224,7 +226,7 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
 
             setIsVerifying(true);
             const requestUrl = resolveReporterAuthUrl('/api/reporter-auth/verify-code');
-            logReporterAuthEvent('verify-code request', { url: requestUrl, email: normalizedEmail, nextTarget });
+            logReporterAuthEvent('verify-code request', { url: requestUrl, backendCode: null, credentialsIncluded: true });
             try {
               const res = await fetch(requestUrl, {
                 method: 'POST',
@@ -235,13 +237,13 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
               const data = await res.json().catch(() => null as any);
               const responseCode = getReporterResponseCode(data);
               if (!res.ok || data?.ok !== true) {
-                  logReporterAuthFailure('verify-code failed', { url: requestUrl, status: res.status, backendCode: responseCode });
-                  if (responseCode === 'OTP_EXPIRED_OR_MISSING') {
+                  logReporterAuthFailure('verify-code failed', { url: requestUrl, status: res.status, backendCode: responseCode, credentialsIncluded: true });
+                  if (responseCode === 'OTP_EXPIRED_OR_MISSING' || responseCode === 'REPORTER_OTP_EXPIRED' || responseCode === 'REPORTER_OTP_MISSING') {
                   setError('This verification code expired. Request a fresh code.');
                   setStep('email');
                   return;
                 }
-                  if (responseCode === 'OTP_INVALID') {
+                  if (responseCode === 'OTP_INVALID' || responseCode === 'REPORTER_OTP_INVALID' || responseCode === 'INVALID_OTP') {
                   setError(`Invalid code.${typeof data?.attemptsRemaining === 'number' ? ` Attempts remaining: ${data.attemptsRemaining}.` : ''}`);
                   return;
                 }
@@ -249,10 +251,9 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
                 return;
               }
 
-                logReporterAuthEvent('verify-code success', { url: requestUrl, status: res.status, backendCode: responseCode, nextTarget });
+                logReporterAuthEvent('verify-code success', { url: requestUrl, status: res.status, backendCode: responseCode, credentialsIncluded: true });
 
               saveReporterPortalProfile({ ...(loadReporterPortalProfile() || {}), email: normalizedEmail });
-                saveReporterPortalSessionToken(typeof data?.sessionToken === 'string' ? data.sessionToken : null);
               setStep('success');
               setNotice('Verification successful. Opening Reporter Portal…');
               await router.push(nextTarget);

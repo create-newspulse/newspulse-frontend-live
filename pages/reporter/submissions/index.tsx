@@ -14,7 +14,7 @@ export default function ReporterSubmissionsPage({ communityReporterClosed, repor
   const router = useRouter();
   const { toggles } = usePublicFounderToggles({ communityReporterClosed, reporterPortalClosed, updatedAt: null });
   const { session, isReady, logout, reason } = useReporterPortalSession({ reportUnauthorizedReason: true });
-  const { settings, settingsLoading, stories, isLoading, error, errorStatus, hasLoadedOnce } = useCommunityStories({ reporterEmail: session?.email, reporterAuth: true });
+  const { settings, settingsLoading, stories, isLoading, error, errorStatus, hasLoadedOnce } = useCommunityStories({ reporterEmail: session?.email, reporterAuth: true, debugContexts: ['submissions tab fetch'] });
   const hasSessionIssue = errorStatus === 401 || errorStatus === 403;
 
   if (toggles.communityReporterClosed || toggles.reporterPortalClosed) {
@@ -27,6 +27,10 @@ export default function ReporterSubmissionsPage({ communityReporterClosed, repor
 
   if (!session?.email) {
     return <ReporterPortalLayout title="My Submissions" description="A reporter login is required." active="submissions"><PortalRouteState title={reason === 'SESSION_EXPIRED' ? 'Session expired' : 'Login required'} description={reason === 'SESSION_EXPIRED' ? 'Your verified reporter session expired. Sign in again to keep tracking your submissions.' : 'Sign in with your reporter email to track submissions and open story details.'} actionHref="/reporter/login" actionLabel="Login to Reporter Portal" /></ReporterPortalLayout>;
+  }
+
+  if (hasLoadedOnce && !isLoading && hasSessionIssue) {
+    return <ReporterPortalLayout title="My Submissions" description="Reporter authentication could not be confirmed for submission records." active="submissions"><PortalRouteState title="Session expired" description="Your reporter session could not be confirmed for submission records. Sign in again and retry." actionHref="/reporter/login" actionLabel="Login to Reporter Portal" /></ReporterPortalLayout>;
   }
 
   if (!settingsLoading && settings && (!settings.communityReporterEnabled || !settings.allowMyStoriesPortal)) {
@@ -45,7 +49,7 @@ export default function ReporterSubmissionsPage({ communityReporterClosed, repor
         </div>
 
         {!hasLoadedOnce || (isLoading && stories.length === 0) ? <div className="mt-6 text-sm text-slate-600">Loading submissions…</div> : null}
-        {hasLoadedOnce && !isLoading && error ? <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-6 text-sm text-amber-900">{hasSessionIssue ? 'Your reporter session could not be confirmed for submission records. Sign in again and retry.' : 'Submission records are temporarily unavailable for this verified reporter email. Please try again shortly.'}</div> : null}
+        {hasLoadedOnce && !isLoading && error ? <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-6 text-sm text-amber-900">Submission records are temporarily unavailable for this verified reporter email. Please try again shortly.</div> : null}
         {hasLoadedOnce && !isLoading && !error && stories.length === 0 ? <div className="mt-6 rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-600">No submissions yet.</div> : null}
 
         {!error && stories.length > 0 ? (

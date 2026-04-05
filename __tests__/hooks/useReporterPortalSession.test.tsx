@@ -15,28 +15,27 @@ describe('useReporterPortalSession', () => {
     (global as any).fetch = jest.fn();
   });
 
-  it('does not clear a newer token saved while an older session check is in flight', async () => {
-    let resolveFetch: ((value: any) => void) | null = null;
-    (global as any).fetch.mockImplementationOnce(() => new Promise((resolve) => {
-      resolveFetch = resolve;
-    }));
+  it('checks the reporter session with cookie credentials only', async () => {
+    (global as any).fetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, session: { email: 'reporter@example.com', expiresAt: new Date().toISOString() } }),
+    });
 
     const { result } = renderHook(() => useReporterPortalSession());
 
-    act(() => {
-      window.localStorage.setItem('np_reporter_portal_session_token', 'new-valid-token');
-    });
-
     await act(async () => {
-      resolveFetch?.({
-        ok: false,
-        status: 401,
-        json: async () => ({ ok: false, code: 'SESSION_EXPIRED', message: 'SESSION_EXPIRED' }),
-      });
       await Promise.resolve();
     });
 
-    expect(window.localStorage.getItem('np_reporter_portal_session_token')).toBe('new-valid-token');
-    expect(result.current.session).toBeNull();
+    expect((global as any).fetch).toHaveBeenCalledWith(
+      '/api/reporter-auth/session',
+      expect.objectContaining({
+        method: 'GET',
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
+      })
+    );
+    expect(result.current.session?.email).toBe('reporter@example.com');
   });
 });

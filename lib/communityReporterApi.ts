@@ -1,10 +1,11 @@
 import type { CommunitySettingsPublic, CommunityStorySummary } from "../types/community-reporter";
 import { getPublicApiBaseUrl } from './publicApiBase';
-import { getReporterPortalAuthHeaders, normalizeReporterEmail } from './reporterPortal';
+import { normalizeReporterEmail } from './reporterPortal';
 
 type FetchMyStoriesOptions = {
   reporterAuth?: boolean;
   useProxy?: boolean;
+  debugContexts?: string[];
 };
 
 function shouldLogReporterDebug(): boolean {
@@ -76,14 +77,16 @@ export async function fetchMyStoriesByEmail(email: string, options?: FetchMyStor
     ? `/api/community-reporter/my-stories?email=${encodeURIComponent(normalizedEmail)}`
     : `${base}/api/community-reporter/my-stories?email=${encodeURIComponent(normalizedEmail)}`;
   const credentialsEnabled = Boolean(options?.reporterAuth);
-  logReporterDebug('reporter submissions request', {
-    endpoint: url,
-    credentialsEnabled,
-  });
+  const debugContexts = options?.debugContexts?.length ? options.debugContexts : ['reporter submissions fetch'];
+  for (const context of debugContexts) {
+    logReporterDebug(`${context} request`, {
+      url,
+      credentialsIncluded: credentialsEnabled,
+    });
+  }
   const res: any = await fetch(url, {
     headers: {
       Accept: 'application/json',
-      ...(options?.reporterAuth ? getReporterPortalAuthHeaders() : {}),
     },
     credentials: credentialsEnabled ? 'include' : undefined,
   });
@@ -92,13 +95,15 @@ export async function fetchMyStoriesByEmail(email: string, options?: FetchMyStor
   const data = await res.json().catch(() => null as any);
   const responseCode = String(data?.code || '').trim() || null;
   const responseMessage = String(data?.message || '').trim() || null;
-  logReporterDebug('reporter submissions response', {
-    endpoint: url,
-    status,
-    responseCode,
-    responseMessage,
-    credentialsEnabled,
-  });
+  for (const context of debugContexts) {
+    logReporterDebug(`${context} response`, {
+      url,
+      status,
+      responseCode,
+      responseMessage,
+      credentialsIncluded: credentialsEnabled,
+    });
+  }
 
   const items = Array.isArray(data?.stories)
     ? data.stories

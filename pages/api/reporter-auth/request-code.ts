@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { getReporterForwardCookieHeader, forwardReporterProxyCookies, readReporterProxyBody, resolveReporterAuthProxyUrl } from '../../../lib/reporterAuthProxy';
 import {
   createMagicLinkToken,
   createOtpCookie,
@@ -58,6 +59,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const email = normalizeReporterAuthEmail(req.body?.email);
+  const backendUrl = resolveReporterAuthProxyUrl('/api/reporter-auth/request-code');
   const envPresence = getReporterPortalAuthEnvPresence();
   authRouteLog('email normalized', { email: maskReporterEmail(email) });
   authRouteLog('env presence check', {
@@ -75,6 +77,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     authRouteLog('final response sent', { status: 400, message: 'VALID_EMAIL_REQUIRED' });
     return res.status(400).json({ ok: false, code: 'INVALID_EMAIL', message: 'VALID_EMAIL_REQUIRED' });
+  }
+
+  if (backendUrl) {
+    authRouteLog('proxy request start', { targetUrl: backendUrl, credentialsIncluded: Boolean(getReporterForwardCookieHeader(req)) });
+    try {
+      const upstream = await fetch(backendUrl, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          ...(getReporterForwardCookieHeader(req) ? { cookie: getReporterForwardCookieHeader(req) } : {}),
+        },
+        body: JSON.stringify({ email }),
+      });
+      const { data, text } = await readReporterProxyBody(upstream);
+      authRouteLog('proxy request end', {
+        targetUrl: backendUrl,
+        status: upstream.status,
+        backendCode: String(data?.code || data?.message || '').trim() || null,
+        credentialsIncluded: Boolean(getReporterForwardCookieHeader(req)),
+      });
+      forwardReporterProxyCookies(res, upstream.headers);
+
+      if (!upstream.ok) {
+        return res.status(upstream.status || 500).json(data || { ok: false, message: text || 'REPORTER_REQUEST_CODE_FAILED' });
+      }
+
+      return res.status(200).json({ ...(data || {}), ok: data?.ok !== false, email: data?.email || email });
+    } catch (error: any) {
+      authRouteError('proxy request failed', {
+        targetUrl: backendUrl,
+        error: error?.message || 'REPORTER_REQUEST_CODE_PROXY_FAILED',
+      });
+      return res.status(503).json({ ok: false, code: 'REPORTER_EMAIL_UNAVAILABLE', message: 'REPORTER_PORTAL_EMAIL_SEND_FAILED' });
+    }
   }
 
   try {

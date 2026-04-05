@@ -1,8 +1,5 @@
 import { useEffect, useState } from 'react';
 import {
-  clearReporterPortalSessionToken,
-  getReporterPortalAuthHeaders,
-  loadReporterPortalSessionToken,
   loadReporterPortalProfile,
   type ReporterPortalProfile,
   type ReporterPortalSession,
@@ -25,17 +22,6 @@ function logReporterSessionDebug(event: string, details: Record<string, unknown>
   console.info(`[Reporter Portal] ${event}`, details);
 }
 
-function clearReporterTokenIfUnchanged(requestToken: string | null) {
-  if (!requestToken) {
-    return;
-  }
-
-  const latestToken = loadReporterPortalSessionToken();
-  if (latestToken === requestToken) {
-    clearReporterPortalSessionToken();
-  }
-}
-
 export function useReporterPortalSession(options?: UseReporterPortalSessionOptions) {
   const reportUnauthorizedReason = Boolean(options?.reportUnauthorizedReason);
   const [session, setSession] = useState<ReporterPortalSession | null>(null);
@@ -47,27 +33,26 @@ export function useReporterPortalSession(options?: UseReporterPortalSessionOptio
     let cancelled = false;
 
     const loadSession = async () => {
-      const requestHeaders: Record<string, string> = {
-        Accept: 'application/json',
-        ...getReporterPortalAuthHeaders(),
-      };
-      const requestToken = String(requestHeaders.Authorization || requestHeaders.authorization || '').trim().replace(/^Bearer\s+/i, '') || null;
+      const requestUrl = '/api/reporter-auth/session';
+      const credentialsEnabled = true;
       try {
         logReporterSessionDebug('session request', {
-          url: '/api/reporter-auth/session',
-          credentialsEnabled: true,
+          url: requestUrl,
+          credentialsIncluded: credentialsEnabled,
         });
-        const res = await fetch('/api/reporter-auth/session', {
+        const res = await fetch(requestUrl, {
           method: 'GET',
-          headers: requestHeaders,
+          headers: {
+            Accept: 'application/json',
+          },
           credentials: 'include',
         });
         const data = await res.json().catch(() => null as any);
         logReporterSessionDebug('session response', {
-          url: '/api/reporter-auth/session',
+          url: requestUrl,
           status: res.status,
           responseCode: String(data?.code || '').trim() || null,
-          credentialsEnabled: true,
+          credentialsIncluded: credentialsEnabled,
         });
         if (cancelled) return;
         const storedProfile = loadReporterPortalProfile();
@@ -82,17 +67,16 @@ export function useReporterPortalSession(options?: UseReporterPortalSessionOptio
           setReason(null);
         } else {
           setSession(null);
-          clearReporterTokenIfUnchanged(requestToken);
-          if (res.status === 401 && data?.message === 'SESSION_EXPIRED' && !reportUnauthorizedReason) {
+          if (res.status === 401 && (data?.message === 'SESSION_EXPIRED' || data?.code === 'SESSION_EXPIRED') && !reportUnauthorizedReason) {
             setReason(null);
           } else {
-            setReason(typeof data?.message === 'string' ? data.message : null);
+            const nextReason = String(data?.message || data?.code || '').trim();
+            setReason(nextReason === 'REPORTER_SESSION_MISSING' ? 'SESSION_EXPIRED' : (nextReason || null));
           }
         }
       } catch {
         if (!cancelled) {
           setSession(null);
-          clearReporterTokenIfUnchanged(requestToken);
           setProfile(loadReporterPortalProfile());
           setReason('SESSION_CHECK_FAILED');
         }
@@ -113,12 +97,10 @@ export function useReporterPortalSession(options?: UseReporterPortalSessionOptio
         method: 'POST',
         headers: {
           Accept: 'application/json',
-          ...getReporterPortalAuthHeaders(),
         },
         credentials: 'include',
       });
     } catch {}
-    clearReporterPortalSessionToken();
     setSession(null);
     setReason(null);
   };

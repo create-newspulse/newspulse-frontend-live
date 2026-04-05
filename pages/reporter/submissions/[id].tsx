@@ -31,6 +31,10 @@ export default function ReporterSubmissionDetailPage({ communityReporterClosed, 
     return <ReporterPortalLayout title="Submission Detail" description="A reporter login is required." active="submissions"><PortalRouteState title={reason === 'SESSION_EXPIRED' ? 'Session expired' : 'Login required'} description={reason === 'SESSION_EXPIRED' ? 'Your verified reporter session expired. Sign in again to reopen submission details.' : 'Sign in to open a submission detail page.'} actionHref="/reporter/login" actionLabel="Login to Reporter Portal" /></ReporterPortalLayout>;
   }
 
+  if (hasLoadedOnce && !isLoading && (errorStatus === 401 || errorStatus === 403)) {
+    return <ReporterPortalLayout title="Submission Detail" description="Reporter authentication could not be confirmed for this submission record." active="submissions"><PortalRouteState title="Session expired" description="Your reporter session could not be confirmed for this submission record. Sign in again and retry." actionHref="/reporter/login" actionLabel="Login to Reporter Portal" /></ReporterPortalLayout>;
+  }
+
   if (!settingsLoading && settings && (!settings.communityReporterEnabled || !settings.allowMyStoriesPortal)) {
     return <ReporterPortalLayout title="Submission Detail" description="Portal settings are disabled." active="submissions" session={session} onLogout={() => { void logout().finally(() => router.push('/reporter/login').catch(() => {})); }}><PortalRouteState title="Reporter Portal is unavailable" description="Public settings currently disable submission detail views in the Reporter Portal." actionHref="/community-reporter" actionLabel="Back to Community Reporter" /></ReporterPortalLayout>;
   }

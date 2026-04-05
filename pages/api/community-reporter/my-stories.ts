@@ -1,6 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
-import { getSessionFromCookie } from '../../../lib/reporterPortalAuth';
 
 function shouldLogReporterProxyDebug(): boolean {
   const isJest = Boolean((globalThis as any)?.jest) || (typeof process !== 'undefined' && Boolean((process.env as any)?.JEST_WORKER_ID));
@@ -15,14 +14,6 @@ function logReporterProxyDebug(event: string, details: Record<string, unknown>) 
   console.info(`[api/community-reporter/my-stories] ${event}`, details);
 }
 
-function resolveReporterSessionEmail(req: NextApiRequest): string {
-  const cookieToken = String(req.cookies?.np_reporter_portal_session || '').trim();
-  const authorization = String(req.headers.authorization || '').trim();
-  const bearerToken = authorization.toLowerCase().startsWith('bearer ') ? authorization.slice(7).trim() : '';
-  const session = getSessionFromCookie(cookieToken) || getSessionFromCookie(bearerToken);
-  return String(session?.email || '').trim().toLowerCase();
-}
-
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
@@ -35,31 +26,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const email = emailRaw.toLowerCase();
-  const reporterSessionEmail = resolveReporterSessionEmail(req);
-  if (reporterSessionEmail && reporterSessionEmail !== email) {
-    return res.status(403).json({ ok: false, code: 'REPORTER_EMAIL_MISMATCH', message: 'REPORTER_EMAIL_MISMATCH' });
-  }
   const base = String(getPublicApiBaseUrl() || '').trim().replace(/\/+$/, '');
   if (!base) {
     console.error('[api/community-reporter/my-stories] backend base URL not configured');
     return res.status(500).json({ ok: false, message: 'BACKEND_URL_NOT_CONFIGURED' });
   }
   const targetUrl = `${base}/api/community-reporter/my-stories?email=${encodeURIComponent(email)}`;
-  const forwardedCookie = String(req.headers.cookie || '');
-  const forwardedAuthorization = String(req.headers.authorization || '');
 
   try {
+    const forwardedCookie = String(req.headers.cookie || '').trim();
     logReporterProxyDebug('proxy request', {
       targetUrl,
       hasCookie: Boolean(forwardedCookie),
-      hasAuthorization: Boolean(forwardedAuthorization),
+      credentialsEnabled: true,
     });
     const upstream = await fetch(targetUrl, {
       method: 'GET',
       headers: {
         Accept: 'application/json',
-        cookie: forwardedCookie,
-        authorization: forwardedAuthorization,
+        ...(forwardedCookie ? { cookie: forwardedCookie } : {}),
       },
     });
 

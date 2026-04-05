@@ -14,8 +14,9 @@ export default function ReporterDashboardPage({ communityReporterClosed, reporte
   const router = useRouter();
   const { toggles } = usePublicFounderToggles({ communityReporterClosed, reporterPortalClosed, updatedAt: null });
   const { session, isReady, logout, reason } = useReporterPortalSession({ reportUnauthorizedReason: true });
-  const { settings, settingsLoading, stories, counts, isLoading, error, errorStatus, hasLoadedOnce } = useCommunityStories({ reporterEmail: session?.email, reporterAuth: true });
+  const { settings, settingsLoading, stories, counts, isLoading, error, errorStatus, hasLoadedOnce } = useCommunityStories({ reporterEmail: session?.email, reporterAuth: true, debugContexts: ['dashboard stats fetch', 'recent submissions fetch'] });
   const hasSessionIssue = errorStatus === 401 || errorStatus === 403;
+  const showStats = hasLoadedOnce && !isLoading && !error;
 
   if (toggles.communityReporterClosed || toggles.reporterPortalClosed) {
     return <ReporterPortalLayout title="Reporter Dashboard" description="Reporter Portal access is blocked by toggle." active="dashboard"><PortalRouteState title="Reporter Portal is closed" description="The Reporter Portal toggle is off, so dashboard access is blocked." actionHref="/community-reporter" actionLabel="Back to Community Reporter" /></ReporterPortalLayout>;
@@ -29,6 +30,10 @@ export default function ReporterDashboardPage({ communityReporterClosed, reporte
     return <ReporterPortalLayout title="Reporter Dashboard" description="A reporter login is required." active="dashboard"><PortalRouteState title={reason === 'SESSION_EXPIRED' ? 'Session expired' : 'Login required'} description={reason === 'SESSION_EXPIRED' ? 'Your verified reporter session expired. Sign in again with email verification to reopen the portal.' : 'Sign in with the reporter email used for your community reporter submissions to view your dashboard.'} actionHref="/reporter/login" actionLabel="Login to Reporter Portal" /></ReporterPortalLayout>;
   }
 
+  if (hasLoadedOnce && !isLoading && hasSessionIssue) {
+    return <ReporterPortalLayout title="Reporter Dashboard" description="Reporter authentication could not be confirmed for dashboard activity." active="dashboard"><PortalRouteState title="Session expired" description="Your reporter session could not be confirmed for dashboard activity. Sign in again and retry." actionHref="/reporter/login" actionLabel="Login to Reporter Portal" /></ReporterPortalLayout>;
+  }
+
   if (!settingsLoading && settings && (!settings.communityReporterEnabled || !settings.allowMyStoriesPortal)) {
     return <ReporterPortalLayout title="Reporter Dashboard" description="Portal settings are disabled." active="dashboard" session={session} onLogout={() => { void logout().finally(() => router.push('/reporter/login').catch(() => {})); }}><PortalRouteState title="Reporter Portal is unavailable" description="Public settings currently disable the reporter portal, so dashboard access is blocked." actionHref="/community-reporter" actionLabel="Back to Community Reporter" /></ReporterPortalLayout>;
   }
@@ -37,13 +42,19 @@ export default function ReporterDashboardPage({ communityReporterClosed, reporte
 
   return (
     <ReporterPortalLayout title="Reporter Dashboard" description="Track your community reporter activity, submission outcomes, and recent editorial movement." active="dashboard" session={session} onLogout={() => { void logout().finally(() => router.push('/reporter/login').catch(() => {})); }}>
-      <div className="grid gap-4 md:grid-cols-5">
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Total</div><div className="mt-3 text-3xl font-black text-slate-950">{counts.total}</div></div>
-        <div className="rounded-3xl border border-blue-200 bg-blue-50 p-5 shadow-sm"><div className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Pending Review</div><div className="mt-3 text-3xl font-black text-blue-900">{counts.pending}</div></div>
-        <div className="rounded-3xl border border-green-200 bg-green-50 p-5 shadow-sm"><div className="text-xs font-bold uppercase tracking-[0.18em] text-green-700">Approved</div><div className="mt-3 text-3xl font-black text-green-900">{counts.approved}</div></div>
-        <div className="rounded-3xl border border-red-200 bg-red-50 p-5 shadow-sm"><div className="text-xs font-bold uppercase tracking-[0.18em] text-red-700">Rejected</div><div className="mt-3 text-3xl font-black text-red-900">{counts.rejected}</div></div>
-        <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm"><div className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">Published</div><div className="mt-3 text-3xl font-black text-emerald-900">{counts.published}</div></div>
-      </div>
+      {showStats ? (
+        <div className="grid gap-4 md:grid-cols-5">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Total</div><div className="mt-3 text-3xl font-black text-slate-950">{counts.total}</div></div>
+          <div className="rounded-3xl border border-blue-200 bg-blue-50 p-5 shadow-sm"><div className="text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Pending Review</div><div className="mt-3 text-3xl font-black text-blue-900">{counts.pending}</div></div>
+          <div className="rounded-3xl border border-green-200 bg-green-50 p-5 shadow-sm"><div className="text-xs font-bold uppercase tracking-[0.18em] text-green-700">Approved</div><div className="mt-3 text-3xl font-black text-green-900">{counts.approved}</div></div>
+          <div className="rounded-3xl border border-red-200 bg-red-50 p-5 shadow-sm"><div className="text-xs font-bold uppercase tracking-[0.18em] text-red-700">Rejected</div><div className="mt-3 text-3xl font-black text-red-900">{counts.rejected}</div></div>
+          <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm"><div className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">Published</div><div className="mt-3 text-3xl font-black text-emerald-900">{counts.published}</div></div>
+        </div>
+      ) : (
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
+          {!hasLoadedOnce || isLoading ? 'Loading dashboard activity…' : hasSessionIssue ? 'Your reporter session could not be confirmed for dashboard activity. Sign in again and retry.' : 'Dashboard activity is temporarily unavailable for this verified reporter email. Please try again shortly.'}
+        </div>
+      )}
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -56,7 +67,7 @@ export default function ReporterDashboardPage({ communityReporterClosed, reporte
           </div>
 
           {!hasLoadedOnce || (isLoading && stories.length === 0) ? <div className="mt-4 text-sm text-slate-600">Loading submission activity…</div> : null}
-          {hasLoadedOnce && !isLoading && error ? <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-6 text-sm text-amber-900">{hasSessionIssue ? 'Your reporter session could not be confirmed for submission records. Sign in again and retry.' : 'Submission records are temporarily unavailable for this verified reporter email. Please try again shortly.'}</div> : null}
+          {hasLoadedOnce && !isLoading && error ? <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-6 text-sm text-amber-900">Submission records are temporarily unavailable for this verified reporter email. Please try again shortly.</div> : null}
           {hasLoadedOnce && !isLoading && !error && recentStories.length === 0 ? <div className="mt-4 rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-600">No submissions yet.</div> : null}
 
           <div className="mt-4 space-y-3">
