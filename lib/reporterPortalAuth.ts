@@ -127,6 +127,7 @@ export function maskReporterEmail(email: string | null | undefined): string {
 
 function getAuthSecret(): string {
   const secret = String(
+    process.env.REPORTER_AUTH_SECRET ||
     process.env.REPORTER_PORTAL_AUTH_SECRET ||
     process.env.NEXTAUTH_SECRET ||
     ''
@@ -332,7 +333,7 @@ export function resolveReporterPortalSmtpConfig(): ReporterSmtpConfig | null {
 export function getReporterPortalAuthEnvPresence() {
   const smtp = resolveReporterPortalSmtpConfig();
   return {
-    hasAuthSecret: Boolean(String(process.env.REPORTER_PORTAL_AUTH_SECRET || process.env.NEXTAUTH_SECRET || '').trim()),
+    hasAuthSecret: Boolean(String(process.env.REPORTER_AUTH_SECRET || process.env.REPORTER_PORTAL_AUTH_SECRET || process.env.NEXTAUTH_SECRET || '').trim()),
     hasResendKey: Boolean(resolveReporterPortalResendKey()),
     hasFromEmail: Boolean(resolveReporterPortalFromEmail()),
     hasSmtpHost: Boolean(firstEnv('REPORTER_PORTAL_SMTP_HOST', 'SMTP_HOST', 'MAIL_HOST', 'EMAIL_HOST')),
@@ -470,6 +471,14 @@ export async function sendReporterPortalLoginEmail(input: { email: string; code:
     });
 
     reporterAuthLog('upstream call start', {
+      provider: 'smtp',
+      host: smtp!.host,
+      port: smtp!.port,
+      secure: smtp!.secure,
+    });
+
+    await transporter.verify();
+    reporterAuthLog('transporter verify success', {
       provider: 'smtp',
       host: smtp!.host,
       port: smtp!.port,
