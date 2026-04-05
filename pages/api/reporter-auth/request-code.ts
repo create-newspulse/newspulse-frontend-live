@@ -3,12 +3,15 @@ import {
   createMagicLinkToken,
   createOtpCookie,
   createOtpToken,
+  getReporterPortalAuthEnvPresence,
   generateOtpCode,
   getOtpExpiryIso,
   maskReporterEmail,
   normalizeReporterAuthEmail,
+  ReporterPortalMailError,
   resolveReporterPortalFromEmail,
   resolveReporterPortalResendKey,
+  resolveReporterPortalSmtpConfig,
   sendReporterPortalLoginEmail,
 } from '../../../lib/reporterPortalAuth';
 
@@ -55,8 +58,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const email = normalizeReporterAuthEmail(req.body?.email);
+  const envPresence = getReporterPortalAuthEnvPresence();
   authRouteLog('email normalized', { email: maskReporterEmail(email) });
+  authRouteLog('env presence check', {
+    ...envPresence,
+    hasSiteUrl: Boolean(
+      String(
+        process.env.NEXT_PUBLIC_SITE_URL ||
+        process.env.NEXT_PUBLIC_APP_URL ||
+        process.env.SITE_URL ||
+        process.env.VERCEL_PROJECT_PRODUCTION_URL ||
+        ''
+      ).trim()
+    ),
+  });
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    authRouteLog('final response sent', { status: 400, message: 'VALID_EMAIL_REQUIRED' });
     return res.status(400).json({ ok: false, message: 'VALID_EMAIL_REQUIRED' });
   }
 
@@ -69,9 +86,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const loginPath = `/reporter/login?token=${encodeURIComponent(magicLinkToken)}`;
     const magicLink = `${baseUrl}${loginPath}`;
     authRouteLog('mail transport initialized', {
-      provider: 'resend',
+      provider: resolveReporterPortalResendKey() && resolveReporterPortalFromEmail() ? 'resend' : (resolveReporterPortalSmtpConfig() ? 'smtp' : null),
       hasResendKey: Boolean(resolveReporterPortalResendKey()),
       hasFromEmail: Boolean(resolveReporterPortalFromEmail()),
+      hasSmtpConfig: Boolean(resolveReporterPortalSmtpConfig()),
       siteUrl: baseUrl,
       sendsViaBackend: false,
     });
@@ -80,6 +98,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       email: maskReporterEmail(email),
       delivered: Boolean(delivery && 'delivered' in delivery && delivery.delivered),
       usedDebugCode: Boolean(delivery && 'debugCode' in delivery),
+      provider: delivery.provider,
     });
 
     try {
@@ -90,9 +109,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         email: maskReporterEmail(email),
         error: cookieError?.message || 'COOKIE_WRITE_FAILED',
       });
-      throw cookieError;
+      throw new ReporterPortalMailError('REPORTER_PORTAL_SESSION_STORE_FAILED', {
+        category: 'SESSION_STORE_FAILED',
+        source: 'session-store',
+        code: 'REPORTER_PORTAL_SESSION_STORE_FAILED',
+        cause: cookieError,
+      });
     }
 
+    authRouteLog('final response sent', { status: 200, message: 'OK', provider: delivery.provider });
     return res.status(200).json({
       ok: true,
       email,
@@ -100,15 +125,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       debugCode: 'debugCode' in delivery ? delivery.debugCode : undefined,
     });
   } catch (error: any) {
+    const classifiedError = error instanceof ReporterPortalMailError ? error : new ReporterPortalMailError('REPORTER_PORTAL_EMAIL_SEND_FAILED', {
+      category: 'UNKNOWN_EXCEPTION',
+      source: 'unknown',
+      code: String(error?.code || 'REPORTER_PORTAL_EMAIL_SEND_FAILED'),
+      cause: error,
+    });
     authRouteError('request failed', {
       email: maskReporterEmail(email),
-      error: error?.message || 'REPORTER_PORTAL_EMAIL_SEND_FAILED',
-      hasAuthSecret: Boolean(process.env.REPORTER_PORTAL_AUTH_SECRET || process.env.NEXTAUTH_SECRET),
-      hasResendKey: Boolean(resolveReporterPortalResendKey()),
-      hasFromEmail: Boolean(resolveReporterPortalFromEmail()),
+      error: classifiedError.message,
+      category: classifiedError.category,
+      source: classifiedError.source,
+      provider: classifiedError.provider,
+      statusCode: classifiedError.statusCode,
+      code: classifiedError.code,
+      safeBody: classifiedError.safeBody,
+      ...envPresence,
       siteUrl: resolveSiteUrl(req),
       sendsViaBackend: false,
     });
+    authRouteLog('final response sent', { status: 503, message: 'REPORTER_PORTAL_EMAIL_SEND_FAILED', category: classifiedError.category });
     return res.status(503).json({ ok: false, message: 'REPORTER_PORTAL_EMAIL_SEND_FAILED' });
   }
 }

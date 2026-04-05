@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import nodemailer from 'nodemailer';
 
 export const REPORTER_SESSION_COOKIE = 'np_reporter_portal_session';
 export const REPORTER_OTP_COOKIE = 'np_reporter_portal_otp';
@@ -25,6 +26,64 @@ export type ReporterSessionPayload = SignedPayload & {
 export type ReporterMagicLinkPayload = SignedPayload & {
   kind: 'magic-link';
 };
+
+export type ReporterMailFailureCategory =
+  | 'CONFIG_MISSING'
+  | 'MAIL_AUTH_FAILED'
+  | 'MAIL_PROVIDER_UNAVAILABLE'
+  | 'UPSTREAM_BACKEND_FAILED'
+  | 'SESSION_STORE_FAILED'
+  | 'UNKNOWN_EXCEPTION';
+
+type ReporterMailProvider = 'resend' | 'smtp';
+
+type ReporterMailSendResult = {
+  delivered: boolean;
+  provider: ReporterMailProvider;
+  debugCode?: string;
+};
+
+type ReporterMailErrorOptions = {
+  category: ReporterMailFailureCategory;
+  source: 'mail-config' | 'mail-provider' | 'session-store' | 'unknown';
+  statusCode?: number;
+  provider?: ReporterMailProvider;
+  safeBody?: string;
+  code?: string;
+  cause?: unknown;
+};
+
+type ReporterSmtpConfig = {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  pass: string;
+  from: string;
+};
+
+export class ReporterPortalMailError extends Error {
+  category: ReporterMailFailureCategory;
+  source: 'mail-config' | 'mail-provider' | 'session-store' | 'unknown';
+  statusCode?: number;
+  provider?: ReporterMailProvider;
+  safeBody?: string;
+  code?: string;
+
+  constructor(message: string, options: ReporterMailErrorOptions) {
+    super(message);
+    this.name = 'ReporterPortalMailError';
+    this.category = options.category;
+    this.source = options.source;
+    this.statusCode = options.statusCode;
+    this.provider = options.provider;
+    this.safeBody = options.safeBody;
+    this.code = options.code;
+    if (options.cause !== undefined) {
+      (this as Error & { cause?: unknown }).cause = options.cause;
+    }
+  }
+}
 
 function firstEnv(...keys: string[]): string {
   for (const key of keys) {
@@ -233,78 +292,231 @@ export function resolveReporterPortalFromEmail(): string {
     'REPORTER_PORTAL_FROM_EMAIL',
     'RESEND_FROM_EMAIL',
     'REPORTER_PORTAL_EMAIL_FROM',
+    'SMTP_FROM_EMAIL',
+    'SMTP_FROM',
+    'MAIL_FROM',
     'FROM_EMAIL',
     'EMAIL_FROM'
   );
+}
+
+export function resolveReporterPortalSmtpConfig(): ReporterSmtpConfig | null {
+  const host = firstEnv('REPORTER_PORTAL_SMTP_HOST', 'SMTP_HOST', 'MAIL_HOST', 'EMAIL_HOST');
+  const portRaw = firstEnv('REPORTER_PORTAL_SMTP_PORT', 'SMTP_PORT', 'MAIL_PORT', 'EMAIL_PORT');
+  const user = firstEnv('REPORTER_PORTAL_SMTP_USER', 'REPORTER_PORTAL_SMTP_USERNAME', 'SMTP_USER', 'SMTP_USERNAME', 'MAIL_USER', 'MAIL_USERNAME', 'EMAIL_USER');
+  const pass = firstEnv('REPORTER_PORTAL_SMTP_PASS', 'REPORTER_PORTAL_SMTP_PASSWORD', 'SMTP_PASS', 'SMTP_PASSWORD', 'MAIL_PASS', 'MAIL_PASSWORD', 'EMAIL_PASS');
+  const from = resolveReporterPortalFromEmail();
+
+  if (!host || !portRaw || !user || !pass || !from) {
+    return null;
+  }
+
+  const port = Number.parseInt(portRaw, 10);
+  if (!Number.isFinite(port)) {
+    return null;
+  }
+
+  const secureRaw = firstEnv('REPORTER_PORTAL_SMTP_SECURE', 'SMTP_SECURE', 'MAIL_SECURE', 'EMAIL_SECURE').toLowerCase();
+  const secure = secureRaw ? ['1', 'true', 'yes'].includes(secureRaw) : port === 465;
+
+  return {
+    host,
+    port,
+    secure,
+    user,
+    pass,
+    from,
+  };
+}
+
+export function getReporterPortalAuthEnvPresence() {
+  const smtp = resolveReporterPortalSmtpConfig();
+  return {
+    hasAuthSecret: Boolean(String(process.env.REPORTER_PORTAL_AUTH_SECRET || process.env.NEXTAUTH_SECRET || '').trim()),
+    hasResendKey: Boolean(resolveReporterPortalResendKey()),
+    hasFromEmail: Boolean(resolveReporterPortalFromEmail()),
+    hasSmtpHost: Boolean(firstEnv('REPORTER_PORTAL_SMTP_HOST', 'SMTP_HOST', 'MAIL_HOST', 'EMAIL_HOST')),
+    hasSmtpPort: Boolean(firstEnv('REPORTER_PORTAL_SMTP_PORT', 'SMTP_PORT', 'MAIL_PORT', 'EMAIL_PORT')),
+    hasSmtpUser: Boolean(firstEnv('REPORTER_PORTAL_SMTP_USER', 'REPORTER_PORTAL_SMTP_USERNAME', 'SMTP_USER', 'SMTP_USERNAME', 'MAIL_USER', 'MAIL_USERNAME', 'EMAIL_USER')),
+    hasSmtpPass: Boolean(firstEnv('REPORTER_PORTAL_SMTP_PASS', 'REPORTER_PORTAL_SMTP_PASSWORD', 'SMTP_PASS', 'SMTP_PASSWORD', 'MAIL_PASS', 'MAIL_PASSWORD', 'EMAIL_PASS')),
+    smtpReady: Boolean(smtp),
+  };
+}
+
+function classifyResendFailure(status: number): ReporterMailFailureCategory {
+  if (status === 401 || status === 403) return 'MAIL_AUTH_FAILED';
+  if (status === 429 || status >= 500) return 'MAIL_PROVIDER_UNAVAILABLE';
+  return 'UNKNOWN_EXCEPTION';
+}
+
+function classifySmtpFailure(error: unknown): ReporterMailFailureCategory {
+  const code = String((error as { code?: string })?.code || '').toUpperCase();
+  if (code === 'EAUTH') return 'MAIL_AUTH_FAILED';
+  if (['ECONNECTION', 'ESOCKET', 'ETIMEDOUT', 'EDNS', 'ENOTFOUND', 'ECONNREFUSED'].includes(code)) {
+    return 'MAIL_PROVIDER_UNAVAILABLE';
+  }
+  return 'UNKNOWN_EXCEPTION';
+}
+
+function getPreferredReporterPortalMailProvider(): ReporterMailProvider | null {
+  if (resolveReporterPortalResendKey() && resolveReporterPortalFromEmail()) {
+    return 'resend';
+  }
+  if (resolveReporterPortalSmtpConfig()) {
+    return 'smtp';
+  }
+  return null;
 }
 
 export async function sendReporterPortalLoginEmail(input: { email: string; code: string; magicLink: string }) {
   const to = normalizeReporterAuthEmail(input.email);
   const resendKey = resolveReporterPortalResendKey();
   const from = resolveReporterPortalFromEmail();
+  const smtp = resolveReporterPortalSmtpConfig();
+  const provider = getPreferredReporterPortalMailProvider();
 
   reporterAuthLog('mail transport initialized', {
-    provider: 'resend',
+    provider,
     hasResendKey: Boolean(resendKey),
     hasFromEmail: Boolean(from),
+    hasSmtpConfig: Boolean(smtp),
     fromDomain: from.includes('@') ? from.split('@')[1] : '',
     recipient: maskReporterEmail(to),
   });
 
-  if (!resendKey || !from) {
+  if (!provider) {
     if (process.env.NODE_ENV !== 'production') {
       reporterAuthLog('mail transport fallback debug code', { recipient: maskReporterEmail(to) });
-      return { delivered: false, debugCode: input.code } as const;
+      return { delivered: false, debugCode: input.code, provider: 'resend' } as const;
     }
     reporterAuthError('mail transport misconfigured', {
       hasResendKey: Boolean(resendKey),
       hasFromEmail: Boolean(from),
+      hasSmtpConfig: Boolean(smtp),
     });
-    throw new Error('REPORTER_PORTAL_EMAIL_NOT_CONFIGURED');
+    throw new ReporterPortalMailError('REPORTER_PORTAL_EMAIL_NOT_CONFIGURED', {
+      category: 'CONFIG_MISSING',
+      source: 'mail-config',
+      code: 'REPORTER_PORTAL_EMAIL_NOT_CONFIGURED',
+    });
   }
 
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${resendKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from,
-      to: [to],
-      subject: 'Your News Pulse Reporter Portal verification',
-      html: `
-        <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827;max-width:560px;margin:0 auto;">
-          <h2 style="margin-bottom:12px;">Reporter Portal verification</h2>
-          <p>Use this one-time code to finish signing in to your News Pulse Reporter Portal:</p>
-          <div style="margin:20px 0;padding:16px 20px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;font-size:28px;font-weight:700;letter-spacing:0.22em;text-align:center;">${input.code}</div>
-          <p>The code expires in 10 minutes.</p>
-          <p>You can also sign in using this secure link:</p>
-          <p><a href="${input.magicLink}" style="display:inline-block;padding:12px 18px;background:#2563eb;color:#fff;text-decoration:none;border-radius:999px;font-weight:600;">Open Reporter Portal</a></p>
-          <p style="font-size:12px;color:#6b7280;">If you did not request this email, you can ignore it.</p>
-        </div>
-      `,
-    }),
-  });
+  const subject = 'Your News Pulse Reporter Portal verification';
+  const html = `
+    <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827;max-width:560px;margin:0 auto;">
+      <h2 style="margin-bottom:12px;">Reporter Portal verification</h2>
+      <p>Use this one-time code to finish signing in to your News Pulse Reporter Portal:</p>
+      <div style="margin:20px 0;padding:16px 20px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;font-size:28px;font-weight:700;letter-spacing:0.22em;text-align:center;">${input.code}</div>
+      <p>The code expires in 10 minutes.</p>
+      <p>You can also sign in using this secure link:</p>
+      <p><a href="${input.magicLink}" style="display:inline-block;padding:12px 18px;background:#2563eb;color:#fff;text-decoration:none;border-radius:999px;font-weight:600;">Open Reporter Portal</a></p>
+      <p style="font-size:12px;color:#6b7280;">If you did not request this email, you can ignore it.</p>
+    </div>
+  `;
 
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    reporterAuthError('mail send failed', {
+  if (provider === 'resend') {
+    reporterAuthLog('upstream call start', { provider: 'resend', url: 'https://api.resend.com/emails' });
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${resendKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from,
+        to: [to],
+        subject,
+        html,
+      }),
+    });
+
+    reporterAuthLog('upstream call end', { provider: 'resend', status: response.status });
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      reporterAuthError('mail send failed', {
+        provider: 'resend',
+        status: response.status,
+        body: safeProviderErrorBody(text),
+        recipient: maskReporterEmail(to),
+      });
+      throw new ReporterPortalMailError('REPORTER_PORTAL_EMAIL_SEND_FAILED', {
+        category: classifyResendFailure(response.status),
+        source: 'mail-provider',
+        provider: 'resend',
+        statusCode: response.status,
+        safeBody: safeProviderErrorBody(text),
+        code: 'REPORTER_PORTAL_EMAIL_SEND_FAILED',
+      });
+    }
+
+    reporterAuthLog('mail send success', {
       provider: 'resend',
       status: response.status,
-      body: safeProviderErrorBody(text),
       recipient: maskReporterEmail(to),
     });
-    throw new Error('REPORTER_PORTAL_EMAIL_SEND_FAILED');
+
+    return { delivered: true, provider: 'resend' };
   }
 
-  reporterAuthLog('mail send success', {
-    provider: 'resend',
-    status: response.status,
-    recipient: maskReporterEmail(to),
-  });
+  try {
+    const transporter = nodemailer.createTransport({
+      host: smtp!.host,
+      port: smtp!.port,
+      secure: smtp!.secure,
+      auth: {
+        user: smtp!.user,
+        pass: smtp!.pass,
+      },
+    });
 
-  return { delivered: true } as const;
+    reporterAuthLog('upstream call start', {
+      provider: 'smtp',
+      host: smtp!.host,
+      port: smtp!.port,
+      secure: smtp!.secure,
+    });
+
+    const info = await transporter.sendMail({
+      from: smtp!.from,
+      to,
+      subject,
+      html,
+    });
+
+    reporterAuthLog('upstream call end', {
+      provider: 'smtp',
+      accepted: info.accepted.length,
+      rejected: info.rejected.length,
+      response: safeProviderErrorBody(info.response || ''),
+    });
+
+    reporterAuthLog('mail send success', {
+      provider: 'smtp',
+      recipient: maskReporterEmail(to),
+      accepted: info.accepted.length,
+      rejected: info.rejected.length,
+    });
+  } catch (error) {
+    reporterAuthError('mail send failed', {
+      provider: 'smtp',
+      code: String((error as { code?: string })?.code || ''),
+      command: String((error as { command?: string })?.command || ''),
+      responseCode: Number((error as { responseCode?: number })?.responseCode || 0) || undefined,
+      response: safeProviderErrorBody(String((error as { response?: string })?.response || '')),
+      recipient: maskReporterEmail(to),
+    });
+    throw new ReporterPortalMailError('REPORTER_PORTAL_EMAIL_SEND_FAILED', {
+      category: classifySmtpFailure(error),
+      source: 'mail-provider',
+      provider: 'smtp',
+      statusCode: Number((error as { responseCode?: number })?.responseCode || 0) || undefined,
+      safeBody: safeProviderErrorBody(String((error as { response?: string })?.response || '')),
+      code: String((error as { code?: string })?.code || 'REPORTER_PORTAL_EMAIL_SEND_FAILED'),
+      cause: error,
+    });
+  }
+
+  return { delivered: true, provider: 'smtp' };
 }
 
 export function getOtpAttemptsRemaining(attempts: number): number {
