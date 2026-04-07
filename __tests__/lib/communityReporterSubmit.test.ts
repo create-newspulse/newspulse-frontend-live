@@ -38,7 +38,10 @@ describe('submitCommunityStory (identity anchors)', () => {
     expect(body.reporterAccountId).toBe('acct-1');
     expect(body.reporterProfileId).toBe('prof-1');
     expect(body.reporterEmail).toBe('test@example.com');
+    expect(body.reporterPhone).toBe('999');
+    expect(body.phone).toBe('999');
     expect(body.reporterWhatsApp).toBe('888');
+    expect(body.whatsapp).toBe('888');
     expect(body.reporterDistrict).toBe('Ahmedabad');
     expect(body.consentToContact).toBe(true);
     expect(body.coverageScope).toBe('regional');
