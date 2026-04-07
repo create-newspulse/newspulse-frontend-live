@@ -20,6 +20,10 @@ type ReporterChallengeState = {
   resendCount: number;
 };
 
+function isSessionExpiredCode(code: string | null): boolean {
+  return code === 'SESSION_EXPIRED' || code === 'REPORTER_SESSION_MISSING' || code === 'REPORTER_VERIFY_SESSION_MISSING';
+}
+
 function getSafeNextTarget(value: string | string[] | undefined) {
   const candidate = Array.isArray(value) ? value[0] : value;
   if (!candidate || !candidate.startsWith('/reporter/')) {
@@ -68,6 +72,9 @@ function getRequestCodeErrorMessage(code: string | null, status: number | null):
 }
 
 function getVerifyCodeErrorMessage(code: string | null, challenge: ReporterChallengeState | null, data?: any): string {
+  if (isSessionExpiredCode(code)) {
+    return 'Your verification session expired. Request a new code.';
+  }
   if (code === 'OTP_EXPIRED_OR_MISSING' || code === 'REPORTER_OTP_EXPIRED' || code === 'REPORTER_OTP_MISSING') {
     return 'This verification code expired. Request a fresh code.';
   }
@@ -100,6 +107,8 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
   const nextTarget = getSafeNextTarget(router.query.next);
   const latestRequestIdRef = useRef(0);
   const activeChallengeRef = useRef<ReporterChallengeState | null>(null);
+  const sendInFlightRef = useRef(false);
+  const verifyInFlightRef = useRef(false);
 
   useEffect(() => {
     const storedProfile = loadReporterPortalProfile();
@@ -123,6 +132,10 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
   }, [activeChallenge]);
 
   const sendVerificationCode = async (normalizedEmail: string, options?: { resend?: boolean }) => {
+    if (sendInFlightRef.current) {
+      return;
+    }
+    sendInFlightRef.current = true;
     const requestId = latestRequestIdRef.current + 1;
     latestRequestIdRef.current = requestId;
     setError(null);
@@ -163,10 +176,20 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
       setStep('code');
       setNotice(options?.resend ? 'A new verification code was sent. Use the most recent code only.' : 'Verification code sent. Check your email for the code or secure sign-in link.');
     } finally {
+      sendInFlightRef.current = false;
       if (requestId === latestRequestIdRef.current) {
         setIsSending(false);
       }
     }
+  };
+
+  const resetChallengeToEmailStep = (message: string) => {
+    activeChallengeRef.current = null;
+    setActiveChallenge(null);
+    setCode('');
+    setStep('email');
+    setNotice(null);
+    setError(message);
   };
 
   useEffect(() => {
@@ -242,6 +265,9 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
         {step === 'email' ? (
           <form className="mt-6 space-y-4" onSubmit={async (event) => {
             event.preventDefault();
+            if (sendInFlightRef.current || isVerifying) {
+              return;
+            }
             setError(null);
             setNotice(null);
             const normalizedEmail = normalizeReporterEmail(email);
@@ -265,6 +291,9 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
         {step === 'code' ? (
           <form className="mt-6 space-y-4" onSubmit={async (event) => {
             event.preventDefault();
+            if (verifyInFlightRef.current || sendInFlightRef.current) {
+              return;
+            }
             setError(null);
             setNotice(null);
             const currentChallenge = activeChallenge;
@@ -280,6 +309,7 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
               return;
             }
 
+            verifyInFlightRef.current = true;
             setIsVerifying(true);
             const requestUrl = resolveReporterAuthUrl('/api/reporter-auth/verify-code');
             logReporterAuthEvent('verify-code request', { url: requestUrl, backendCode: null, credentialsIncluded: true, requestId: currentChallenge.requestId });
@@ -297,6 +327,10 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
               }
               if (!res.ok || data?.ok !== true) {
                 logReporterAuthFailure('verify-code failed', { url: requestUrl, status: res.status, backendCode: responseCode, credentialsIncluded: true, requestId: currentChallenge.requestId });
+                if (isSessionExpiredCode(responseCode) || res.status === 401 || (res.status >= 500 && /SESSION|REPORTER_SESSION_MISSING/i.test(String(responseCode || data?.message || '')))) {
+                  resetChallengeToEmailStep('Your verification session expired. Request a new code.');
+                  return;
+                }
                 const message = getVerifyCodeErrorMessage(responseCode, currentChallenge, data);
                 setError(message);
                 if (responseCode === 'OTP_EXPIRED_OR_MISSING' || responseCode === 'REPORTER_OTP_EXPIRED' || responseCode === 'REPORTER_OTP_MISSING') {
@@ -315,6 +349,7 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
               setNotice('Verification successful. Opening Reporter Portal…');
               await router.push(nextTarget);
             } finally {
+              verifyInFlightRef.current = false;
               setIsVerifying(false);
             }
           }}>
@@ -331,10 +366,7 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
               </button>
               <button type="button" disabled={isSending || isVerifying} onClick={() => {
                 if (!activeChallenge?.email) {
-                  setStep('email');
-                  setCode('');
-                  setError(null);
-                  setNotice(null);
+                  resetChallengeToEmailStep('Your verification session expired. Request a new code.');
                   return;
                 }
                 void sendVerificationCode(activeChallenge.email, { resend: true });
