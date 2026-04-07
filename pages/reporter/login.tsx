@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import type { GetServerSideProps } from 'next';
 import ReporterPortalLayout from '../../components/reporter-portal/ReporterPortalLayout';
@@ -11,6 +11,14 @@ import { loadReporterPortalProfile, normalizeReporterEmail, saveReporterPortalPr
 import type { FeatureToggleProps } from '../../types/community-reporter';
 
 const DEFAULT_PORTAL_TARGET = '/reporter/dashboard';
+
+type ReporterChallengeState = {
+  requestId: number;
+  email: string;
+  expiresAt: string | null;
+  debugCode: string | null;
+  resendCount: number;
+};
 
 function getSafeNextTarget(value: string | string[] | undefined) {
   const candidate = Array.isArray(value) ? value[0] : value;
@@ -59,6 +67,22 @@ function getRequestCodeErrorMessage(code: string | null, status: number | null):
   return 'Could not send a verification code right now.';
 }
 
+function getVerifyCodeErrorMessage(code: string | null, challenge: ReporterChallengeState | null, data?: any): string {
+  if (code === 'OTP_EXPIRED_OR_MISSING' || code === 'REPORTER_OTP_EXPIRED' || code === 'REPORTER_OTP_MISSING') {
+    return 'This verification code expired. Request a fresh code.';
+  }
+  if (code === 'OTP_REPLACED_BY_NEWER_CODE' || code === 'REPORTER_OTP_REPLACED' || code === 'NEWER_CODE_ACTIVE') {
+    return 'A newer verification code was sent. Use the most recent code only.';
+  }
+  if (code === 'OTP_INVALID' || code === 'REPORTER_OTP_INVALID' || code === 'INVALID_OTP') {
+    if ((challenge?.resendCount || 0) > 0) {
+      return 'A newer verification code was sent. Use the most recent code only.';
+    }
+    return `Invalid code.${typeof data?.attemptsRemaining === 'number' ? ` Attempts remaining: ${data.attemptsRemaining}.` : ''}`;
+  }
+  return 'Could not verify this code.';
+}
+
 export default function ReporterLoginPage({ communityReporterClosed, reporterPortalClosed }: FeatureToggleProps) {
   const router = useRouter();
   const { toggles } = usePublicFounderToggles({ communityReporterClosed, reporterPortalClosed, updatedAt: null });
@@ -71,10 +95,11 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
   const [isSending, setIsSending] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [portalAvailable, setPortalAvailable] = useState<boolean | null>(null);
-  const [expiresAt, setExpiresAt] = useState<string | null>(null);
-  const [debugCode, setDebugCode] = useState<string | null>(null);
+  const [activeChallenge, setActiveChallenge] = useState<ReporterChallengeState | null>(null);
   const token = typeof router.query.token === 'string' ? router.query.token : '';
   const nextTarget = getSafeNextTarget(router.query.next);
+  const latestRequestIdRef = useRef(0);
+  const activeChallengeRef = useRef<ReporterChallengeState | null>(null);
 
   useEffect(() => {
     const storedProfile = loadReporterPortalProfile();
@@ -92,6 +117,57 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
       router.replace(nextTarget).catch(() => {});
     }
   }, [nextTarget, router, session]);
+
+  useEffect(() => {
+    activeChallengeRef.current = activeChallenge;
+  }, [activeChallenge]);
+
+  const sendVerificationCode = async (normalizedEmail: string, options?: { resend?: boolean }) => {
+    const requestId = latestRequestIdRef.current + 1;
+    latestRequestIdRef.current = requestId;
+    setError(null);
+    setNotice(null);
+    setIsSending(true);
+    const requestUrl = resolveReporterAuthUrl('/api/reporter-auth/request-code');
+    logReporterAuthEvent('request-code request', { url: requestUrl, credentialsIncluded: true, requestId, resend: Boolean(options?.resend) });
+    try {
+      const res = await fetch(requestUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email: normalizedEmail }),
+      });
+      const data = await res.json().catch(() => null as any);
+      const responseCode = getReporterResponseCode(data);
+      if (requestId !== latestRequestIdRef.current) {
+        return;
+      }
+      if (!res.ok || data?.ok !== true) {
+        logReporterAuthFailure('request-code failed', { url: requestUrl, status: res.status, backendCode: responseCode, credentialsIncluded: true, requestId, resend: Boolean(options?.resend) });
+        setError(getRequestCodeErrorMessage(responseCode, res.status));
+        return;
+      }
+      logReporterAuthEvent('request-code success', { url: requestUrl, status: res.status, backendCode: responseCode, credentialsIncluded: true, requestId, resend: Boolean(options?.resend) });
+      saveReporterPortalProfile({ ...(loadReporterPortalProfile() || {}), email: normalizedEmail });
+      setEmail(normalizedEmail);
+      setCode('');
+      const nextChallenge = {
+        requestId,
+        email: normalizedEmail,
+        expiresAt: typeof data?.expiresAt === 'string' ? data.expiresAt : null,
+        debugCode: typeof data?.debugCode === 'string' ? data.debugCode : null,
+        resendCount: options?.resend ? ((activeChallengeRef.current?.resendCount || 0) + 1) : 0,
+      };
+      activeChallengeRef.current = nextChallenge;
+      setActiveChallenge(nextChallenge);
+      setStep('code');
+      setNotice(options?.resend ? 'A new verification code was sent. Use the most recent code only.' : 'Verification code sent. Check your email for the code or secure sign-in link.');
+    } finally {
+      if (requestId === latestRequestIdRef.current) {
+        setIsSending(false);
+      }
+    }
+  };
 
   useEffect(() => {
     if (!token) return;
@@ -173,33 +249,7 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
               setError('Enter the same valid email address you use for community reporter submissions.');
               return;
             }
-            setIsSending(true);
-            const requestUrl = resolveReporterAuthUrl('/api/reporter-auth/request-code');
-            logReporterAuthEvent('request-code request', { url: requestUrl, credentialsIncluded: true });
-            try {
-                const res = await fetch(requestUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({ email: normalizedEmail }),
-              });
-              const data = await res.json().catch(() => null as any);
-              const responseCode = getReporterResponseCode(data);
-              if (!res.ok || data?.ok !== true) {
-                  logReporterAuthFailure('request-code failed', { url: requestUrl, status: res.status, backendCode: responseCode, credentialsIncluded: true });
-                setError(getRequestCodeErrorMessage(responseCode, res.status));
-                return;
-              }
-                logReporterAuthEvent('request-code success', { url: requestUrl, status: res.status, backendCode: responseCode, credentialsIncluded: true });
-              saveReporterPortalProfile({ ...(loadReporterPortalProfile() || {}), email: normalizedEmail });
-              setEmail(normalizedEmail);
-              setExpiresAt(typeof data?.expiresAt === 'string' ? data.expiresAt : null);
-              setDebugCode(typeof data?.debugCode === 'string' ? data.debugCode : null);
-              setNotice('Verification code sent. Check your email for the code or secure sign-in link.');
-              setStep('code');
-            } finally {
-              setIsSending(false);
-            }
+            await sendVerificationCode(normalizedEmail);
           }}>
             <div>
               <label htmlFor="reporterEmail" className="mb-1 block text-sm font-semibold text-slate-900">Reporter email</label>
@@ -217,8 +267,14 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
             event.preventDefault();
             setError(null);
             setNotice(null);
-            const normalizedEmail = normalizeReporterEmail(email);
+            const currentChallenge = activeChallenge;
+            const normalizedEmail = currentChallenge?.email || normalizeReporterEmail(email);
             const normalizedCode = String(code || '').trim();
+            if (!currentChallenge) {
+              setError('Request a new verification code to continue.');
+              setStep('email');
+              return;
+            }
             if (normalizedCode.length < 6) {
               setError('Enter the 6-digit verification code from your email.');
               return;
@@ -226,7 +282,7 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
 
             setIsVerifying(true);
             const requestUrl = resolveReporterAuthUrl('/api/reporter-auth/verify-code');
-            logReporterAuthEvent('verify-code request', { url: requestUrl, backendCode: null, credentialsIncluded: true });
+            logReporterAuthEvent('verify-code request', { url: requestUrl, backendCode: null, credentialsIncluded: true, requestId: currentChallenge.requestId });
             try {
               const res = await fetch(requestUrl, {
                 method: 'POST',
@@ -236,25 +292,26 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
               });
               const data = await res.json().catch(() => null as any);
               const responseCode = getReporterResponseCode(data);
+              if (activeChallengeRef.current?.requestId !== currentChallenge.requestId) {
+                return;
+              }
               if (!res.ok || data?.ok !== true) {
-                  logReporterAuthFailure('verify-code failed', { url: requestUrl, status: res.status, backendCode: responseCode, credentialsIncluded: true });
-                  if (responseCode === 'OTP_EXPIRED_OR_MISSING' || responseCode === 'REPORTER_OTP_EXPIRED' || responseCode === 'REPORTER_OTP_MISSING') {
-                  setError('This verification code expired. Request a fresh code.');
+                logReporterAuthFailure('verify-code failed', { url: requestUrl, status: res.status, backendCode: responseCode, credentialsIncluded: true, requestId: currentChallenge.requestId });
+                const message = getVerifyCodeErrorMessage(responseCode, currentChallenge, data);
+                setError(message);
+                if (responseCode === 'OTP_EXPIRED_OR_MISSING' || responseCode === 'REPORTER_OTP_EXPIRED' || responseCode === 'REPORTER_OTP_MISSING') {
                   setStep('email');
                   return;
                 }
-                  if (responseCode === 'OTP_INVALID' || responseCode === 'REPORTER_OTP_INVALID' || responseCode === 'INVALID_OTP') {
-                  setError(`Invalid code.${typeof data?.attemptsRemaining === 'number' ? ` Attempts remaining: ${data.attemptsRemaining}.` : ''}`);
-                  return;
-                }
-                setError('Could not verify this code.');
                 return;
               }
 
-                logReporterAuthEvent('verify-code success', { url: requestUrl, status: res.status, backendCode: responseCode, credentialsIncluded: true });
+              logReporterAuthEvent('verify-code success', { url: requestUrl, status: res.status, backendCode: responseCode, credentialsIncluded: true, requestId: currentChallenge.requestId });
 
               saveReporterPortalProfile({ ...(loadReporterPortalProfile() || {}), email: normalizedEmail });
               setStep('success');
+              activeChallengeRef.current = null;
+              setActiveChallenge(null);
               setNotice('Verification successful. Opening Reporter Portal…');
               await router.push(nextTarget);
             } finally {
@@ -264,16 +321,25 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
             <div>
               <label htmlFor="reporterCode" className="mb-1 block text-sm font-semibold text-slate-900">Verification code</label>
               <input id="reporterCode" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value.replace(/\D+/g, '').slice(0, 6))} className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-center text-lg font-semibold tracking-[0.35em] text-slate-900 outline-none ring-0 focus:border-blue-500" placeholder="123456" />
-              <p className="mt-2 text-xs text-slate-500">Code sent to {email}.{expiresAt ? ` Expires ${new Date(expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.` : ''}</p>
-              {debugCode ? <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">Development code: {debugCode}</p> : null}
+              <p className="mt-2 text-xs text-slate-500">Code sent to {activeChallenge?.email || email}.{activeChallenge?.expiresAt ? ` Expires ${new Date(activeChallenge.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.` : ''}</p>
+              {activeChallenge?.debugCode ? <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">Development code: {activeChallenge.debugCode}</p> : null}
             </div>
             {error ? <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
             <div className="flex gap-3">
-              <button type="submit" disabled={isVerifying} className={`flex-1 rounded-2xl px-4 py-3 text-sm font-semibold text-white ${isVerifying ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'}`}>
+              <button type="submit" disabled={isVerifying || isSending} className={`flex-1 rounded-2xl px-4 py-3 text-sm font-semibold text-white ${(isVerifying || isSending) ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'}`}>
                 {isVerifying ? 'Verifying code…' : 'Verify code'}
               </button>
-              <button type="button" onClick={() => { setStep('email'); setCode(''); setError(null); setNotice(null); }} className="rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-                Resend
+              <button type="button" disabled={isSending || isVerifying} onClick={() => {
+                if (!activeChallenge?.email) {
+                  setStep('email');
+                  setCode('');
+                  setError(null);
+                  setNotice(null);
+                  return;
+                }
+                void sendVerificationCode(activeChallenge.email, { resend: true });
+              }} className={`rounded-2xl border border-slate-300 px-4 py-3 text-sm font-semibold text-slate-700 ${(isSending || isVerifying) ? 'cursor-not-allowed bg-slate-100 text-slate-400' : 'hover:bg-slate-50'}`}>
+                {isSending ? 'Sending…' : 'Resend'}
               </button>
             </div>
           </form>

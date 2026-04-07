@@ -105,4 +105,116 @@ describe('pages/reporter/login', () => {
     expect(screen.getByText('Development code: 123456')).toBeTruthy();
     expect(saveReporterPortalProfileMock).toHaveBeenCalledWith({ email: 'reporter@example.com' });
   });
+
+  it('resend resets the OTP input and tells the user to use the latest code only', async () => {
+    (global as any).fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, expiresAt: '2025-01-01T10:30:00.000Z', debugCode: '111111' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, expiresAt: '2025-01-01T10:35:00.000Z', debugCode: '222222' }),
+      });
+
+    render(<ReporterLoginPage communityReporterClosed={false} reporterPortalClosed={false} />);
+
+    fireEvent.change(await screen.findByLabelText('Reporter email'), {
+      target: { value: 'Reporter@Example.com ' },
+    });
+    fireEvent.click(screen.getByText('Send verification code'));
+
+    const codeInput = await screen.findByLabelText('Verification code');
+    fireEvent.change(codeInput, { target: { value: '123456' } });
+    expect((codeInput as HTMLInputElement).value).toBe('123456');
+
+    fireEvent.click(screen.getByText('Resend'));
+
+    await screen.findByText('A new verification code was sent. Use the most recent code only.');
+    expect((screen.getByLabelText('Verification code') as HTMLInputElement).value).toBe('');
+    expect(screen.getByText('Development code: 222222')).toBeTruthy();
+
+    expect((global as any).fetch).toHaveBeenNthCalledWith(
+      2,
+      'http://localhost/api/reporter-auth/request-code',
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'include',
+        body: JSON.stringify({ email: 'reporter@example.com' }),
+      })
+    );
+  });
+
+  it('verifies using the latest active challenge email and shows newer-code messaging after resend', async () => {
+    (global as any).fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, expiresAt: '2025-01-01T10:30:00.000Z', debugCode: '111111' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, expiresAt: '2025-01-01T10:35:00.000Z', debugCode: '222222' }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        json: async () => ({ ok: false, code: 'OTP_INVALID' }),
+      });
+
+    render(<ReporterLoginPage communityReporterClosed={false} reporterPortalClosed={false} />);
+
+    fireEvent.change(await screen.findByLabelText('Reporter email'), {
+      target: { value: 'Reporter@Example.com ' },
+    });
+    fireEvent.click(screen.getByText('Send verification code'));
+    await screen.findByLabelText('Verification code');
+
+    fireEvent.click(screen.getByText('Resend'));
+    await screen.findByText('A new verification code was sent. Use the most recent code only.');
+
+    fireEvent.change(screen.getByLabelText('Verification code'), { target: { value: '111111' } });
+    fireEvent.click(screen.getByText('Verify code'));
+
+    await screen.findByText('A newer verification code was sent. Use the most recent code only.');
+    expect((global as any).fetch).toHaveBeenNthCalledWith(
+      3,
+      'http://localhost/api/reporter-auth/verify-code',
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'include',
+        body: JSON.stringify({ email: 'reporter@example.com', code: '111111' }),
+      })
+    );
+  });
+
+  it('shows a specific expired-code message and returns to the email step', async () => {
+    (global as any).fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, expiresAt: '2025-01-01T10:30:00.000Z', debugCode: '123456' }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        json: async () => ({ ok: false, code: 'OTP_EXPIRED_OR_MISSING' }),
+      });
+
+    render(<ReporterLoginPage communityReporterClosed={false} reporterPortalClosed={false} />);
+
+    fireEvent.change(await screen.findByLabelText('Reporter email'), {
+      target: { value: 'reporter@example.com' },
+    });
+    fireEvent.click(screen.getByText('Send verification code'));
+
+    fireEvent.change(await screen.findByLabelText('Verification code'), { target: { value: '123456' } });
+    fireEvent.click(screen.getByText('Verify code'));
+
+    await screen.findByText('This verification code expired. Request a fresh code.');
+    expect(await screen.findByLabelText('Reporter email')).toBeTruthy();
+  });
 });
