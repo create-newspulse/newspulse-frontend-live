@@ -90,6 +90,10 @@ function getVerifyCodeErrorMessage(code: string | null, challenge: ReporterChall
   return 'Could not verify this code.';
 }
 
+function getVerificationSessionExpiredMessage() {
+  return 'Your verification session expired. Request a new code.';
+}
+
 export default function ReporterLoginPage({ communityReporterClosed, reporterPortalClosed }: FeatureToggleProps) {
   const router = useRouter();
   const { toggles } = usePublicFounderToggles({ communityReporterClosed, reporterPortalClosed, updatedAt: null });
@@ -160,6 +164,25 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
         setError(getRequestCodeErrorMessage(responseCode, res.status));
         return;
       }
+
+      const sessionCheckUrl = resolveReporterAuthUrl('/api/reporter-auth/session');
+      logReporterAuthEvent('verification-session request', { url: sessionCheckUrl, requestId, resend: Boolean(options?.resend) });
+      const sessionRes = await fetch(sessionCheckUrl, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+      });
+      const sessionData = await sessionRes.json().catch(() => null as any);
+      const sessionCode = getReporterResponseCode(sessionData);
+      if (requestId !== latestRequestIdRef.current) {
+        return;
+      }
+      if (!sessionRes.ok || sessionData?.ok !== true) {
+        logReporterAuthFailure('verification-session failed', { url: sessionCheckUrl, status: sessionRes.status, backendCode: sessionCode, requestId, resend: Boolean(options?.resend) });
+        resetChallengeToEmailStep(getVerificationSessionExpiredMessage());
+        return;
+      }
+
       logReporterAuthEvent('request-code success', { url: requestUrl, status: res.status, backendCode: responseCode, credentialsIncluded: true, requestId, resend: Boolean(options?.resend) });
       saveReporterPortalProfile({ ...(loadReporterPortalProfile() || {}), email: normalizedEmail });
       setEmail(normalizedEmail);
@@ -311,6 +334,23 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
 
             verifyInFlightRef.current = true;
             setIsVerifying(true);
+            const sessionCheckUrl = resolveReporterAuthUrl('/api/reporter-auth/session');
+            const sessionRes = await fetch(sessionCheckUrl, {
+              method: 'GET',
+              headers: { Accept: 'application/json' },
+              credentials: 'include',
+            });
+            const sessionData = await sessionRes.json().catch(() => null as any);
+            const sessionCode = getReporterResponseCode(sessionData);
+            if (activeChallengeRef.current?.requestId !== currentChallenge.requestId) {
+              return;
+            }
+            if (!sessionRes.ok || sessionData?.ok !== true) {
+              logReporterAuthFailure('verification-session failed before verify', { url: sessionCheckUrl, status: sessionRes.status, backendCode: sessionCode, credentialsIncluded: true, requestId: currentChallenge.requestId });
+              resetChallengeToEmailStep(getVerificationSessionExpiredMessage());
+              return;
+            }
+
             const requestUrl = resolveReporterAuthUrl('/api/reporter-auth/verify-code');
             logReporterAuthEvent('verify-code request', { url: requestUrl, backendCode: null, credentialsIncluded: true, requestId: currentChallenge.requestId });
             try {
@@ -328,7 +368,7 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
               if (!res.ok || data?.ok !== true) {
                 logReporterAuthFailure('verify-code failed', { url: requestUrl, status: res.status, backendCode: responseCode, credentialsIncluded: true, requestId: currentChallenge.requestId });
                 if (isSessionExpiredCode(responseCode) || res.status === 401 || (res.status >= 500 && /SESSION|REPORTER_SESSION_MISSING/i.test(String(responseCode || data?.message || '')))) {
-                  resetChallengeToEmailStep('Your verification session expired. Request a new code.');
+                  resetChallengeToEmailStep(getVerificationSessionExpiredMessage());
                   return;
                 }
                 const message = getVerifyCodeErrorMessage(responseCode, currentChallenge, data);
@@ -366,7 +406,7 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
               </button>
               <button type="button" disabled={isSending || isVerifying} onClick={() => {
                 if (!activeChallenge?.email) {
-                  resetChallengeToEmailStep('Your verification session expired. Request a new code.');
+                  resetChallengeToEmailStep(getVerificationSessionExpiredMessage());
                   return;
                 }
                 void sendVerificationCode(activeChallenge.email, { resend: true });
