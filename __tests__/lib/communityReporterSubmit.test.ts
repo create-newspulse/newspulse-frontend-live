@@ -42,7 +42,13 @@ describe('submitCommunityStory (identity anchors)', () => {
     expect(body.phone).toBe('999');
     expect(body.reporterWhatsApp).toBe('888');
     expect(body.whatsapp).toBe('888');
+    expect(body.city).toBe('Ahmedabad');
+    expect(body.state).toBe('Gujarat');
+    expect(body.country).toBe('India');
+    expect(body.coverageType).toBe('regional');
     expect(body.reporterDistrict).toBe('Ahmedabad');
+    expect(body.reporterProfile.phone).toBe('999');
+    expect(body.reporterProfile.city).toBe('Ahmedabad');
     expect(body.consentToContact).toBe(true);
     expect(body.coverageScope).toBe('regional');
     expect(Array.isArray(body.beats)).toBe(true);
