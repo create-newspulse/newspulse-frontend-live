@@ -63,6 +63,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const email = normalizeReporterAuthEmail(req.body?.email);
   const backendUrl = resolveReporterAuthProxyUrl('/api/reporter-auth/request-code');
   const envPresence = getReporterPortalAuthEnvPresence();
+  let shouldUseLocalFallback = false;
   authRouteLog('email normalized', { email: maskReporterEmail(email) });
   authRouteLog('env presence check', {
     ...envPresence,
@@ -102,19 +103,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
 
       if (!upstream.ok) {
+        if ((upstream.status || 500) >= 500) {
+          authRouteError('proxy request failed, falling back to local delivery', {
+            targetUrl: backendUrl,
+            status: upstream.status,
+            backendCode: String(data?.code || data?.message || '').trim() || null,
+          });
+          shouldUseLocalFallback = true;
+        }
+      }
+
+      if (!upstream.ok && !shouldUseLocalFallback) {
         forwardReporterProxyCookies(res, upstream.headers);
         return res.status(upstream.status || 500).json(data || { ok: false, message: text || 'REPORTER_REQUEST_CODE_FAILED' });
       }
 
-      forwardReporterProxyCookies(res, upstream.headers, [createChallengeCookie(createChallengeToken(email, data?.expiresAt))]);
+      if (!upstream.ok && shouldUseLocalFallback) {
+        forwardReporterProxyCookies(res, upstream.headers);
+      }
 
-      return res.status(200).json({ ...(data || {}), ok: data?.ok !== false, email: data?.email || email });
+      if (!shouldUseLocalFallback) {
+        forwardReporterProxyCookies(res, upstream.headers, [createChallengeCookie(createChallengeToken(email, data?.expiresAt))]);
+
+        return res.status(200).json({ ...(data || {}), ok: data?.ok !== false, email: data?.email || email });
+      }
     } catch (error: any) {
       authRouteError('proxy request failed', {
         targetUrl: backendUrl,
         error: error?.message || 'REPORTER_REQUEST_CODE_PROXY_FAILED',
       });
-      return res.status(503).json({ ok: false, code: 'REPORTER_EMAIL_UNAVAILABLE', message: 'REPORTER_PORTAL_EMAIL_SEND_FAILED' });
+      shouldUseLocalFallback = true;
     }
   }
 

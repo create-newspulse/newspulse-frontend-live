@@ -2,11 +2,21 @@ jest.mock('../../../../lib/publicApiBase', () => ({
   getPublicApiBaseUrl: () => 'http://localhost:3010',
 }));
 
+jest.mock('../../../../lib/reporterPortalAuth', () => {
+  const actual = jest.requireActual('../../../../lib/reporterPortalAuth');
+  return {
+    ...actual,
+    sendReporterPortalLoginEmail: jest.fn(async () => ({ delivered: true, provider: 'resend', debugCode: '123456' })),
+  };
+});
+
 import handler from '../../../../pages/api/reporter-auth/request-code';
+import { sendReporterPortalLoginEmail } from '../../../../lib/reporterPortalAuth';
 
 describe('pages/api/reporter-auth/request-code', () => {
   beforeEach(() => {
     (global as any).fetch = jest.fn();
+    (sendReporterPortalLoginEmail as jest.Mock).mockClear();
   });
 
   it('sets a frontend challenge cookie when the proxied request-code call succeeds', async () => {
@@ -28,6 +38,33 @@ describe('pages/api/reporter-auth/request-code', () => {
 
     expect(res.statusCode).toBe(200);
     const cookies = ([] as string[]).concat(res.headers['Set-Cookie'] || []);
+    expect(cookies.some((value) => value.includes('np_reporter_portal_challenge='))).toBe(true);
+  });
+
+  it('falls back to local email delivery when the proxied request-code call returns 503', async () => {
+    (global as any).fetch.mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+      headers: new Headers(),
+      text: async () => JSON.stringify({ ok: false, code: 'REPORTER_EMAIL_UNAVAILABLE', message: 'REPORTER_PORTAL_EMAIL_SEND_FAILED' }),
+    });
+
+    const req = {
+      method: 'POST',
+      body: { email: 'reporter@example.com' },
+      headers: {
+        host: 'www.newspulse.co.in',
+        'x-forwarded-proto': 'https',
+      },
+    } as any;
+
+    const res = createMockResponse();
+    await handler(req, res as any);
+
+    expect(res.statusCode).toBe(200);
+    expect(sendReporterPortalLoginEmail).toHaveBeenCalledTimes(1);
+    const cookies = ([] as string[]).concat(res.headers['Set-Cookie'] || []);
+    expect(cookies.some((value) => value.includes('np_reporter_portal_otp='))).toBe(true);
     expect(cookies.some((value) => value.includes('np_reporter_portal_challenge='))).toBe(true);
   });
 });
