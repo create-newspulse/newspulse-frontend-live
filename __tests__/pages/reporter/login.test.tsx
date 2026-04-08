@@ -140,6 +140,47 @@ describe('pages/reporter/login', () => {
     expect(saveReporterPortalProfileMock).not.toHaveBeenCalled();
   });
 
+  it('keeps the user on the email step and shows a mailer outage message when request-code returns 503', async () => {
+    (global as any).fetch.mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+      json: async () => ({ ok: false, code: 'REPORTER_PORTAL_EMAIL_SEND_FAILED' }),
+    });
+
+    render(<ReporterLoginPage communityReporterClosed={false} reporterPortalClosed={false} />);
+
+    fireEvent.change(await screen.findByLabelText('Reporter email'), {
+      target: { value: 'reporter@example.com' },
+    });
+    fireEvent.click(screen.getByText('Send verification code'));
+
+    await screen.findByText('Verification email is temporarily unavailable. Please try again shortly.');
+    expect(await screen.findByLabelText('Reporter email')).toBeTruthy();
+    expect((screen.getByLabelText('Reporter email') as HTMLInputElement).value).toBe('reporter@example.com');
+    expect(screen.queryByLabelText('Verification code')).toBeNull();
+    expect((global as any).fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the user on the email step and shows the cooldown message when request-code returns 429', async () => {
+    (global as any).fetch.mockResolvedValueOnce({
+      ok: false,
+      status: 429,
+      json: async () => ({ ok: false, code: 'RATE_LIMITED' }),
+    });
+
+    render(<ReporterLoginPage communityReporterClosed={false} reporterPortalClosed={false} />);
+
+    fireEvent.change(await screen.findByLabelText('Reporter email'), {
+      target: { value: 'reporter@example.com' },
+    });
+    fireEvent.click(screen.getByText('Send verification code'));
+
+    await screen.findByText('Please wait a moment before requesting another verification code.');
+    expect(await screen.findByLabelText('Reporter email')).toBeTruthy();
+    expect(screen.queryByLabelText('Verification code')).toBeNull();
+    expect((global as any).fetch).toHaveBeenCalledTimes(1);
+  });
+
   it('resend resets the OTP input and tells the user to use the latest code only', async () => {
     (global as any).fetch
       .mockResolvedValueOnce({
@@ -221,7 +262,7 @@ describe('pages/reporter/login', () => {
       .mockResolvedValueOnce({
         ok: false,
         status: 400,
-        json: async () => ({ ok: false, code: 'OTP_INVALID' }),
+        json: async () => ({ ok: false, code: 'OTP_REPLACED_BY_NEWER_CODE' }),
       });
 
     render(<ReporterLoginPage communityReporterClosed={false} reporterPortalClosed={false} />);
@@ -248,6 +289,58 @@ describe('pages/reporter/login', () => {
         body: JSON.stringify({ email: 'reporter@example.com', code: '111111' }),
       })
     );
+  });
+
+  it('shows an incorrect-code message after resend when the OTP is wrong but not explicitly replaced', async () => {
+    (global as any).fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, expiresAt: '2025-01-01T10:30:00.000Z', debugCode: '111111' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:30:00.000Z' } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, expiresAt: '2025-01-01T10:35:00.000Z', debugCode: '222222' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:35:00.000Z' } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:35:00.000Z' } }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        json: async () => ({ ok: false, code: 'OTP_INVALID', attemptsRemaining: 2 }),
+      });
+
+    render(<ReporterLoginPage communityReporterClosed={false} reporterPortalClosed={false} />);
+
+    fireEvent.change(await screen.findByLabelText('Reporter email'), {
+      target: { value: 'Reporter@Example.com ' },
+    });
+    fireEvent.click(screen.getByText('Send verification code'));
+    await screen.findByLabelText('Verification code');
+
+    fireEvent.click(screen.getByText('Resend'));
+    await screen.findByText('A new verification code was sent. Use the most recent code only.');
+
+    fireEvent.change(screen.getByLabelText('Verification code'), { target: { value: '333333' } });
+    fireEvent.click(screen.getByText('Verify code'));
+
+    await screen.findByText('That verification code is incorrect. Attempts remaining: 2.');
+    expect(screen.queryByText('A newer verification code was sent. Use the most recent code only.')).toBeNull();
+    expect(await screen.findByLabelText('Verification code')).toBeTruthy();
   });
 
   it('shows a specific expired-code message and returns to the email step', async () => {

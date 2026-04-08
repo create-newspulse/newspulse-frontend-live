@@ -97,7 +97,13 @@ function getRequestCodeErrorMessage(code: string | null, status: number | null):
   if (code === 'INVALID_EMAIL' || code === 'VALID_EMAIL_REQUIRED') {
     return 'Enter the same valid email address you use for community reporter submissions.';
   }
-  if (code === 'REPORTER_EMAIL_UNAVAILABLE' || code === 'REPORTER_PORTAL_EMAIL_NOT_CONFIGURED' || code === 'REPORTER_PORTAL_EMAIL_SEND_FAILED') {
+  if (
+    (status || 0) >= 500
+    || code === 'REPORTER_EMAIL_UNAVAILABLE'
+    || code === 'REPORTER_PORTAL_EMAIL_NOT_CONFIGURED'
+    || code === 'REPORTER_PORTAL_EMAIL_SEND_FAILED'
+    || code === 'REPORTER_PORTAL_SESSION_STORE_FAILED'
+  ) {
     return 'Verification email is temporarily unavailable. Please try again shortly.';
   }
   return 'Could not send a verification code right now.';
@@ -117,10 +123,7 @@ function getVerifyCodeErrorMessage(code: string | null, challenge: ReporterChall
     return 'A newer verification code was sent. Use the most recent code only.';
   }
   if (code === 'OTP_INVALID' || code === 'REPORTER_OTP_INVALID' || code === 'INVALID_OTP') {
-    if ((challenge?.resendCount || 0) > 0) {
-      return 'A newer verification code was sent. Use the most recent code only.';
-    }
-    return `Invalid code.${typeof data?.attemptsRemaining === 'number' ? ` Attempts remaining: ${data.attemptsRemaining}.` : ''}`;
+    return `That verification code is incorrect.${typeof data?.attemptsRemaining === 'number' ? ` Attempts remaining: ${data.attemptsRemaining}.` : ''}`;
   }
   if (code === 'SESSION_CHECK_FAILED' || code === 'REPORTER_VERIFY_CODE_FAILED' || (typeof data?.status === 'number' && data.status >= 500)) {
     return 'Verification is temporarily unavailable. Try again shortly.';
