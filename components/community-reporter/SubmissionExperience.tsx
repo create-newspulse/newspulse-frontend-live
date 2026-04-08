@@ -580,7 +580,7 @@ export default function SubmissionExperience({
   return (
     <div className="min-h-screen bg-white text-black dark:bg-dark-primary dark:text-dark-text">
       <Head>
-        <title>{isPortalView ? 'Reporter Portal – Submit Story' : 'Community Reporter – Submit Your Story'} | News Pulse</title>
+        <title>{`${isPortalView ? 'Reporter Portal – Submit Story' : 'Community Reporter – Submit Your Story'} | News Pulse`}</title>
         <meta name="description" content={isPortalView ? 'Submit a community story from the News Pulse Reporter Portal.' : 'Submit your story to News Pulse.'} />
       </Head>
 

@@ -3,12 +3,13 @@ import nodemailer from 'nodemailer';
 
 export const REPORTER_SESSION_COOKIE = 'np_reporter_portal_session';
 export const REPORTER_OTP_COOKIE = 'np_reporter_portal_otp';
+export const REPORTER_CHALLENGE_COOKIE = 'np_reporter_portal_challenge';
 const OTP_TTL_SECONDS = 10 * 60;
 const SESSION_TTL_SECONDS = 12 * 60 * 60;
 const MAX_OTP_ATTEMPTS = 5;
 
 type SignedPayload = Record<string, unknown> & {
-  kind: 'otp' | 'session' | 'magic-link';
+  kind: 'otp' | 'session' | 'magic-link' | 'challenge';
   email: string;
   exp: number;
 };
@@ -25,6 +26,10 @@ export type ReporterSessionPayload = SignedPayload & {
 
 export type ReporterMagicLinkPayload = SignedPayload & {
   kind: 'magic-link';
+};
+
+export type ReporterChallengePayload = SignedPayload & {
+  kind: 'challenge';
 };
 
 export type ReporterMailFailureCategory =
@@ -221,6 +226,19 @@ export function createSessionToken(email: string): string {
   return createSignedToken(payload);
 }
 
+export function createChallengeToken(email: string, expiresAt?: string | number | null): string {
+  const normalizedEmail = normalizeReporterAuthEmail(email);
+  const parsedExp = typeof expiresAt === 'number'
+    ? expiresAt
+    : (typeof expiresAt === 'string' ? Date.parse(expiresAt) : Number.NaN);
+  const payload: ReporterChallengePayload = {
+    kind: 'challenge',
+    email: normalizedEmail,
+    exp: Number.isFinite(parsedExp) ? parsedExp : (Date.now() + OTP_TTL_SECONDS * 1000),
+  };
+  return createSignedToken(payload);
+}
+
 export function getOtpExpiryIso(): string {
   return new Date(Date.now() + OTP_TTL_SECONDS * 1000).toISOString();
 }
@@ -250,12 +268,20 @@ export function createOtpCookie(token: string): string {
   return serializeCookie(REPORTER_OTP_COOKIE, token, { maxAge: OTP_TTL_SECONDS, httpOnly: true });
 }
 
+export function createChallengeCookie(token: string): string {
+  return serializeCookie(REPORTER_CHALLENGE_COOKIE, token, { maxAge: OTP_TTL_SECONDS, httpOnly: true });
+}
+
 export function createSessionCookie(token: string): string {
   return serializeCookie(REPORTER_SESSION_COOKIE, token, { maxAge: SESSION_TTL_SECONDS, httpOnly: true });
 }
 
 export function clearOtpCookie(): string {
   return serializeCookie(REPORTER_OTP_COOKIE, '', { maxAge: 0, httpOnly: true });
+}
+
+export function clearChallengeCookie(): string {
+  return serializeCookie(REPORTER_CHALLENGE_COOKIE, '', { maxAge: 0, httpOnly: true });
 }
 
 export function clearSessionCookie(): string {
@@ -271,6 +297,12 @@ export function getSessionFromCookie(cookieValue: string | null | undefined): Re
 export function getOtpFromCookie(cookieValue: string | null | undefined): ReporterOtpPayload | null {
   const payload = verifySignedToken<ReporterOtpPayload>(cookieValue);
   if (!payload || payload.kind !== 'otp' || isExpired(payload.exp)) return null;
+  return payload;
+}
+
+export function getChallengeFromCookie(cookieValue: string | null | undefined): ReporterChallengePayload | null {
+  const payload = verifySignedToken<ReporterChallengePayload>(cookieValue);
+  if (!payload || payload.kind !== 'challenge' || isExpired(payload.exp)) return null;
   return payload;
 }
 

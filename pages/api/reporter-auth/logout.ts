@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { forwardReporterProxyCookies, getReporterForwardCookieHeader, resolveReporterAuthProxyUrl } from '../../../lib/reporterAuthProxy';
-import { clearOtpCookie, clearSessionCookie } from '../../../lib/reporterPortalAuth';
+import { clearChallengeCookie, clearOtpCookie, clearSessionCookie } from '../../../lib/reporterPortalAuth';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -18,11 +18,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           ...(getReporterForwardCookieHeader(req) ? { cookie: getReporterForwardCookieHeader(req) } : {}),
         },
       });
-      forwardReporterProxyCookies(res, upstream.headers, [clearSessionCookie(), clearOtpCookie()]);
-      return res.status(upstream.ok ? 200 : upstream.status || 200).json({ ok: true });
+      forwardReporterProxyCookies(res, upstream.headers, [clearSessionCookie(), clearOtpCookie(), clearChallengeCookie()]);
+      return res.status(200).json({ ok: true });
     } catch {}
   }
 
-  res.setHeader('Set-Cookie', [clearSessionCookie(), clearOtpCookie()]);
+  res.setHeader('Set-Cookie', [clearSessionCookie(), clearOtpCookie(), clearChallengeCookie()]);
   return res.status(200).json({ ok: true });
 }

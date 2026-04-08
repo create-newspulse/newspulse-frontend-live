@@ -53,9 +53,41 @@ function logReporterAuthFailure(event: string, details: Record<string, unknown>)
   console.error(`[Reporter Portal] ${event}`, details);
 }
 
+function logReporterAuthHandledFailure(event: string, details: Record<string, unknown>) {
+  if (typeof window === 'undefined' || process.env.NODE_ENV !== 'development') {
+    return;
+  }
+  console.info(`[Reporter Portal] ${event}`, details);
+}
+
 function getReporterResponseCode(data: any): string | null {
   const code = String(data?.code || data?.message || '').trim();
   return code || null;
+}
+
+function isExpectedReporterAuthFailure(status: number | null, code: string | null, data?: any): boolean {
+  if (isSessionExpiredCode(code)) {
+    return true;
+  }
+  if (status === 401) {
+    return true;
+  }
+  if ((status || 0) >= 500) {
+    return true;
+  }
+  if (typeof data?.attemptsRemaining === 'number') {
+    return true;
+  }
+  return code === 'OTP_EXPIRED_OR_MISSING'
+    || code === 'REPORTER_OTP_EXPIRED'
+    || code === 'REPORTER_OTP_MISSING'
+    || code === 'OTP_REPLACED_BY_NEWER_CODE'
+    || code === 'REPORTER_OTP_REPLACED'
+    || code === 'NEWER_CODE_ACTIVE'
+    || code === 'OTP_INVALID'
+    || code === 'REPORTER_OTP_INVALID'
+    || code === 'INVALID_OTP'
+    || code === 'SESSION_CHECK_FAILED';
 }
 
 function getRequestCodeErrorMessage(code: string | null, status: number | null): string {
@@ -75,6 +107,9 @@ function getVerifyCodeErrorMessage(code: string | null, challenge: ReporterChall
   if (isSessionExpiredCode(code)) {
     return 'Your verification session expired. Request a new code.';
   }
+  if (typeof data?.attemptsRemaining === 'number' && data.attemptsRemaining <= 0) {
+    return 'Too many incorrect attempts. Request a fresh code.';
+  }
   if (code === 'OTP_EXPIRED_OR_MISSING' || code === 'REPORTER_OTP_EXPIRED' || code === 'REPORTER_OTP_MISSING') {
     return 'This verification code expired. Request a fresh code.';
   }
@@ -87,6 +122,9 @@ function getVerifyCodeErrorMessage(code: string | null, challenge: ReporterChall
     }
     return `Invalid code.${typeof data?.attemptsRemaining === 'number' ? ` Attempts remaining: ${data.attemptsRemaining}.` : ''}`;
   }
+  if (code === 'SESSION_CHECK_FAILED' || code === 'REPORTER_VERIFY_CODE_FAILED' || (typeof data?.status === 'number' && data.status >= 500)) {
+    return 'Verification is temporarily unavailable. Try again shortly.';
+  }
   return 'Could not verify this code.';
 }
 
@@ -94,10 +132,26 @@ function getVerificationSessionExpiredMessage() {
   return 'Your verification session expired. Request a new code.';
 }
 
+async function getActiveChallengeStatus() {
+  const requestUrl = resolveReporterAuthUrl('/api/reporter-auth/challenge-session');
+  const res = await fetch(requestUrl, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  const data = await res.json().catch(() => null as any);
+  return {
+    requestUrl,
+    res,
+    data,
+    code: getReporterResponseCode(data),
+  };
+}
+
 export default function ReporterLoginPage({ communityReporterClosed, reporterPortalClosed }: FeatureToggleProps) {
   const router = useRouter();
   const { toggles } = usePublicFounderToggles({ communityReporterClosed, reporterPortalClosed, updatedAt: null });
-  const { session, reason } = useReporterPortalSession();
+  const { session, reason } = useReporterPortalSession({ skipInitialCheck: true });
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -162,6 +216,16 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
       if (!res.ok || data?.ok !== true) {
         logReporterAuthFailure('request-code failed', { url: requestUrl, status: res.status, backendCode: responseCode, credentialsIncluded: true, requestId, resend: Boolean(options?.resend) });
         setError(getRequestCodeErrorMessage(responseCode, res.status));
+        return;
+      }
+
+      const challengeStatus = await getActiveChallengeStatus();
+      if (requestId !== latestRequestIdRef.current) {
+        return;
+      }
+      if (!challengeStatus.res.ok || challengeStatus.data?.ok !== true) {
+        logReporterAuthHandledFailure('challenge-session failed after request-code', { url: challengeStatus.requestUrl, status: challengeStatus.res.status, backendCode: challengeStatus.code, credentialsIncluded: true, requestId, resend: Boolean(options?.resend) });
+        resetChallengeToEmailStep(getVerificationSessionExpiredMessage());
         return;
       }
 
@@ -316,6 +380,16 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
 
             verifyInFlightRef.current = true;
             setIsVerifying(true);
+            const challengeStatus = await getActiveChallengeStatus();
+            if (activeChallengeRef.current?.requestId !== currentChallenge.requestId) {
+              return;
+            }
+            if (!challengeStatus.res.ok || challengeStatus.data?.ok !== true) {
+              logReporterAuthHandledFailure('challenge-session failed before verify', { url: challengeStatus.requestUrl, status: challengeStatus.res.status, backendCode: challengeStatus.code, credentialsIncluded: true, requestId: currentChallenge.requestId });
+              resetChallengeToEmailStep(getVerificationSessionExpiredMessage());
+              return;
+            }
+
             const requestUrl = resolveReporterAuthUrl('/api/reporter-auth/verify-code');
             logReporterAuthEvent('verify-code request', { url: requestUrl, backendCode: null, credentialsIncluded: true, requestId: currentChallenge.requestId });
             try {
@@ -331,14 +405,19 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
                 return;
               }
               if (!res.ok || data?.ok !== true) {
-                logReporterAuthFailure('verify-code failed', { url: requestUrl, status: res.status, backendCode: responseCode, credentialsIncluded: true, requestId: currentChallenge.requestId });
+                const failureDetails = { url: requestUrl, status: res.status, backendCode: responseCode, credentialsIncluded: true, requestId: currentChallenge.requestId };
+                if (isExpectedReporterAuthFailure(res.status, responseCode, data)) {
+                  logReporterAuthHandledFailure('verify-code failed', failureDetails);
+                } else {
+                  logReporterAuthFailure('verify-code failed', failureDetails);
+                }
                 if (isSessionExpiredCode(responseCode) || res.status === 401 || (res.status >= 500 && /SESSION|REPORTER_SESSION_MISSING/i.test(String(responseCode || data?.message || '')))) {
                   resetChallengeToEmailStep(getVerificationSessionExpiredMessage());
                   return;
                 }
-                const message = getVerifyCodeErrorMessage(responseCode, currentChallenge, data);
+                const message = getVerifyCodeErrorMessage(responseCode, currentChallenge, { ...(data || {}), status: res.status });
                 setError(message);
-                if (responseCode === 'OTP_EXPIRED_OR_MISSING' || responseCode === 'REPORTER_OTP_EXPIRED' || responseCode === 'REPORTER_OTP_MISSING') {
+                if (responseCode === 'OTP_EXPIRED_OR_MISSING' || responseCode === 'REPORTER_OTP_EXPIRED' || responseCode === 'REPORTER_OTP_MISSING' || (typeof data?.attemptsRemaining === 'number' && data.attemptsRemaining <= 0)) {
                   setStep('email');
                   return;
                 }

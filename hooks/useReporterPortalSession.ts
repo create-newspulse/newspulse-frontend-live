@@ -7,6 +7,7 @@ import {
 
 type UseReporterPortalSessionOptions = {
   reportUnauthorizedReason?: boolean;
+  skipInitialCheck?: boolean;
 };
 
 function shouldLogReporterSessionDebug(): boolean {
@@ -24,12 +25,21 @@ function logReporterSessionDebug(event: string, details: Record<string, unknown>
 
 export function useReporterPortalSession(options?: UseReporterPortalSessionOptions) {
   const reportUnauthorizedReason = Boolean(options?.reportUnauthorizedReason);
+  const skipInitialCheck = Boolean(options?.skipInitialCheck);
   const [session, setSession] = useState<ReporterPortalSession | null>(null);
   const [profile, setProfile] = useState<ReporterPortalProfile | null>(null);
   const [isReady, setIsReady] = useState(false);
   const [reason, setReason] = useState<string | null>(null);
 
   useEffect(() => {
+    if (skipInitialCheck) {
+      setProfile(loadReporterPortalProfile());
+      setSession(null);
+      setReason(null);
+      setIsReady(true);
+      return;
+    }
+
     let cancelled = false;
 
     const loadSession = async () => {
@@ -89,7 +99,7 @@ export function useReporterPortalSession(options?: UseReporterPortalSessionOptio
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [skipInitialCheck]);
 
   const logout = async () => {
     try {

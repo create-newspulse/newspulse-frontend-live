@@ -1,6 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getReporterForwardCookieHeader, forwardReporterProxyCookies, readReporterProxyBody, resolveReporterAuthProxyUrl } from '../../../lib/reporterAuthProxy';
 import {
+  createChallengeCookie,
+  createChallengeToken,
   createMagicLinkToken,
   createOtpCookie,
   createOtpToken,
@@ -98,11 +100,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         backendCode: String(data?.code || data?.message || '').trim() || null,
         credentialsIncluded: Boolean(getReporterForwardCookieHeader(req)),
       });
-      forwardReporterProxyCookies(res, upstream.headers);
 
       if (!upstream.ok) {
+        forwardReporterProxyCookies(res, upstream.headers);
         return res.status(upstream.status || 500).json(data || { ok: false, message: text || 'REPORTER_REQUEST_CODE_FAILED' });
       }
+
+      forwardReporterProxyCookies(res, upstream.headers, [createChallengeCookie(createChallengeToken(email, data?.expiresAt))]);
 
       return res.status(200).json({ ...(data || {}), ok: data?.ok !== false, email: data?.email || email });
     } catch (error: any) {
@@ -139,7 +143,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
 
     try {
-      res.setHeader('Set-Cookie', createOtpCookie(otpToken));
+      res.setHeader('Set-Cookie', [createOtpCookie(otpToken), createChallengeCookie(createChallengeToken(email))]);
       authRouteLog('otp cookie write success', { email: maskReporterEmail(email) });
     } catch (cookieError: any) {
       authRouteError('otp cookie write failure', {

@@ -31,7 +31,7 @@ export default function ReporterPortalLayout({ title, description, active, sessi
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <Head>
-        <title>{title} | News Pulse Reporter Portal</title>
+        <title>{`${title} | News Pulse Reporter Portal`}</title>
         <meta name="description" content={description} />
       </Head>
 
