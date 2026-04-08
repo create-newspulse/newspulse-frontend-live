@@ -135,6 +135,13 @@ function getVerificationSessionExpiredMessage() {
   return 'Your verification session expired. Request a new code.';
 }
 
+function shouldResetToEmailAfterRequestFailure(status: number | null, code: string | null): boolean {
+  if (status === 429 || (code && /RATE|TOO_MANY/i.test(code))) {
+    return false;
+  }
+  return (status || 0) >= 500;
+}
+
 async function getActiveChallengeStatus() {
   const requestUrl = resolveReporterAuthUrl('/api/reporter-auth/challenge-session');
   const res = await fetch(requestUrl, {
@@ -218,7 +225,12 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
       }
       if (!res.ok || data?.ok !== true) {
         logReporterAuthFailure('request-code failed', { url: requestUrl, status: res.status, backendCode: responseCode, credentialsIncluded: true, requestId, resend: Boolean(options?.resend) });
-        setError(getRequestCodeErrorMessage(responseCode, res.status));
+        const message = getRequestCodeErrorMessage(responseCode, res.status);
+        if (shouldResetToEmailAfterRequestFailure(res.status, responseCode)) {
+          resetChallengeToEmailStep(message);
+          return;
+        }
+        setError(message);
         return;
       }
 

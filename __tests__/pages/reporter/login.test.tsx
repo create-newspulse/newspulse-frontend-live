@@ -161,6 +161,25 @@ describe('pages/reporter/login', () => {
     expect((global as any).fetch).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the user on the email step and shows the mailer outage message when request-code returns 504', async () => {
+    (global as any).fetch.mockResolvedValueOnce({
+      ok: false,
+      status: 504,
+      json: async () => ({ ok: false, code: 'REPORTER_PORTAL_EMAIL_SEND_FAILED' }),
+    });
+
+    render(<ReporterLoginPage communityReporterClosed={false} reporterPortalClosed={false} />);
+
+    fireEvent.change(await screen.findByLabelText('Reporter email'), {
+      target: { value: 'reporter@example.com' },
+    });
+    fireEvent.click(screen.getByText('Send verification code'));
+
+    await screen.findByText('Verification email is temporarily unavailable. Please try again shortly.');
+    expect(await screen.findByLabelText('Reporter email')).toBeTruthy();
+    expect(screen.queryByLabelText('Verification code')).toBeNull();
+  });
+
   it('keeps the user on the email step and shows the cooldown message when request-code returns 429', async () => {
     (global as any).fetch.mockResolvedValueOnce({
       ok: false,
@@ -230,6 +249,41 @@ describe('pages/reporter/login', () => {
         body: JSON.stringify({ email: 'reporter@example.com' }),
       })
     );
+  });
+
+  it('resets to email entry and clears stale OTP state when resend request-code fails with 503', async () => {
+    (global as any).fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, expiresAt: '2025-01-01T10:30:00.000Z', debugCode: '111111' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:30:00.000Z' } }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        json: async () => ({ ok: false, code: 'REPORTER_PORTAL_EMAIL_SEND_FAILED' }),
+      });
+
+    render(<ReporterLoginPage communityReporterClosed={false} reporterPortalClosed={false} />);
+
+    fireEvent.change(await screen.findByLabelText('Reporter email'), {
+      target: { value: 'reporter@example.com' },
+    });
+    fireEvent.click(screen.getByText('Send verification code'));
+
+    const codeInput = await screen.findByLabelText('Verification code');
+    fireEvent.change(codeInput, { target: { value: '123456' } });
+    fireEvent.click(screen.getByText('Resend'));
+
+    await screen.findByText('Verification email is temporarily unavailable. Please try again shortly.');
+    expect(await screen.findByLabelText('Reporter email')).toBeTruthy();
+    expect((screen.getByLabelText('Reporter email') as HTMLInputElement).value).toBe('reporter@example.com');
+    expect(screen.queryByLabelText('Verification code')).toBeNull();
   });
 
   it('verifies using the latest active challenge email and shows newer-code messaging after resend', async () => {
@@ -599,5 +653,82 @@ describe('pages/reporter/login', () => {
 
     await screen.findByText('Verification is temporarily unavailable. Try again shortly.');
     expect(screen.queryByText('Could not verify this code.')).toBeNull();
+  });
+
+  it('prevents duplicate request-code submissions while a send is pending', async () => {
+    let resolveRequestCode: ((value: any) => void) | null = null;
+    (global as any).fetch.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveRequestCode = resolve;
+    }));
+
+    render(<ReporterLoginPage communityReporterClosed={false} reporterPortalClosed={false} />);
+
+    fireEvent.change(await screen.findByLabelText('Reporter email'), {
+      target: { value: 'reporter@example.com' },
+    });
+
+    const submitButton = screen.getByText('Send verification code');
+    fireEvent.click(submitButton);
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect((global as any).fetch).toHaveBeenCalledTimes(1);
+    });
+
+    resolveRequestCode?.({
+      ok: false,
+      status: 503,
+      json: async () => ({ ok: false, code: 'REPORTER_PORTAL_EMAIL_SEND_FAILED' }),
+    });
+
+    await screen.findByText('Verification email is temporarily unavailable. Please try again shortly.');
+  });
+
+  it('prevents duplicate verify submissions while verification is pending', async () => {
+    let resolveVerifyCode: ((value: any) => void) | null = null;
+    (global as any).fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, expiresAt: '2025-01-01T10:30:00.000Z', debugCode: '123456' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:30:00.000Z' } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:30:00.000Z' } }),
+      })
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        resolveVerifyCode = resolve;
+      }));
+
+    render(<ReporterLoginPage communityReporterClosed={false} reporterPortalClosed={false} />);
+
+    fireEvent.change(await screen.findByLabelText('Reporter email'), {
+      target: { value: 'reporter@example.com' },
+    });
+    fireEvent.click(screen.getByText('Send verification code'));
+
+    fireEvent.change(await screen.findByLabelText('Verification code'), { target: { value: '123456' } });
+
+    const verifyButton = screen.getByText('Verify code');
+    fireEvent.click(verifyButton);
+    fireEvent.click(verifyButton);
+
+    await waitFor(() => {
+      expect((global as any).fetch).toHaveBeenCalledTimes(4);
+    });
+
+    resolveVerifyCode?.({
+      ok: false,
+      status: 503,
+      json: async () => ({ ok: false, code: 'REPORTER_VERIFY_CODE_FAILED' }),
+    });
+
+    await screen.findByText('Verification is temporarily unavailable. Try again shortly.');
   });
 });
