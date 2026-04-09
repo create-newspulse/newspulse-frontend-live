@@ -142,6 +142,10 @@ function shouldResetToEmailAfterRequestFailure(status: number | null, code: stri
   return (status || 0) >= 500;
 }
 
+function getRequestCodeUnavailableMessage() {
+  return 'Verification email is temporarily unavailable. Please try again shortly.';
+}
+
 async function getActiveChallengeStatus() {
   const requestUrl = resolveReporterAuthUrl('/api/reporter-auth/challenge-session');
   const res = await fetch(requestUrl, {
@@ -199,6 +203,28 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
     activeChallengeRef.current = activeChallenge;
   }, [activeChallenge]);
 
+  const resetChallengeToEmailStep = (message: string, nextEmail?: string) => {
+    activeChallengeRef.current = null;
+    setActiveChallenge(null);
+    setCode('');
+    setStep('email');
+    setNotice(null);
+    if (typeof nextEmail === 'string' && nextEmail) {
+      setEmail(nextEmail);
+    }
+    setError(message);
+  };
+
+  const handleRequestCodeFailure = (message: string, nextEmail: string, options?: { resend?: boolean }) => {
+    const shouldReturnToEmail = options?.resend || step !== 'email';
+    if (shouldReturnToEmail) {
+      resetChallengeToEmailStep(message, nextEmail);
+      return;
+    }
+    setEmail(nextEmail);
+    setError(message);
+  };
+
   const sendVerificationCode = async (normalizedEmail: string, options?: { resend?: boolean }) => {
     if (sendInFlightRef.current) {
       return;
@@ -227,9 +253,10 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
         logReporterAuthFailure('request-code failed', { url: requestUrl, status: res.status, backendCode: responseCode, credentialsIncluded: true, requestId, resend: Boolean(options?.resend) });
         const message = getRequestCodeErrorMessage(responseCode, res.status);
         if (shouldResetToEmailAfterRequestFailure(res.status, responseCode)) {
-          resetChallengeToEmailStep(message);
+          handleRequestCodeFailure(message, normalizedEmail, options);
           return;
         }
+        setEmail(normalizedEmail);
         setError(message);
         return;
       }
@@ -238,9 +265,10 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
       if (requestId !== latestRequestIdRef.current) {
         return;
       }
-      if (!challengeStatus.res.ok || challengeStatus.data?.ok !== true) {
+      const challengeEmail = normalizeReporterEmail(challengeStatus.data?.challenge?.email || challengeStatus.data?.email || '');
+      if (!challengeStatus.res.ok || challengeStatus.data?.ok !== true || !challengeEmail || challengeEmail !== normalizedEmail) {
         logReporterAuthHandledFailure('challenge-session failed after request-code', { url: challengeStatus.requestUrl, status: challengeStatus.res.status, backendCode: challengeStatus.code, credentialsIncluded: true, requestId, resend: Boolean(options?.resend) });
-        resetChallengeToEmailStep(getVerificationSessionExpiredMessage());
+        resetChallengeToEmailStep(getVerificationSessionExpiredMessage(), normalizedEmail);
         return;
       }
 
@@ -259,21 +287,24 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
       setActiveChallenge(nextChallenge);
       setStep('code');
       setNotice(options?.resend ? 'A new verification code was sent. Use the most recent code only.' : 'Verification code sent. Check your email for the code or secure sign-in link.');
+    } catch (requestError) {
+      if (requestId !== latestRequestIdRef.current) {
+        return;
+      }
+      logReporterAuthFailure('request-code request exception', {
+        url: requestUrl,
+        credentialsIncluded: true,
+        requestId,
+        resend: Boolean(options?.resend),
+        error: requestError instanceof Error ? requestError.message : String(requestError),
+      });
+      handleRequestCodeFailure(getRequestCodeUnavailableMessage(), normalizedEmail, options);
     } finally {
       sendInFlightRef.current = false;
       if (requestId === latestRequestIdRef.current) {
         setIsSending(false);
       }
     }
-  };
-
-  const resetChallengeToEmailStep = (message: string) => {
-    activeChallengeRef.current = null;
-    setActiveChallenge(null);
-    setCode('');
-    setStep('email');
-    setNotice(null);
-    setError(message);
   };
 
   useEffect(() => {

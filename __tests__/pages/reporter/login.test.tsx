@@ -161,6 +161,23 @@ describe('pages/reporter/login', () => {
     expect((global as any).fetch).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the user on the email step and preserves the email when request-code throws', async () => {
+    (global as any).fetch.mockRejectedValueOnce(new Error('network down'));
+
+    render(<ReporterLoginPage communityReporterClosed={false} reporterPortalClosed={false} />);
+
+    fireEvent.change(await screen.findByLabelText('Reporter email'), {
+      target: { value: 'reporter@example.com' },
+    });
+    fireEvent.click(screen.getByText('Send verification code'));
+
+    await screen.findByText('Verification email is temporarily unavailable. Please try again shortly.');
+    expect(await screen.findByLabelText('Reporter email')).toBeTruthy();
+    expect((screen.getByLabelText('Reporter email') as HTMLInputElement).value).toBe('reporter@example.com');
+    expect(screen.queryByLabelText('Verification code')).toBeNull();
+    expect((global as any).fetch).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the user on the email step and shows the mailer outage message when request-code returns 504', async () => {
     (global as any).fetch.mockResolvedValueOnce({
       ok: false,
