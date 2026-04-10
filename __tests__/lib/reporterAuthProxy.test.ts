@@ -51,6 +51,18 @@ describe('lib/reporterAuthProxy', () => {
     ).toBe('https://newspulse-backend-real.onrender.com/api/reporter-auth/request-code');
   });
 
+  it('falls back to the Render backend when the configured base matches the Vercel deployment host', () => {
+    process.env.VERCEL_ENV = 'production';
+    process.env.VERCEL_URL = 'newspulse-frontend-live.vercel.app';
+    process.env.NEXT_PUBLIC_API_BASE = 'https://newspulse-frontend-live.vercel.app';
+
+    const { resolveReporterAuthProxyUrl } = require('../../lib/reporterAuthProxy');
+
+    expect(resolveReporterAuthProxyUrl('/api/reporter-auth/request-code')).toBe(
+      'https://newspulse-backend-real.onrender.com/api/reporter-auth/request-code'
+    );
+  });
+
   it('does not substitute a production backend for same-host self-proxying outside production', () => {
     process.env.NEXT_PUBLIC_API_BASE = 'https://preview.newspulse.app';
 

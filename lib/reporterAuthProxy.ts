@@ -29,16 +29,36 @@ function getRequestHost(req?: NextApiRequest): string {
     .toLowerCase();
 }
 
+function getConfiguredFrontendHosts(req?: NextApiRequest): Set<string> {
+  const hosts = new Set<string>();
+
+  [
+    getRequestHost(req),
+    String(process.env.VERCEL_URL || '').trim(),
+    String(process.env.VERCEL_PROJECT_PRODUCTION_URL || '').trim(),
+    String(process.env.NEXT_PUBLIC_SITE_URL || '').trim(),
+    String(process.env.NEXT_PUBLIC_APP_URL || '').trim(),
+    String(process.env.SITE_URL || '').trim(),
+  ].forEach((value) => {
+    const hostname = getHostname(/^https?:\/\//i.test(value) ? value : `https://${value}`);
+    if (hostname) {
+      hosts.add(hostname);
+    }
+  });
+
+  KNOWN_FRONTEND_HOSTS.forEach((hostname) => hosts.add(hostname));
+  return hosts;
+}
+
 function isFrontendProxyBase(base: string, req?: NextApiRequest): boolean {
   const hostname = getHostname(base);
   if (!hostname) return false;
 
-  if (KNOWN_FRONTEND_HOSTS.has(hostname)) {
+  if (getConfiguredFrontendHosts(req).has(hostname)) {
     return true;
   }
 
-  const requestHost = getRequestHost(req);
-  return Boolean(requestHost) && hostname === requestHost;
+  return false;
 }
 
 export function resolveReporterAuthProxyUrl(path: string, req?: NextApiRequest): string | null {
