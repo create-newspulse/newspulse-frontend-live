@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getReporterForwardCookieHeader, forwardReporterProxyCookies, readReporterProxyBody, resolveReporterAuthProxyUrl } from '../../../lib/reporterAuthProxy';
+import { getReporterForwardCookieHeader, forwardReporterProxyCookies, readReporterProxyBody, resolveReporterAuthProxyTarget } from '../../../lib/reporterAuthProxy';
 import {
   createChallengeCookie,
   createChallengeToken,
@@ -67,7 +67,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const email = normalizeReporterAuthEmail(req.body?.email);
-  const backendUrl = resolveReporterAuthProxyUrl('/api/reporter-auth/request-code', req);
+  const proxyTarget = resolveReporterAuthProxyTarget('/api/reporter-auth/request-code', req);
+  const backendUrl = proxyTarget.url;
   const envPresence = getReporterPortalAuthEnvPresence();
   let shouldUseLocalFallback = false;
   const method = 'POST';
@@ -90,6 +91,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     authRouteLog('final response sent', { status: 400, message: 'VALID_EMAIL_REQUIRED' });
     return res.status(400).json({ ok: false, code: 'INVALID_EMAIL', message: 'VALID_EMAIL_REQUIRED' });
   }
+
+  authRouteLog('proxy target resolved', {
+    targetUrl: proxyTarget.url,
+    targetBase: proxyTarget.base,
+    targetSource: proxyTarget.source,
+    targetReason: proxyTarget.reason,
+    method,
+  });
 
   if (backendUrl) {
     authRouteLog('proxy request start', {
