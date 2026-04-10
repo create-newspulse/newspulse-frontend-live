@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getReporterForwardCookieHeader, forwardReporterProxyCookies, readReporterProxyBody, resolveReporterAuthProxyTarget } from '../../../lib/reporterAuthProxy';
+import { getDefaultReporterAuthProxyUrl, getReporterForwardCookieHeader, forwardReporterProxyCookies, readReporterProxyBody, resolveReporterAuthProxyTarget } from '../../../lib/reporterAuthProxy';
 import {
   createChallengeCookie,
   createChallengeToken,
@@ -51,6 +51,59 @@ function resolveSiteUrl(req: NextApiRequest): string {
   return `${forwardedProto}://${forwardedHost}`.replace(/\/+$/, '');
 }
 
+async function proxyRequestCodeAttempt(options: {
+  req: NextApiRequest;
+  res: NextApiResponse;
+  targetUrl: string;
+  method: string;
+  forwardedCookie: string;
+  proxyRequestBody: string;
+  attemptLabel: 'primary' | 'prod_retry';
+  requestId: string;
+}) {
+  const { req, targetUrl, method, forwardedCookie, proxyRequestBody, attemptLabel, requestId } = options;
+  authRouteLog('proxy request start', {
+    targetUrl,
+    method,
+    requestId,
+    attemptLabel,
+    bodyPresent: Boolean(proxyRequestBody),
+    credentialsIncluded: Boolean(forwardedCookie),
+    forwardedHeaders: {
+      accept: 'application/json',
+      contentType: 'application/json',
+      hasCookie: Boolean(forwardedCookie),
+      requestId,
+    },
+    requestBodySnippet: toLogSnippet(proxyRequestBody),
+  });
+
+  const upstream = await fetch(targetUrl, {
+    method,
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'X-Reporter-Request-Id': requestId,
+      ...(forwardedCookie ? { cookie: forwardedCookie } : {}),
+    },
+    body: proxyRequestBody,
+  });
+  const { data, text } = await readReporterProxyBody(upstream);
+  const upstreamBodySnippet = toLogSnippet(text || (data ? JSON.stringify(data) : ''));
+  authRouteLog('proxy request end', {
+    targetUrl,
+    method,
+    requestId,
+    attemptLabel,
+    upstreamStatus: upstream.status,
+    backendCode: String(data?.code || data?.message || '').trim() || null,
+    credentialsIncluded: Boolean(forwardedCookie),
+    upstreamResponseBodySnippet: upstreamBodySnippet || null,
+  });
+
+  return { upstream, data, text, upstreamBodySnippet };
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   authRouteLog('request received', {
     method: req.method,
@@ -74,6 +127,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const method = 'POST';
   const forwardedCookie = getReporterForwardCookieHeader(req);
   const proxyRequestBody = JSON.stringify({ email });
+  const requestId = String(req.headers['x-reporter-request-id'] || '').trim() || `srv-${Date.now()}`;
+  const defaultBackendUrl = getDefaultReporterAuthProxyUrl('/api/reporter-auth/request-code');
+  const isDuplicateBrowserRequest = Boolean(String(req.headers['x-reporter-request-duplicate'] || '').trim() === '1');
   authRouteLog('email normalized', { email: maskReporterEmail(email) });
   authRouteLog('env presence check', {
     ...envPresence,
@@ -98,46 +154,56 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     targetSource: proxyTarget.source,
     targetReason: proxyTarget.reason,
     method,
+    requestId,
+    bodyPresent: Boolean(proxyRequestBody),
+    duplicateClientCall: isDuplicateBrowserRequest,
+    stableProdFallbackUrl: defaultBackendUrl,
   });
 
   if (backendUrl) {
-    authRouteLog('proxy request start', {
-      targetUrl: backendUrl,
-      method,
-      credentialsIncluded: Boolean(forwardedCookie),
-      forwardedHeaders: {
-        accept: 'application/json',
-        contentType: 'application/json',
-        hasCookie: Boolean(forwardedCookie),
-      },
-      requestBodySnippet: toLogSnippet(proxyRequestBody),
-    });
     try {
-      const upstream = await fetch(backendUrl, {
-        method,
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          ...(forwardedCookie ? { cookie: forwardedCookie } : {}),
-        },
-        body: proxyRequestBody,
-      });
-      const { data, text } = await readReporterProxyBody(upstream);
-      const upstreamBodySnippet = toLogSnippet(text || (data ? JSON.stringify(data) : ''));
-      authRouteLog('proxy request end', {
+      let proxyAttempt = await proxyRequestCodeAttempt({
+        req,
+        res,
         targetUrl: backendUrl,
         method,
-        upstreamStatus: upstream.status,
-        backendCode: String(data?.code || data?.message || '').trim() || null,
-        credentialsIncluded: Boolean(forwardedCookie),
-        upstreamResponseBodySnippet: upstreamBodySnippet || null,
+        forwardedCookie,
+        proxyRequestBody,
+        attemptLabel: 'primary',
+        requestId,
       });
+      let { upstream, data, text, upstreamBodySnippet } = proxyAttempt;
+
+      if (!upstream.ok && (upstream.status || 500) >= 500 && backendUrl !== defaultBackendUrl) {
+        authRouteError('proxy request failed, retrying stable production target', {
+          targetUrl: backendUrl,
+          retryTargetUrl: defaultBackendUrl,
+          method,
+          requestId,
+          upstreamStatus: upstream.status,
+          backendCode: String(data?.code || data?.message || '').trim() || null,
+          upstreamResponseBodySnippet: upstreamBodySnippet || null,
+          fallbackReason: 'primary_upstream_5xx',
+        });
+        proxyAttempt = await proxyRequestCodeAttempt({
+          req,
+          res,
+          targetUrl: defaultBackendUrl,
+          method,
+          forwardedCookie,
+          proxyRequestBody,
+          attemptLabel: 'prod_retry',
+          requestId,
+        });
+        ({ upstream, data, text, upstreamBodySnippet } = proxyAttempt);
+      }
 
       if (!upstream.ok) {
         if ((upstream.status || 500) >= 500) {
           authRouteError('proxy request failed, falling back to local delivery', {
-            targetUrl: backendUrl,
+            targetUrl: proxyAttempt.upstream.url,
             method,
+            requestId,
             upstreamStatus: upstream.status,
             backendCode: String(data?.code || data?.message || '').trim() || null,
             upstreamResponseBodySnippet: upstreamBodySnippet || null,
@@ -165,15 +231,52 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       authRouteError('proxy request failed', {
         targetUrl: backendUrl,
         method,
+        requestId,
         error: error?.message || 'REPORTER_REQUEST_CODE_PROXY_FAILED',
         fallbackReason: 'proxy_exception',
       });
+
+      if (backendUrl !== defaultBackendUrl) {
+        try {
+          authRouteError('proxy request exception, retrying stable production target', {
+            targetUrl: backendUrl,
+            retryTargetUrl: defaultBackendUrl,
+            method,
+            requestId,
+            fallbackReason: 'proxy_exception_retry_prod_default',
+          });
+          const { upstream, data } = await proxyRequestCodeAttempt({
+            req,
+            res,
+            targetUrl: defaultBackendUrl,
+            method,
+            forwardedCookie,
+            proxyRequestBody,
+            attemptLabel: 'prod_retry',
+            requestId,
+          });
+          if (upstream.ok) {
+            forwardReporterProxyCookies(res, upstream.headers, [createChallengeCookie(createChallengeToken(email, data?.expiresAt))]);
+            return res.status(200).json({ ...(data || {}), ok: data?.ok !== false, email: data?.email || email });
+          }
+        } catch (retryError: any) {
+          authRouteError('stable production target retry failed', {
+            retryTargetUrl: defaultBackendUrl,
+            method,
+            requestId,
+            error: retryError?.message || 'REPORTER_REQUEST_CODE_PROXY_RETRY_FAILED',
+            fallbackReason: 'proxy_retry_exception',
+          });
+        }
+      }
+
       shouldUseLocalFallback = true;
     }
   } else {
     authRouteError('proxy target unavailable, falling back to local delivery', {
       targetUrl: null,
       method,
+      requestId,
       fallbackReason: 'backend_base_missing',
     });
   }
@@ -193,6 +296,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       hasSmtpConfig: Boolean(resolveReporterPortalSmtpConfig()),
       siteUrl: baseUrl,
       sendsViaBackend: false,
+      requestId,
     });
     const delivery = await sendReporterPortalLoginEmail({ email, code, magicLink });
     authRouteLog('mail send completed', {
@@ -200,6 +304,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       delivered: Boolean(delivery && 'delivered' in delivery && delivery.delivered),
       usedDebugCode: Boolean(delivery && 'debugCode' in delivery),
       provider: delivery.provider,
+      requestId,
     });
 
     try {
@@ -244,6 +349,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       ...envPresence,
       siteUrl: resolveSiteUrl(req),
       sendsViaBackend: false,
+      requestId,
     });
     authRouteLog('final response sent', { status: 503, message: 'REPORTER_PORTAL_EMAIL_SEND_FAILED', category: classifiedError.category });
     return res.status(503).json({ ok: false, code: classifiedError.code || 'REPORTER_EMAIL_UNAVAILABLE', message: classifiedError.message || 'REPORTER_PORTAL_EMAIL_SEND_FAILED' });

@@ -20,6 +20,12 @@ type ReporterChallengeState = {
   resendCount: number;
 };
 
+type ReporterSendRequestState = {
+  requestId: string;
+  email: string;
+  startedAt: number;
+};
+
 function isSessionExpiredCode(code: string | null): boolean {
   return code === 'SESSION_EXPIRED' || code === 'REPORTER_SESSION_MISSING' || code === 'REPORTER_VERIFY_SESSION_MISSING';
 }
@@ -181,6 +187,7 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
   const activeChallengeRef = useRef<ReporterChallengeState | null>(null);
   const sendInFlightRef = useRef(false);
   const verifyInFlightRef = useRef(false);
+  const pendingSendRequestRef = useRef<ReporterSendRequestState | null>(null);
 
   useEffect(() => {
     const storedProfile = loadReporterPortalProfile();
@@ -227,20 +234,45 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
 
   const sendVerificationCode = async (normalizedEmail: string, options?: { resend?: boolean }) => {
     if (sendInFlightRef.current) {
+      logReporterAuthHandledFailure('request-code duplicate blocked', {
+        url: resolveReporterAuthUrl('/api/reporter-auth/request-code'),
+        email: normalizedEmail,
+        requestId: pendingSendRequestRef.current?.requestId || null,
+        duplicate: true,
+        resend: Boolean(options?.resend),
+      });
       return;
     }
     sendInFlightRef.current = true;
     const requestId = latestRequestIdRef.current + 1;
+    const clientRequestId = `request-code-${requestId}-${Date.now()}`;
     latestRequestIdRef.current = requestId;
+    pendingSendRequestRef.current = {
+      requestId: clientRequestId,
+      email: normalizedEmail,
+      startedAt: Date.now(),
+    };
     setError(null);
     setNotice(null);
     setIsSending(true);
     const requestUrl = resolveReporterAuthUrl('/api/reporter-auth/request-code');
-    logReporterAuthEvent('request-code request', { url: requestUrl, credentialsIncluded: true, requestId, resend: Boolean(options?.resend) });
+    logReporterAuthEvent('request-code request', {
+      url: requestUrl,
+      credentialsIncluded: true,
+      requestId,
+      clientRequestId,
+      duplicate: false,
+      resend: Boolean(options?.resend),
+    });
     try {
       const res = await fetch(requestUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          'X-Reporter-Request-Id': clientRequestId,
+          'X-Reporter-Request-Duplicate': '0',
+        },
         credentials: 'include',
         body: JSON.stringify({ email: normalizedEmail }),
       });
@@ -301,6 +333,7 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
       handleRequestCodeFailure(getRequestCodeUnavailableMessage(), normalizedEmail, options);
     } finally {
       sendInFlightRef.current = false;
+      pendingSendRequestRef.current = null;
       if (requestId === latestRequestIdRef.current) {
         setIsSending(false);
       }

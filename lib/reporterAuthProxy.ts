@@ -134,6 +134,10 @@ export function resolveReporterAuthProxyUrl(path: string, req?: NextApiRequest):
   return resolveReporterAuthProxyTarget(path, req).url;
 }
 
+export function getDefaultReporterAuthProxyUrl(path: string): string {
+  return `${DEFAULT_PROD_REPORTER_AUTH_BASE}${normalizePath(path)}`;
+}
+
 export function getReporterProxySetCookies(headers: Headers): string[] {
   const candidate = headers as Headers & { getSetCookie?: () => string[] };
   if (typeof candidate.getSetCookie === 'function') {
