@@ -126,6 +126,15 @@ export function resolveReporterAuthProxyTarget(path: string, req?: NextApiReques
     };
   }
 
+  if (isProdDeployment(req)) {
+    return {
+      url: `${DEFAULT_PROD_REPORTER_AUTH_BASE}${normalizePath(path)}`,
+      base: DEFAULT_PROD_REPORTER_AUTH_BASE,
+      source: 'prod_default',
+      reason: 'configured_base',
+    };
+  }
+
   const configuredBase = normalizeBase(String(getPublicApiBaseUrl() || ''));
   if (configuredBase && !isFrontendProxyBase(configuredBase, req)) {
     return {
@@ -133,15 +142,6 @@ export function resolveReporterAuthProxyTarget(path: string, req?: NextApiReques
       base: configuredBase,
       source: 'public_api_base',
       reason: 'configured_base',
-    };
-  }
-
-  if (isProdDeployment(req)) {
-    return {
-      url: `${DEFAULT_PROD_REPORTER_AUTH_BASE}${normalizePath(path)}`,
-      base: DEFAULT_PROD_REPORTER_AUTH_BASE,
-      source: 'prod_default',
-      reason: configuredBase ? 'frontend_target_rejected' : 'missing_base',
     };
   }
 

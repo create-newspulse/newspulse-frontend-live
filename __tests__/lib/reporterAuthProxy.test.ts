@@ -42,17 +42,22 @@ describe('lib/reporterAuthProxy', () => {
     ).toBe('https://newspulse-backend-real.onrender.com/api/reporter-auth/request-code');
   });
 
-  it('uses the configured backend when it already points to the backend host', () => {
+  it('uses the stable Render backend in production even when the configured public base already points to a backend host', () => {
     process.env.VERCEL_ENV = 'production';
-    process.env.NEXT_PUBLIC_API_BASE = 'https://newspulse-backend-real.onrender.com';
+    process.env.NEXT_PUBLIC_API_BASE = 'https://some-other-backend.example.com';
 
-    const { resolveReporterAuthProxyUrl } = require('../../lib/reporterAuthProxy');
+    const { resolveReporterAuthProxyTarget } = require('../../lib/reporterAuthProxy');
 
     expect(
-      resolveReporterAuthProxyUrl('/api/reporter-auth/request-code', {
+      resolveReporterAuthProxyTarget('/api/reporter-auth/request-code', {
         headers: { host: 'www.newspulse.co.in' },
       })
-    ).toBe('https://newspulse-backend-real.onrender.com/api/reporter-auth/request-code');
+    ).toEqual({
+      url: 'https://newspulse-backend-real.onrender.com/api/reporter-auth/request-code',
+      base: 'https://newspulse-backend-real.onrender.com',
+      source: 'prod_default',
+      reason: 'configured_base',
+    });
   });
 
   it('falls back to the Render backend when the configured base matches the Vercel deployment host', () => {
