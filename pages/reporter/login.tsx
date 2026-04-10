@@ -46,21 +46,21 @@ function resolveReporterAuthUrl(path: string) {
 }
 
 function logReporterAuthEvent(event: string, details: Record<string, unknown>) {
-  if (typeof window === 'undefined' || process.env.NODE_ENV !== 'development') {
+  if (typeof window === 'undefined') {
     return;
   }
   console.info(`[Reporter Portal] ${event}`, details);
 }
 
 function logReporterAuthFailure(event: string, details: Record<string, unknown>) {
-  if (typeof window === 'undefined' || process.env.NODE_ENV !== 'development') {
+  if (typeof window === 'undefined') {
     return;
   }
   console.error(`[Reporter Portal] ${event}`, details);
 }
 
 function logReporterAuthHandledFailure(event: string, details: Record<string, unknown>) {
-  if (typeof window === 'undefined' || process.env.NODE_ENV !== 'development') {
+  if (typeof window === 'undefined') {
     return;
   }
   console.info(`[Reporter Portal] ${event}`, details);
@@ -104,22 +104,23 @@ function isExpectedReporterAuthFailure(status: number | null, code: string | nul
     || code === 'SESSION_CHECK_FAILED';
 }
 
-function getRequestCodeErrorMessage(code: string | null, status: number | null): string {
+function getRequestCodeErrorMessage(code: string | null, status: number | null, data?: any): string {
   if (status === 429 || (code && /RATE|TOO_MANY/i.test(code))) {
     return 'Please wait a moment before requesting another verification code.';
   }
   if (code === 'INVALID_EMAIL' || code === 'VALID_EMAIL_REQUIRED') {
     return 'Enter the same valid email address you use for community reporter submissions.';
   }
-  if (
-    (status || 0) >= 500
-    || code === 'REPORTER_EMAIL_UNAVAILABLE'
-    || code === 'REPORTER_PORTAL_EMAIL_NOT_CONFIGURED'
-    || code === 'REPORTER_PORTAL_EMAIL_SEND_FAILED'
-    || code === 'REPORTER_PORTAL_SESSION_STORE_FAILED'
-  ) {
-    return 'Verification email is temporarily unavailable. Please try again shortly.';
+
+  const responseMessage = String(data?.message || '').trim();
+  const responseCode = String(data?.code || '').trim();
+  if (responseMessage) {
+    return responseCode && responseCode !== responseMessage ? `${responseCode}: ${responseMessage}` : responseMessage;
   }
+  if (responseCode) {
+    return responseCode;
+  }
+
   return 'Could not send a verification code right now.';
 }
 
@@ -296,7 +297,11 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
         url: requestUrl,
         status: res.status,
         ok: res.ok,
-        parsedJson: data,
+        parsedJson: {
+          ok: data?.ok ?? null,
+          code: data?.code ?? null,
+          message: data?.message ?? null,
+        },
         requestId,
         clientRequestId,
         resend: Boolean(options?.resend),
@@ -306,7 +311,7 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
       }
       if (!res.ok || data?.ok !== true) {
         logReporterAuthFailure('request-code failed', { url: requestUrl, status: res.status, backendCode: responseCode, credentialsIncluded: true, requestId, resend: Boolean(options?.resend) });
-        const message = getRequestCodeErrorMessage(responseCode, res.status);
+        const message = getRequestCodeErrorMessage(responseCode, res.status, data);
         if (shouldResetToEmailAfterRequestFailure(res.status, responseCode)) {
           handleRequestCodeFailure(message, normalizedEmail, options);
           return;
@@ -338,31 +343,6 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
       });
       setStep('code');
       setNotice(options?.resend ? 'A new verification code was sent. Use the most recent code only.' : 'Verification code sent. Check your email for the code or secure sign-in link.');
-
-      void getActiveChallengeStatus()
-        .then((challengeStatus) => {
-          const challengeEmail = normalizeReporterEmail(challengeStatus.data?.challenge?.email || challengeStatus.data?.email || '');
-          if (!challengeStatus.res.ok || challengeStatus.data?.ok !== true || !challengeEmail || challengeEmail !== normalizedEmail) {
-            logReporterAuthHandledFailure('challenge-session bootstrap mismatch after request-code success', {
-              url: challengeStatus.requestUrl,
-              status: challengeStatus.res.status,
-              backendCode: challengeStatus.code,
-              credentialsIncluded: true,
-              requestId,
-              resend: Boolean(options?.resend),
-              challengeEmail: challengeEmail || null,
-            });
-          }
-        })
-        .catch((bootstrapError) => {
-          logReporterAuthHandledFailure('challenge-session bootstrap request failed after request-code success', {
-            url: resolveReporterAuthUrl('/api/reporter-auth/challenge-session'),
-            credentialsIncluded: true,
-            requestId,
-            resend: Boolean(options?.resend),
-            error: bootstrapError instanceof Error ? bootstrapError.message : String(bootstrapError),
-          });
-        });
     } catch (requestError) {
       if (requestId !== latestRequestIdRef.current) {
         return;

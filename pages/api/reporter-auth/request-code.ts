@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getDefaultReporterAuthProxyUrl, getReporterForwardCookieHeader, forwardReporterProxyCookies, readReporterProxyBody, resolveReporterAuthProxyTarget } from '../../../lib/reporterAuthProxy';
+import { getReporterForwardCookieHeader, forwardReporterProxyCookies, readReporterProxyBody, resolveReporterAuthProxyTarget } from '../../../lib/reporterAuthProxy';
 import {
   createChallengeCookie,
   createChallengeToken,
@@ -38,6 +38,12 @@ function setReporterAuthProxyDebugHeader(res: NextApiResponse, target: { source:
   } catch {}
 }
 
+function setNoStoreHeaders(res: NextApiResponse) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+}
+
 function resolveSiteUrl(req: NextApiRequest): string {
   const raw = String(
     process.env.NEXT_PUBLIC_SITE_URL ||
@@ -58,16 +64,14 @@ function resolveSiteUrl(req: NextApiRequest): string {
 }
 
 async function proxyRequestCodeAttempt(options: {
-  req: NextApiRequest;
-  res: NextApiResponse;
   targetUrl: string;
   method: string;
   forwardedCookie: string;
   proxyRequestBody: string;
-  attemptLabel: 'primary' | 'prod_retry';
+  attemptLabel: 'primary';
   requestId: string;
 }) {
-  const { req, targetUrl, method, forwardedCookie, proxyRequestBody, attemptLabel, requestId } = options;
+  const { targetUrl, method, forwardedCookie, proxyRequestBody, attemptLabel, requestId } = options;
   authRouteLog('proxy request start', {
     targetUrl,
     method,
@@ -111,6 +115,7 @@ async function proxyRequestCodeAttempt(options: {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  setNoStoreHeaders(res);
   authRouteLog('request received', {
     method: req.method,
     host: req.headers.host || '',
@@ -129,12 +134,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const proxyTarget = resolveReporterAuthProxyTarget('/api/reporter-auth/request-code', req);
   const backendUrl = proxyTarget.url;
   const envPresence = getReporterPortalAuthEnvPresence();
-  let shouldUseLocalFallback = false;
   const method = 'POST';
   const forwardedCookie = getReporterForwardCookieHeader(req);
   const proxyRequestBody = JSON.stringify({ email });
   const requestId = String(req.headers['x-reporter-request-id'] || '').trim() || `srv-${Date.now()}`;
-  const defaultBackendUrl = getDefaultReporterAuthProxyUrl('/api/reporter-auth/request-code');
   const isDuplicateBrowserRequest = Boolean(String(req.headers['x-reporter-request-duplicate'] || '').trim() === '1');
   authRouteLog('email normalized', { email: maskReporterEmail(email) });
   authRouteLog('env presence check', {
@@ -163,14 +166,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     requestId,
     bodyPresent: Boolean(proxyRequestBody),
     duplicateClientCall: isDuplicateBrowserRequest,
-    stableProdFallbackUrl: defaultBackendUrl,
   });
 
   if (backendUrl) {
     try {
-      let proxyAttempt = await proxyRequestCodeAttempt({
-        req,
-        res,
+      const proxyAttempt = await proxyRequestCodeAttempt({
         targetUrl: backendUrl,
         method,
         forwardedCookie,
@@ -178,62 +178,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         attemptLabel: 'primary',
         requestId,
       });
-      let { upstream, data, text, upstreamBodySnippet } = proxyAttempt;
-
-      if (!upstream.ok && (upstream.status || 500) >= 500 && backendUrl !== defaultBackendUrl) {
-        authRouteError('proxy request failed, retrying stable production target', {
-          targetUrl: backendUrl,
-          retryTargetUrl: defaultBackendUrl,
-          method,
-          requestId,
-          upstreamStatus: upstream.status,
-          backendCode: String(data?.code || data?.message || '').trim() || null,
-          upstreamResponseBodySnippet: upstreamBodySnippet || null,
-          fallbackReason: 'primary_upstream_5xx',
-        });
-        proxyAttempt = await proxyRequestCodeAttempt({
-          req,
-          res,
-          targetUrl: defaultBackendUrl,
-          method,
-          forwardedCookie,
-          proxyRequestBody,
-          attemptLabel: 'prod_retry',
-          requestId,
-        });
-        ({ upstream, data, text, upstreamBodySnippet } = proxyAttempt);
-      }
+      const { upstream, data, text } = proxyAttempt;
+      setReporterAuthProxyDebugHeader(res, { source: proxyTarget.source, reason: proxyTarget.reason });
 
       if (!upstream.ok) {
-        if ((upstream.status || 500) >= 500) {
-          authRouteError('proxy request failed, falling back to local delivery', {
-            targetUrl: proxyAttempt.upstream.url,
-            method,
-            requestId,
-            upstreamStatus: upstream.status,
-            backendCode: String(data?.code || data?.message || '').trim() || null,
-            upstreamResponseBodySnippet: upstreamBodySnippet || null,
-            fallbackReason: 'upstream_5xx',
-          });
-          shouldUseLocalFallback = true;
-        }
-      }
-
-      if (!upstream.ok && !shouldUseLocalFallback) {
-        setReporterAuthProxyDebugHeader(res, { source: proxyTarget.source, reason: proxyTarget.reason });
         forwardReporterProxyCookies(res, upstream.headers);
-        return res.status(upstream.status || 500).json(data || { ok: false, message: text || 'REPORTER_REQUEST_CODE_FAILED' });
+        return res.status(upstream.status || 500).json(data || {
+          ok: false,
+          code: 'REPORTER_REQUEST_CODE_FAILED',
+          message: text || 'REPORTER_REQUEST_CODE_FAILED',
+        });
       }
 
-      if (!upstream.ok && shouldUseLocalFallback) {
-        forwardReporterProxyCookies(res, upstream.headers);
-      }
-
-      if (!shouldUseLocalFallback) {
-        forwardReporterProxyCookies(res, upstream.headers, [createChallengeCookie(createChallengeToken(email, data?.expiresAt))]);
-
-        return res.status(200).json({ ...(data || {}), ok: data?.ok !== false, email: data?.email || email });
-      }
+      forwardReporterProxyCookies(res, upstream.headers, [createChallengeCookie(createChallengeToken(email, data?.expiresAt))]);
+      return res.status(upstream.status || 200).json({ ...(data || {}), ok: data?.ok !== false, email: data?.email || email });
     } catch (error: any) {
       authRouteError('proxy request failed', {
         targetUrl: backendUrl,
@@ -242,42 +200,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         error: error?.message || 'REPORTER_REQUEST_CODE_PROXY_FAILED',
         fallbackReason: 'proxy_exception',
       });
-
-      if (backendUrl !== defaultBackendUrl) {
-        try {
-          authRouteError('proxy request exception, retrying stable production target', {
-            targetUrl: backendUrl,
-            retryTargetUrl: defaultBackendUrl,
-            method,
-            requestId,
-            fallbackReason: 'proxy_exception_retry_prod_default',
-          });
-          const { upstream, data } = await proxyRequestCodeAttempt({
-            req,
-            res,
-            targetUrl: defaultBackendUrl,
-            method,
-            forwardedCookie,
-            proxyRequestBody,
-            attemptLabel: 'prod_retry',
-            requestId,
-          });
-          if (upstream.ok) {
-            forwardReporterProxyCookies(res, upstream.headers, [createChallengeCookie(createChallengeToken(email, data?.expiresAt))]);
-            return res.status(200).json({ ...(data || {}), ok: data?.ok !== false, email: data?.email || email });
-          }
-        } catch (retryError: any) {
-          authRouteError('stable production target retry failed', {
-            retryTargetUrl: defaultBackendUrl,
-            method,
-            requestId,
-            error: retryError?.message || 'REPORTER_REQUEST_CODE_PROXY_RETRY_FAILED',
-            fallbackReason: 'proxy_retry_exception',
-          });
-        }
-      }
-
-      shouldUseLocalFallback = true;
+      setReporterAuthProxyDebugHeader(res, { source: proxyTarget.source, reason: proxyTarget.reason });
+      return res.status(502).json({
+        ok: false,
+        code: 'REPORTER_REQUEST_CODE_PROXY_FAILED',
+        message: error?.message || 'REPORTER_REQUEST_CODE_PROXY_FAILED',
+      });
     }
   } else {
     setReporterAuthProxyDebugHeader(res, { source: proxyTarget.source, reason: proxyTarget.reason });

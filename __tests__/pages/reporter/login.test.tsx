@@ -81,10 +81,6 @@ describe('pages/reporter/login', () => {
         expiresAt: '2025-01-01T10:30:00.000Z',
         debugCode: '123456',
       }),
-    }).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:30:00.000Z' } }),
     });
 
     render(<ReporterLoginPage communityReporterClosed={false} reporterPortalClosed={false} />);
@@ -108,24 +104,19 @@ describe('pages/reporter/login', () => {
     expect(screen.getByText('Verification code sent. Check your email for the code or secure sign-in link.')).toBeTruthy();
     expect(screen.getByText('Development code: 123456')).toBeTruthy();
     expect(saveReporterPortalProfileMock).toHaveBeenCalledWith({ email: 'reporter@example.com' });
+    expect((global as any).fetch).toHaveBeenCalledTimes(1);
   });
 
-  it('stays on the OTP step when challenge-session bootstrap fails after request-code succeeds', async () => {
-    (global as any).fetch
-      .mockResolvedValueOnce({
+  it('does not fire a second bootstrap request after request-code succeeds', async () => {
+    (global as any).fetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
         ok: true,
-        status: 200,
-        json: async () => ({
-          ok: true,
-          expiresAt: '2025-01-01T10:30:00.000Z',
-          debugCode: '123456',
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 401,
-        json: async () => ({ ok: false, code: 'SESSION_EXPIRED', message: 'SESSION_EXPIRED' }),
-      });
+        expiresAt: '2025-01-01T10:30:00.000Z',
+        debugCode: '123456',
+      }),
+    });
 
     render(<ReporterLoginPage communityReporterClosed={false} reporterPortalClosed={false} />);
 
@@ -136,27 +127,21 @@ describe('pages/reporter/login', () => {
 
     expect(await screen.findByLabelText('Verification code')).toBeTruthy();
     expect(screen.getByText('Verification code sent. Check your email for the code or secure sign-in link.')).toBeTruthy();
-    expect(screen.queryByText('Your verification session expired. Request a new code.')).toBeNull();
     expect(saveReporterPortalProfileMock).toHaveBeenCalledWith({ email: 'reporter@example.com' });
+    expect((global as any).fetch).toHaveBeenCalledTimes(1);
   });
 
   it('treats 200 ok true as success even when the response includes a non-empty message field', async () => {
-    (global as any).fetch
-      .mockResolvedValueOnce({
+    (global as any).fetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
         ok: true,
-        status: 200,
-        json: async () => ({
-          ok: true,
-          message: 'OTP sent successfully',
-          expiresAt: '2025-01-01T10:30:00.000Z',
-          debugCode: '123456',
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:30:00.000Z' } }),
-      });
+        message: 'OTP sent successfully',
+        expiresAt: '2025-01-01T10:30:00.000Z',
+        debugCode: '123456',
+      }),
+    });
 
     render(<ReporterLoginPage communityReporterClosed={false} reporterPortalClosed={false} />);
 
@@ -184,7 +169,7 @@ describe('pages/reporter/login', () => {
     });
     fireEvent.click(screen.getByText('Send verification code'));
 
-    await screen.findByText('Verification email is temporarily unavailable. Please try again shortly.');
+    await screen.findByText('REPORTER_PORTAL_EMAIL_SEND_FAILED');
     expect(await screen.findByLabelText('Reporter email')).toBeTruthy();
     expect((screen.getByLabelText('Reporter email') as HTMLInputElement).value).toBe('reporter@example.com');
     expect(screen.queryByLabelText('Verification code')).toBeNull();
@@ -222,7 +207,7 @@ describe('pages/reporter/login', () => {
     });
     fireEvent.click(screen.getByText('Send verification code'));
 
-    await screen.findByText('Verification email is temporarily unavailable. Please try again shortly.');
+    await screen.findByText('REPORTER_PORTAL_EMAIL_SEND_FAILED');
     expect(await screen.findByLabelText('Reporter email')).toBeTruthy();
     expect(screen.queryByLabelText('Verification code')).toBeNull();
   });
@@ -290,17 +275,7 @@ describe('pages/reporter/login', () => {
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:30:00.000Z' } }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
         json: async () => ({ ok: true, expiresAt: '2025-01-01T10:35:00.000Z', debugCode: '222222' }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:35:00.000Z' } }),
       });
 
     render(<ReporterLoginPage communityReporterClosed={false} reporterPortalClosed={false} />);
@@ -321,7 +296,7 @@ describe('pages/reporter/login', () => {
     expect(screen.getByText('Development code: 222222')).toBeTruthy();
 
     expect((global as any).fetch).toHaveBeenNthCalledWith(
-      3,
+      2,
       'http://localhost/api/reporter-auth/request-code',
       expect.objectContaining({
         method: 'POST',
@@ -337,11 +312,6 @@ describe('pages/reporter/login', () => {
         ok: true,
         status: 200,
         json: async () => ({ ok: true, expiresAt: '2025-01-01T10:30:00.000Z', debugCode: '111111' }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:30:00.000Z' } }),
       })
       .mockResolvedValueOnce({
         ok: false,
@@ -360,7 +330,7 @@ describe('pages/reporter/login', () => {
     fireEvent.change(codeInput, { target: { value: '123456' } });
     fireEvent.click(screen.getByText('Resend'));
 
-    await screen.findByText('Verification email is temporarily unavailable. Please try again shortly.');
+    await screen.findByText('REPORTER_PORTAL_EMAIL_SEND_FAILED');
     expect(await screen.findByLabelText('Reporter email')).toBeTruthy();
     expect((screen.getByLabelText('Reporter email') as HTMLInputElement).value).toBe('reporter@example.com');
     expect(screen.queryByLabelText('Verification code')).toBeNull();
@@ -376,17 +346,7 @@ describe('pages/reporter/login', () => {
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:30:00.000Z' } }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
         json: async () => ({ ok: true, expiresAt: '2025-01-01T10:35:00.000Z', debugCode: '222222' }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:35:00.000Z' } }),
       })
       .mockResolvedValueOnce({
         ok: true,
@@ -415,7 +375,7 @@ describe('pages/reporter/login', () => {
 
     await screen.findByText('A newer verification code was sent. Use the most recent code only.');
     expect((global as any).fetch).toHaveBeenNthCalledWith(
-      6,
+      4,
       'http://localhost/api/reporter-auth/verify-code',
       expect.objectContaining({
         method: 'POST',
@@ -435,17 +395,7 @@ describe('pages/reporter/login', () => {
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:30:00.000Z' } }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
         json: async () => ({ ok: true, expiresAt: '2025-01-01T10:35:00.000Z', debugCode: '222222' }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:35:00.000Z' } }),
       })
       .mockResolvedValueOnce({
         ok: true,
@@ -490,11 +440,6 @@ describe('pages/reporter/login', () => {
         json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:30:00.000Z' } }),
       })
       .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:30:00.000Z' } }),
-      })
-      .mockResolvedValueOnce({
         ok: false,
         status: 400,
         json: async () => ({ ok: false, code: 'OTP_EXPIRED_OR_MISSING' }),
@@ -527,11 +472,6 @@ describe('pages/reporter/login', () => {
         json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:30:00.000Z' } }),
       })
       .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:30:00.000Z' } }),
-      })
-      .mockResolvedValueOnce({
         ok: false,
         status: 401,
         json: async () => ({ ok: false, code: 'REPORTER_SESSION_MISSING', message: 'REPORTER_SESSION_MISSING' }),
@@ -550,7 +490,7 @@ describe('pages/reporter/login', () => {
     await screen.findByText('Your verification session expired. Request a new code.');
     expect(await screen.findByLabelText('Reporter email')).toBeTruthy();
     expect(screen.queryByLabelText('Verification code')).toBeNull();
-    expect((global as any).fetch).toHaveBeenCalledTimes(4);
+    expect((global as any).fetch).toHaveBeenCalledTimes(3);
   });
 
   it('resets cleanly when verify returns a session-related 500 response', async () => {
@@ -559,11 +499,6 @@ describe('pages/reporter/login', () => {
         ok: true,
         status: 200,
         json: async () => ({ ok: true, expiresAt: '2025-01-01T10:30:00.000Z', debugCode: '123456' }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:30:00.000Z' } }),
       })
       .mockResolvedValueOnce({
         ok: true,
@@ -588,7 +523,7 @@ describe('pages/reporter/login', () => {
 
     await screen.findByText('Your verification session expired. Request a new code.');
     expect(await screen.findByLabelText('Reporter email')).toBeTruthy();
-    expect((global as any).fetch).toHaveBeenCalledTimes(4);
+    expect((global as any).fetch).toHaveBeenCalledTimes(3);
   });
 
   it('resets to email step when the latest challenge session is missing before verify', async () => {
@@ -637,11 +572,6 @@ describe('pages/reporter/login', () => {
         json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:30:00.000Z' } }),
       })
       .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:30:00.000Z' } }),
-      })
-      .mockResolvedValueOnce({
         ok: false,
         status: 400,
         json: async () => ({ ok: false, code: 'OTP_INVALID', attemptsRemaining: 0 }),
@@ -674,11 +604,6 @@ describe('pages/reporter/login', () => {
         json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:30:00.000Z' } }),
       })
       .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:30:00.000Z' } }),
-      })
-      .mockResolvedValueOnce({
         ok: false,
         status: 503,
         json: async () => ({ ok: false, code: 'REPORTER_VERIFY_CODE_FAILED' }),
@@ -704,11 +629,6 @@ describe('pages/reporter/login', () => {
         ok: true,
         status: 200,
         json: async () => ({ ok: true, expiresAt: '2025-01-01T10:30:00.000Z', debugCode: '123456' }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:30:00.000Z' } }),
       })
       .mockResolvedValueOnce({
         ok: true,
@@ -761,7 +681,7 @@ describe('pages/reporter/login', () => {
       json: async () => ({ ok: false, code: 'REPORTER_PORTAL_EMAIL_SEND_FAILED' }),
     });
 
-    await screen.findByText('Verification email is temporarily unavailable. Please try again shortly.');
+    await screen.findByText('REPORTER_PORTAL_EMAIL_SEND_FAILED');
   });
 
   it('prevents duplicate verify submissions while verification is pending', async () => {
@@ -771,11 +691,6 @@ describe('pages/reporter/login', () => {
         ok: true,
         status: 200,
         json: async () => ({ ok: true, expiresAt: '2025-01-01T10:30:00.000Z', debugCode: '123456' }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:30:00.000Z' } }),
       })
       .mockResolvedValueOnce({
         ok: true,
@@ -800,7 +715,7 @@ describe('pages/reporter/login', () => {
     fireEvent.click(verifyButton);
 
     await waitFor(() => {
-      expect((global as any).fetch).toHaveBeenCalledTimes(4);
+      expect((global as any).fetch).toHaveBeenCalledTimes(3);
     });
 
     resolveVerifyCode?.({
