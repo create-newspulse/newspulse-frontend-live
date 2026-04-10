@@ -37,6 +37,7 @@ describe('pages/api/reporter-auth/request-code', () => {
     await handler(req, res as any);
 
     expect(res.statusCode).toBe(200);
+    expect(res.headers['Cache-Control']).toBe('no-store, no-cache, must-revalidate, proxy-revalidate');
     expect((global as any).fetch).toHaveBeenCalledWith(
       'http://localhost:3010/api/reporter-auth/request-code',
       expect.objectContaining({
@@ -52,7 +53,7 @@ describe('pages/api/reporter-auth/request-code', () => {
     expect(cookies.some((value) => value.includes('np_reporter_portal_challenge='))).toBe(true);
   });
 
-  it('falls back to local email delivery when the proxied request-code call returns 503', async () => {
+  it('returns the upstream status and body when the proxied request-code call returns 503', async () => {
     (global as any).fetch.mockResolvedValueOnce({
       ok: false,
       status: 503,
@@ -72,11 +73,30 @@ describe('pages/api/reporter-auth/request-code', () => {
     const res = createMockResponse();
     await handler(req, res as any);
 
-    expect(res.statusCode).toBe(200);
-    expect(sendReporterPortalLoginEmail).toHaveBeenCalledTimes(1);
-    const cookies = ([] as string[]).concat(res.headers['Set-Cookie'] || []);
-    expect(cookies.some((value) => value.includes('np_reporter_portal_otp='))).toBe(true);
-    expect(cookies.some((value) => value.includes('np_reporter_portal_challenge='))).toBe(true);
+    expect(res.statusCode).toBe(503);
+    expect(res.body).toEqual({ ok: false, code: 'REPORTER_EMAIL_UNAVAILABLE', message: 'REPORTER_PORTAL_EMAIL_SEND_FAILED' });
+    expect(sendReporterPortalLoginEmail).not.toHaveBeenCalled();
+  });
+
+  it('returns a precise proxy error when the upstream request throws', async () => {
+    (global as any).fetch.mockRejectedValueOnce(new Error('connect ETIMEDOUT'));
+
+    const req = {
+      method: 'POST',
+      body: { email: 'reporter@example.com' },
+      headers: {},
+    } as any;
+
+    const res = createMockResponse();
+    await handler(req, res as any);
+
+    expect(res.statusCode).toBe(502);
+    expect(res.body).toEqual({
+      ok: false,
+      code: 'REPORTER_REQUEST_CODE_PROXY_FAILED',
+      message: 'connect ETIMEDOUT',
+    });
+    expect(sendReporterPortalLoginEmail).not.toHaveBeenCalled();
   });
 });
 
