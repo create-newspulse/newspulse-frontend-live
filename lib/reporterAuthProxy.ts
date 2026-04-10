@@ -11,10 +11,15 @@ type ReporterAuthProxyTarget = {
   reason: 'explicit_env' | 'configured_base' | 'frontend_target_rejected' | 'missing_base' | 'dev_same_host_rejected';
 };
 
-function isProdDeployment(): boolean {
+function isKnownProdHost(hostname: string): boolean {
+  return hostname === 'www.newspulse.co.in' || hostname === 'newspulse.co.in' || hostname === 'admin.newspulse.co.in';
+}
+
+function isProdDeployment(req?: NextApiRequest): boolean {
   if (String(process.env.VERCEL_ENV || '').toLowerCase() === 'production') return true;
   const explicit = String(process.env.NEWS_PULSE_DEPLOYMENT || process.env.NEWS_PULSE_ENV || '').toLowerCase();
-  return explicit === 'production' || explicit === 'prod';
+  if (explicit === 'production' || explicit === 'prod') return true;
+  return isKnownProdHost(getRequestHost(req));
 }
 
 function normalizePath(path: string): string {
@@ -113,7 +118,7 @@ export function resolveReporterAuthProxyTarget(path: string, req?: NextApiReques
     };
   }
 
-  if (isProdDeployment()) {
+  if (isProdDeployment(req)) {
     return {
       url: `${DEFAULT_PROD_REPORTER_AUTH_BASE}${normalizePath(path)}`,
       base: DEFAULT_PROD_REPORTER_AUTH_BASE,

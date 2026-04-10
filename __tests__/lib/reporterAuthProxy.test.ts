@@ -104,4 +104,14 @@ describe('lib/reporterAuthProxy', () => {
       })
     ).toBeNull();
   });
+
+  it('falls back to the Render backend on the live host even when runtime production env is absent', () => {
+    const { resolveReporterAuthProxyUrl } = require('../../lib/reporterAuthProxy');
+
+    expect(
+      resolveReporterAuthProxyUrl('/api/reporter-auth/request-code', {
+        headers: { host: 'www.newspulse.co.in' },
+      })
+    ).toBe('https://newspulse-backend-real.onrender.com/api/reporter-auth/request-code');
+  });
 });
