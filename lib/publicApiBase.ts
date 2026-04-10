@@ -1,4 +1,5 @@
 let warnedUnsafeDevBase = false;
+const DEFAULT_PROD_API_BASE = 'https://newspulse-backend-real.onrender.com';
 
 function normalizeBase(raw: string): string {
   // Normalize to an origin-ish base (no trailing slash, and strip trailing /api).
@@ -61,6 +62,10 @@ export function getPublicApiBaseUrl(): string {
   if (typeof window !== 'undefined') return '';
 
   const base = resolveConfiguredBase();
+
+  if (!base && isProdDeployment()) {
+    return DEFAULT_PROD_API_BASE;
+  }
 
   // Safety: local dev should not silently hit production.
   // This prevents accidental cross-environment writes (admin) and reads (public).

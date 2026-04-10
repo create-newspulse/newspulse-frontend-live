@@ -37,6 +37,17 @@ describe('pages/api/reporter-auth/request-code', () => {
     await handler(req, res as any);
 
     expect(res.statusCode).toBe(200);
+    expect((global as any).fetch).toHaveBeenCalledWith(
+      'http://localhost:3010/api/reporter-auth/request-code',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        }),
+        body: JSON.stringify({ email: 'reporter@example.com' }),
+      })
+    );
     const cookies = ([] as string[]).concat(res.headers['Set-Cookie'] || []);
     expect(cookies.some((value) => value.includes('np_reporter_portal_challenge='))).toBe(true);
   });

@@ -26,6 +26,12 @@ function authRouteError(event: string, details?: Record<string, unknown>) {
   console.error(`[reporter-auth/request-code] ${event}`, details || {});
 }
 
+function toLogSnippet(value: string, maxLength = 280): string {
+  const normalized = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!normalized) return '';
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}...` : normalized;
+}
+
 function resolveSiteUrl(req: NextApiRequest): string {
   const raw = String(
     process.env.NEXT_PUBLIC_SITE_URL ||
@@ -64,6 +70,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const backendUrl = resolveReporterAuthProxyUrl('/api/reporter-auth/request-code');
   const envPresence = getReporterPortalAuthEnvPresence();
   let shouldUseLocalFallback = false;
+  const method = 'POST';
+  const forwardedCookie = getReporterForwardCookieHeader(req);
+  const proxyRequestBody = JSON.stringify({ email });
   authRouteLog('email normalized', { email: maskReporterEmail(email) });
   authRouteLog('env presence check', {
     ...envPresence,
@@ -83,31 +92,47 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (backendUrl) {
-    authRouteLog('proxy request start', { targetUrl: backendUrl, credentialsIncluded: Boolean(getReporterForwardCookieHeader(req)) });
+    authRouteLog('proxy request start', {
+      targetUrl: backendUrl,
+      method,
+      credentialsIncluded: Boolean(forwardedCookie),
+      forwardedHeaders: {
+        accept: 'application/json',
+        contentType: 'application/json',
+        hasCookie: Boolean(forwardedCookie),
+      },
+      requestBodySnippet: toLogSnippet(proxyRequestBody),
+    });
     try {
       const upstream = await fetch(backendUrl, {
-        method: 'POST',
+        method,
         headers: {
           Accept: 'application/json',
           'Content-Type': 'application/json',
-          ...(getReporterForwardCookieHeader(req) ? { cookie: getReporterForwardCookieHeader(req) } : {}),
+          ...(forwardedCookie ? { cookie: forwardedCookie } : {}),
         },
-        body: JSON.stringify({ email }),
+        body: proxyRequestBody,
       });
       const { data, text } = await readReporterProxyBody(upstream);
+      const upstreamBodySnippet = toLogSnippet(text || (data ? JSON.stringify(data) : ''));
       authRouteLog('proxy request end', {
         targetUrl: backendUrl,
-        status: upstream.status,
+        method,
+        upstreamStatus: upstream.status,
         backendCode: String(data?.code || data?.message || '').trim() || null,
-        credentialsIncluded: Boolean(getReporterForwardCookieHeader(req)),
+        credentialsIncluded: Boolean(forwardedCookie),
+        upstreamResponseBodySnippet: upstreamBodySnippet || null,
       });
 
       if (!upstream.ok) {
         if ((upstream.status || 500) >= 500) {
           authRouteError('proxy request failed, falling back to local delivery', {
             targetUrl: backendUrl,
-            status: upstream.status,
+            method,
+            upstreamStatus: upstream.status,
             backendCode: String(data?.code || data?.message || '').trim() || null,
+            upstreamResponseBodySnippet: upstreamBodySnippet || null,
+            fallbackReason: 'upstream_5xx',
           });
           shouldUseLocalFallback = true;
         }
@@ -130,10 +155,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     } catch (error: any) {
       authRouteError('proxy request failed', {
         targetUrl: backendUrl,
+        method,
         error: error?.message || 'REPORTER_REQUEST_CODE_PROXY_FAILED',
+        fallbackReason: 'proxy_exception',
       });
       shouldUseLocalFallback = true;
     }
+  } else {
+    authRouteError('proxy target unavailable, falling back to local delivery', {
+      targetUrl: null,
+      method,
+      fallbackReason: 'backend_base_missing',
+    });
   }
 
   try {
