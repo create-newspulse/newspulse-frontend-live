@@ -32,6 +32,12 @@ function toLogSnippet(value: string, maxLength = 280): string {
   return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}...` : normalized;
 }
 
+function setReporterAuthProxyDebugHeader(res: NextApiResponse, target: { source: string; reason: string }) {
+  try {
+    res.setHeader('X-Reporter-Auth-Proxy', `${target.source}:${target.reason}`);
+  } catch {}
+}
+
 function resolveSiteUrl(req: NextApiRequest): string {
   const raw = String(
     process.env.NEXT_PUBLIC_SITE_URL ||
@@ -214,6 +220,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       if (!upstream.ok && !shouldUseLocalFallback) {
+        setReporterAuthProxyDebugHeader(res, { source: proxyTarget.source, reason: proxyTarget.reason });
         forwardReporterProxyCookies(res, upstream.headers);
         return res.status(upstream.status || 500).json(data || { ok: false, message: text || 'REPORTER_REQUEST_CODE_FAILED' });
       }
@@ -273,6 +280,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       shouldUseLocalFallback = true;
     }
   } else {
+    setReporterAuthProxyDebugHeader(res, { source: proxyTarget.source, reason: proxyTarget.reason });
     authRouteError('proxy target unavailable, falling back to local delivery', {
       targetUrl: null,
       method,
@@ -352,6 +360,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       requestId,
     });
     authRouteLog('final response sent', { status: 503, message: 'REPORTER_PORTAL_EMAIL_SEND_FAILED', category: classifiedError.category });
+    setReporterAuthProxyDebugHeader(res, { source: proxyTarget.source, reason: proxyTarget.reason });
     return res.status(503).json({ ok: false, code: classifiedError.code || 'REPORTER_EMAIL_UNAVAILABLE', message: classifiedError.message || 'REPORTER_PORTAL_EMAIL_SEND_FAILED' });
   }
 }
