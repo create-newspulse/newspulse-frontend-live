@@ -67,7 +67,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const email = normalizeReporterAuthEmail(req.body?.email);
-  const backendUrl = resolveReporterAuthProxyUrl('/api/reporter-auth/request-code');
+  const backendUrl = resolveReporterAuthProxyUrl('/api/reporter-auth/request-code', req);
   const envPresence = getReporterPortalAuthEnvPresence();
   let shouldUseLocalFallback = false;
   const method = 'POST';

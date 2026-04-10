@@ -8,7 +8,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ ok: false, message: 'METHOD_NOT_ALLOWED' });
   }
 
-  const backendUrl = resolveReporterAuthProxyUrl('/api/reporter-auth/logout');
+  const backendUrl = resolveReporterAuthProxyUrl('/api/reporter-auth/logout', req);
   if (backendUrl) {
     try {
       const upstream = await fetch(backendUrl, {

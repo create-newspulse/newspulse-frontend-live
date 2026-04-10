@@ -75,7 +75,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const email = normalizeReporterAuthEmail(req.body?.email);
   const code = String(req.body?.code || '').trim();
-  const backendUrl = resolveReporterAuthProxyUrl('/api/reporter-auth/verify-code');
+  const backendUrl = resolveReporterAuthProxyUrl('/api/reporter-auth/verify-code', req);
 
   if (backendUrl) {
     try {

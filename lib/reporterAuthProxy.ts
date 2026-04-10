@@ -1,13 +1,57 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPublicApiBaseUrl } from './publicApiBase';
 
-export function resolveReporterAuthProxyUrl(path: string): string | null {
-  const base = String(getPublicApiBaseUrl() || '').trim().replace(/\/+$/, '');
+const DEFAULT_PROD_REPORTER_AUTH_BASE = 'https://newspulse-backend-real.onrender.com';
+const KNOWN_FRONTEND_HOSTS = new Set(['www.newspulse.co.in', 'newspulse.co.in', 'admin.newspulse.co.in']);
+
+function isProdDeployment(): boolean {
+  if (String(process.env.VERCEL_ENV || '').toLowerCase() === 'production') return true;
+  const explicit = String(process.env.NEWS_PULSE_DEPLOYMENT || process.env.NEWS_PULSE_ENV || '').toLowerCase();
+  return explicit === 'production' || explicit === 'prod';
+}
+
+function normalizePath(path: string): string {
+  return path.startsWith('/') ? path : `/${path}`;
+}
+
+function getHostname(value: string): string {
+  try {
+    return new URL(value).hostname.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+function getRequestHost(req?: NextApiRequest): string {
+  return String(req?.headers['x-forwarded-host'] || req?.headers.host || '')
+    .split(',')[0]
+    .trim()
+    .toLowerCase();
+}
+
+function isFrontendProxyBase(base: string, req?: NextApiRequest): boolean {
+  const hostname = getHostname(base);
+  if (!hostname) return false;
+
+  if (KNOWN_FRONTEND_HOSTS.has(hostname)) {
+    return true;
+  }
+
+  const requestHost = getRequestHost(req);
+  return Boolean(requestHost) && hostname === requestHost;
+}
+
+export function resolveReporterAuthProxyUrl(path: string, req?: NextApiRequest): string | null {
+  const configuredBase = String(getPublicApiBaseUrl() || '').trim().replace(/\/+$/, '');
+  const base = isFrontendProxyBase(configuredBase, req)
+    ? (isProdDeployment() ? DEFAULT_PROD_REPORTER_AUTH_BASE : '')
+    : configuredBase;
+
   if (!base) {
     return null;
   }
 
-  return `${base}${path.startsWith('/') ? path : `/${path}`}`;
+  return `${base}${normalizePath(path)}`;
 }
 
 export function getReporterProxySetCookies(headers: Headers): string[] {
