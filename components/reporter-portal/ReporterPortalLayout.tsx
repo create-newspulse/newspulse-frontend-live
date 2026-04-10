@@ -1,7 +1,7 @@
 import Head from 'next/head';
 import Link from 'next/link';
 import React from 'react';
-import type { ReporterPortalSession } from '../../lib/reporterPortal';
+import { getReporterDisplayName, type ReporterPortalProfile, type ReporterPortalSession } from '../../lib/reporterPortal';
 
 type PortalSection = 'dashboard' | 'submissions' | 'submit' | 'profile' | 'login';
 
@@ -10,6 +10,7 @@ type Props = {
   description: string;
   active: PortalSection;
   session?: ReporterPortalSession | null;
+  profile?: ReporterPortalProfile | null;
   onLogout?: () => void;
   children: React.ReactNode;
 };
@@ -27,7 +28,15 @@ const navItemClass = (active: boolean) => (
     : 'rounded-full border border-blue-200 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50'
 );
 
-export default function ReporterPortalLayout({ title, description, active, session, onLogout, children }: Props) {
+export default function ReporterPortalLayout({ title, description, active, session, profile, onLogout, children }: Props) {
+  const displayName = getReporterDisplayName({
+    fullName: profile?.fullName || session?.fullName,
+    name: profile?.name || session?.name,
+    firstName: profile?.firstName || session?.firstName,
+    email: profile?.email || session?.email,
+  });
+  const displayEmail = profile?.email || session?.email || 'Not signed in';
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <Head>
@@ -48,8 +57,8 @@ export default function ReporterPortalLayout({ title, description, active, sessi
 
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
               <div className="font-semibold text-slate-900">Signed in reporter</div>
-              <div>{session?.fullName || 'Community Reporter'}</div>
-              <div className="text-xs text-slate-500">{session?.email || 'Not signed in'}</div>
+              <div>{displayName}</div>
+              <div className="text-xs text-slate-500">{displayEmail}</div>
               <div className="mt-3 flex items-center gap-2">
                 <Link href="/community-reporter" className="text-xs font-semibold text-blue-700 hover:underline">
                   Public Community Reporter page

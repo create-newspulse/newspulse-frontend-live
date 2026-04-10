@@ -40,6 +40,12 @@ jest.mock('../../../lib/communityReporterApi', () => ({
 
 jest.mock('../../../lib/reporterPortal', () => ({
   normalizeReporterEmail: (value: string) => String(value || '').trim().toLowerCase(),
+  extractReporterIdentityFields: (value: any, fallbackEmail?: string) => ({
+    ...(typeof value?.fullName === 'string' && value.fullName.trim() ? { fullName: value.fullName.trim() } : {}),
+    ...(typeof value?.name === 'string' && value.name.trim() ? { name: value.name.trim() } : {}),
+    ...(typeof value?.firstName === 'string' && value.firstName.trim() ? { firstName: value.firstName.trim() } : {}),
+    email: String(value?.email || fallbackEmail || '').trim().toLowerCase(),
+  }),
   loadReporterPortalProfile: (...args: any[]) => loadReporterPortalProfileMock(...args),
   saveReporterPortalProfile: (...args: any[]) => saveReporterPortalProfileMock(...args),
 }));
@@ -425,6 +431,47 @@ describe('pages/reporter/login', () => {
     await screen.findByText('That verification code is incorrect. Attempts remaining: 2.');
     expect(screen.queryByText('A newer verification code was sent. Use the most recent code only.')).toBeNull();
     expect(await screen.findByLabelText('Verification code')).toBeTruthy();
+  });
+
+  it('stores the verified reporter full name when verify-code returns identity fields', async () => {
+    (global as any).fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, expiresAt: '2025-01-01T10:30:00.000Z', debugCode: '123456' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:30:00.000Z' } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, email: 'reporter@example.com', fullName: 'Kiran Parmar', firstName: 'Kiran' }),
+      });
+
+    render(<ReporterLoginPage communityReporterClosed={false} reporterPortalClosed={false} />);
+
+    fireEvent.change(await screen.findByLabelText('Reporter email'), {
+      target: { value: 'reporter@example.com' },
+    });
+    fireEvent.click(screen.getByText('Send verification code'));
+
+    fireEvent.change(await screen.findByLabelText('Verification code'), {
+      target: { value: '123456' },
+    });
+    fireEvent.click(screen.getByText('Verify code'));
+
+    await waitFor(() => {
+      expect(routerState.push).toHaveBeenCalledWith('/reporter/dashboard');
+    });
+
+    expect(saveReporterPortalProfileMock).toHaveBeenLastCalledWith({
+      email: 'reporter@example.com',
+      fullName: 'Kiran Parmar',
+      firstName: 'Kiran',
+    });
   });
 
   it('shows a specific expired-code message and returns to the email step', async () => {

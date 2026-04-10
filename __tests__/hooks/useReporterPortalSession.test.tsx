@@ -38,4 +38,26 @@ describe('useReporterPortalSession', () => {
     );
     expect(result.current.session?.email).toBe('reporter@example.com');
   });
+
+  it('uses the shared reporter name precedence when hydrating session identity', async () => {
+    (global as any).window.localStorage.setItem('np_cr_profile_v1', JSON.stringify({
+      firstName: 'Kiran',
+      email: 'reporter@example.com',
+    }));
+
+    (global as any).fetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, session: { email: 'reporter@example.com', expiresAt: new Date().toISOString() } }),
+    });
+
+    const { result } = renderHook(() => useReporterPortalSession());
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(result.current.session?.fullName).toBe('Kiran');
+    expect(result.current.session?.firstName).toBe('Kiran');
+  });
 });

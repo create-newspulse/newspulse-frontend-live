@@ -1,6 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
 import type { ReporterProfileSummary } from '../../hooks/useCommunityStories';
+import { getReporterDisplayName } from '../../lib/reporterPortal';
 
 type Props = {
   title?: string;
@@ -11,7 +12,12 @@ type Props = {
 
 const MyStoriesHeader: React.FC<Props> = ({ title = 'My Community Stories', reporterEmail, reporterProfile, profileWarning }) => {
   const email = String((reporterEmail || reporterProfile?.email || '')).trim();
-  const fullName = String((reporterProfile?.fullName || '')).trim();
+  const displayName = getReporterDisplayName({
+    fullName: reporterProfile?.fullName,
+    name: reporterProfile?.name,
+    firstName: reporterProfile?.firstName,
+    email,
+  }, 'Not provided');
   const phone = String((reporterProfile?.phone || '')).trim();
   const whatsapp = String((reporterProfile?.whatsapp || '')).trim();
   const location = [reporterProfile?.city, reporterProfile?.district, reporterProfile?.state, reporterProfile?.country]
@@ -45,7 +51,7 @@ const MyStoriesHeader: React.FC<Props> = ({ title = 'My Community Stories', repo
         <div className="mt-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
           <div className="font-semibold text-gray-900 dark:text-gray-100">Reporter details</div>
           <div className="mt-1 grid gap-1">
-            <div><span className="font-medium">Name:</span> {fullName || 'Not provided'}</div>
+            <div><span className="font-medium">Name:</span> {displayName}</div>
             <div><span className="font-medium">Email:</span> {email || 'Not provided'}</div>
             <div><span className="font-medium">Phone:</span> {phone || 'Not provided'}</div>
             <div><span className="font-medium">WhatsApp:</span> {whatsapp || 'Not provided'}</div>

@@ -7,7 +7,7 @@ import { usePublicFounderToggles } from '../../hooks/usePublicFounderToggles';
 import { useReporterPortalSession } from '../../hooks/useReporterPortalSession';
 import { fetchPublicSettings } from '../../lib/communityReporterApi';
 import { getReporterPortalPageServerProps } from '../../lib/reporterPortalPage';
-import { loadReporterPortalProfile, normalizeReporterEmail, saveReporterPortalProfile } from '../../lib/reporterPortal';
+import { extractReporterIdentityFields, loadReporterPortalProfile, normalizeReporterEmail, saveReporterPortalProfile } from '../../lib/reporterPortal';
 import type { FeatureToggleProps } from '../../types/community-reporter';
 
 const DEFAULT_PORTAL_TARGET = '/reporter/dashboard';
@@ -77,6 +77,13 @@ function logReporterAuthStateTransition(from: 'email' | 'code' | 'success', to: 
 function getReporterResponseCode(data: any): string | null {
   const code = String(data?.code || data?.message || '').trim();
   return code || null;
+}
+
+function persistReporterIdentity(source: any, fallbackEmail: string) {
+  saveReporterPortalProfile({
+    ...(loadReporterPortalProfile() || {}),
+    ...extractReporterIdentityFields(source, fallbackEmail),
+  });
 }
 
 function isExpectedReporterAuthFailure(status: number | null, code: string | null, data?: any): boolean {
@@ -322,7 +329,7 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
       }
 
       logReporterAuthEvent('request-code success', { url: requestUrl, status: res.status, backendCode: responseCode, credentialsIncluded: true, requestId, resend: Boolean(options?.resend) });
-      saveReporterPortalProfile({ ...(loadReporterPortalProfile() || {}), email: normalizedEmail });
+      persistReporterIdentity(data, normalizedEmail);
       setEmail(normalizedEmail);
       setCode('');
       const nextChallenge = {
@@ -394,7 +401,7 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
 
         logReporterAuthEvent('verify-link success', { url: requestUrl, status: res.status, backendCode: responseCode, nextTarget });
 
-        saveReporterPortalProfile({ ...(loadReporterPortalProfile() || {}), email: data.email });
+        persistReporterIdentity(data, data.email);
         setStep('success');
         setNotice('Email verified. Opening Reporter Portal…');
         await router.replace(nextTarget);
@@ -529,7 +536,7 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
 
               logReporterAuthEvent('verify-code success', { url: requestUrl, status: res.status, backendCode: responseCode, credentialsIncluded: true, requestId: currentChallenge.requestId });
 
-              saveReporterPortalProfile({ ...(loadReporterPortalProfile() || {}), email: normalizedEmail });
+              persistReporterIdentity(data, normalizedEmail);
               setStep('success');
               activeChallengeRef.current = null;
               setActiveChallenge(null);

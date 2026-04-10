@@ -13,10 +13,11 @@ import type { FeatureToggleProps } from '../../types/community-reporter';
 export default function ReporterDashboardPage({ communityReporterClosed, reporterPortalClosed }: FeatureToggleProps) {
   const router = useRouter();
   const { toggles } = usePublicFounderToggles({ communityReporterClosed, reporterPortalClosed, updatedAt: null });
-  const { session, isReady, logout, reason } = useReporterPortalSession({ reportUnauthorizedReason: true });
-  const { settings, settingsLoading, stories, counts, isLoading, error, errorStatus, hasLoadedOnce } = useCommunityStories({ reporterEmail: session?.email, reporterAuth: true, debugContexts: ['dashboard stats fetch', 'recent submissions fetch'] });
+  const { session, profile, isReady, logout, reason } = useReporterPortalSession({ reportUnauthorizedReason: true });
+  const { settings, settingsLoading, stories, counts, isLoading, error, errorStatus, hasLoadedOnce, reporterProfile } = useCommunityStories({ reporterEmail: session?.email, reporterAuth: true, debugContexts: ['dashboard stats fetch', 'recent submissions fetch'] });
   const hasSessionIssue = errorStatus === 401 || errorStatus === 403;
   const showStats = hasLoadedOnce && !isLoading && !error;
+  const portalProfile = reporterProfile || profile;
 
   if (toggles.communityReporterClosed || toggles.reporterPortalClosed) {
     return <ReporterPortalLayout title="Reporter Dashboard" description="Reporter Portal access is blocked by toggle." active="dashboard"><PortalRouteState title="Reporter Portal is closed" description="The Reporter Portal toggle is off, so dashboard access is blocked." actionHref="/community-reporter" actionLabel="Back to Community Reporter" /></ReporterPortalLayout>;
@@ -35,13 +36,13 @@ export default function ReporterDashboardPage({ communityReporterClosed, reporte
   }
 
   if (!settingsLoading && settings && (!settings.communityReporterEnabled || !settings.allowMyStoriesPortal)) {
-    return <ReporterPortalLayout title="Reporter Dashboard" description="Portal settings are disabled." active="dashboard" session={session} onLogout={() => { void logout().finally(() => router.push('/reporter/login').catch(() => {})); }}><PortalRouteState title="Reporter Portal is unavailable" description="Public settings currently disable the reporter portal, so dashboard access is blocked." actionHref="/community-reporter" actionLabel="Back to Community Reporter" /></ReporterPortalLayout>;
+    return <ReporterPortalLayout title="Reporter Dashboard" description="Portal settings are disabled." active="dashboard" session={session} profile={portalProfile} onLogout={() => { void logout().finally(() => router.push('/reporter/login').catch(() => {})); }}><PortalRouteState title="Reporter Portal is unavailable" description="Public settings currently disable the reporter portal, so dashboard access is blocked." actionHref="/community-reporter" actionLabel="Back to Community Reporter" /></ReporterPortalLayout>;
   }
 
   const recentStories = getRecentStories(stories, 5);
 
   return (
-    <ReporterPortalLayout title="Reporter Dashboard" description="Track your community reporter activity, submission outcomes, and recent editorial movement." active="dashboard" session={session} onLogout={() => { void logout().finally(() => router.push('/reporter/login').catch(() => {})); }}>
+    <ReporterPortalLayout title="Reporter Dashboard" description="Track your community reporter activity, submission outcomes, and recent editorial movement." active="dashboard" session={session} profile={portalProfile} onLogout={() => { void logout().finally(() => router.push('/reporter/login').catch(() => {})); }}>
       {showStats ? (
         <div className="grid gap-4 md:grid-cols-5">
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"><div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Total</div><div className="mt-3 text-3xl font-black text-slate-950">{counts.total}</div></div>

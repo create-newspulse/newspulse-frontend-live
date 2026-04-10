@@ -13,9 +13,10 @@ import type { FeatureToggleProps } from '../../../types/community-reporter';
 export default function ReporterSubmissionsPage({ communityReporterClosed, reporterPortalClosed }: FeatureToggleProps) {
   const router = useRouter();
   const { toggles } = usePublicFounderToggles({ communityReporterClosed, reporterPortalClosed, updatedAt: null });
-  const { session, isReady, logout, reason } = useReporterPortalSession({ reportUnauthorizedReason: true });
-  const { settings, settingsLoading, stories, isLoading, error, errorStatus, hasLoadedOnce } = useCommunityStories({ reporterEmail: session?.email, reporterAuth: true, debugContexts: ['submissions tab fetch'] });
+  const { session, profile, isReady, logout, reason } = useReporterPortalSession({ reportUnauthorizedReason: true });
+  const { settings, settingsLoading, stories, isLoading, error, errorStatus, hasLoadedOnce, reporterProfile } = useCommunityStories({ reporterEmail: session?.email, reporterAuth: true, debugContexts: ['submissions tab fetch'] });
   const hasSessionIssue = errorStatus === 401 || errorStatus === 403;
+  const portalProfile = reporterProfile || profile;
 
   if (toggles.communityReporterClosed || toggles.reporterPortalClosed) {
     return <ReporterPortalLayout title="My Submissions" description="Reporter submissions are blocked by toggle." active="submissions"><PortalRouteState title="Reporter Portal is closed" description="The Reporter Portal toggle is off, so submission tracking routes are blocked." actionHref="/community-reporter" actionLabel="Back to Community Reporter" /></ReporterPortalLayout>;
@@ -34,11 +35,11 @@ export default function ReporterSubmissionsPage({ communityReporterClosed, repor
   }
 
   if (!settingsLoading && settings && (!settings.communityReporterEnabled || !settings.allowMyStoriesPortal)) {
-    return <ReporterPortalLayout title="My Submissions" description="Portal settings are disabled." active="submissions" session={session} onLogout={() => { void logout().finally(() => router.push('/reporter/login').catch(() => {})); }}><PortalRouteState title="Reporter Portal is unavailable" description="Public settings currently disable submission tracking in the Reporter Portal." actionHref="/community-reporter" actionLabel="Back to Community Reporter" /></ReporterPortalLayout>;
+    return <ReporterPortalLayout title="My Submissions" description="Portal settings are disabled." active="submissions" session={session} profile={portalProfile} onLogout={() => { void logout().finally(() => router.push('/reporter/login').catch(() => {})); }}><PortalRouteState title="Reporter Portal is unavailable" description="Public settings currently disable submission tracking in the Reporter Portal." actionHref="/community-reporter" actionLabel="Back to Community Reporter" /></ReporterPortalLayout>;
   }
 
   return (
-    <ReporterPortalLayout title="My Submissions" description="Track submission status, category, date, and open detail views for individual community reporter records." active="submissions" session={session} onLogout={() => { void logout().finally(() => router.push('/reporter/login').catch(() => {})); }}>
+    <ReporterPortalLayout title="My Submissions" description="Track submission status, category, date, and open detail views for individual community reporter records." active="submissions" session={session} profile={portalProfile} onLogout={() => { void logout().finally(() => router.push('/reporter/login').catch(() => {})); }}>
       <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <div>

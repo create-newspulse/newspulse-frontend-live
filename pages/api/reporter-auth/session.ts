@@ -12,6 +12,17 @@ function resolveSessionEmail(data: any): string {
   ).trim().toLowerCase();
 }
 
+function resolveSessionName(data: any, field: 'fullName' | 'name' | 'firstName'): string | undefined {
+  const value = String(
+    data?.session?.[field] ||
+    data?.reporter?.[field] ||
+    data?.user?.[field] ||
+    data?.[field] ||
+    ''
+  ).trim();
+  return value || undefined;
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
@@ -46,6 +57,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         ok: true,
         session: {
           email,
+          fullName: resolveSessionName(data, 'fullName'),
+          name: resolveSessionName(data, 'name'),
+          firstName: resolveSessionName(data, 'firstName'),
           expiresAt: typeof data?.session?.expiresAt === 'string' ? data.session.expiresAt : undefined,
         },
       });

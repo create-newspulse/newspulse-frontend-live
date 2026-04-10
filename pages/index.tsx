@@ -2539,7 +2539,7 @@ function FeedList({ theme, title, items, lang }: any) {
   const safeLang = (lang === 'hi' || lang === 'gu') ? lang : 'en';
   const prefix = safeLang === 'en' ? '' : `/${safeLang}`;
 
-  const MAX_ITEMS = 8;
+  const MAX_ITEMS = 6;
   const CATEGORY_ORDER = [
     'regional',
     'national',
@@ -2582,6 +2582,15 @@ function FeedList({ theme, title, items, lang }: any) {
   const isLoading = items == null;
   const listItems: any[] = Array.isArray(items) ? items : [];
 
+  const FILTER_OPTIONS = [
+    { key: 'all', label: 'All' },
+    { key: 'regional', label: 'Regional' },
+    { key: 'national', label: 'National' },
+    { key: 'international', label: 'International' },
+  ] as const;
+  type LatestFilterKey = (typeof FILTER_OPTIONS)[number]['key'];
+  const [activeFilter, setActiveFilter] = React.useState<LatestFilterKey>('all');
+
   const orderedItems = React.useMemo(() => {
     const picked: any[] = [];
     const pickedIds = new Set<string>();
@@ -2590,25 +2599,21 @@ function FeedList({ theme, title, items, lang }: any) {
       return getStoryId(it) || getStorySlug(it);
     };
 
-    // 1 per category in fixed order
-    for (const cat of CATEGORY_ORDER) {
-      const found = listItems.find((it) => {
-        const id = getItemId(it);
-        if (!id) return false;
-        if (pickedIds.has(id)) return false;
-        return normalizeCategoryKey(it?.category) === cat;
-      });
-      if (found) {
-        const id = getItemId(found);
-        if (id && !pickedIds.has(id)) {
-          picked.push(found);
-          pickedIds.add(id);
-        }
+    for (const item of listItems) {
+      const id = getItemId(item);
+      if (!id || pickedIds.has(id)) {
+        continue;
       }
+      picked.push(item);
+      pickedIds.add(id);
     }
 
-    return picked.slice(0, MAX_ITEMS);
-  }, [listItems]);
+    const filtered = activeFilter === 'all'
+      ? picked
+      : picked.filter((item) => normalizeCategoryKey(item?.category) === activeFilter);
+
+    return filtered.slice(0, MAX_ITEMS);
+  }, [activeFilter, listItems]);
 
   if (!isLoading && !orderedItems.length) return null;
 
@@ -2644,64 +2649,85 @@ function FeedList({ theme, title, items, lang }: any) {
             {t('common.viewAll')}
           </Link>
         </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          {FILTER_OPTIONS.map((option) => {
+            const isActive = activeFilter === option.key;
+            return (
+              <button
+                key={option.key}
+                type="button"
+                onClick={() => setActiveFilter(option.key)}
+                className="rounded-full border px-3 py-1.5 text-xs font-semibold tracking-[0.08em] transition"
+                style={{
+                  borderColor: isActive ? theme.accent : theme.border,
+                  color: isActive ? theme.accent : theme.sub,
+                  background: isActive
+                    ? (theme.mode === 'dark' ? 'rgba(56,189,248,0.12)' : 'rgba(37,99,235,0.08)')
+                    : theme.surface,
+                }}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="px-2 pb-2 pt-2">
-        <div className="max-h-[520px] overflow-auto">
-          {isLoading ? (
-            <div className="px-2">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div key={`sk-${i}`} className="border-b border-slate-100 last:border-b-0 py-2">
-                  <div className="h-3 w-2/3 rounded bg-slate-100 animate-pulse" />
-                  <div className="mt-2 h-4 w-full rounded bg-slate-100 animate-pulse" />
-                </div>
-              ))}
-            </div>
-          ) : !orderedItems.length ? (
-            <div className="px-4 pb-4 text-sm text-slate-500">No fresh updates right now</div>
-          ) : (
-            orderedItems.map((f: any, index: number) => {
-              const storyId = getStoryId(f);
-              const rawSlug = getStorySlug(f);
-              const href = buildNewsUrl({ id: storyId || rawSlug, slug: rawSlug, lang: safeLang });
-              const time = String(f?.time || '').trim();
-              const category = String(f?.category || '').trim();
-              const metaText = time;
-              const storyKey = getStoryReactKey(f, href);
+        {isLoading ? (
+          <div className="px-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={`sk-${i}`} className="border-b border-slate-100 last:border-b-0 py-2.5">
+                <div className="h-3 w-2/3 rounded bg-slate-100 animate-pulse" />
+                <div className="mt-2 h-4 w-full rounded bg-slate-100 animate-pulse" />
+              </div>
+            ))}
+          </div>
+        ) : !orderedItems.length ? (
+          <div className="px-4 pb-4 pt-2 text-sm text-slate-500">No fresh updates right now</div>
+        ) : (
+          orderedItems.map((f: any) => {
+            const storyId = getStoryId(f);
+            const rawSlug = getStorySlug(f);
+            const href = buildNewsUrl({ id: storyId || rawSlug, slug: rawSlug, lang: safeLang });
+            const time = String(f?.time || '').trim();
+            const category = String(f?.category || '').trim();
+            const metaText = time;
+            const storyKey = getStoryReactKey(f, href);
 
-              debugStoryCard('home-feed-list', f, f?.imageSrc);
+            debugStoryCard('home-feed-list', f, f?.imageSrc);
 
-              return (
-                <Link
-                  key={storyKey}
-                  href={href}
-                  className="block rounded-[20px] px-3 py-3 transition border-b border-slate-100 last:border-b-0 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    {metaText ? (
-                      <div className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{metaText}</div>
-                    ) : null}
+            return (
+              <Link
+                key={storyKey}
+                href={href}
+                className="block rounded-[20px] border-b border-slate-100 px-3 py-2.5 transition last:border-b-0 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  {metaText ? (
+                    <div className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{metaText}</div>
+                  ) : null}
 
-                    {category ? (
-                      <span
-                        className={`ml-auto shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${categoryBadgeClasses(category)}`}
-                      >
-                        {category}
-                      </span>
-                    ) : null}
-                  </div>
-
-                  <div className="mt-1 flex items-start gap-2">
-                    <span className="line-clamp-2 font-semibold text-sm leading-snug" style={{ color: theme.text }}>
-                      {String(f?.title || '').trim()}
+                  {category ? (
+                    <span
+                      className={`ml-auto shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${categoryBadgeClasses(category)}`}
+                    >
+                      {category}
                     </span>
-                    {f?.titleIsOriginal ? <OriginalTag /> : null}
-                  </div>
-                </Link>
-              );
-            })
-          )}
-        </div>
+                  ) : null}
+                </div>
+
+                <div className="mt-1 flex items-start gap-2">
+                  <span className="line-clamp-2 font-semibold text-sm leading-snug" style={{ color: theme.text }}>
+                    {String(f?.title || '').trim()}
+                  </span>
+                  {f?.titleIsOriginal ? <OriginalTag /> : null}
+                </div>
+              </Link>
+            );
+          })
+        )}
       </div>
     </div>
   );
@@ -2785,6 +2811,7 @@ function LiveTVWidget({ theme, enabled = true, onToast, embedUrlOverride }: any)
 function HomeEditorialSection({ theme, title, href, items, lang, Icon }: any) {
   const { t } = useI18n();
   const safeLang = lang === 'hi' || lang === 'gu' ? lang : 'en';
+  const spotlightLeadMediaClasses = 'relative overflow-hidden rounded-[30px] bg-slate-100 shadow-[0_24px_54px_-36px_rgba(15,23,42,0.26)] ring-1 ring-slate-200/70';
 
   const lineClamp2: React.CSSProperties = {
     display: '-webkit-box',
@@ -2856,12 +2883,28 @@ function HomeEditorialSection({ theme, title, href, items, lang, Icon }: any) {
             className="group block overflow-hidden rounded-[28px] border p-4 shadow-[0_18px_42px_-34px_rgba(15,23,42,0.30)] transition hover:-translate-y-[1px] hover:shadow-[0_24px_52px_-34px_rgba(15,23,42,0.34)] sm:p-5"
             style={{ borderColor: theme.border, background: theme.surface }}
           >
-            <TopStoryImage
-              storyId={lead ? getStoryId(lead) : undefined}
-              src={lead?.imageSrc ? String(lead.imageSrc) : undefined}
-              alt={String(lead?.title || title || '').trim()}
-              fallbackSrc={COVER_PLACEHOLDER_SRC}
-            />
+            <div className={spotlightLeadMediaClasses}>
+              {lead?.imageSrc ? (
+                <StoryImage
+                  storyId={getStoryId(lead)}
+                  src={String(lead.imageSrc)}
+                  fitMode="cover"
+                  alt={String(lead?.title || title || '').trim()}
+                  variant="top"
+                  fallbackSrc={COVER_PLACEHOLDER_SRC}
+                  allowLowResContainFallback={false}
+                  className="w-full rounded-none bg-transparent shadow-none ring-0"
+                />
+              ) : (
+                <div className="w-full bg-slate-100" style={{ aspectRatio: '16 / 9' }}>
+                  <div className="grid h-full w-full place-items-center">
+                    <div className="text-xs font-extrabold tracking-tight text-slate-500 select-none">
+                      News <span className="text-slate-700">Pulse</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: theme.sub }}>
               {lead?.category ? (
@@ -4014,7 +4057,7 @@ export default function UiPreviewV145() {
           />
 
           <div className="relative grid gap-6">
-            <div className="grid grid-cols-12 gap-6 lg:gap-8">
+            <div className="grid grid-cols-12 items-start gap-6 lg:gap-8">
               {heroLeftBlocks.length ? (
                 <aside className="col-span-12 order-3 lg:order-1 lg:col-span-3">
                   <div className="sticky top-4 grid gap-4">
@@ -4034,7 +4077,7 @@ export default function UiPreviewV145() {
                 </div>
               </main>
 
-              <aside className="col-span-12 order-2 lg:order-3 lg:col-span-3">
+              <aside className="col-span-12 order-2 self-start lg:order-3 lg:col-span-3">
                 <div className="sticky top-4 grid gap-4">
                   <AdSlot slot="HOME_RIGHT_300x250" variant="right300" />
 

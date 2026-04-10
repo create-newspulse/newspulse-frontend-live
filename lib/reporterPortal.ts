@@ -3,11 +3,15 @@ import type { CommunityStorySummary, CommunitySubmissionCounts } from '../types/
 export type ReporterPortalSession = {
   email: string;
   fullName?: string;
+  name?: string;
+  firstName?: string;
   expiresAt?: string;
 };
 
 export type ReporterPortalProfile = {
   fullName?: string;
+  name?: string;
+  firstName?: string;
   email?: string;
   phone?: string;
   whatsapp?: string;
@@ -45,6 +49,78 @@ function removeStorage(key: string) {
 
 export function normalizeReporterEmail(email: string | null | undefined): string {
   return String(email || '').trim().toLowerCase();
+}
+
+type ReporterDisplayNameSource = {
+  fullName?: string | null;
+  name?: string | null;
+  firstName?: string | null;
+  email?: string | null;
+};
+
+function normalizeReporterNamePart(value: string | null | undefined): string {
+  return String(value || '').trim().replace(/\s+/g, ' ');
+}
+
+export function getReporterDisplayName(source: ReporterDisplayNameSource | null | undefined, fallback = 'Community Reporter'): string {
+  const fullName = normalizeReporterNamePart(source?.fullName);
+  if (fullName) return fullName;
+
+  const name = normalizeReporterNamePart(source?.name);
+  if (name) return name;
+
+  const firstName = normalizeReporterNamePart(source?.firstName);
+  if (firstName) return firstName;
+
+  const emailPrefix = normalizeReporterEmail(source?.email).split('@')[0]?.trim() || '';
+  return emailPrefix || fallback;
+}
+
+export function extractReporterIdentityFields(source: any, fallbackEmail?: string | null): Partial<ReporterPortalProfile> {
+  const fullName = normalizeReporterNamePart(
+    source?.fullName ||
+    source?.name ||
+    source?.reporterName ||
+    source?.reporter?.fullName ||
+    source?.reporter?.reporterName ||
+    source?.reporterProfile?.fullName ||
+    source?.reporterProfile?.reporterName ||
+    source?.session?.fullName ||
+    source?.user?.fullName
+  );
+  const name = normalizeReporterNamePart(
+    source?.name ||
+    source?.reporter?.name ||
+    source?.reporterProfile?.name ||
+    source?.session?.name ||
+    source?.user?.name ||
+    fullName
+  );
+  const firstName = normalizeReporterNamePart(
+    source?.firstName ||
+    source?.reporter?.firstName ||
+    source?.reporterProfile?.firstName ||
+    source?.session?.firstName ||
+    source?.user?.firstName ||
+    fullName.split(/\s+/)[0] ||
+    name.split(/\s+/)[0]
+  );
+  const email = normalizeReporterEmail(
+    source?.email ||
+    source?.reporterEmail ||
+    source?.reporter?.email ||
+    source?.reporterProfile?.email ||
+    source?.session?.email ||
+    source?.user?.email ||
+    fallbackEmail
+  );
+
+  return {
+    ...(fullName ? { fullName } : {}),
+    ...(name ? { name } : {}),
+    ...(firstName ? { firstName } : {}),
+    ...(email ? { email } : {}),
+  };
 }
 
 export function getStoryIdentity(story: CommunityStorySummary | null | undefined): string {
@@ -150,8 +226,7 @@ export function loadReporterPortalProfile(): ReporterPortalProfile | null {
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return null;
     return {
-      fullName: typeof parsed.fullName === 'string' ? parsed.fullName : (typeof parsed.name === 'string' ? parsed.name : undefined),
-      email: typeof parsed.email === 'string' ? normalizeReporterEmail(parsed.email) : undefined,
+      ...extractReporterIdentityFields(parsed),
       phone: typeof parsed.phone === 'string' ? parsed.phone : undefined,
       whatsapp: typeof parsed.whatsapp === 'string' ? parsed.whatsapp : (typeof parsed.reporterWhatsApp === 'string' ? parsed.reporterWhatsApp : undefined),
       city: typeof parsed.city === 'string' ? parsed.city : undefined,
@@ -165,9 +240,15 @@ export function loadReporterPortalProfile(): ReporterPortalProfile | null {
 }
 
 export function saveReporterPortalProfile(profile: ReporterPortalProfile) {
-  const normalizedEmail = normalizeReporterEmail(profile.email);
+  const identity = extractReporterIdentityFields(profile);
+  const normalizedEmail = normalizeReporterEmail(identity.email || profile.email);
+  const fullName = normalizeReporterNamePart(identity.fullName || profile.fullName);
+  const name = normalizeReporterNamePart(identity.name || profile.name || fullName);
+  const firstName = normalizeReporterNamePart(identity.firstName || profile.firstName || fullName.split(/\s+/)[0] || name.split(/\s+/)[0]);
   const payload = {
-    fullName: String(profile.fullName || '').trim(),
+    fullName,
+    name,
+    firstName,
     email: normalizedEmail,
     phone: String(profile.phone || '').trim(),
     whatsapp: String(profile.whatsapp || '').trim(),

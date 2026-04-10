@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
+  extractReporterIdentityFields,
+  getReporterDisplayName,
   loadReporterPortalProfile,
   type ReporterPortalProfile,
   type ReporterPortalSession,
@@ -69,11 +71,25 @@ export function useReporterPortalSession(options?: UseReporterPortalSessionOptio
         setProfile(storedProfile);
 
         if (res.ok && data?.ok === true && data?.session?.email) {
+          const responseIdentity = extractReporterIdentityFields(data?.session, data.session.email);
+          const displayName = getReporterDisplayName({
+            fullName: responseIdentity.fullName || storedProfile?.fullName,
+            name: responseIdentity.name || storedProfile?.name,
+            firstName: responseIdentity.firstName || storedProfile?.firstName,
+            email: data.session.email,
+          }, '');
           setSession({
             email: data.session.email,
             expiresAt: typeof data.session.expiresAt === 'string' ? data.session.expiresAt : undefined,
-            fullName: storedProfile?.fullName,
+            fullName: displayName || undefined,
+            name: responseIdentity.name || storedProfile?.name,
+            firstName: responseIdentity.firstName || storedProfile?.firstName,
           });
+          setProfile((current) => ({
+            ...(current || {}),
+            ...(storedProfile || {}),
+            ...responseIdentity,
+          }));
           setReason(null);
         } else {
           setSession(null);

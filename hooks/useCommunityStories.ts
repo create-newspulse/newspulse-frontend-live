@@ -2,11 +2,13 @@ import { useContext, createContext, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import type { CommunitySettingsPublic, CommunityStorySummary, CommunitySubmissionCounts } from '../types/community-reporter';
 import { fetchMyStoriesByEmail, fetchPublicSettings, isCommunityReporterHttpError, withdrawStoryById } from '../lib/communityReporterApi';
-import { getSubmissionCounts, normalizeReporterEmail } from '../lib/reporterPortal';
+import { extractReporterIdentityFields, getSubmissionCounts, loadReporterPortalProfile, normalizeReporterEmail, saveReporterPortalProfile } from '../lib/reporterPortal';
 import { useI18n } from '../src/i18n/LanguageProvider';
 
 export type ReporterProfileSummary = {
   fullName?: string;
+  name?: string;
+  firstName?: string;
   email?: string;
   phone?: string;
   whatsapp?: string;
@@ -43,6 +45,16 @@ type UseCommunityStoriesOptions = {
 
 const CommunityStoriesOverrideContext = createContext<UseCommunityStoriesValue | null>(null);
 export const CommunityStoriesProvider = CommunityStoriesOverrideContext.Provider;
+
+function mergeReporterProfileSummary(current: ReporterProfileSummary | null, patch: Partial<ReporterProfileSummary>): ReporterProfileSummary | null {
+  if (!current && !Object.keys(patch).length) {
+    return null;
+  }
+  return {
+    ...(current || {}),
+    ...patch,
+  };
+}
 
 export function useCommunityStories(opts?: UseCommunityStoriesOptions): UseCommunityStoriesValue {
   const override = useContext(CommunityStoriesOverrideContext);
@@ -136,7 +148,7 @@ export function useCommunityStories(opts?: UseCommunityStoriesOptions): UseCommu
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object') return;
       setReporterProfile({
-        fullName: typeof parsed.fullName === 'string' ? parsed.fullName : (typeof parsed.name === 'string' ? parsed.name : undefined),
+        ...extractReporterIdentityFields(parsed),
         email: typeof parsed.email === 'string' ? parsed.email : undefined,
         phone: typeof parsed.phone === 'string' ? parsed.phone : undefined,
         whatsapp: typeof parsed.whatsapp === 'string' ? parsed.whatsapp : (typeof parsed.reporterWhatsApp === 'string' ? parsed.reporterWhatsApp : undefined),
@@ -173,6 +185,22 @@ export function useCommunityStories(opts?: UseCommunityStoriesOptions): UseCommu
         useProxy: Boolean(opts?.reporterAuth),
         debugContexts: opts?.debugContexts,
       });
+      const reporterIdentity = items.reduce<Partial<ReporterProfileSummary>>((resolved, item) => {
+        if (resolved.fullName || resolved.name || resolved.firstName) {
+          return resolved;
+        }
+        return extractReporterIdentityFields(item, em);
+      }, {});
+      if (reporterIdentity.fullName || reporterIdentity.name || reporterIdentity.firstName) {
+        const storedProfile = loadReporterPortalProfile() || {};
+        const mergedProfile = {
+          ...storedProfile,
+          ...reporterIdentity,
+          email: reporterIdentity.email || storedProfile.email || em,
+        };
+        saveReporterPortalProfile(mergedProfile);
+        setReporterProfile((current) => mergeReporterProfileSummary(current, mergedProfile));
+      }
       setStories(items);
       setHasLoadedOnce(true);
       try {

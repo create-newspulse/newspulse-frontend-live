@@ -45,7 +45,7 @@ describe('useCommunityStories', () => {
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ ok: true, settings: { communityReporterEnabled: true, allowNewSubmissions: true, allowMyStoriesPortal: true, allowJournalistApplications: false } }) })
       // stories
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ ok: true, stories: [
-        { id: '1', headline: 'A', category: 'Cat', status: 'pending', createdAt: new Date().toISOString() },
+        { id: '1', headline: 'A', category: 'Cat', status: 'pending', createdAt: new Date().toISOString(), reporterName: 'Kiran Parmar' },
         { id: '2', headline: 'B', category: 'Cat', status: 'approved', createdAt: new Date().toISOString() },
         { id: '3', headline: 'C', category: 'Cat', status: 'rejected', createdAt: new Date().toISOString() },
       ] }) });
@@ -68,6 +68,12 @@ describe('useCommunityStories', () => {
     expect(result.current.counts.approved).toBe(1);
     expect(result.current.counts.rejected).toBe(1);
     expect(result.current.profileWarning).toBeNull();
+    expect(result.current.reporterProfile).toEqual(expect.objectContaining({
+      fullName: 'Kiran Parmar',
+      name: 'Kiran Parmar',
+      firstName: 'Kiran',
+      email: 'tester@example.com',
+    }));
   });
 
   it('does not fall back to router or local storage when reporter email is session-controlled', async () => {

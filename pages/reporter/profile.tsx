@@ -12,7 +12,7 @@ import type { FeatureToggleProps } from '../../types/community-reporter';
 export default function ReporterProfilePage({ communityReporterClosed, reporterPortalClosed }: FeatureToggleProps) {
   const router = useRouter();
   const { toggles } = usePublicFounderToggles({ communityReporterClosed, reporterPortalClosed, updatedAt: null });
-  const { session, isReady, logout, reason } = useReporterPortalSession({ reportUnauthorizedReason: true });
+  const { session, profile, isReady, logout, reason } = useReporterPortalSession({ reportUnauthorizedReason: true });
   const [form, setForm] = useState({ fullName: '', email: '', phone: '', whatsapp: '', city: '', district: '', state: '', country: 'India' });
   const [saved, setSaved] = useState(false);
 
@@ -43,7 +43,7 @@ export default function ReporterProfilePage({ communityReporterClosed, reporterP
   }
 
   return (
-    <ReporterPortalLayout title="Reporter Profile" description="Manage the saved reporter identity used by the portal and the shared community reporter submission flow." active="profile" session={session} onLogout={() => { void logout().finally(() => router.push('/reporter/login').catch(() => {})); }}>
+    <ReporterPortalLayout title="Reporter Profile" description="Manage the saved reporter identity used by the portal and the shared community reporter submission flow." active="profile" session={session} profile={profile} onLogout={() => { void logout().finally(() => router.push('/reporter/login').catch(() => {})); }}>
       <div className="mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
         <h2 className="text-2xl font-black text-slate-950">Reporter Profile</h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">These saved details prefill future submissions and keep the portal aligned with the existing community reporter browser storage.</p>
