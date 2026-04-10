@@ -110,7 +110,7 @@ describe('pages/reporter/login', () => {
     expect(saveReporterPortalProfileMock).toHaveBeenCalledWith({ email: 'reporter@example.com' });
   });
 
-  it('resets to email step when challenge-session fails immediately after request-code', async () => {
+  it('stays on the OTP step when challenge-session bootstrap fails after request-code succeeds', async () => {
     (global as any).fetch
       .mockResolvedValueOnce({
         ok: true,
@@ -134,10 +134,40 @@ describe('pages/reporter/login', () => {
     });
     fireEvent.click(screen.getByText('Send verification code'));
 
-    await screen.findByText('Your verification session expired. Request a new code.');
-    expect(await screen.findByLabelText('Reporter email')).toBeTruthy();
-    expect(screen.queryByLabelText('Verification code')).toBeNull();
-    expect(saveReporterPortalProfileMock).not.toHaveBeenCalled();
+    expect(await screen.findByLabelText('Verification code')).toBeTruthy();
+    expect(screen.getByText('Verification code sent. Check your email for the code or secure sign-in link.')).toBeTruthy();
+    expect(screen.queryByText('Your verification session expired. Request a new code.')).toBeNull();
+    expect(saveReporterPortalProfileMock).toHaveBeenCalledWith({ email: 'reporter@example.com' });
+  });
+
+  it('treats 200 ok true as success even when the response includes a non-empty message field', async () => {
+    (global as any).fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          message: 'OTP sent successfully',
+          expiresAt: '2025-01-01T10:30:00.000Z',
+          debugCode: '123456',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:30:00.000Z' } }),
+      });
+
+    render(<ReporterLoginPage communityReporterClosed={false} reporterPortalClosed={false} />);
+
+    fireEvent.change(await screen.findByLabelText('Reporter email'), {
+      target: { value: 'reporter@example.com' },
+    });
+    fireEvent.click(screen.getByText('Send verification code'));
+
+    expect(await screen.findByLabelText('Verification code')).toBeTruthy();
+    expect(screen.queryByText('Verification email is temporarily unavailable. Please try again shortly.')).toBeNull();
+    expect(screen.getByText('Verification code sent. Check your email for the code or secure sign-in link.')).toBeTruthy();
   });
 
   it('keeps the user on the email step and shows a mailer outage message when request-code returns 503', async () => {
@@ -215,6 +245,39 @@ describe('pages/reporter/login', () => {
     expect(await screen.findByLabelText('Reporter email')).toBeTruthy();
     expect(screen.queryByLabelText('Verification code')).toBeNull();
     expect((global as any).fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('prevents duplicate request-code submissions while loading', async () => {
+    let resolveRequest: ((value: any) => void) | null = null;
+    (global as any).fetch.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveRequest = resolve;
+    }));
+
+    render(<ReporterLoginPage communityReporterClosed={false} reporterPortalClosed={false} />);
+
+    fireEvent.change(await screen.findByLabelText('Reporter email'), {
+      target: { value: 'reporter@example.com' },
+    });
+
+    const submitButton = screen.getByText('Send verification code');
+    fireEvent.click(submitButton);
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect((global as any).fetch).toHaveBeenCalledTimes(1);
+    });
+
+    resolveRequest?.({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        expiresAt: '2025-01-01T10:30:00.000Z',
+        debugCode: '123456',
+      }),
+    });
+
+    expect(await screen.findByLabelText('Verification code')).toBeTruthy();
   });
 
   it('resend resets the OTP input and tells the user to use the latest code only', async () => {
