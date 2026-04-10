@@ -100,6 +100,24 @@ function getReporterAuthConfiguredBase(): string {
 export function resolveReporterAuthProxyTarget(path: string, req?: NextApiRequest): ReporterAuthProxyTarget {
   const explicitReporterBase = getReporterAuthConfiguredBase();
   if (explicitReporterBase) {
+    if (isFrontendProxyBase(explicitReporterBase, req)) {
+      if (isProdDeployment(req)) {
+        return {
+          url: `${DEFAULT_PROD_REPORTER_AUTH_BASE}${normalizePath(path)}`,
+          base: DEFAULT_PROD_REPORTER_AUTH_BASE,
+          source: 'prod_default',
+          reason: 'frontend_target_rejected',
+        };
+      }
+
+      return {
+        url: null,
+        base: null,
+        source: 'unavailable',
+        reason: 'dev_same_host_rejected',
+      };
+    }
+
     return {
       url: `${explicitReporterBase}${normalizePath(path)}`,
       base: explicitReporterBase,

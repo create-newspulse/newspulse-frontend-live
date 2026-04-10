@@ -93,6 +93,24 @@ describe('lib/reporterAuthProxy', () => {
     });
   });
 
+  it('ignores the dedicated reporter auth env when it matches the live frontend host', () => {
+    process.env.VERCEL_ENV = 'production';
+    process.env.REPORTER_AUTH_API_BASE = 'https://www.newspulse.co.in';
+
+    const { resolveReporterAuthProxyTarget } = require('../../lib/reporterAuthProxy');
+
+    expect(
+      resolveReporterAuthProxyTarget('/api/reporter-auth/request-code', {
+        headers: { host: 'www.newspulse.co.in' },
+      })
+    ).toEqual({
+      url: 'https://newspulse-backend-real.onrender.com/api/reporter-auth/request-code',
+      base: 'https://newspulse-backend-real.onrender.com',
+      source: 'prod_default',
+      reason: 'frontend_target_rejected',
+    });
+  });
+
   it('does not substitute a production backend for same-host self-proxying outside production', () => {
     process.env.NEXT_PUBLIC_API_BASE = 'https://preview.newspulse.app';
 
