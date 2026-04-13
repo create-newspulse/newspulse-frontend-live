@@ -1945,7 +1945,7 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick, founderToggle
   );
 }
 
-function FeaturedCard({ theme, item, onToast }: any) {
+function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
   const { t } = useI18n();
   const { isBookmarked, toggleBookmark } = useBookmarks();
   const router = useRouter();
@@ -2084,10 +2084,6 @@ function FeaturedCard({ theme, item, onToast }: any) {
 
   const topStoryLabel = t('home.topStory');
 
-  // Fallback: never show hardcoded English placeholder on non-English routes.
-  const fallbackTitle = t('home.updateFallback');
-  const fallbackSummary = t('home.noUpdates');
-
   const openArticle = React.useCallback(() => {
     if (!vm?.href) return;
     void router.push(vm.href);
@@ -2098,6 +2094,80 @@ function FeaturedCard({ theme, item, onToast }: any) {
       'home-top-story',
       { ...(article as any), title: vm.title, slug: resolveArticleSlug(article as any, requestedLang) },
       vm.imageSrc
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <Surface theme={theme} className="group overflow-hidden">
+        <div className="relative overflow-hidden px-5 py-5 sm:px-6 sm:py-6 lg:px-7 lg:py-6">
+          <div className="flex items-start justify-between gap-3">
+            <div
+              className="inline-flex h-8 w-28 animate-pulse rounded-full border"
+              style={{ background: theme.surface2, borderColor: theme.border }}
+            />
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <div className="h-3 w-16 animate-pulse rounded-full" style={{ background: theme.chip }} />
+            <div className="h-3 w-24 animate-pulse rounded-full" style={{ background: theme.chip }} />
+            <div className="h-3 w-20 animate-pulse rounded-full" style={{ background: theme.chip }} />
+          </div>
+
+          <div className="mt-5 grid gap-3">
+            <div className="h-9 w-[88%] animate-pulse rounded-2xl" style={{ background: theme.surface2 }} />
+            <div className="h-9 w-[72%] animate-pulse rounded-2xl" style={{ background: theme.surface2 }} />
+          </div>
+
+          <div className="mt-5 aspect-[16/9] w-full animate-pulse rounded-[28px] border" style={{ background: theme.surface2, borderColor: theme.border }} />
+
+          <div className="mt-5 grid gap-2">
+            <div className="h-4 w-full animate-pulse rounded-full" style={{ background: theme.surface2 }} />
+            <div className="h-4 w-[92%] animate-pulse rounded-full" style={{ background: theme.surface2 }} />
+            <div className="h-4 w-[78%] animate-pulse rounded-full" style={{ background: theme.surface2 }} />
+          </div>
+
+          <div className="mt-5 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: theme.border }}>
+            <div className="flex gap-2">
+              <div className="h-3 w-20 animate-pulse rounded-full" style={{ background: theme.chip }} />
+              <div className="h-3 w-24 animate-pulse rounded-full" style={{ background: theme.chip }} />
+            </div>
+            <div className="flex gap-2">
+              <div className="h-10 w-28 animate-pulse rounded-2xl" style={{ background: theme.surface2 }} />
+              <div className="h-10 w-24 animate-pulse rounded-2xl" style={{ background: theme.surface2 }} />
+            </div>
+          </div>
+        </div>
+      </Surface>
+    );
+  }
+
+  if (!vm) {
+    return (
+      <Surface theme={theme} className="group overflow-hidden">
+        <div className="relative overflow-hidden px-5 py-8 sm:px-6 sm:py-9 lg:px-7 lg:py-10">
+          <div className="flex items-start justify-between gap-3">
+            <span
+              className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-extrabold uppercase tracking-[0.16em]"
+              style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}
+            >
+              <span className="inline-block h-2 w-2 rounded-full" style={{ background: theme.live }} />
+              {topStoryLabel}
+            </span>
+          </div>
+
+          <div className="mt-8 rounded-[28px] border px-5 py-10 text-center sm:px-8" style={{ borderColor: theme.border, background: theme.surface2 }}>
+            <div className="mx-auto max-w-xl">
+              <div className="text-lg font-extrabold tracking-tight" style={{ color: theme.text }}>
+                {t('home.topStory')}
+              </div>
+              <div className="mt-3 text-sm leading-6 sm:text-[15px]" style={{ color: theme.sub }}>
+                {t('home.noUpdates')}
+              </div>
+            </div>
+          </div>
+        </div>
+      </Surface>
     );
   }
 
@@ -2158,10 +2228,10 @@ function FeaturedCard({ theme, item, onToast }: any) {
 
         <div className="relative mt-4">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: theme.sub }}>
-            <span>{vm ? vm.time : '—'}</span>
+            <span>{vm.time}</span>
             <span aria-hidden="true" style={{ opacity: 0.45 }}>•</span>
-            <span className="truncate">{vm ? vm.source : 'News Pulse'}</span>
-            {vm?.category ? (
+            <span className="truncate">{vm.source}</span>
+            {vm.category ? (
               <>
                 <span aria-hidden="true" style={{ opacity: 0.45 }}>•</span>
                 <span className="truncate" style={{ color: theme.text }}>{vm.category}</span>
@@ -2171,54 +2241,46 @@ function FeaturedCard({ theme, item, onToast }: any) {
 
           <div className="mt-4 flex items-start gap-2">
             <h1 className="min-w-0 text-[1.82rem] font-extrabold leading-[1.18] tracking-[-0.015em] sm:text-[2.15rem] sm:leading-[1.15] md:text-[2.35rem]" style={{ color: theme.text, ...lineClamp4 }}>
-              {vm ? vm.title : fallbackTitle}
+              {vm.title}
             </h1>
-            {vm?.titleIsOriginal ? <OriginalTag /> : null}
+            {vm.titleIsOriginal ? <OriginalTag /> : null}
           </div>
 
           <div className="mt-5">
             <TopStoryImage
-              storyId={vm?.id}
-              src={vm?.imageSrc}
-              alt={vm?.title || fallbackTitle}
+              storyId={vm.id}
+              src={vm.imageSrc}
+              alt={vm.title}
               priority
               fallbackSrc={COVER_PLACEHOLDER_SRC}
             />
           </div>
 
           <div className="mt-5 text-[15px] leading-7 sm:text-[15px] sm:leading-7" style={{ color: theme.sub }}>
-            <span style={lineClamp3}>{vm ? vm.summary : fallbackSummary}</span>
-            {vm?.summaryIsOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
+            <span style={lineClamp3}>{vm.summary}</span>
+            {vm.summaryIsOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
           </div>
 
           <div className="mt-5 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: theme.border }}>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12px] font-medium" style={{ color: theme.sub }}>
-              {vm?.location ? (
+              {vm.location ? (
                 <span className="inline-flex items-center gap-1.5">
                   <MapPin className="h-3.5 w-3.5" /> {vm.location}
                 </span>
               ) : null}
-              {vm ? (
-                <span className="inline-flex items-center gap-1.5">
-                  <BookOpen className="h-3.5 w-3.5" /> {vm.readMinutes} {t('common.minutesShort')}
-                </span>
-              ) : null}
+              <span className="inline-flex items-center gap-1.5">
+                <BookOpen className="h-3.5 w-3.5" /> {vm.readMinutes} {t('common.minutesShort')}
+              </span>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {vm ? (
-                <Link
-                  href={vm.href}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold border transition hover:opacity-[0.98]"
-                  style={{ background: theme.accent, color: '#fff', borderColor: 'transparent' }}
-                >
-                  {t('common.read')} <ArrowRight className="h-4 w-4" />
-                </Link>
-              ) : (
-                <Button theme={theme} variant="solid" onClick={() => onToast('Open top story (planned)')}>
-                  {t('common.read')} <ArrowRight className="h-4 w-4" />
-                </Button>
-              )}
+              <Link
+                href={vm.href}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold border transition hover:opacity-[0.98]"
+                style={{ background: theme.accent, color: '#fff', borderColor: 'transparent' }}
+              >
+                {t('common.read')} <ArrowRight className="h-4 w-4" />
+              </Link>
 
               <Button
                 theme={theme}
@@ -4072,7 +4134,7 @@ export default function UiPreviewV145() {
 
               <main className={`col-span-12 order-1 lg:order-2 ${heroCenterColClass}`}>
                 <div className="grid gap-4">
-                  <FeaturedCard theme={theme} item={{ article: topStory, requestedLang: apiLang }} onToast={onToast} />
+                  <FeaturedCard theme={theme} item={{ article: topStory, requestedLang: apiLang }} onToast={onToast} isLoading={latestFromBackend == null} />
                   <CenterStoryFeed theme={theme} items={centerFeedItems} lang={apiLang} />
                 </div>
               </main>
