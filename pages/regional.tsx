@@ -122,6 +122,7 @@ const FALLBACK_DISTRICTS: District[] = [
   "Surendranagar",
   "Tapi",
   "Vadodara",
+  "Vav-Tharad",
   "Valsad",
 ].map((n, i) => ({ id: `dist-${i}`, name: n }));
 

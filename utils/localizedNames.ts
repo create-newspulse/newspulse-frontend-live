@@ -95,7 +95,8 @@ export const GUJ_DISTRICT_LABELS: Record<string, { english: string; hindi: strin
   'surendranagar': { english: 'Surendranagar', hindi: 'सुरेंद्रनगर', gujarati: 'સુરેન્દ્રનગર' },
   'tapi': { english: 'Tapi', hindi: 'तापी', gujarati: 'તાપી' },
   'vadodara': { english: 'Vadodara', hindi: 'वडोदरा', gujarati: 'વડોદરા' },
-  'valsad': { english: 'Valsad', hindi: 'वलसाड', gujarati: 'વલસાડ' }
+  'valsad': { english: 'Valsad', hindi: 'वलसाड', gujarati: 'વલસાડ' },
+  'vav-tharad': { english: 'Vav-Tharad', hindi: 'वाव-थराद', gujarati: 'વાવ-થરાદ' }
 };
 
 // =========================

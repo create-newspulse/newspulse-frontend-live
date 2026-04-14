@@ -4,6 +4,14 @@ function classNames(...s: Array<string | false | null | undefined>) {
   return s.filter(Boolean).join(' ');
 }
 
+function normalizeSearch(value: string) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, ' ')
+    .replace(/[\s-]+/g, ' ')
+    .trim();
+}
+
 export type DistrictPickerItem = {
   slug: string;
   name: string;
@@ -61,9 +69,9 @@ export default function DistrictPicker({
   }, [open]);
 
   const filtered = React.useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = normalizeSearch(query);
     if (!q) return districts;
-    return districts.filter((d) => d.name.toLowerCase().includes(q) || d.slug.toLowerCase().includes(q));
+    return districts.filter((d) => normalizeSearch(d.name).includes(q) || normalizeSearch(d.slug).includes(q));
   }, [districts, query]);
 
   if (!open) return null;
