@@ -187,13 +187,15 @@ const HOME_EDITORIAL_SECTIONS = [
   { key: 'web-stories', route: '/web-stories', Icon: BookOpen },
 ] as const;
 
-const HOME_SPOTLIGHT_SECTION_KEYS = ['regional', 'national', 'international', 'science-technology', 'sports'] as const;
+const HOME_SPOTLIGHT_PRIMARY_SECTION_KEYS = ['regional', 'national', 'international', 'science-technology', 'sports', 'business', 'youth'] as const;
+const HOME_SPOTLIGHT_FALLBACK_SECTION_KEYS = ['glamour'] as const;
 const HOME_SPOTLIGHT_RENDER_FILTER_KEYS = ['regional', 'national', 'international', 'business', 'science-technology', 'sports', 'lifestyle', 'glamour'] as const;
 const HOME_SPOTLIGHT_MAX_ITEMS = 8;
+const HOME_SPOTLIGHT_MAX_PER_CATEGORY = 2;
+const HOME_SPOTLIGHT_MAX_GLAMOUR_ITEMS = 1;
 const HOME_SPOTLIGHT_SOURCE_LIMIT = 18;
 const HOME_SPOTLIGHT_ROTATE_MS = 5000;
 const HOME_SPOTLIGHT_FRESH_HOURS = 72;
-const HOME_SPOTLIGHT_NORMAL_FILL_SECTION_KEYS = ['regional', 'national', 'international', 'business', 'science-technology', 'sports', 'lifestyle', 'glamour'] as const;
 
 const CATEGORY_THEME: Record<string, { base: string; icon: string; hover: string; ring: string; active: string; dot: string }> = {
   breaking: {
@@ -536,48 +538,6 @@ function storyAgeHours(article: any, referenceTime: number): number {
   const publishedTime = storyPublishedTimeValue(article);
   if (!publishedTime || !Number.isFinite(referenceTime)) return Number.POSITIVE_INFINITY;
   return Math.max(0, (referenceTime - publishedTime) / (1000 * 60 * 60));
-}
-
-function spotlightBooleanFlag(article: any, keys: string[]): boolean {
-  for (const key of keys) {
-    const value = article?.[key];
-    if (typeof value === 'boolean') return value;
-    if (typeof value === 'number') return value === 1;
-    if (typeof value === 'string') {
-      const normalized = value.trim().toLowerCase();
-      if (normalized === 'true' || normalized === '1' || normalized === 'yes') return true;
-      if (normalized === 'false' || normalized === '0' || normalized === 'no') return false;
-    }
-  }
-  return false;
-}
-
-function spotlightNumberValue(article: any, keys: string[]): number {
-  for (const key of keys) {
-    const value = Number(article?.[key]);
-    if (Number.isFinite(value)) return value;
-  }
-  return 0;
-}
-
-function spotlightExpiryTimeValue(article: any, keys: string[]): number {
-  for (const key of keys) {
-    const raw = String(article?.[key] || '').trim();
-    if (!raw) continue;
-    const value = Date.parse(raw);
-    if (Number.isFinite(value)) return value;
-  }
-  return 0;
-}
-
-function isManualSpotlightEligible(article: any, referenceTime: number): boolean {
-  const enabled = spotlightBooleanFlag(article, ['spotlightEnabled', 'isSpotlight', 'homepageSpotlightEnabled']);
-  if (!enabled) return false;
-
-  const expiryTime = spotlightExpiryTimeValue(article, ['spotlightExpiresAt', 'spotlightExpiry', 'spotlightEndAt', 'spotlightUntil', 'expiresAt']);
-  if (expiryTime && expiryTime < referenceTime) return false;
-
-  return true;
 }
 
 function makeDekFromContent(text: string): string {
@@ -4312,7 +4272,6 @@ export default function UiPreviewV145() {
   }, [apiLang, homeSectionNews, homepageLeadIdentitySet, t]);
 
   const spotlightItems = React.useMemo(() => {
-    const now = Date.now();
     const seen = new Set<string>();
 
     const toIdentity = (item: any) => {
@@ -4355,9 +4314,6 @@ export default function UiPreviewV145() {
           qualityScore:
             (String(feedItem?.imageSrc || '').trim().length > 0 ? 2 : 0) +
             (String(feedItem?.desc || '').trim().length >= 30 ? 1 : 0),
-          manualEnabled: isManualSpotlightEligible(article, now),
-          manualPinned: spotlightBooleanFlag(article, ['spotlightPinned']),
-          manualPriority: spotlightNumberValue(article, ['spotlightPriority']),
           item: feedItem,
         };
       })
@@ -4366,57 +4322,48 @@ export default function UiPreviewV145() {
         sortTime: number;
         categoryKey: string;
         qualityScore: number;
-        manualEnabled: boolean;
-        manualPinned: boolean;
-        manualPriority: number;
         item: any;
       }>;
 
-    const manualItems = rawStoryCandidates
-      .filter((candidate) => candidate.manualEnabled)
-      .sort((left, right) => {
-        if (left.manualPinned !== right.manualPinned) return left.manualPinned ? -1 : 1;
-        if (left.manualPriority !== right.manualPriority) return right.manualPriority - left.manualPriority;
-        return right.sortTime - left.sortTime;
-      })
-      .slice(0, HOME_SPOTLIGHT_MAX_ITEMS);
-
-    const selectedIds = new Set(manualItems.map((candidate) => candidate.identity));
-
-    const autoCandidates = rawStoryCandidates
-      .filter((candidate) => !selectedIds.has(candidate.identity))
-      .sort((left, right) => {
-        const leftPreferred = HOME_SPOTLIGHT_SECTION_KEYS.includes(left.categoryKey as (typeof HOME_SPOTLIGHT_SECTION_KEYS)[number]);
-        const rightPreferred = HOME_SPOTLIGHT_SECTION_KEYS.includes(right.categoryKey as (typeof HOME_SPOTLIGHT_SECTION_KEYS)[number]);
-        if (leftPreferred !== rightPreferred) return leftPreferred ? -1 : 1;
+    const sortedCandidates = rawStoryCandidates.sort((left, right) => {
         if (left.sortTime !== right.sortTime) return right.sortTime - left.sortTime;
         if (left.qualityScore !== right.qualityScore) return right.qualityScore - left.qualityScore;
         return left.identity.localeCompare(right.identity);
       });
 
-    const preferredAutoCandidates = autoCandidates.filter((candidate) =>
-      HOME_SPOTLIGHT_SECTION_KEYS.includes(candidate.categoryKey as (typeof HOME_SPOTLIGHT_SECTION_KEYS)[number])
+    const primaryCandidates = sortedCandidates.filter((candidate) =>
+      HOME_SPOTLIGHT_PRIMARY_SECTION_KEYS.includes(candidate.categoryKey as (typeof HOME_SPOTLIGHT_PRIMARY_SECTION_KEYS)[number])
     );
 
-    const normalFillCandidates = autoCandidates.filter((candidate) =>
-      HOME_SPOTLIGHT_NORMAL_FILL_SECTION_KEYS.includes(candidate.categoryKey as (typeof HOME_SPOTLIGHT_NORMAL_FILL_SECTION_KEYS)[number])
+    const glamourCandidates = sortedCandidates.filter((candidate) =>
+      HOME_SPOTLIGHT_FALLBACK_SECTION_KEYS.includes(candidate.categoryKey as (typeof HOME_SPOTLIGHT_FALLBACK_SECTION_KEYS)[number])
     );
 
-    const filled = [...manualItems];
-    const filledIds = new Set(filled.map((candidate) => candidate.identity));
+    const filled: typeof rawStoryCandidates = [];
+    const categoryCounts = new Map<string, number>();
 
-    for (const candidate of preferredAutoCandidates) {
+    for (let pass = 1; pass <= HOME_SPOTLIGHT_MAX_PER_CATEGORY; pass += 1) {
+      for (const candidate of primaryCandidates) {
+        if (filled.length >= HOME_SPOTLIGHT_MAX_ITEMS) break;
+
+        const currentCount = categoryCounts.get(candidate.categoryKey) || 0;
+        if (currentCount >= pass) continue;
+
+        filled.push(candidate);
+        categoryCounts.set(candidate.categoryKey, currentCount + 1);
+      }
+
       if (filled.length >= HOME_SPOTLIGHT_MAX_ITEMS) break;
-      if (filledIds.has(candidate.identity)) continue;
-      filledIds.add(candidate.identity);
-      filled.push(candidate);
     }
 
-    for (const candidate of normalFillCandidates) {
+    for (const candidate of glamourCandidates) {
       if (filled.length >= HOME_SPOTLIGHT_MAX_ITEMS) break;
-      if (filledIds.has(candidate.identity)) continue;
-      filledIds.add(candidate.identity);
+
+      const currentCount = categoryCounts.get(candidate.categoryKey) || 0;
+      if (currentCount >= HOME_SPOTLIGHT_MAX_GLAMOUR_ITEMS) continue;
+
       filled.push(candidate);
+      categoryCounts.set(candidate.categoryKey, currentCount + 1);
     }
 
     return filled.slice(0, HOME_SPOTLIGHT_MAX_ITEMS).map((candidate) => candidate.item);

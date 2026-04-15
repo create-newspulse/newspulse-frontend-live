@@ -578,7 +578,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                 </div>
 
                 <div className="px-4 md:px-6 pb-6">
-                  <article className="prose prose-slate max-w-none">
+                  <article lang={lang} className="article-body prose prose-slate max-w-none">
                     {paragraphBlocks.length ? (
                       paragraphBlocks.map((block, idx) => (
                         <React.Fragment key={`pblock-${idx}`}>
@@ -754,6 +754,84 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
           </div>
         </div>
       </main>
+
+      <style jsx global>{`
+        .article-body {
+          color: #1e293b;
+        }
+
+        .article-body :where(p, li) {
+          font-size: 1.04rem;
+          line-height: 1.9;
+          overflow-wrap: anywhere;
+        }
+
+        .article-body :where(p) {
+          margin: 0 0 1.05em;
+        }
+
+        .article-body :where(h2, h3) {
+          color: #0f172a;
+          font-weight: 700;
+          line-height: 1.35;
+          margin-top: 1.8em;
+          margin-bottom: 0.7em;
+        }
+
+        .article-body :where(h2) {
+          font-size: 1.45rem;
+        }
+
+        .article-body :where(h3) {
+          font-size: 1.22rem;
+        }
+
+        .article-body :where(p strong, p b, li strong, li b) {
+          color: #0f172a;
+          font-weight: 600;
+        }
+
+        .article-body :where(ul, ol) {
+          margin: 1em 0 1.15em;
+          padding-inline-start: 1.4rem;
+        }
+
+        .article-body :where(ul) {
+          list-style-type: disc;
+        }
+
+        .article-body :where(ol) {
+          list-style-type: decimal;
+        }
+
+        .article-body :where(li) {
+          margin: 0.3em 0;
+          padding-inline-start: 0.2rem;
+        }
+
+        .article-body :where(li::marker) {
+          color: #475569;
+          font-weight: 600;
+        }
+
+        .article-body :where(li > p) {
+          margin: 0;
+        }
+
+        .article-body :where(li > p + p) {
+          margin-top: 0.45em;
+        }
+
+        .article-body :where(ul ul, ul ol, ol ul, ol ol) {
+          margin-top: 0.45em;
+          margin-bottom: 0.45em;
+        }
+
+        .article-body:lang(gu) :where(p, li),
+        .article-body:lang(hi) :where(p, li) {
+          line-height: 2;
+        }
+      `}</style>
     </>
   );
 }
