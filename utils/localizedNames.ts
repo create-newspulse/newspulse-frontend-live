@@ -68,6 +68,7 @@ export const GUJ_DISTRICT_LABELS: Record<string, { english: string; hindi: strin
   'anand': { english: 'Anand', hindi: 'आनंद', gujarati: 'આનંદ' },
   'aravalli': { english: 'Aravalli', hindi: 'अरावली', gujarati: 'અરવલ્લી' },
   'banaskantha': { english: 'Banaskantha', hindi: 'बनासकांठा', gujarati: 'બનાસકાંઠા' },
+  'vav-tharad': { english: 'Vav-Tharad', hindi: 'वाव-थराद', gujarati: 'વાવ-થરાદ' },
   'bharuch': { english: 'Bharuch', hindi: 'भरूच', gujarati: 'ભરૂચ' },
   'bhavnagar': { english: 'Bhavnagar', hindi: 'भावनगर', gujarati: 'ભાવનગર' },
   'botad': { english: 'Botad', hindi: 'बोटाद', gujarati: 'બોટાદ' },
