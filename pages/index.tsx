@@ -193,6 +193,7 @@ const HOME_SPOTLIGHT_MAX_ITEMS = 8;
 const HOME_SPOTLIGHT_SOURCE_LIMIT = 18;
 const HOME_SPOTLIGHT_ROTATE_MS = 5000;
 const HOME_SPOTLIGHT_FRESH_HOURS = 72;
+const HOME_SPOTLIGHT_NORMAL_FILL_SECTION_KEYS = ['regional', 'national', 'international', 'business', 'science-technology', 'sports', 'lifestyle', 'glamour'] as const;
 
 const CATEGORY_THEME: Record<string, { base: string; icon: string; hover: string; ring: string; active: string; dot: string }> = {
   breaking: {
@@ -535,6 +536,48 @@ function storyAgeHours(article: any, referenceTime: number): number {
   const publishedTime = storyPublishedTimeValue(article);
   if (!publishedTime || !Number.isFinite(referenceTime)) return Number.POSITIVE_INFINITY;
   return Math.max(0, (referenceTime - publishedTime) / (1000 * 60 * 60));
+}
+
+function spotlightBooleanFlag(article: any, keys: string[]): boolean {
+  for (const key of keys) {
+    const value = article?.[key];
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value === 1;
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (normalized === 'true' || normalized === '1' || normalized === 'yes') return true;
+      if (normalized === 'false' || normalized === '0' || normalized === 'no') return false;
+    }
+  }
+  return false;
+}
+
+function spotlightNumberValue(article: any, keys: string[]): number {
+  for (const key of keys) {
+    const value = Number(article?.[key]);
+    if (Number.isFinite(value)) return value;
+  }
+  return 0;
+}
+
+function spotlightExpiryTimeValue(article: any, keys: string[]): number {
+  for (const key of keys) {
+    const raw = String(article?.[key] || '').trim();
+    if (!raw) continue;
+    const value = Date.parse(raw);
+    if (Number.isFinite(value)) return value;
+  }
+  return 0;
+}
+
+function isManualSpotlightEligible(article: any, referenceTime: number): boolean {
+  const enabled = spotlightBooleanFlag(article, ['spotlightEnabled', 'isSpotlight', 'homepageSpotlightEnabled']);
+  if (!enabled) return false;
+
+  const expiryTime = spotlightExpiryTimeValue(article, ['spotlightExpiresAt', 'spotlightExpiry', 'spotlightEndAt', 'spotlightUntil', 'expiresAt']);
+  if (expiryTime && expiryTime < referenceTime) return false;
+
+  return true;
 }
 
 function makeDekFromContent(text: string): string {
@@ -3771,6 +3814,7 @@ export default function UiPreviewV145() {
 
   const effectiveSettings = settings ?? DEFAULT_NORMALIZED_PUBLIC_SETTINGS;
   const [latestFromBackend, setLatestFromBackend] = useState<any[] | null>(null);
+  const [latestRawStories, setLatestRawStories] = useState<Article[] | null>(null);
   const [topStory, setTopStory] = useState<Article | null>(null);
   const [homeSectionNews, setHomeSectionNews] = useState<Record<string, Article[]>>({});
 
@@ -3820,6 +3864,7 @@ export default function UiPreviewV145() {
     const controller = new AbortController();
 
     setLatestFromBackend(null);
+    setLatestRawStories(null);
 
     (async () => {
       // Latest news list (homepage)
@@ -3827,6 +3872,7 @@ export default function UiPreviewV145() {
       if (controller.signal.aborted) return;
       const latestArticles = latestResp.items || [];
       setTopStory(latestArticles[0] || null);
+      setLatestRawStories(Array.isArray(latestArticles) ? latestArticles : []);
       setLatestFromBackend(latestArticles.map((a) => articleToFeedItem(a as any, apiLang)));
       const breakingResp = await fetchPublicNews({ category: 'breaking', language: apiLang, limit: 10, signal: controller.signal });
       if (controller.signal.aborted) return;
@@ -3836,6 +3882,7 @@ export default function UiPreviewV145() {
     })().catch(() => {
       if (controller.signal.aborted) return;
       setTopStory(null);
+      setLatestRawStories([]);
       setLatestFromBackend([]);
     });
 
@@ -4277,99 +4324,103 @@ export default function UiPreviewV145() {
       return identifiers[0] || identifiers[1] || String(item?.title || '').trim().toLowerCase();
     };
 
-    const candidates = HOME_SPOTLIGHT_SECTION_KEYS.flatMap((sectionKey) => {
-      const rawItems = Array.isArray(homeSectionNews[sectionKey]) ? homeSectionNews[sectionKey] : [];
+    const buildFeedItem = (article: any) => articleToFeedItem(article as any, apiLang);
 
-      return rawItems
-        .map((article) => {
-          const feedItem = articleToFeedItem(article as any, apiLang);
-          const identifiers = [
-            String((article as any)?._id || (article as any)?.id || feedItem?.id || '').trim().toLowerCase(),
-            String((article as any)?.slug || feedItem?.slug || '').trim().toLowerCase(),
-          ].filter(Boolean);
-
-          if (identifiers.some((value) => spotlightExcludedIdentitySet.has(value))) return null;
-
-          const identity = identifiers[0] || identifiers[1] || String(feedItem?.title || '').trim().toLowerCase();
-          if (!identity || seen.has(identity)) return null;
-
-          const sortTime = storyPublishedTimeValue(article);
-          if (!sortTime) return null;
-
-          seen.add(identity);
-
-          return {
-            identity,
-            sortTime,
-            ageHours: storyAgeHours(article, now),
-            qualityScore:
-              (String(feedItem?.imageSrc || '').trim().length > 0 ? 2 : 0) +
-              (String(feedItem?.desc || '').trim().length >= 30 ? 1 : 0),
-            item: feedItem,
-          };
-        })
-        .filter(Boolean) as Array<{ identity: string; sortTime: number; ageHours: number; qualityScore: number; item: any }>;
-    });
-
-    const latestHomepageCandidates = [
-      ...(Array.isArray(latestFromBackend) ? latestFromBackend : []),
-      ...HOME_EDITORIAL_SECTIONS.flatMap((section) => {
-        const rawItems = Array.isArray(homeSectionNews[section.key]) ? homeSectionNews[section.key] : [];
-        return rawItems.map((article) => articleToFeedItem(article as any, apiLang));
-      }),
+    const rawHomepageStories = [
+      ...(Array.isArray(latestRawStories) ? latestRawStories : []),
+      ...HOME_EDITORIAL_SECTIONS.flatMap((section) => Array.isArray(homeSectionNews[section.key]) ? homeSectionNews[section.key] : []),
     ];
 
-    const sortCandidates = (items: Array<{ identity: string; sortTime: number; ageHours: number; qualityScore: number; item: any }>) =>
-      items.slice().sort((left, right) => {
+    const rawStoryCandidates = rawHomepageStories
+      .map((article) => {
+        const feedItem = buildFeedItem(article);
+        const identity = toIdentity({
+          _id: (article as any)?._id || (article as any)?.id || feedItem?.id,
+          slug: (article as any)?.slug || feedItem?.slug,
+          title: feedItem?.title,
+        });
+
+        if (!identity || seen.has(identity)) return null;
+        if (spotlightExcludedIdentitySet.has(identity)) return null;
+
+        const sortTime = storyPublishedTimeValue(article);
+        if (!sortTime) return null;
+
+        seen.add(identity);
+
+        return {
+          identity,
+          sortTime,
+          categoryKey: normalizeCategoryKey((article as any)?.category || feedItem?.category),
+          qualityScore:
+            (String(feedItem?.imageSrc || '').trim().length > 0 ? 2 : 0) +
+            (String(feedItem?.desc || '').trim().length >= 30 ? 1 : 0),
+          manualEnabled: isManualSpotlightEligible(article, now),
+          manualPinned: spotlightBooleanFlag(article, ['spotlightPinned']),
+          manualPriority: spotlightNumberValue(article, ['spotlightPriority']),
+          item: feedItem,
+        };
+      })
+      .filter(Boolean) as Array<{
+        identity: string;
+        sortTime: number;
+        categoryKey: string;
+        qualityScore: number;
+        manualEnabled: boolean;
+        manualPinned: boolean;
+        manualPriority: number;
+        item: any;
+      }>;
+
+    const manualItems = rawStoryCandidates
+      .filter((candidate) => candidate.manualEnabled)
+      .sort((left, right) => {
+        if (left.manualPinned !== right.manualPinned) return left.manualPinned ? -1 : 1;
+        if (left.manualPriority !== right.manualPriority) return right.manualPriority - left.manualPriority;
+        return right.sortTime - left.sortTime;
+      })
+      .slice(0, HOME_SPOTLIGHT_MAX_ITEMS);
+
+    const selectedIds = new Set(manualItems.map((candidate) => candidate.identity));
+
+    const autoCandidates = rawStoryCandidates
+      .filter((candidate) => !selectedIds.has(candidate.identity))
+      .sort((left, right) => {
+        const leftPreferred = HOME_SPOTLIGHT_SECTION_KEYS.includes(left.categoryKey as (typeof HOME_SPOTLIGHT_SECTION_KEYS)[number]);
+        const rightPreferred = HOME_SPOTLIGHT_SECTION_KEYS.includes(right.categoryKey as (typeof HOME_SPOTLIGHT_SECTION_KEYS)[number]);
+        if (leftPreferred !== rightPreferred) return leftPreferred ? -1 : 1;
         if (left.sortTime !== right.sortTime) return right.sortTime - left.sortTime;
         if (left.qualityScore !== right.qualityScore) return right.qualityScore - left.qualityScore;
         return left.identity.localeCompare(right.identity);
       });
 
-    const freshCandidates = sortCandidates(
-      candidates.filter((candidate) => Number.isFinite(candidate.ageHours) && candidate.ageHours <= HOME_SPOTLIGHT_FRESH_HOURS)
+    const preferredAutoCandidates = autoCandidates.filter((candidate) =>
+      HOME_SPOTLIGHT_SECTION_KEYS.includes(candidate.categoryKey as (typeof HOME_SPOTLIGHT_SECTION_KEYS)[number])
     );
 
-    const selected = freshCandidates.slice(0, HOME_SPOTLIGHT_MAX_ITEMS);
-    if (selected.length >= HOME_SPOTLIGHT_MAX_ITEMS) {
-      return selected.map((candidate) => candidate.item);
-    }
-
-    const selectedIds = new Set(selected.map((candidate) => candidate.identity));
-    const remainingCandidates = sortCandidates(
-      candidates.filter((candidate) => !selectedIds.has(candidate.identity))
+    const normalFillCandidates = autoCandidates.filter((candidate) =>
+      HOME_SPOTLIGHT_NORMAL_FILL_SECTION_KEYS.includes(candidate.categoryKey as (typeof HOME_SPOTLIGHT_NORMAL_FILL_SECTION_KEYS)[number])
     );
 
-    const preferredItems = [...selected, ...remainingCandidates]
-      .slice(0, HOME_SPOTLIGHT_MAX_ITEMS)
-      .map((candidate) => candidate.item);
+    const filled = [...manualItems];
+    const filledIds = new Set(filled.map((candidate) => candidate.identity));
 
-    if (preferredItems.length >= HOME_SPOTLIGHT_MAX_ITEMS) {
-      return preferredItems;
+    for (const candidate of preferredAutoCandidates) {
+      if (filled.length >= HOME_SPOTLIGHT_MAX_ITEMS) break;
+      if (filledIds.has(candidate.identity)) continue;
+      filledIds.add(candidate.identity);
+      filled.push(candidate);
     }
 
-    const fallbackSeen = new Set(preferredItems.map((item) => toIdentity(item)));
-    const latestFallbackItems = latestHomepageCandidates
-      .filter((item) => {
-        const identity = toIdentity(item);
-        if (!identity || fallbackSeen.has(identity)) return false;
-        if (spotlightExcludedIdentitySet.has(identity)) return false;
+    for (const candidate of normalFillCandidates) {
+      if (filled.length >= HOME_SPOTLIGHT_MAX_ITEMS) break;
+      if (filledIds.has(candidate.identity)) continue;
+      filledIds.add(candidate.identity);
+      filled.push(candidate);
+    }
 
-        fallbackSeen.add(identity);
-        return true;
-      })
-      .sort((left, right) => {
-        const leftTime = storyPublishedTimeValue(left);
-        const rightTime = storyPublishedTimeValue(right);
-        if (leftTime !== rightTime) return rightTime - leftTime;
-
-        const leftScore = (String(left?.imageSrc || '').trim().length > 0 ? 2 : 0) + (String(left?.desc || '').trim().length >= 30 ? 1 : 0);
-        const rightScore = (String(right?.imageSrc || '').trim().length > 0 ? 2 : 0) + (String(right?.desc || '').trim().length >= 30 ? 1 : 0);
-        return rightScore - leftScore;
-      });
-
-    return [...preferredItems, ...latestFallbackItems].slice(0, HOME_SPOTLIGHT_MAX_ITEMS);
-  }, [apiLang, homeSectionNews, latestFromBackend, spotlightExcludedIdentitySet]);
+    return filled.slice(0, HOME_SPOTLIGHT_MAX_ITEMS).map((candidate) => candidate.item);
+  }, [apiLang, homeSectionNews, latestRawStories, spotlightExcludedIdentitySet]);
 
   const renderedEditorialSections = React.useMemo(
     () => editorialSections.filter((section) => !HOME_SPOTLIGHT_RENDER_FILTER_KEYS.includes(section.key as (typeof HOME_SPOTLIGHT_RENDER_FILTER_KEYS)[number])),
