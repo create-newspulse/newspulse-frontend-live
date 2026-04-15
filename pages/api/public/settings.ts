@@ -22,6 +22,10 @@ function isRecord(v: unknown): v is JsonRecord {
   return !!v && typeof v === 'object' && !Array.isArray(v);
 }
 
+function isLocalOrigin(origin: string): boolean {
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(String(origin || '').trim());
+}
+
 function clampNum(n: unknown, min: number, max: number, fallback: number): number {
   const v = Number(n);
   if (!Number.isFinite(v)) return fallback;
@@ -138,6 +142,30 @@ function mapSiteSettingsToPublicSettingsResponse(raw: unknown): PublicSettingsRe
   return out;
 }
 
+function shouldUseLocalDevelopmentSettingsFallback(origin: string, raw: unknown): boolean {
+  if (!isLocalOrigin(origin)) return false;
+
+  const root = isRecord(raw) ? raw : null;
+  if (!root) return false;
+
+  const scope = String((root as any).scope || '').trim().toLowerCase();
+  if (scope !== 'development') return false;
+
+  const published = isRecord((root as any).published) ? ((root as any).published as JsonRecord) : root;
+  const homepage = isRecord((published as any).homepage) ? ((published as any).homepage as JsonRecord) : null;
+  const modules = isRecord((homepage as any)?.modules)
+    ? (((homepage as any).modules) as JsonRecord)
+    : isRecord((published as any).modules)
+      ? (((published as any).modules) as JsonRecord)
+      : null;
+  const liveTv = isRecord((published as any).liveTv) ? ((published as any).liveTv as JsonRecord) : null;
+
+  const liveTvEnabled = typeof (liveTv as any)?.enabled === 'boolean' ? Boolean((liveTv as any).enabled) : undefined;
+  const hasExplicitLiveTvCardModule = isRecord((modules as any)?.liveTvCard);
+
+  return liveTvEnabled === false && !hasExplicitLiveTvCardModule;
+}
+
 async function ensurePublishedFile(): Promise<void> {
   try {
     await fs.access(PUBLISHED_PATH);
@@ -213,6 +241,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const json = await upstream.json().catch(() => null);
     if (upstream.ok && json) {
+      if (shouldUseLocalDevelopmentSettingsFallback(origin, json)) {
+        const local = await readPublishedLocal();
+        return res.status(200).json(local);
+      }
       return res.status(200).json(json);
     }
   } catch {

@@ -1,5 +1,6 @@
 import React from 'react';
 import { getStoryCategoryLabel, getStoryDateIso } from '../../lib/publicStories';
+import { formatEditorialDateTime } from '../../lib/storyDateTime';
 import OriginalTag from '../OriginalTag';
 import { buildNewsUrl } from '../../lib/newsRoutes';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
@@ -185,7 +186,7 @@ function StoryCard({
   const href = buildNewsUrl({ id, slug: id, lang: requestedLang });
   const categoryLabel = getStoryCategoryLabel(story?.category) || story?.category || fallbackCategoryLabel;
   const dateIso = getStoryDateIso(story);
-  const dateText = dateIso ? new Date(dateIso).toLocaleString() : '';
+  const dateText = formatEditorialDateTime(dateIso);
 
   const districtLabelFromProp = showDistrictBadges && getDistrictLabel ? getDistrictLabel(story) : '';
 

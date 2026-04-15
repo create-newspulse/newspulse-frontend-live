@@ -22,6 +22,7 @@ import { buildNewsUrl } from "../lib/newsRoutes";
 import { COVER_PLACEHOLDER_SRC, resolveCoverFitMode, resolveCoverImageUrl } from "../lib/coverImages";
 import { fetchCurrentWeather } from "../lib/fetchWeather";
 import { debugStoryCard, getStoryId, getStoryReactKey, getStorySlug, getStoryTranslationGroupId } from "../lib/storyIdentity";
+import { formatEditorialDateTime, getStoryDateTimeValue, resolveStoryDateIso } from "../lib/storyDateTime";
 import StoryImage, { TopStoryImage } from "../src/components/story/StoryImage";
 import { getTickerMarqueeText, mergeTickerItemsWithAds, type TickerMarqueeItem } from "../lib/publicTickerAds";
 import InspirationHubHomepageSection from "../components/home/InspirationHubHomepageSection";
@@ -185,6 +186,13 @@ const HOME_EDITORIAL_SECTIONS = [
   { key: 'glamour', route: '/glamour', Icon: Sparkles },
   { key: 'web-stories', route: '/web-stories', Icon: BookOpen },
 ] as const;
+
+const HOME_SPOTLIGHT_SECTION_KEYS = ['regional', 'national', 'international', 'science-technology', 'sports'] as const;
+const HOME_SPOTLIGHT_RENDER_FILTER_KEYS = ['regional', 'national', 'international', 'business', 'science-technology', 'sports', 'lifestyle', 'glamour'] as const;
+const HOME_SPOTLIGHT_MAX_ITEMS = 8;
+const HOME_SPOTLIGHT_SOURCE_LIMIT = 18;
+const HOME_SPOTLIGHT_ROTATE_MS = 5000;
+const HOME_SPOTLIGHT_FRESH_HOURS = 72;
 
 const CATEGORY_THEME: Record<string, { base: string; icon: string; hover: string; ring: string; active: string; dot: string }> = {
   breaking: {
@@ -519,6 +527,16 @@ function truncateSmart(text: string, maxChars: number): string {
   return `${cut.replace(/\s+$/g, '')}…`;
 }
 
+function storyPublishedTimeValue(article: any): number {
+  return getStoryDateTimeValue(article);
+}
+
+function storyAgeHours(article: any, referenceTime: number): number {
+  const publishedTime = storyPublishedTimeValue(article);
+  if (!publishedTime || !Number.isFinite(referenceTime)) return Number.POSITIVE_INFINITY;
+  return Math.max(0, (referenceTime - publishedTime) / (1000 * 60 * 60));
+}
+
 function makeDekFromContent(text: string): string {
   const s = String(text || '').trim();
   if (!s) return '';
@@ -614,20 +632,8 @@ function articleToFeedItem(a: Article, requestedLang: 'en' | 'hi' | 'gu') {
   const title = safeTitle(titleRes.text || (a as any)?.title) || 'Untitled';
   const desc = safeTitle(descRes.text || (a as any)?.summary || (a as any)?.excerpt) || '';
 
-  const iso = safeTitle((a as any)?.publishedAt || (a as any)?.createdAt) || '';
-  let time = '';
-  if (iso) {
-    try {
-      // Hydration-safe: use a fixed timezone so SSR and client match.
-      time = new Intl.DateTimeFormat('en-IN', {
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZone: 'Asia/Kolkata',
-      }).format(new Date(iso));
-    } catch {
-      time = '';
-    }
-  }
+  const iso = resolveStoryDateIso(a as any);
+  const time = formatEditorialDateTime(iso);
 
   const source = safeTitle((a as any)?.source?.name || (a as any)?.source) || 'News Pulse';
   const category = safeTitle((a as any)?.category) || '';
@@ -1983,19 +1989,8 @@ function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
     );
     const summary = summaryFromApi || summaryGenerated || excerptFallback;
 
-    const iso = safeTitle((article as any)?.publishedAt || (article as any)?.createdAt) || '';
-    let time = '';
-    if (iso) {
-      try {
-        time = new Intl.DateTimeFormat('en-IN', {
-          hour: '2-digit',
-          minute: '2-digit',
-          timeZone: 'Asia/Kolkata',
-        }).format(new Date(iso));
-      } catch {
-        time = '';
-      }
-    }
+    const iso = resolveStoryDateIso(article as any);
+    const time = formatEditorialDateTime(iso);
 
     const source = safeTitle((article as any)?.source?.name || (article as any)?.source) || 'News Pulse';
     const categoryRaw = safeTitle((article as any)?.category) || '';
@@ -3048,6 +3043,321 @@ function HomeEditorialSection({ theme, title, href, items, lang, Icon }: any) {
   );
 }
 
+function HomeSpotlightCarousel({ theme, title, href, items, lang, Icon }: any) {
+  const { t } = useI18n();
+  const safeLang = lang === 'hi' || lang === 'gu' ? lang : 'en';
+  const localizedHref = localizePath(href, safeLang);
+  const slides = React.useMemo(() => (Array.isArray(items) ? items.slice(0, HOME_SPOTLIGHT_MAX_ITEMS) : []), [items]);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const touchStartX = useRef<number | null>(null);
+
+  const lineClamp2: React.CSSProperties = {
+    display: '-webkit-box',
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical',
+    overflow: 'hidden',
+  };
+
+  const lineClamp3: React.CSSProperties = {
+    display: '-webkit-box',
+    WebkitLineClamp: 3,
+    WebkitBoxOrient: 'vertical',
+    overflow: 'hidden',
+  };
+
+  const resolveCategoryLabel = React.useCallback(
+    (raw: unknown) => {
+      const categoryRaw = String(raw || '').trim();
+      const categoryKey = normalizeCategoryKey(categoryRaw);
+      const categoryLabelKey = categoryKey ? labelKeyForCategory(categoryKey) : '';
+      const translated = categoryLabelKey ? t(categoryLabelKey) : '';
+      if (categoryLabelKey && translated && translated !== categoryLabelKey) return translated;
+      return categoryRaw;
+    },
+    [t]
+  );
+
+  React.useEffect(() => {
+    setActiveIndex(0);
+  }, [slides.length]);
+
+  const goToPrevious = React.useCallback(() => {
+    if (slides.length <= 1) return;
+    setActiveIndex((current) => (current - 1 + slides.length) % slides.length);
+  }, [slides.length]);
+
+  const goToNext = React.useCallback(() => {
+    if (slides.length <= 1) return;
+    setActiveIndex((current) => (current + 1) % slides.length);
+  }, [slides.length]);
+
+  React.useEffect(() => {
+    if (slides.length <= 1 || isPaused) return;
+    const timerId = window.setInterval(() => {
+      setActiveIndex((current) => (current + 1) % slides.length);
+    }, HOME_SPOTLIGHT_ROTATE_MS);
+
+    return () => window.clearInterval(timerId);
+  }, [isPaused, slides.length]);
+
+  const onTouchStart = React.useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    touchStartX.current = event.changedTouches[0]?.clientX ?? null;
+  }, []);
+
+  const onTouchEnd = React.useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    const startX = touchStartX.current;
+    const endX = event.changedTouches[0]?.clientX ?? null;
+    touchStartX.current = null;
+
+    if (startX == null || endX == null) return;
+
+    const delta = endX - startX;
+    if (Math.abs(delta) < 40) return;
+
+    if (delta > 0) {
+      goToPrevious();
+      return;
+    }
+
+    goToNext();
+  }, [goToNext, goToPrevious]);
+
+  const activeItem = slides[activeIndex] || null;
+
+  const vm = React.useMemo(() => {
+    if (!activeItem) return null;
+
+    const storyId = getStoryId(activeItem);
+    const rawSlug = getStorySlug(activeItem);
+    const storyHref = buildNewsUrl({ id: storyId || rawSlug, slug: rawSlug, lang: safeLang });
+    const categoryLabel = resolveCategoryLabel(activeItem?.category);
+    const summary = truncateSmart(String(activeItem?.desc || '').trim(), 180);
+    const readMinutes = estimateReadMinutes(`${String(activeItem?.title || '').trim()} ${summary}`);
+
+    return {
+      key: getStoryReactKey(activeItem, storyHref),
+      href: storyHref,
+      categoryLabel,
+      summary,
+      readMinutes,
+      imageSrc: String(activeItem?.imageSrc || '').trim(),
+      title: String(activeItem?.title || '').trim(),
+      time: String(activeItem?.time || '').trim(),
+      coverFitMode: activeItem?.coverFitMode,
+      storyId,
+      titleIsOriginal: Boolean(activeItem?.titleIsOriginal),
+    };
+  }, [activeItem, resolveCategoryLabel, safeLang]);
+
+  if (!vm) return null;
+
+  return (
+    <Surface theme={theme} className="overflow-hidden">
+      <div
+        className="border-b px-4 py-4 sm:px-5"
+        style={{
+          borderColor: theme.border,
+          background: theme.mode === 'dark'
+            ? 'linear-gradient(135deg, rgba(56,189,248,0.10), rgba(244,114,182,0.09) 65%, transparent 100%)'
+            : 'linear-gradient(135deg, rgba(37,99,235,0.08), rgba(244,114,182,0.08) 65%, rgba(255,255,255,0.76) 100%)',
+        }}
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-[12px] font-extrabold uppercase tracking-[0.16em]" style={{ color: theme.sub }}>
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-2xl border" style={{ borderColor: theme.border, background: theme.surface2, color: theme.text }}>
+                <Icon className="h-4 w-4" />
+              </span>
+              Spotlight
+            </div>
+            <div className="mt-2 text-2xl font-black tracking-tight" style={{ color: theme.text }}>
+              {title}
+            </div>
+            <div className="mt-1 max-w-2xl text-sm leading-6" style={{ color: theme.sub }}>
+              Freshly selected from the newsroom's most important stories
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="hidden items-center gap-2 sm:flex">
+              <button
+                type="button"
+                onClick={goToPrevious}
+                aria-label="Previous spotlight story"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border transition hover:opacity-[0.98]"
+                style={{ color: theme.text, borderColor: theme.border, background: theme.surface }}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={goToNext}
+                aria-label="Next spotlight story"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border transition hover:opacity-[0.98]"
+                style={{ color: theme.text, borderColor: theme.border, background: theme.surface }}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+
+            <Link
+              href={localizedHref}
+              className="inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold transition hover:opacity-[0.98]"
+              style={{ color: theme.text, borderColor: theme.border, background: theme.surface }}
+            >
+              {t('common.viewAll')} <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      <div className="p-4 sm:p-5">
+        <div
+          className="overflow-hidden rounded-[30px] border p-4 shadow-[0_24px_54px_-38px_rgba(15,23,42,0.30)] sm:p-5 lg:p-6"
+          style={{ borderColor: theme.border, background: theme.surface }}
+          onTouchStart={onTouchStart}
+          onTouchEnd={onTouchEnd}
+          onMouseEnter={() => setIsPaused(true)}
+          onMouseLeave={() => setIsPaused(false)}
+        >
+          <AnimatePresence mode="wait">
+            <motion.article
+              key={vm.key}
+              initial={{ opacity: 0, y: 10, scale: 0.992 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, y: -10, scale: 0.996 }}
+              transition={{ duration: 0.34, ease: 'easeOut' }}
+              className="grid gap-5 lg:grid-cols-[minmax(0,1.02fr)_minmax(0,0.98fr)] lg:items-center lg:gap-7"
+            >
+              <Link href={vm.href} className="group block">
+                <div className="relative overflow-hidden rounded-[28px] bg-slate-100 shadow-[0_22px_48px_-36px_rgba(15,23,42,0.26)] ring-1 ring-slate-200/70">
+                  <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-20 bg-[linear-gradient(180deg,rgba(15,23,42,0.12),rgba(15,23,42,0))]" />
+                  {vm.imageSrc ? (
+                    <StoryImage
+                      storyId={vm.storyId}
+                      src={vm.imageSrc}
+                      fitMode={vm.coverFitMode}
+                      alt={vm.title}
+                      variant="top"
+                      fallbackSrc={COVER_PLACEHOLDER_SRC}
+                      allowLowResContainFallback={false}
+                      className="w-full rounded-none bg-transparent shadow-none ring-0"
+                    />
+                  ) : (
+                    <div className="w-full bg-slate-100" style={{ aspectRatio: '16 / 9' }}>
+                      <div className="grid h-full w-full place-items-center">
+                        <div className="text-xs font-extrabold tracking-tight text-slate-500 select-none">
+                          News <span className="text-slate-700">Pulse</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </Link>
+
+              <div className="min-w-0 lg:pr-2">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: theme.sub }}>
+                  {vm.categoryLabel ? (
+                    <span className="rounded-full border px-2.5 py-1 shadow-[0_10px_24px_-20px_rgba(15,23,42,0.35)]" style={{ borderColor: theme.border, background: theme.surface2, color: theme.text }}>
+                      {vm.categoryLabel}
+                    </span>
+                  ) : null}
+                  {vm.time ? <span className="text-[10.5px]" style={{ color: theme.muted }}>{vm.time}</span> : null}
+                  {vm.time ? <span aria-hidden="true" style={{ opacity: 0.38 }}>•</span> : null}
+                  <span className="text-[10.5px]" style={{ color: theme.muted }}>{vm.readMinutes} {t('common.minutesShort')}</span>
+                </div>
+
+                <div className="mt-4 flex items-start gap-2">
+                  <h3 className="min-w-0 text-[1.62rem] font-black leading-[1.14] tracking-[-0.015em] sm:text-[1.92rem]" style={{ color: theme.text, ...lineClamp2 }}>
+                    {vm.title}
+                  </h3>
+                  {vm.titleIsOriginal ? <OriginalTag /> : null}
+                </div>
+
+                {vm.summary ? (
+                  <div className="mt-4 max-w-xl text-sm leading-6 sm:text-[15px] sm:leading-6" style={{ color: theme.sub, ...lineClamp3 }}>
+                    {vm.summary}
+                  </div>
+                ) : null}
+
+                <div className="mt-6 flex flex-wrap items-center gap-3">
+                  <Link
+                    href={vm.href}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold border transition hover:opacity-[0.98]"
+                    style={{ background: theme.accent, color: '#fff', borderColor: 'transparent' }}
+                  >
+                    {t('common.read')} <ArrowRight className="h-4 w-4" />
+                  </Link>
+
+                  <div className="flex items-center gap-2 sm:hidden">
+                    <button
+                      type="button"
+                      onClick={goToPrevious}
+                      aria-label="Previous spotlight story"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border transition hover:opacity-[0.98]"
+                      style={{ color: theme.text, borderColor: theme.border, background: theme.surface2 }}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={goToNext}
+                      aria-label="Next spotlight story"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border transition hover:opacity-[0.98]"
+                      style={{ color: theme.text, borderColor: theme.border, background: theme.surface2 }}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.article>
+          </AnimatePresence>
+        </div>
+
+        {slides.length > 1 ? (
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.14em]" style={{ color: theme.sub }}>
+              <span>{activeIndex + 1} / {slides.length}</span>
+              <span className="inline-flex h-1.5 w-20 overflow-hidden rounded-full" style={{ background: theme.border }}>
+                <motion.span
+                  key={`spotlight-progress-${activeIndex}-${isPaused ? 'paused' : 'running'}`}
+                  initial={{ width: '0%' }}
+                  animate={{ width: isPaused ? '100%' : '100%' }}
+                  transition={{ duration: isPaused ? 0.2 : HOME_SPOTLIGHT_ROTATE_MS / 1000, ease: 'linear' }}
+                  className="h-full rounded-full"
+                  style={{ background: theme.accent }}
+                />
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {slides.map((slide: any, index: number) => {
+                const isActive = index === activeIndex;
+                const key = getStoryReactKey(slide, `${String(slide?.id || slide?.slug || index)}`);
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setActiveIndex(index)}
+                    aria-label={`Go to spotlight story ${index + 1}`}
+                    className="h-2.5 rounded-full transition-all"
+                    style={{
+                      width: isActive ? 24 : 8,
+                      background: isActive ? theme.accent : theme.border,
+                      opacity: isActive ? 1 : 0.55,
+                    }}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </Surface>
+  );
+}
+
 function QuickToolsCard({ theme, onToast }: any) {
   const { t } = useI18n();
   return (
@@ -3543,12 +3853,14 @@ export default function UiPreviewV145() {
           const resp = await fetchPublicNews({
             category: section.key,
             language: apiLang,
-            limit: 6,
+            limit: HOME_SPOTLIGHT_SOURCE_LIMIT,
             extraQuery: { strictLocale: '1' },
             signal: controller.signal,
           });
 
-          return [section.key, Array.isArray(resp?.items) ? resp.items : []] as const;
+          const items = Array.isArray(resp?.items) ? resp.items.slice().sort((left, right) => storyPublishedTimeValue(right) - storyPublishedTimeValue(left)) : [];
+
+          return [section.key, items] as const;
         })
       );
 
@@ -3906,6 +4218,20 @@ export default function UiPreviewV145() {
     return values;
   }, [centerFeedItems, moreReadItems, topStory]);
 
+  const spotlightExcludedIdentitySet = React.useMemo(() => {
+    const values = new Set<string>();
+
+    [
+      String((topStory as any)?._id || (topStory as any)?.id || '').trim().toLowerCase(),
+      String(resolveArticleSlug(topStory as any, apiLang) || '').trim().toLowerCase(),
+      String((topStory as any)?.slug || '').trim().toLowerCase(),
+    ]
+      .filter(Boolean)
+      .forEach((value) => values.add(value));
+
+    return values;
+  }, [apiLang, topStory]);
+
   const editorialSections = React.useMemo(() => {
     return HOME_EDITORIAL_SECTIONS.map((section) => {
       const rawItems = Array.isArray(homeSectionNews[section.key]) ? homeSectionNews[section.key] : [];
@@ -3937,6 +4263,118 @@ export default function UiPreviewV145() {
       };
     }).filter((section) => section.items.length > 0);
   }, [apiLang, homeSectionNews, homepageLeadIdentitySet, t]);
+
+  const spotlightItems = React.useMemo(() => {
+    const now = Date.now();
+    const seen = new Set<string>();
+
+    const toIdentity = (item: any) => {
+      const identifiers = [
+        String(item?._id || item?.id || '').trim().toLowerCase(),
+        String(item?.slug || '').trim().toLowerCase(),
+      ].filter(Boolean);
+
+      return identifiers[0] || identifiers[1] || String(item?.title || '').trim().toLowerCase();
+    };
+
+    const candidates = HOME_SPOTLIGHT_SECTION_KEYS.flatMap((sectionKey) => {
+      const rawItems = Array.isArray(homeSectionNews[sectionKey]) ? homeSectionNews[sectionKey] : [];
+
+      return rawItems
+        .map((article) => {
+          const feedItem = articleToFeedItem(article as any, apiLang);
+          const identifiers = [
+            String((article as any)?._id || (article as any)?.id || feedItem?.id || '').trim().toLowerCase(),
+            String((article as any)?.slug || feedItem?.slug || '').trim().toLowerCase(),
+          ].filter(Boolean);
+
+          if (identifiers.some((value) => spotlightExcludedIdentitySet.has(value))) return null;
+
+          const identity = identifiers[0] || identifiers[1] || String(feedItem?.title || '').trim().toLowerCase();
+          if (!identity || seen.has(identity)) return null;
+
+          const sortTime = storyPublishedTimeValue(article);
+          if (!sortTime) return null;
+
+          seen.add(identity);
+
+          return {
+            identity,
+            sortTime,
+            ageHours: storyAgeHours(article, now),
+            qualityScore:
+              (String(feedItem?.imageSrc || '').trim().length > 0 ? 2 : 0) +
+              (String(feedItem?.desc || '').trim().length >= 30 ? 1 : 0),
+            item: feedItem,
+          };
+        })
+        .filter(Boolean) as Array<{ identity: string; sortTime: number; ageHours: number; qualityScore: number; item: any }>;
+    });
+
+    const latestHomepageCandidates = [
+      ...(Array.isArray(latestFromBackend) ? latestFromBackend : []),
+      ...HOME_EDITORIAL_SECTIONS.flatMap((section) => {
+        const rawItems = Array.isArray(homeSectionNews[section.key]) ? homeSectionNews[section.key] : [];
+        return rawItems.map((article) => articleToFeedItem(article as any, apiLang));
+      }),
+    ];
+
+    const sortCandidates = (items: Array<{ identity: string; sortTime: number; ageHours: number; qualityScore: number; item: any }>) =>
+      items.slice().sort((left, right) => {
+        if (left.sortTime !== right.sortTime) return right.sortTime - left.sortTime;
+        if (left.qualityScore !== right.qualityScore) return right.qualityScore - left.qualityScore;
+        return left.identity.localeCompare(right.identity);
+      });
+
+    const freshCandidates = sortCandidates(
+      candidates.filter((candidate) => Number.isFinite(candidate.ageHours) && candidate.ageHours <= HOME_SPOTLIGHT_FRESH_HOURS)
+    );
+
+    const selected = freshCandidates.slice(0, HOME_SPOTLIGHT_MAX_ITEMS);
+    if (selected.length >= HOME_SPOTLIGHT_MAX_ITEMS) {
+      return selected.map((candidate) => candidate.item);
+    }
+
+    const selectedIds = new Set(selected.map((candidate) => candidate.identity));
+    const remainingCandidates = sortCandidates(
+      candidates.filter((candidate) => !selectedIds.has(candidate.identity))
+    );
+
+    const preferredItems = [...selected, ...remainingCandidates]
+      .slice(0, HOME_SPOTLIGHT_MAX_ITEMS)
+      .map((candidate) => candidate.item);
+
+    if (preferredItems.length >= HOME_SPOTLIGHT_MAX_ITEMS) {
+      return preferredItems;
+    }
+
+    const fallbackSeen = new Set(preferredItems.map((item) => toIdentity(item)));
+    const latestFallbackItems = latestHomepageCandidates
+      .filter((item) => {
+        const identity = toIdentity(item);
+        if (!identity || fallbackSeen.has(identity)) return false;
+        if (spotlightExcludedIdentitySet.has(identity)) return false;
+
+        fallbackSeen.add(identity);
+        return true;
+      })
+      .sort((left, right) => {
+        const leftTime = storyPublishedTimeValue(left);
+        const rightTime = storyPublishedTimeValue(right);
+        if (leftTime !== rightTime) return rightTime - leftTime;
+
+        const leftScore = (String(left?.imageSrc || '').trim().length > 0 ? 2 : 0) + (String(left?.desc || '').trim().length >= 30 ? 1 : 0);
+        const rightScore = (String(right?.imageSrc || '').trim().length > 0 ? 2 : 0) + (String(right?.desc || '').trim().length >= 30 ? 1 : 0);
+        return rightScore - leftScore;
+      });
+
+    return [...preferredItems, ...latestFallbackItems].slice(0, HOME_SPOTLIGHT_MAX_ITEMS);
+  }, [apiLang, homeSectionNews, latestFromBackend, spotlightExcludedIdentitySet]);
+
+  const renderedEditorialSections = React.useMemo(
+    () => editorialSections.filter((section) => !HOME_SPOTLIGHT_RENDER_FILTER_KEYS.includes(section.key as (typeof HOME_SPOTLIGHT_RENDER_FILTER_KEYS)[number])),
+    [editorialSections]
+  );
 
   const heroLeftBlocks = sidebarBlocks.filter((b) => b.key === 'explore');
   const utilityLeftBlocks = sidebarBlocks.filter((b) => b.key !== 'explore');
@@ -4182,9 +4620,9 @@ export default function UiPreviewV145() {
           </div>
         </div>
 
-        {editorialSections.length ? (
+        {renderedEditorialSections.length ? (
           <div className="mt-8 grid gap-6 lg:gap-7">
-            {editorialSections.map((section) => (
+            {renderedEditorialSections.map((section) => (
               <HomeEditorialSection
                 key={section.key}
                 theme={theme}
@@ -4195,6 +4633,19 @@ export default function UiPreviewV145() {
                 Icon={section.Icon}
               />
             ))}
+          </div>
+        ) : null}
+
+        {spotlightItems.length ? (
+          <div className="mt-8">
+            <HomeSpotlightCarousel
+              theme={theme}
+              title="News Pulse Spotlight"
+              href="/latest"
+              items={spotlightItems}
+              lang={apiLang}
+              Icon={Sparkles}
+            />
           </div>
         ) : null}
 

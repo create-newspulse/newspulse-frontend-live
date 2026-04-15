@@ -13,6 +13,7 @@ import { localizeArticle } from '../../lib/localizeArticle';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
 import { COVER_PLACEHOLDER_SRC, resolveCoverFitMode, resolveCoverImageUrl } from '../../lib/coverImages';
 import { getStoryId } from '../../lib/storyIdentity';
+import { formatEditorialDateTime, resolveStoryDateIso } from '../../lib/storyDateTime';
 import StoryImage from '../../src/components/story/StoryImage';
 
 const API_BASE =
@@ -94,7 +95,7 @@ export default function RegionPage(props: { lang: 'en' | 'hi' | 'gu'; data?: any
                           className="border border-gray-200 dark:border-gray-700"
                         />
                         <div className="min-w-0 flex-1">
-                      <div className="text-xs text-gray-500 mb-2">{new Date(article.publishedAt).toLocaleString()}</div>
+                      <div className="text-xs text-gray-500 mb-2">{formatEditorialDateTime(resolveStoryDateIso(article))}</div>
                       {(() => {
                         const titleRes = resolveArticleTitle(article, uiLang);
                         const summaryRes = resolveArticleSummaryOrExcerpt(article, uiLang);

@@ -9,6 +9,7 @@ import { buildNewsUrl } from '../../../../lib/newsRoutes';
 import { resolveArticleSlug } from '../../../../lib/articleSlugs';
 import { resolveCoverFitMode, resolveCoverImageUrl } from '../../../../lib/coverImages';
 import { getStoryId } from '../../../../lib/storyIdentity';
+import { formatEditorialDateTime, resolveStoryDateIso } from '../../../../lib/storyDateTime';
 import { getActiveRouteLang } from '../../../../utils/routeLang';
 import { unwrapRegionalFeedItems } from '../../../../lib/unwrapRegionalFeed';
 import { buildRegionalFeedSearchParams } from '../../../../lib/regionalFeedQuery';
@@ -129,7 +130,7 @@ export default function GujaratCityPage() {
                       <StoryImage storyId={id} src={coverUrl} fitMode={fitMode} alt={title || ''} variant="mini" className="rounded-xl" />
 
                       <div className="min-w-0 flex-1">
-                        <div className="text-xs text-gray-500 mb-2">{article.publishedAt ? new Date(article.publishedAt).toLocaleString() : ''}</div>
+                        <div className="text-xs text-gray-500 mb-2">{formatEditorialDateTime(resolveStoryDateIso(article))}</div>
                         {!!title ? (
                           <h3 className="font-bold text-lg mb-2">{title}</h3>
                         ) : null}

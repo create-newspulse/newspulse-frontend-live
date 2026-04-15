@@ -12,22 +12,8 @@ import { useI18n } from '../../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../../lib/newsRoutes';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
 import { COVER_PLACEHOLDER_SRC, resolveCoverFitMode, resolveCoverImageUrl } from '../../lib/coverImages';
+import { formatEditorialDateTime, resolveStoryDateIso } from '../../lib/storyDateTime';
 import StoryImage from '../../src/components/story/StoryImage';
-
-function formatWhenLabel(iso?: string) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  try {
-    return new Intl.DateTimeFormat('en-IN', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-      timeZone: 'Asia/Kolkata',
-    }).format(d);
-  } catch {
-    return d.toISOString();
-  }
-}
 
 function slugToQuery(slug: string) {
   const s = String(slug || '').trim();
@@ -118,7 +104,7 @@ export default function TopicPage() {
                   const id = String(a._id || '').trim();
                   const slug = resolveArticleSlug(a, language);
                   const href = id ? buildNewsUrl({ id, slug, lang: language }) : '#';
-                  const when = formatWhenLabel(a.publishedAt || a.createdAt);
+                  const when = formatEditorialDateTime(resolveStoryDateIso(a as any));
                   const titleRes = resolveArticleTitle(a as any, language);
                   const summaryRes = resolveArticleSummaryOrExcerpt(a as any, language);
                   const summary = summaryRes.text;

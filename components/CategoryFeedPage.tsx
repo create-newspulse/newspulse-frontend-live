@@ -10,6 +10,7 @@ import { useI18n } from '../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../lib/newsRoutes';
 import { COVER_PLACEHOLDER_SRC, resolveCoverFitMode, resolveCoverImageUrl } from '../lib/coverImages';
 import { debugStoryCard, getStoryId, getStoryReactKey } from '../lib/storyIdentity';
+import { formatEditorialDateTime, resolveStoryDateIso } from '../lib/storyDateTime';
 import StoryImage from '../src/components/story/StoryImage';
 
 export type CategoryFeedPageProps = {
@@ -38,21 +39,6 @@ function categoryKeyToI18nKey(categoryKey: string): string | null {
   if (k === 'inspiration' || k === 'inspiration-hub') return 'categories.inspirationHub';
 
   return null;
-}
-
-function formatWhenLabel(iso?: string) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  try {
-    return new Intl.DateTimeFormat('en-IN', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-      timeZone: 'Asia/Kolkata',
-    }).format(d);
-  } catch {
-    return d.toISOString();
-  }
 }
 
 export default function CategoryFeedPage({ title, categoryKey, extraQuery }: CategoryFeedPageProps) {
@@ -201,7 +187,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
                   if (!localized.isVisible) return null;
 
                   const href = buildNewsUrl({ id, slug: localized.slug || id, lang: language });
-                  const when = formatWhenLabel(a.publishedAt || a.createdAt);
+                  const when = formatEditorialDateTime(resolveStoryDateIso(a as any));
                   const title = localized.title || t('categoryPage.untitled');
                   const summary = localized.summary;
                   const image = resolveCoverImageUrl(a) || COVER_PLACEHOLDER_SRC;

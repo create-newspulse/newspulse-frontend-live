@@ -8,6 +8,7 @@ import { useLanguage } from '../utils/LanguageContext';
 import { useI18n } from '../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../lib/newsRoutes';
 import { COVER_PLACEHOLDER_SRC, resolveCoverFitMode, resolveCoverImageUrl } from '../lib/coverImages';
+import { formatEditorialDateTime, resolveStoryDateIso } from '../lib/storyDateTime';
 import StoryImage from '../src/components/story/StoryImage';
 
 // Preview-only component you can paste into:
@@ -41,22 +42,6 @@ function cx(...c: Array<string | false | null | undefined>) {
   return c.filter(Boolean).join(" ");
 }
 
-function formatDateLikeUI(d?: string) {
-  if (!d) return "";
-  try {
-    const dt = new Date(d);
-    return dt.toLocaleString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return "";
-  }
-}
-
 function toSearchItem(a: Article, requestedLang: RouteLocale): SearchItem | null {
   const localized = getLocalizedArticleFields(a as any, requestedLang as RouteLocale);
   if (!localized.isVisible) return null;
@@ -69,8 +54,7 @@ function toSearchItem(a: Article, requestedLang: RouteLocale): SearchItem | null
 
   const summary = String(localized.summary || '').trim() || undefined;
   const category = String((a as any)?.category || '').trim() || undefined;
-  const publishedAt =
-    String((a as any)?.publishedAt || (a as any)?.createdAt || '').trim() || undefined;
+  const publishedAt = resolveStoryDateIso(a as any) || undefined;
 
   return {
     id,
@@ -283,7 +267,7 @@ function ResultCard({ item, language }: { item: SearchItem; language: 'en' | 'hi
             </span>
           )}
           {item.publishedAt && (
-            <span className="text-xs text-black/50">{formatDateLikeUI(item.publishedAt)}</span>
+            <span className="text-xs text-black/50">{formatEditorialDateTime(item.publishedAt)}</span>
           )}
         </div>
       </div>

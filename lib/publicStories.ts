@@ -1,4 +1,5 @@
 import { getPublicApiBaseUrl } from './publicApiBase';
+import { resolveStoryDateIso } from './storyDateTime';
 
 export type PublicStory = {
   _id: string;
@@ -10,6 +11,7 @@ export type PublicStory = {
   status?: string;
   createdAt?: string;
   publishedAt?: string;
+  updatedAt?: string;
   content?: string;
 };
 
@@ -127,5 +129,5 @@ export function getStoryCategoryLabel(category: PublicStory['category']): string
 }
 
 export function getStoryDateIso(story: PublicStory): string {
-  return story.publishedAt || story.createdAt || '';
+  return resolveStoryDateIso(story);
 }

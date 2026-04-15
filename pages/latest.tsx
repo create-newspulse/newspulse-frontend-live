@@ -7,23 +7,10 @@ import { resolveCoverFitMode, resolveCoverImageUrl } from '../lib/coverImages';
 import { buildNewsUrl } from '../lib/newsRoutes';
 import { getLocalizedArticleFields } from '../lib/localizedArticleFields';
 import { debugStoryCard, getStoryId, getStoryReactKey } from '../lib/storyIdentity';
+import { formatEditorialDateTime, resolveStoryDateIso } from '../lib/storyDateTime';
 import { useI18n } from '../src/i18n/LanguageProvider';
 import { useLanguage } from '../utils/LanguageContext';
 import OriginalTag from '../components/OriginalTag';
-
-function formatTime(iso?: string): string {
-  const raw = String(iso || '').trim();
-  if (!raw) return '';
-  try {
-    return new Intl.DateTimeFormat('en-IN', {
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: 'Asia/Kolkata',
-    }).format(new Date(raw));
-  } catch {
-    return '';
-  }
-}
 
 type LatestCategoryKey =
   | 'regional'
@@ -190,7 +177,7 @@ export default function LatestPage() {
                       const href = buildNewsUrl({ id, slug: localized.slug || id, lang: language });
 
                       const title = String(localized.title || '').trim() || String(t('common.untitled') || 'Untitled');
-                      const when = formatTime(a.publishedAt || a.createdAt);
+                      const when = formatEditorialDateTime(resolveStoryDateIso(a as any));
                       const category = String(localized.categoryLabel || (a as any)?.category || '').trim();
                       const coverSrc = resolveCoverImageUrl(a as any);
                       const fitMode = resolveCoverFitMode(a as any, { src: coverSrc, altText: title });
