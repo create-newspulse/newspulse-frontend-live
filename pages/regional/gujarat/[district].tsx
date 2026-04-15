@@ -61,10 +61,9 @@ function normalize(s: string) {
 function toSlug(value: string) {
   return String(value || '')
     .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
     .trim()
-    .replace(/[^a-z0-9\s-]/g, ' ')
-    .replace(/[\s-]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+    .replace(/\s+/g, '-');
 }
 
 function extractDistrict(story: AnyStory): string {
@@ -150,11 +149,11 @@ function isGujaratTagged(story: AnyStory): boolean {
   if (tags.some((t) => t.startsWith('district:') || t.startsWith('city:'))) return true;
 
   const districtTokens = new Set(
-    GUJARAT_DISTRICTS.flatMap((d) => [normalize(String(d.slug || '')), normalize(String(d.name || ''))]).filter(Boolean)
+    GUJARAT_DISTRICTS.flatMap((d) => [String(d.slug || '').toLowerCase(), String(d.name || '').toLowerCase()]).filter(Boolean)
   );
-  if (tags.some((t) => districtTokens.has(normalize(t)))) return true;
+  if (tags.some((t) => districtTokens.has(t))) return true;
 
-  const districtField = normalize(String(extractDistrict(story) || ''));
+  const districtField = String(extractDistrict(story) || '').toLowerCase().trim();
   if (districtField && districtTokens.has(districtField)) return true;
 
   return false;
