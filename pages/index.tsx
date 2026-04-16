@@ -19,6 +19,7 @@ import AdSlot from "../src/components/ads/AdSlot";
 import { useBookmarks } from "../hooks/useBookmarks";
 import { resolveArticleSlug } from "../lib/articleSlugs";
 import { buildNewsUrl } from "../lib/newsRoutes";
+import { resolveSponsoredContentMeta } from "../lib/sponsoredContent";
 import { COVER_PLACEHOLDER_SRC, resolveCoverFitMode, resolveCoverImageUrl } from "../lib/coverImages";
 import { fetchCurrentWeather } from "../lib/fetchWeather";
 import { debugStoryCard, getStoryId, getStoryReactKey, getStorySlug, getStoryTranslationGroupId } from "../lib/storyIdentity";
@@ -827,18 +828,7 @@ function resolveHomepageFeatureSelection(options: {
       const qualityScore = scoreHomepageFeatureQuality(article, requestedLang);
       const publishedTime = storyPublishedTimeValue(article);
       const categoryKey = normalizeCategoryKey((article as any)?.category);
-
-      const isSponsored =
-        !isExplicitlyInactiveFeature(article) &&
-        (
-          hasTruthyFeatureFlag(article, ['isSponsored', 'sponsored', 'isSponsoredFeature', 'sponsoredFeature']) ||
-          tokenMatchesAny(tokens, [
-            /\bsponsored feature\b/,
-            /\bsponsored\b/,
-            /\bpartner content\b/,
-            /\bpromoted\b/,
-          ])
-        );
+      const sponsored = resolveSponsoredContentMeta(article, requestedLang);
 
       const isEditorsPick =
         hasTruthyFeatureFlag(article, ['isEditorsPick', 'editorsPick', 'editorPick', 'isEditorPick']) ||
@@ -863,7 +853,7 @@ function resolveHomepageFeatureSelection(options: {
         publishedTime,
         qualityScore,
         categoryKey,
-        isSponsored,
+        isSponsoredFeature: sponsored.isFeatureActive,
         isEditorsPick,
         isTopExplainer,
       };
@@ -874,7 +864,7 @@ function resolveHomepageFeatureSelection(options: {
       publishedTime: number;
       qualityScore: number;
       categoryKey: string;
-      isSponsored: boolean;
+      isSponsoredFeature: boolean;
       isEditorsPick: boolean;
       isTopExplainer: boolean;
     }>;
@@ -885,7 +875,7 @@ function resolveHomepageFeatureSelection(options: {
     return left.identity.localeCompare(right.identity);
   };
 
-  const sponsored = candidates.filter((candidate) => candidate.isSponsored).sort(byPriority)[0];
+  const sponsored = candidates.filter((candidate) => candidate.isSponsoredFeature).sort(byPriority)[0];
   if (sponsored) {
     return { article: sponsored.article, label: 'Sponsored Feature', dotColor: '#f59e0b' };
   }
@@ -2225,6 +2215,7 @@ function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
 
   const requestedLang = (item?.requestedLang || 'en') as 'en' | 'hi' | 'gu';
   const article = item?.article as Article | null | undefined;
+  const sponsored = useMemo(() => resolveSponsoredContentMeta(article, requestedLang), [article, requestedLang]);
 
   const vm = useMemo(() => {
     if (!article) {
@@ -2289,10 +2280,17 @@ function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
 
     const imageSrc = resolveStoryImageSrc(article as any, requestedLang);
     const coverFitMode = resolveCoverFitMode(article as any, { src: imageSrc, altText: title, lang: requestedLang });
+    const destinationHref = sponsored.isFeatureActive && sponsored.destinationHref ? sponsored.destinationHref : href;
+    const ctaLabel = sponsored.isFeatureActive ? sponsored.ctaLabel : '';
 
     return {
       id: id || slug || title,
       href,
+      destinationHref,
+      destinationIsExternal: sponsored.destinationIsExternal,
+      ctaLabel,
+      sponsorName: sponsored.sponsorName,
+      sponsorDisclosure: sponsored.sponsorDisclosure,
       title,
       summary,
       titleIsOriginal: Boolean(titleRes.isOriginal),
@@ -2306,7 +2304,7 @@ function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
       imageSrc,
       coverFitMode,
     };
-  }, [article, requestedLang, t]);
+  }, [article, requestedLang, sponsored.ctaLabel, sponsored.destinationHref, sponsored.destinationIsExternal, sponsored.isFeatureActive, sponsored.sponsorDisclosure, sponsored.sponsorName, t]);
 
   const bookmarked = vm ? isBookmarked(vm.id) : false;
 
@@ -2366,11 +2364,19 @@ function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
 
   const topStoryLabel = safeTitle(item?.featureLabel) || t('home.topStory');
   const topStoryDotColor = safeTitle(item?.featureDotColor) || theme.live;
+  const isSponsoredFeatureCard = Boolean(sponsored.isFeatureActive);
+  const primaryHref = vm?.destinationHref || vm?.href || '';
 
   const openArticle = React.useCallback(() => {
-    if (!vm?.href) return;
-    void router.push(vm.href);
-  }, [router, vm?.href]);
+    if (!primaryHref) return;
+    if (vm?.destinationIsExternal) {
+      if (typeof window !== 'undefined') {
+        window.open(primaryHref, '_blank', 'noopener,noreferrer');
+      }
+      return;
+    }
+    void router.push(primaryHref);
+  }, [primaryHref, router, vm?.destinationIsExternal]);
 
   if (article && vm?.imageSrc) {
     debugStoryCard(
@@ -2447,9 +2453,13 @@ function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
         <div
           className="pointer-events-none absolute inset-0"
           style={{
-            background: theme.mode === 'dark'
-              ? 'radial-gradient(circle at top left, rgba(56,189,248,0.16), transparent 36%), radial-gradient(circle at 85% 20%, rgba(167,139,250,0.14), transparent 32%)'
-              : 'radial-gradient(circle at top left, rgba(37,99,235,0.10), transparent 36%), radial-gradient(circle at 85% 20%, rgba(124,58,237,0.09), transparent 32%)',
+            background: isSponsoredFeatureCard
+              ? (theme.mode === 'dark'
+                ? 'linear-gradient(135deg, rgba(245,158,11,0.18), rgba(120,53,15,0.08) 42%, transparent 78%), radial-gradient(circle at 82% 18%, rgba(251,191,36,0.18), transparent 30%)'
+                : 'linear-gradient(135deg, rgba(245,158,11,0.16), rgba(255,251,235,0.78) 46%, rgba(255,255,255,0.92) 78%), radial-gradient(circle at 84% 18%, rgba(251,191,36,0.18), transparent 30%)')
+              : (theme.mode === 'dark'
+                ? 'radial-gradient(circle at top left, rgba(56,189,248,0.16), transparent 36%), radial-gradient(circle at 85% 20%, rgba(167,139,250,0.14), transparent 32%)'
+                : 'radial-gradient(circle at top left, rgba(37,99,235,0.10), transparent 36%), radial-gradient(circle at 85% 20%, rgba(124,58,237,0.09), transparent 32%)'),
           }}
         />
 
@@ -2491,6 +2501,12 @@ function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
                 <span className="truncate" style={{ color: theme.text }}>{vm.category}</span>
               </>
             ) : null}
+            {isSponsoredFeatureCard && vm.sponsorName ? (
+              <>
+                <span aria-hidden="true" style={{ opacity: 0.45 }}>•</span>
+                <span className="truncate" style={{ color: '#b45309' }}>Presented with {vm.sponsorName}</span>
+              </>
+            ) : null}
           </div>
 
           <div className="mt-4 flex items-start gap-2">
@@ -2515,6 +2531,24 @@ function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
             {vm.summaryIsOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
           </div>
 
+          {isSponsoredFeatureCard && (vm.sponsorDisclosure || vm.sponsorName) ? (
+            <div
+              className="mt-5 rounded-[24px] border px-4 py-3 text-sm leading-6"
+              style={{
+                borderColor: 'rgba(245,158,11,0.22)',
+                background: theme.mode === 'dark' ? 'rgba(120,53,15,0.18)' : 'rgba(255,251,235,0.88)',
+                color: theme.sub,
+              }}
+            >
+              <div className="text-[11px] font-extrabold uppercase tracking-[0.16em]" style={{ color: '#b45309' }}>
+                Sponsored Feature
+              </div>
+              <div className="mt-1">
+                {vm.sponsorDisclosure || (vm.sponsorName ? `Presented with ${vm.sponsorName}.` : '')}
+              </div>
+            </div>
+          ) : null}
+
           <div className="mt-5 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between" style={{ borderColor: theme.border }}>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12px] font-medium" style={{ color: theme.sub }}>
               {vm.location ? (
@@ -2528,26 +2562,44 @@ function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <Link
-                href={vm.href}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold border transition hover:opacity-[0.98]"
-                style={{ background: theme.accent, color: '#fff', borderColor: 'transparent' }}
-              >
-                {t('common.read')} <ArrowRight className="h-4 w-4" />
-              </Link>
+              {primaryHref ? (
+                vm.destinationIsExternal ? (
+                  <a
+                    href={primaryHref}
+                    target="_blank"
+                    rel="sponsored noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold border transition hover:opacity-[0.98]"
+                    style={{ background: isSponsoredFeatureCard ? '#b45309' : theme.accent, color: '#fff', borderColor: 'transparent' }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {(isSponsoredFeatureCard && vm.ctaLabel) ? vm.ctaLabel : t('common.read')} <ArrowRight className="h-4 w-4" />
+                  </a>
+                ) : (
+                  <Link
+                    href={primaryHref}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold border transition hover:opacity-[0.98]"
+                    style={{ background: isSponsoredFeatureCard ? '#b45309' : theme.accent, color: '#fff', borderColor: 'transparent' }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {(isSponsoredFeatureCard && vm.ctaLabel) ? vm.ctaLabel : t('common.read')} <ArrowRight className="h-4 w-4" />
+                  </Link>
+                )
+              ) : null}
 
-              <Button
-                theme={theme}
-                variant="soft"
-                className="px-4 py-2.5"
-                onClick={(e: React.MouseEvent) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onToast('Listen (planned)');
-                }}
-              >
-                <Radio className="h-4 w-4" /> {t('common.listen')}
-              </Button>
+              {!isSponsoredFeatureCard ? (
+                <Button
+                  theme={theme}
+                  variant="soft"
+                  className="px-4 py-2.5"
+                  onClick={(e: React.MouseEvent) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onToast('Listen (planned)');
+                  }}
+                >
+                  <Radio className="h-4 w-4" /> {t('common.listen')}
+                </Button>
+              ) : null}
             </div>
           </div>
         </div>

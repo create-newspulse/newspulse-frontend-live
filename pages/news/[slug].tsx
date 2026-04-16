@@ -15,6 +15,7 @@ import { useI18n } from '../../src/i18n/LanguageProvider';
 import { tHeading, toLanguageKey } from '../../utils/localizedNames';
 import { buildNewsUrl } from '../../lib/newsRoutes';
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
+import { resolveSponsoredContentMeta } from '../../lib/sponsoredContent';
 import { debugStoryCard, getStoryId, getStoryReactKey } from '../../lib/storyIdentity';
 import StoryImage, { ArticleHeroImage } from '../../src/components/story/StoryImage';
 import { useArticleAnalytics } from '../../hooks/useArticleAnalytics';
@@ -362,6 +363,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
   const displayGeneratedAt = cleanText((resolvedArticle as any)?.generatedAt);
 
   const heroSrc = resolveCoverImageUrl(resolvedArticle, { lang }) || null;
+  const sponsoredMeta = React.useMemo(() => resolveSponsoredContentMeta(resolvedArticle, lang), [lang, resolvedArticle]);
 
   const prefix = React.useMemo(() => localePrefix(lang), [lang]);
   const categoryKey = React.useMemo(() => resolveCategoryKey(resolvedArticle), [resolvedArticle]);
@@ -496,6 +498,19 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                   </div>
 
                   <div className="mt-2 flex flex-col gap-2">
+                    {sponsoredMeta.isArticle ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.16em] text-amber-800">
+                          Sponsored
+                        </span>
+                        {sponsoredMeta.sponsorName ? (
+                          <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                            Presented with {sponsoredMeta.sponsorName}
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
+
                     <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 leading-tight">
                       {displayTitle}
                     </h1>
@@ -574,6 +589,37 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                     <p className="mt-4 text-base md:text-lg text-slate-700">
                       {displaySummary}
                     </p>
+                  ) : null}
+
+                  {sponsoredMeta.isArticle ? (
+                    <div className="mt-5 rounded-2xl border border-amber-200 bg-[linear-gradient(135deg,rgba(255,251,235,0.96),rgba(255,255,255,0.98))] p-4 shadow-[0_16px_34px_-28px_rgba(180,83,9,0.35)]">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <div className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-amber-800">
+                            Sponsor disclosure
+                          </div>
+                          <div className="mt-2 text-sm leading-6 text-slate-700">
+                            {sponsoredMeta.sponsorDisclosure}
+                          </div>
+                          {sponsoredMeta.sponsorName ? (
+                            <div className="mt-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                              Sponsor: {sponsoredMeta.sponsorName}
+                            </div>
+                          ) : null}
+                        </div>
+
+                        {sponsoredMeta.destinationHref && sponsoredMeta.ctaLabel ? (
+                          <a
+                            href={sponsoredMeta.destinationHref}
+                            target={sponsoredMeta.destinationIsExternal ? '_blank' : undefined}
+                            rel={sponsoredMeta.destinationIsExternal ? 'sponsored noopener noreferrer' : undefined}
+                            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-amber-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-800"
+                          >
+                            {sponsoredMeta.ctaLabel}
+                          </a>
+                        ) : null}
+                      </div>
+                    </div>
                   ) : null}
                 </div>
 
