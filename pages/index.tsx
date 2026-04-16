@@ -662,6 +662,270 @@ function articleToFeedItem(a: Article, requestedLang: 'en' | 'hi' | 'gu') {
   };
 }
 
+type HomepageFeatureSelection = {
+  article: Article | null;
+  label: string;
+  dotColor?: string;
+};
+
+function normalizeFeatureText(value: unknown): string {
+  return String(value || '')
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[’']/g, '')
+    .replace(/[_/|]+/g, ' ')
+    .replace(/[^a-z0-9\s-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function toFeatureStringList(value: unknown): string[] {
+  if (value == null) return [];
+
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => toFeatureStringList(entry));
+  }
+
+  if (typeof value === 'object') {
+    const candidate =
+      (value as any)?.label ??
+      (value as any)?.name ??
+      (value as any)?.title ??
+      (value as any)?.value ??
+      (value as any)?.key ??
+      '';
+    return candidate ? [String(candidate)] : [];
+  }
+
+  if (typeof value === 'string') {
+    return value
+      .split(/[;,]+/g)
+      .map((entry) => String(entry || '').trim())
+      .filter(Boolean);
+  }
+
+  return [String(value)];
+}
+
+function readFeatureValue(article: any, keys: string[]): unknown {
+  if (!article || typeof article !== 'object') return undefined;
+
+  const containers = [
+    article,
+    article.meta,
+    article.metadata,
+    article.attributes,
+    article.flags,
+    article.settings,
+  ].filter((value) => value && typeof value === 'object');
+
+  for (const container of containers) {
+    for (const key of keys) {
+      const value = (container as any)?.[key];
+      if (value !== undefined && value !== null && value !== '') return value;
+    }
+  }
+
+  return undefined;
+}
+
+function hasTruthyFeatureFlag(article: any, keys: string[]): boolean {
+  const value = readFeatureValue(article, keys);
+  if (typeof value === 'boolean') return value;
+
+  const normalized = normalizeFeatureText(value);
+  return ['1', 'true', 'yes', 'active', 'enabled', 'on'].includes(normalized);
+}
+
+function isExplicitlyInactiveFeature(article: any): boolean {
+  const directFlags = [
+    readFeatureValue(article, ['active', 'isActive', 'enabled']),
+    readFeatureValue(article, ['sponsoredActive', 'sponsoredFeatureActive', 'featureActive']),
+  ];
+
+  for (const flag of directFlags) {
+    if (flag === false) return true;
+    const normalized = normalizeFeatureText(flag);
+    if (['0', 'false', 'no', 'inactive', 'disabled', 'off', 'expired'].includes(normalized)) return true;
+  }
+
+  const statusValues = [
+    readFeatureValue(article, ['status', 'featureStatus', 'publicationStatus']),
+    readFeatureValue(article, ['sponsoredStatus', 'sponsoredFeatureStatus']),
+  ];
+
+  return statusValues.some((value) => {
+    const normalized = normalizeFeatureText(value);
+    return ['inactive', 'disabled', 'draft', 'archived', 'expired'].includes(normalized);
+  });
+}
+
+function collectArticleFeatureTokens(article: any): string[] {
+  if (!article || typeof article !== 'object') return [];
+
+  const rawValues = [
+    readFeatureValue(article, ['tags', 'tag', 'keywords', 'labels', 'label', 'badges', 'badge', 'categories']),
+    readFeatureValue(article, ['featureType', 'featureLabel', 'placement', 'slot']),
+    readFeatureValue(article, ['type', 'storyType', 'articleType', 'contentType', 'format']),
+    readFeatureValue(article, ['topic', 'topics']),
+    readFeatureValue(article, ['category', 'categoryLabel', 'categoryName']),
+  ];
+
+  const normalized = rawValues
+    .flatMap((value) => toFeatureStringList(value))
+    .map((value) => normalizeFeatureText(value))
+    .filter(Boolean);
+
+  return Array.from(new Set(normalized));
+}
+
+function tokenMatchesAny(tokens: string[], patterns: RegExp[]): boolean {
+  return patterns.some((pattern) => tokens.some((token) => pattern.test(token)));
+}
+
+function scoreHomepageFeatureQuality(article: Article, requestedLang: 'en' | 'hi' | 'gu'): number {
+  const feedItem = articleToFeedItem(article, requestedLang);
+  const descriptionLength = String(feedItem?.desc || '').trim().length;
+  const titleLength = String(feedItem?.title || '').trim().length;
+  const hasLocation = Boolean(storyLocationLabel(article as any));
+
+  return (
+    (String(feedItem?.imageSrc || '').trim() ? 3 : 0) +
+    (descriptionLength >= 120 ? 2 : descriptionLength >= 48 ? 1 : 0) +
+    (hasLocation ? 1 : 0) +
+    (titleLength >= 40 ? 1 : 0)
+  );
+}
+
+function resolveHomepageFeatureSelection(options: {
+  latestRawStories: Article[] | null;
+  homeSectionNews: Record<string, Article[]>;
+  requestedLang: 'en' | 'hi' | 'gu';
+  fallbackArticle?: Article | null;
+}): HomepageFeatureSelection {
+  const { latestRawStories, homeSectionNews, requestedLang, fallbackArticle = null } = options;
+
+  const rawStories = [
+    ...(Array.isArray(latestRawStories) ? latestRawStories : []),
+    ...HOME_EDITORIAL_SECTIONS.flatMap((section) => (Array.isArray(homeSectionNews[section.key]) ? homeSectionNews[section.key] : [])),
+  ];
+
+  const seen = new Set<string>();
+  const candidates = rawStories
+    .map((article) => {
+      const identity = [
+        String((article as any)?._id || (article as any)?.id || '').trim().toLowerCase(),
+        String(resolveArticleSlug(article as any, requestedLang) || '').trim().toLowerCase(),
+        String((article as any)?.slug || '').trim().toLowerCase(),
+        String((article as any)?.title || '').trim().toLowerCase(),
+      ].find(Boolean);
+
+      if (!identity || seen.has(identity)) return null;
+      seen.add(identity);
+
+      const tokens = collectArticleFeatureTokens(article);
+      const qualityScore = scoreHomepageFeatureQuality(article, requestedLang);
+      const publishedTime = storyPublishedTimeValue(article);
+      const categoryKey = normalizeCategoryKey((article as any)?.category);
+
+      const isSponsored =
+        !isExplicitlyInactiveFeature(article) &&
+        (
+          hasTruthyFeatureFlag(article, ['isSponsored', 'sponsored', 'isSponsoredFeature', 'sponsoredFeature']) ||
+          tokenMatchesAny(tokens, [
+            /\bsponsored feature\b/,
+            /\bsponsored\b/,
+            /\bpartner content\b/,
+            /\bpromoted\b/,
+          ])
+        );
+
+      const isEditorsPick =
+        hasTruthyFeatureFlag(article, ['isEditorsPick', 'editorsPick', 'editorPick', 'isEditorPick']) ||
+        tokenMatchesAny(tokens, [
+          /\beditors pick\b/,
+          /\beditor pick\b/,
+          /\beditorial pick\b/,
+          /\bdesk pick\b/,
+        ]);
+
+      const isTopExplainer =
+        hasTruthyFeatureFlag(article, ['isTopExplainer', 'topExplainer', 'isExplainer', 'explainer']) ||
+        tokenMatchesAny(tokens, [
+          /\btop explainer\b/,
+          /\bexplainer\b/,
+          /\bdeep dive\b/,
+        ]);
+
+      return {
+        article,
+        identity,
+        publishedTime,
+        qualityScore,
+        categoryKey,
+        isSponsored,
+        isEditorsPick,
+        isTopExplainer,
+      };
+    })
+    .filter(Boolean) as Array<{
+      article: Article;
+      identity: string;
+      publishedTime: number;
+      qualityScore: number;
+      categoryKey: string;
+      isSponsored: boolean;
+      isEditorsPick: boolean;
+      isTopExplainer: boolean;
+    }>;
+
+  const byPriority = (left: { publishedTime: number; qualityScore: number; identity: string }, right: { publishedTime: number; qualityScore: number; identity: string }) => {
+    if (left.publishedTime !== right.publishedTime) return right.publishedTime - left.publishedTime;
+    if (left.qualityScore !== right.qualityScore) return right.qualityScore - left.qualityScore;
+    return left.identity.localeCompare(right.identity);
+  };
+
+  const sponsored = candidates.filter((candidate) => candidate.isSponsored).sort(byPriority)[0];
+  if (sponsored) {
+    return { article: sponsored.article, label: 'Sponsored Feature', dotColor: '#f59e0b' };
+  }
+
+  const editorsPick = candidates.filter((candidate) => candidate.isEditorsPick).sort(byPriority)[0];
+  if (editorsPick) {
+    return { article: editorsPick.article, label: "Editor's Pick", dotColor: '#8b5cf6' };
+  }
+
+  const topExplainer = candidates.filter((candidate) => candidate.isTopExplainer).sort(byPriority)[0];
+  if (topExplainer) {
+    return { article: topExplainer.article, label: 'Top Explainer', dotColor: '#2563eb' };
+  }
+
+  const regionalNationalCandidates = candidates
+    .filter((candidate) => candidate.categoryKey === 'regional' || candidate.categoryKey === 'national')
+    .sort((left, right) => {
+      const leftStrong = left.qualityScore >= 3 ? 1 : 0;
+      const rightStrong = right.qualityScore >= 3 ? 1 : 0;
+      if (leftStrong !== rightStrong) return rightStrong - leftStrong;
+      return byPriority(left, right);
+    });
+
+  const regionalNational = regionalNationalCandidates[0];
+  if (regionalNational) {
+    return {
+      article: regionalNational.article,
+      label: regionalNational.categoryKey === 'regional' ? 'Regional Spotlight' : 'National Spotlight',
+      dotColor: regionalNational.categoryKey === 'regional' ? '#10b981' : '#f59e0b',
+    };
+  }
+
+  const latestFallback = candidates.sort(byPriority)[0] || (fallbackArticle ? { article: fallbackArticle } : null);
+  return {
+    article: latestFallback?.article || null,
+    label: 'Top Story',
+    dotColor: undefined,
+  };
+}
+
 function labelKeyForCategory(key: string): string {
   if (key === 'science-technology') return 'categories.scienceTechnology';
   if (key === 'web-stories') return 'categories.webStories';
@@ -1963,7 +2227,25 @@ function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
   const article = item?.article as Article | null | undefined;
 
   const vm = useMemo(() => {
-    if (!article) return null;
+    if (!article) {
+      const href = localizePath('/latest', requestedLang);
+      return {
+        id: `homepage-safe-fallback-${requestedLang}`,
+        href,
+        title: 'News Pulse Front Page',
+        summary: 'Stay with the homepage desk for the latest curated stories, explainers, and regional updates as the next lead feature arrives.',
+        titleIsOriginal: false,
+        summaryIsOriginal: false,
+        time: 'Live now',
+        iso: '',
+        source: 'News Pulse',
+        category: 'Homepage',
+        location: '',
+        readMinutes: 1,
+        imageSrc: '',
+        coverFitMode: 'cover',
+      };
+    }
 
     const id = safeTitle((article as any)?._id || (article as any)?.id || (article as any)?.slug) || '';
     const slug = resolveArticleSlug(article as any, requestedLang);
@@ -2080,7 +2362,10 @@ function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
     </span>
   );
 
-  const topStoryLabel = t('home.topStory');
+  void Chip;
+
+  const topStoryLabel = safeTitle(item?.featureLabel) || t('home.topStory');
+  const topStoryDotColor = safeTitle(item?.featureDotColor) || theme.live;
 
   const openArticle = React.useCallback(() => {
     if (!vm?.href) return;
@@ -2140,35 +2425,6 @@ function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
     );
   }
 
-  if (!vm) {
-    return (
-      <Surface theme={theme} className="group overflow-hidden">
-        <div className="relative overflow-hidden px-5 py-8 sm:px-6 sm:py-9 lg:px-7 lg:py-10">
-          <div className="flex items-start justify-between gap-3">
-            <span
-              className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-extrabold uppercase tracking-[0.16em]"
-              style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}
-            >
-              <span className="inline-block h-2 w-2 rounded-full" style={{ background: theme.live }} />
-              {topStoryLabel}
-            </span>
-          </div>
-
-          <div className="mt-8 rounded-[28px] border px-5 py-10 text-center sm:px-8" style={{ borderColor: theme.border, background: theme.surface2 }}>
-            <div className="mx-auto max-w-xl">
-              <div className="text-lg font-extrabold tracking-tight" style={{ color: theme.text }}>
-                {t('home.topStory')}
-              </div>
-              <div className="mt-3 text-sm leading-6 sm:text-[15px]" style={{ color: theme.sub }}>
-                {t('home.noUpdates')}
-              </div>
-            </div>
-          </div>
-        </div>
-      </Surface>
-    );
-  }
-
   return (
     <Surface theme={theme} className="group overflow-hidden">
       <div
@@ -2203,7 +2459,7 @@ function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
               className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-extrabold uppercase tracking-[0.16em]"
               style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}
             >
-              <span className="inline-block h-2 w-2 rounded-full" style={{ background: theme.live }} />
+              <span className="inline-block h-2 w-2 rounded-full" style={{ background: topStoryDotColor }} />
               {topStoryLabel}
             </span>
           </div>
@@ -2481,8 +2737,6 @@ function MoreReadsSection({ theme, items, lang }: any) {
     [t]
   );
 
-  if (!isLoading && !visibleItems.length) return null;
-
   return (
     <Surface theme={theme} className="overflow-hidden">
       <div
@@ -2527,6 +2781,39 @@ function MoreReadsSection({ theme, items, lang }: any) {
                 <div className="mt-2 h-5 w-4/5 rounded bg-slate-100 animate-pulse" />
               </div>
             ))}
+          </div>
+        ) : !visibleItems.length ? (
+          <div
+            className="rounded-[28px] border p-6 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.28)] sm:p-7"
+            style={{ borderColor: theme.border, background: theme.surface }}
+          >
+            <div className="mx-auto max-w-2xl text-center">
+              <div
+                className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.16em]"
+                style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}
+              >
+                <span className="inline-block h-2 w-2 rounded-full" style={{ background: theme.accent2 }} />
+                More Reads
+              </div>
+
+              <div className="mt-4 text-xl font-black tracking-tight sm:text-2xl" style={{ color: theme.text }}>
+                Fresh stories will appear here shortly
+              </div>
+
+              <div className="mt-3 text-sm leading-6 sm:text-[15px]" style={{ color: theme.sub }}>
+                The homepage desk is holding this slot until the next strong read is ready. Explore the latest feed in the meantime.
+              </div>
+
+              <div className="mt-5 flex justify-center">
+                <Link
+                  href={`${prefix}/latest`}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold border transition hover:opacity-[0.98]"
+                  style={{ background: theme.accent, color: '#fff', borderColor: 'transparent' }}
+                >
+                  {t('common.viewAll')} <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="grid gap-4 md:grid-cols-3">
@@ -4124,14 +4411,26 @@ export default function UiPreviewV145() {
     </div>
   );
 
+  const homepageFeatureSelection = React.useMemo(
+    () => resolveHomepageFeatureSelection({
+      latestRawStories,
+      homeSectionNews,
+      requestedLang: apiLang,
+      fallbackArticle: topStory,
+    }),
+    [apiLang, homeSectionNews, latestRawStories, topStory]
+  );
+
+  const homepageFeatureArticle = homepageFeatureSelection.article;
+
   const centerFeedItems = React.useMemo(() => {
     if (!Array.isArray(latestFromBackend)) return latestFromBackend;
 
     const topIdentifiers = new Set(
       [
-        safeTitle((topStory as any)?._id || (topStory as any)?.id),
-        resolveArticleSlug(topStory as any, apiLang),
-        safeTitle((topStory as any)?.slug),
+        safeTitle((homepageFeatureArticle as any)?._id || (homepageFeatureArticle as any)?.id),
+        resolveArticleSlug(homepageFeatureArticle as any, apiLang),
+        safeTitle((homepageFeatureArticle as any)?.slug),
       ]
         .map((value) => String(value || '').trim().toLowerCase())
         .filter(Boolean)
@@ -4158,7 +4457,7 @@ export default function UiPreviewV145() {
     }
 
     return [...withImage, ...withoutImage].slice(0, 6);
-  }, [apiLang, latestFromBackend, topStory]);
+  }, [apiLang, homepageFeatureArticle, latestFromBackend]);
 
   const centerFeedIdentitySet = React.useMemo(() => {
     const values = Array.isArray(centerFeedItems) ? centerFeedItems : [];
@@ -4174,9 +4473,9 @@ export default function UiPreviewV145() {
 
     const topIdentifiers = new Set(
       [
-        safeTitle((topStory as any)?._id || (topStory as any)?.id),
-        resolveArticleSlug(topStory as any, apiLang),
-        safeTitle((topStory as any)?.slug),
+        safeTitle((homepageFeatureArticle as any)?._id || (homepageFeatureArticle as any)?.id),
+        resolveArticleSlug(homepageFeatureArticle as any, apiLang),
+        safeTitle((homepageFeatureArticle as any)?.slug),
       ]
         .map((value) => String(value || '').trim().toLowerCase())
         .filter(Boolean)
@@ -4204,7 +4503,7 @@ export default function UiPreviewV145() {
     }
 
     return [...withImage, ...withoutImage].slice(0, 3);
-  }, [apiLang, centerFeedIdentitySet, latestFromBackend, topStory]);
+  }, [apiLang, centerFeedIdentitySet, homepageFeatureArticle, latestFromBackend]);
 
   const homepageLeadIdentitySet = React.useMemo(() => {
     const values = new Set<string>();
@@ -4218,26 +4517,26 @@ export default function UiPreviewV145() {
         .forEach((value) => values.add(value));
     };
 
-    collect(topStory);
+    collect(homepageFeatureArticle);
     if (Array.isArray(centerFeedItems)) centerFeedItems.forEach(collect);
     if (Array.isArray(moreReadItems)) moreReadItems.forEach(collect);
 
     return values;
-  }, [centerFeedItems, moreReadItems, topStory]);
+  }, [centerFeedItems, homepageFeatureArticle, moreReadItems]);
 
   const spotlightExcludedIdentitySet = React.useMemo(() => {
     const values = new Set<string>();
 
     [
-      String((topStory as any)?._id || (topStory as any)?.id || '').trim().toLowerCase(),
-      String(resolveArticleSlug(topStory as any, apiLang) || '').trim().toLowerCase(),
-      String((topStory as any)?.slug || '').trim().toLowerCase(),
+      String((homepageFeatureArticle as any)?._id || (homepageFeatureArticle as any)?.id || '').trim().toLowerCase(),
+      String(resolveArticleSlug(homepageFeatureArticle as any, apiLang) || '').trim().toLowerCase(),
+      String((homepageFeatureArticle as any)?.slug || '').trim().toLowerCase(),
     ]
       .filter(Boolean)
       .forEach((value) => values.add(value));
 
     return values;
-  }, [apiLang, topStory]);
+  }, [apiLang, homepageFeatureArticle]);
 
   const editorialSections = React.useMemo(() => {
     return HOME_EDITORIAL_SECTIONS.map((section) => {
@@ -4379,6 +4678,23 @@ export default function UiPreviewV145() {
   const showUtilityRow = utilityLeftBlocks.length > 0 || moreReadItems == null || (Array.isArray(moreReadItems) && moreReadItems.length > 0) || youthPulseTrendingBlock != null;
   const heroCenterColClass = heroLeftBlocks.length > 0 ? 'lg:col-span-6' : 'lg:col-span-9';
   const utilityCenterColClass = utilityLeftBlocks.length > 0 ? 'lg:col-span-6' : 'lg:col-span-9';
+  const utilityFeatureCardItem = React.useMemo(
+    () => ({
+      article: homepageFeatureArticle,
+      requestedLang: apiLang,
+      featureLabel: homepageFeatureSelection.label,
+      featureDotColor: homepageFeatureSelection.dotColor,
+    }),
+    [apiLang, homepageFeatureArticle, homepageFeatureSelection.dotColor, homepageFeatureSelection.label]
+  );
+  const utilityCenterNode = showUtilityRow ? (
+    <FeaturedCard
+      theme={theme}
+      item={utilityFeatureCardItem}
+      onToast={onToast}
+      isLoading={latestFromBackend == null && !homepageFeatureArticle}
+    />
+  ) : null;
 
   const hasSnapshotsBlock = sidebarBlocks.some((b) => b.key === 'snapshots');
 
@@ -4570,7 +4886,17 @@ export default function UiPreviewV145() {
 
               <main className={`col-span-12 order-1 lg:order-2 ${heroCenterColClass}`}>
                 <div className="grid gap-4">
-                  <FeaturedCard theme={theme} item={{ article: topStory, requestedLang: apiLang }} onToast={onToast} isLoading={latestFromBackend == null} />
+                  <FeaturedCard
+                    theme={theme}
+                    item={{
+                      article: homepageFeatureArticle,
+                      requestedLang: apiLang,
+                      featureLabel: homepageFeatureSelection.label,
+                      featureDotColor: homepageFeatureSelection.dotColor,
+                    }}
+                    onToast={onToast}
+                    isLoading={latestFromBackend == null}
+                  />
                   <CenterStoryFeed theme={theme} items={centerFeedItems} lang={apiLang} />
                 </div>
               </main>
@@ -4603,9 +4929,11 @@ export default function UiPreviewV145() {
                   </aside>
                 ) : null}
 
-                <main className={`col-span-12 order-1 lg:order-2 ${utilityCenterColClass}`}>
-                  <MoreReadsSection theme={theme} items={moreReadItems} lang={apiLang} />
-                </main>
+                {utilityCenterNode ? (
+                  <main className={`col-span-12 order-1 lg:order-2 ${utilityCenterColClass}`}>
+                    {utilityCenterNode}
+                  </main>
+                ) : null}
 
                 <aside className="col-span-12 order-3 lg:order-3 lg:col-span-3">
                   <div className="grid gap-4">
