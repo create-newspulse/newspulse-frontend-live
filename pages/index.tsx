@@ -875,40 +875,21 @@ function resolveHomepageFeatureSelection(options: {
     return left.identity.localeCompare(right.identity);
   };
 
-  const sponsored = candidates.filter((candidate) => candidate.isSponsoredFeature).sort(byPriority)[0];
-  if (sponsored) {
-    return { article: sponsored.article, label: 'Sponsored Feature', dotColor: '#f59e0b' };
-  }
+  const editorialLatest = (Array.isArray(latestRawStories) ? latestRawStories : []).find((article) => {
+    if (!article) return false;
+    const sponsoredMeta = resolveSponsoredContentMeta(article, requestedLang);
+    return sponsoredMeta.isFeatureActive !== true;
+  });
 
-  const editorsPick = candidates.filter((candidate) => candidate.isEditorsPick).sort(byPriority)[0];
-  if (editorsPick) {
-    return { article: editorsPick.article, label: "Editor's Pick", dotColor: '#8b5cf6' };
-  }
+  const fallbackIsEditorial = fallbackArticle ? resolveSponsoredContentMeta(fallbackArticle, requestedLang).isFeatureActive !== true : false;
+  const editorialCandidates = candidates.filter((candidate) => candidate.isSponsoredFeature !== true).sort(byPriority);
 
-  const topExplainer = candidates.filter((candidate) => candidate.isTopExplainer).sort(byPriority)[0];
-  if (topExplainer) {
-    return { article: topExplainer.article, label: 'Top Explainer', dotColor: '#2563eb' };
-  }
+  const latestFallback =
+    (fallbackIsEditorial ? { article: fallbackArticle } : null) ||
+    (editorialLatest ? { article: editorialLatest } : null) ||
+    editorialCandidates[0] ||
+    null;
 
-  const regionalNationalCandidates = candidates
-    .filter((candidate) => candidate.categoryKey === 'regional' || candidate.categoryKey === 'national')
-    .sort((left, right) => {
-      const leftStrong = left.qualityScore >= 3 ? 1 : 0;
-      const rightStrong = right.qualityScore >= 3 ? 1 : 0;
-      if (leftStrong !== rightStrong) return rightStrong - leftStrong;
-      return byPriority(left, right);
-    });
-
-  const regionalNational = regionalNationalCandidates[0];
-  if (regionalNational) {
-    return {
-      article: regionalNational.article,
-      label: regionalNational.categoryKey === 'regional' ? 'Regional Spotlight' : 'National Spotlight',
-      dotColor: regionalNational.categoryKey === 'regional' ? '#10b981' : '#f59e0b',
-    };
-  }
-
-  const latestFallback = candidates.sort(byPriority)[0] || (fallbackArticle ? { article: fallbackArticle } : null);
   return {
     article: latestFallback?.article || null,
     label: 'Top Story',
