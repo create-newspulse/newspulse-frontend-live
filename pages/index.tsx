@@ -3963,13 +3963,21 @@ function AppPromoSection({ theme, onToast }: any) {
   );
 }
 
-function SiteFooter({ theme, onToast, footerTextOverride }: any) {
+function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
   const { t } = useI18n();
 
   const footerBg =
     theme.mode === "dark"
       ? "linear-gradient(180deg, rgba(10,14,35,0.95) 0%, rgba(7,10,24,0.98) 100%)"
       : "linear-gradient(180deg, rgba(10,14,35,0.92) 0%, rgba(7,10,24,0.98) 100%)";
+
+  const businessLinks = [
+    { label: t('footer.advertiseWithUs'), href: localizePath('/advertise-with-us', lang) },
+    { label: t('footer.mediaKit'), href: localizePath('/media-kit', lang) },
+    { label: 'Advertising Policy', href: localizePath('/advertising-policy', lang) },
+    { label: t('footer.partnerships') },
+    { label: t('footer.licensing') },
+  ];
 
   return (
     <div className="mt-6" style={{ background: footerBg }}>
@@ -4023,10 +4031,16 @@ function SiteFooter({ theme, onToast, footerTextOverride }: any) {
               {t('footer.businessTitle')}
             </div>
             <div className="mt-4 grid gap-3 text-sm text-white/85">
-              {[t('footer.advertiseWithUs'), t('footer.mediaKit'), t('footer.partnerships'), t('footer.rssFeeds'), t('footer.apiAccess'), t('footer.licensing')].map((label) => (
-                <button key={label} type="button" onClick={() => onToast(`${label} (planned)`) } className="text-left hover:underline">
-                  {label}
-                </button>
+              {businessLinks.map((item) => (
+                item.href ? (
+                  <Link key={item.label} href={item.href} className="text-left hover:underline">
+                    {item.label}
+                  </Link>
+                ) : (
+                  <button key={item.label} type="button" onClick={() => onToast(`${item.label} (planned)`) } className="text-left hover:underline">
+                    {item.label}
+                  </button>
+                )
               ))}
             </div>
           </div>
@@ -4761,7 +4775,7 @@ export default function UiPreviewV145() {
       key: 'footer',
       order: effectiveSettings.modules.footer.order,
       enabled: effectiveSettings.modules.footer.enabled === true,
-      node: <SiteFooter theme={theme} onToast={onToast} footerTextOverride={undefined} />,
+      node: <SiteFooter theme={theme} onToast={onToast} footerTextOverride={undefined} lang={apiLang} />,
     },
   ]
     .filter((x) => x.enabled)
