@@ -9,8 +9,11 @@ type Props = {
 export default function CategoryGrid({ categories }: Props) {
   return (
     <section className="mt-10" id="youth-categories">
-      <h2 className="text-2xl sm:text-3xl font-bold">Explore Topics</h2>
-      <p className="mt-1 text-gray-600 dark:text-gray-300">Pick a track you vibe with.</p>
+      <h2 className="text-2xl sm:text-3xl font-bold">Tracks inside Youth Pulse</h2>
+      <p className="mt-2 max-w-3xl text-gray-600 dark:text-gray-300">
+        Follow the editorial tracks News Pulse uses to organize student life, campus reporting, exam updates,
+        career guidance, achievers, and moderated youth voices.
+      </p>
 
       <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {categories.map((cat) => (

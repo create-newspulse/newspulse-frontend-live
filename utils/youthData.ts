@@ -15,6 +15,7 @@ export type YouthStory = {
   summary: string;
   category: string; // backend/admin slug
   categoryLabel: string;
+  editorialLabel?: string;
   image: string;    // URL or path
   date: string;
 };
@@ -24,7 +25,7 @@ export const youthCategories: YouthCategory[] = [
     slug: 'youth-pulse',
     title: 'Youth Pulse',
     emoji: '🎓',
-    description: 'Awareness, lifestyle & youth voices',
+    description: 'News Pulse youth coverage on student life, campus change, careers, achievers, and youth voices.',
     gradientFrom: 'indigo-500',
     gradientTo: 'violet-500',
     fromHex: '#6366F1',
@@ -34,7 +35,7 @@ export const youthCategories: YouthCategory[] = [
     slug: 'campus-buzz',
     title: 'Campus Buzz',
     emoji: '🔥',
-    description: 'College fests, campus stories, innovations',
+    description: 'College events, student initiatives, campus reporting, and culture shifts worth tracking.',
     gradientFrom: 'rose-500',
     gradientTo: 'orange-500',
     fromHex: '#F43F5E',
@@ -44,7 +45,7 @@ export const youthCategories: YouthCategory[] = [
     slug: 'govt-exam-updates',
     title: 'Govt Exam Updates',
     emoji: '🎯',
-    description: 'Notifications, toppers, study hacks',
+    description: 'Notifications, exam timelines, prep signals, and student-focused guidance.',
     gradientFrom: 'emerald-500',
     gradientTo: 'teal-500',
     fromHex: '#10B981',
@@ -54,7 +55,7 @@ export const youthCategories: YouthCategory[] = [
     slug: 'career-boosters',
     title: 'Career Boosters',
     emoji: '💼',
-    description: 'Jobs, internships, financial tips',
+    description: 'Internships, early-career guidance, skill building, and practical growth advice.',
     gradientFrom: 'cyan-500',
     gradientTo: 'blue-500',
     fromHex: '#06B6D4',
@@ -64,7 +65,7 @@ export const youthCategories: YouthCategory[] = [
     slug: 'young-achievers',
     title: 'Young Achievers',
     emoji: '🌟',
-    description: 'Youth icons, awards, success journeys',
+    description: 'Standout students, young builders, and emerging achievers making an impact.',
     gradientFrom: 'amber-500',
     gradientTo: 'pink-500',
     fromHex: '#F59E0B',
@@ -74,7 +75,7 @@ export const youthCategories: YouthCategory[] = [
     slug: 'student-voices',
     title: 'Student Voices',
     emoji: '🎙️',
-    description: 'Real student opinions, campus life, study pressure, habits, and everyday youth perspectives.',
+    description: 'Moderated first-person perspectives on campus life, pressure, ambition, and everyday student realities.',
     gradientFrom: 'fuchsia-500',
     gradientTo: 'indigo-500',
     fromHex: '#D946EF',
@@ -101,6 +102,7 @@ export const youthStories: YouthStory[] = [
       'A practical look at note-taking, revision, and research tools students are using right now.',
     category: 'youth-pulse',
     categoryLabel: 'Youth Pulse',
+    editorialLabel: 'Youth Pulse Desk',
     image:
       'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?q=80&w=1600&auto=format&fit=crop',
     date: 'Trending now',
@@ -112,6 +114,7 @@ export const youthStories: YouthStory[] = [
       'Student organizers are mixing in-person energy with digital reach to keep events more accessible.',
     category: 'campus-buzz',
     categoryLabel: 'Campus Buzz',
+    editorialLabel: 'Campus Report',
     image:
       'https://images.unsplash.com/photo-1540575467063-178a50c2df87?q=80&w=1600&auto=format&fit=crop',
     date: 'Campus watch',
@@ -123,6 +126,7 @@ export const youthStories: YouthStory[] = [
       'A simple prep workflow for notifications, syllabus changes, and revision windows.',
     category: 'govt-exam-updates',
     categoryLabel: 'Govt Exam Updates',
+    editorialLabel: 'Exam Update',
     image:
       'https://images.unsplash.com/photo-1513258496099-48168024aec0?q=80&w=1600&auto=format&fit=crop',
     date: 'Exam prep',
@@ -134,6 +138,7 @@ export const youthStories: YouthStory[] = [
       'Simple ways to stand out: impact bullets, tiny projects, and focused case studies.',
     category: 'career-boosters',
     categoryLabel: 'Career Boosters',
+    editorialLabel: 'Youth Pulse Desk',
     image:
       'https://images.unsplash.com/photo-1522071820081-009f0129c71c?q=80&w=1600&auto=format&fit=crop',
     date: 'Career tips',
@@ -145,6 +150,7 @@ export const youthStories: YouthStory[] = [
       'A 17-year-old inventor’s journey from school lab to national recognition.',
     category: 'young-achievers',
     categoryLabel: 'Young Achievers',
+    editorialLabel: 'Young Achiever',
     image:
       'https://images.unsplash.com/photo-1531974586759-3fd55f7b39a3?q=80&w=1600&auto=format&fit=crop',
     date: 'Spotlight',
@@ -156,6 +162,7 @@ export const youthStories: YouthStory[] = [
       'A closer look at workload, routines, social pressure, and the small habits students use to stay balanced.',
     category: 'student-voices',
     categoryLabel: 'Student Voices',
+    editorialLabel: 'Student Voice',
     image:
       'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?q=80&w=1600&auto=format&fit=crop',
     date: 'Student lens',

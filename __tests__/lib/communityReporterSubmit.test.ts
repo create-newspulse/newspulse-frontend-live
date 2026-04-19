@@ -57,20 +57,43 @@ describe('submitCommunityStory (identity anchors)', () => {
   it('tags Youth Pulse submissions for the Youth Pulse Desk workflow', async () => {
     await submitYouthPulseStory({
       reporterName: 'Student Reporter',
+      reporterEmail: 'student@example.com',
+      mobileNumber: '9999999999',
       college: 'GLS University',
+      city: 'Ahmedabad',
+      state: 'Gujarat',
       headline: 'Campus clean-up drive draws 200 volunteers',
       story: 'Students organized a clean-up drive across campus and nearby public areas.',
       track: 'campus-buzz',
+      submissionType: 'student-voice',
+      storySource: 'first-hand',
+      supportingLink: 'https://example.com/proof',
+      attachmentLink: 'https://example.com/doc',
+      truthfulnessConfirmed: true,
+      rightsConfirmed: true,
+      reviewAcknowledged: true,
+      safetyConfirmed: true,
     });
 
     expect((global as any).fetch).toHaveBeenCalledTimes(1);
-    const [, init] = (global as any).fetch.mock.calls[0];
+    const [url, init] = (global as any).fetch.mock.calls[0];
     const body = JSON.parse(init.body);
 
+    expect(url).toBe('/api/public/youth-pulse/submit');
     expect(body.desk).toBe('youth-pulse');
     expect(body.track).toBe('campus-buzz');
     expect(body.category).toBe('Campus Buzz');
     expect(body.submissionType).toBe('youth-pulse');
+    expect(body.youthSubmissionType).toBe('student-voice');
+    expect(body.storySource).toBe('first-hand');
+    expect(body.reporterEmail).toBe('student@example.com');
+    expect(body.reporterPhone).toBe('9999999999');
+    expect(body.city).toBe('Ahmedabad');
+    expect(body.state).toBe('Gujarat');
+    expect(body.supportingLink).toBe('https://example.com/proof');
+    expect(body.attachmentLink).toBe('https://example.com/doc');
+    expect(body.truthfulnessConfirmed).toBe(true);
+    expect(body.reviewAcknowledged).toBe(true);
     expect(body.autoPublish).toBe(false);
     expect(body.publishRequested).toBe(false);
     expect(body.storyText).toContain('clean-up drive');
