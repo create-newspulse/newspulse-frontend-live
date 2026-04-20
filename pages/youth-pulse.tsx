@@ -100,8 +100,7 @@ export default function YouthPulsePage() {
               Submissions are reviewed by News Pulse before publication.
             </p>
             <div className="mt-5 rounded-2xl border border-slate-200/80 bg-white/80 px-5 py-4 text-sm leading-6 text-slate-700 backdrop-blur dark:border-slate-700 dark:bg-slate-950/50 dark:text-slate-300">
-              Public readers see only published Youth Pulse stories. Contributor details and pending submissions stay
-              inside the admin review workflow.
+              Submissions are reviewed by News Pulse before publication. Public readers see only approved published stories.
             </div>
             <div className="mt-6">
               <button
