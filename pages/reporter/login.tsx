@@ -186,7 +186,7 @@ async function getActiveChallengeStatus() {
 
 export default function ReporterLoginPage({ communityReporterClosed, reporterPortalClosed }: FeatureToggleProps) {
   const router = useRouter();
-  const { toggles } = usePublicFounderToggles({ communityReporterClosed, reporterPortalClosed, updatedAt: null });
+  const { toggles } = usePublicFounderToggles({ communityReporterClosed, reporterPortalClosed, youthPulseSubmissionsClosed: false, updatedAt: null });
   const { session, reason } = useReporterPortalSession({ skipInitialCheck: true });
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');

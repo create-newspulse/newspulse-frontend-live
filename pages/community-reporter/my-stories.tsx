@@ -35,6 +35,7 @@ const CommunityReporterMyStoriesPage: React.FC<FeatureToggleProps> = ({ communit
   const { toggles: liveToggles } = usePublicFounderToggles({
     communityReporterClosed,
     reporterPortalClosed,
+    youthPulseSubmissionsClosed: false,
     updatedAt: null,
   });
   const {

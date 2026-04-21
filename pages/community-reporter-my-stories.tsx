@@ -75,6 +75,7 @@ const MyCommunityStoriesPage: React.FC<FeatureToggleProps> = ({ communityReporte
   const { toggles: liveToggles } = usePublicFounderToggles({
     communityReporterClosed,
     reporterPortalClosed,
+    youthPulseSubmissionsClosed: false,
     updatedAt: null,
   });
   const [stories, setStories] = useState<ReporterStory[]>([]);

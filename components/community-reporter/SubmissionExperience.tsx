@@ -121,6 +121,7 @@ export default function SubmissionExperience({
   const { toggles: liveToggles } = usePublicFounderToggles({
     communityReporterClosed,
     reporterPortalClosed,
+    youthPulseSubmissionsClosed: false,
     updatedAt: null,
   });
   const submitInFlightRef = useRef(false);

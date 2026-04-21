@@ -56,6 +56,7 @@ const JournalistDeskPage: React.FC<JournalistDeskProps> = ({ communityReporterCl
   const { toggles: liveToggles } = usePublicFounderToggles({
     communityReporterClosed,
     reporterPortalClosed,
+    youthPulseSubmissionsClosed: false,
     updatedAt: null,
   });
   const [form, setForm] = useState<FormState>(initialForm);

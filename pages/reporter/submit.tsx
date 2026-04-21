@@ -9,7 +9,7 @@ import { getReporterPortalPageServerProps } from '../../lib/reporterPortalPage';
 import type { FeatureToggleProps } from '../../types/community-reporter';
 
 export default function ReporterSubmitPage({ communityReporterClosed, reporterPortalClosed }: FeatureToggleProps) {
-  const { toggles } = usePublicFounderToggles({ communityReporterClosed, reporterPortalClosed, updatedAt: null });
+  const { toggles } = usePublicFounderToggles({ communityReporterClosed, reporterPortalClosed, youthPulseSubmissionsClosed: false, updatedAt: null });
   const { session, isReady, reason } = useReporterPortalSession({ reportUnauthorizedReason: true });
 
   if (toggles.communityReporterClosed || toggles.reporterPortalClosed) {

@@ -12,7 +12,7 @@ import type { FeatureToggleProps } from '../../types/community-reporter';
 
 export default function ReporterDashboardPage({ communityReporterClosed, reporterPortalClosed }: FeatureToggleProps) {
   const router = useRouter();
-  const { toggles } = usePublicFounderToggles({ communityReporterClosed, reporterPortalClosed, updatedAt: null });
+  const { toggles } = usePublicFounderToggles({ communityReporterClosed, reporterPortalClosed, youthPulseSubmissionsClosed: false, updatedAt: null });
   const { session, profile, isReady, logout, reason } = useReporterPortalSession({ reportUnauthorizedReason: true });
   const { settings, settingsLoading, stories, counts, isLoading, error, errorStatus, hasLoadedOnce, reporterProfile } = useCommunityStories({ reporterEmail: session?.email, reporterAuth: true, debugContexts: ['dashboard stats fetch', 'recent submissions fetch'] });
   const hasSessionIssue = errorStatus === 401 || errorStatus === 403;
