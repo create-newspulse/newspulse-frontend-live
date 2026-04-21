@@ -11,6 +11,7 @@ import {
 type Props = {
   open: boolean;
   onClose: () => void;
+  submissionsOpen?: boolean;
 };
 
 type SubmissionTypeChoice =
@@ -121,7 +122,7 @@ const INITIAL_FORM: FormState = {
   safetyConfirmed: false,
 };
 
-export default function SubmitStoryModal({ open, onClose }: Props) {
+export default function SubmitStoryModal({ open, onClose, submissionsOpen = true }: Props) {
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
   const [saved, setSaved] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -166,6 +167,11 @@ export default function SubmitStoryModal({ open, onClose }: Props) {
   }, [open]);
 
   useEffect(() => {
+    if (!open || submissionsOpen) return;
+    setSubmitError('Youth Pulse submissions are temporarily closed.');
+  }, [open, submissionsOpen]);
+
+  useEffect(() => {
     if (!open || saved) return;
     localStorage.setItem('youth-story-draft', JSON.stringify(form));
   }, [form, open, saved]);
@@ -175,6 +181,10 @@ export default function SubmitStoryModal({ open, onClose }: Props) {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
+    if (!submissionsOpen) {
+      setSubmitError('Youth Pulse submissions are temporarily closed.');
+      return;
+    }
 
     setIsSubmitting(true);
     setSubmitError(null);
@@ -199,7 +209,7 @@ export default function SubmitStoryModal({ open, onClose }: Props) {
       });
 
       if (!result.ok) {
-        setSubmitError('We could not send your submission for review right now. Please try again in a moment.');
+        setSubmitError(result.message || 'We could not send your Youth Pulse submission right now. Please try again in a moment.');
         return;
       }
 
@@ -216,7 +226,7 @@ export default function SubmitStoryModal({ open, onClose }: Props) {
       setSaved(form.fullName.trim() || 'Friend');
       setForm(INITIAL_FORM);
     } catch {
-      setSubmitError('We could not send your submission for review right now. Please try again in a moment.');
+      setSubmitError('We could not send your Youth Pulse submission right now. Please try again in a moment.');
     } finally {
       setIsSubmitting(false);
     }
@@ -240,7 +250,7 @@ export default function SubmitStoryModal({ open, onClose }: Props) {
           <div>
             <h3 className="text-xl font-bold">Submit to Youth Pulse</h3>
             <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-              Share a story, update, opinion, or achievement with the News Pulse review desk.
+              Send your story to the News Pulse review desk.
             </p>
             <p className="mt-2 text-sm font-medium text-slate-700 dark:text-slate-200">
               Submissions are reviewed by News Pulse before publication. Public readers see only approved published stories.
@@ -277,6 +287,11 @@ export default function SubmitStoryModal({ open, onClose }: Props) {
                 {submitError}
               </div>
             ) : null}
+            {!submissionsOpen ? (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
+                Youth Pulse submissions are temporarily closed.
+              </div>
+            ) : null}
             <section className="space-y-4 rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
               <div>
                 <h4 className="text-base font-semibold">Identity</h4>
@@ -295,6 +310,7 @@ export default function SubmitStoryModal({ open, onClose }: Props) {
                     value={form.fullName}
                     onChange={(e) => updateField('fullName', e.target.value)}
                     required
+                    disabled={!submissionsOpen}
                     className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-900"
                   />
                 </div>
@@ -308,6 +324,7 @@ export default function SubmitStoryModal({ open, onClose }: Props) {
                     value={form.email}
                     onChange={(e) => updateField('email', e.target.value)}
                     required
+                    disabled={!submissionsOpen}
                     className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-900"
                   />
                 </div>
@@ -320,6 +337,7 @@ export default function SubmitStoryModal({ open, onClose }: Props) {
                     type="tel"
                     value={form.mobileNumber}
                     onChange={(e) => updateField('mobileNumber', e.target.value)}
+                    disabled={!submissionsOpen}
                     className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-900"
                   />
                 </div>
@@ -333,6 +351,7 @@ export default function SubmitStoryModal({ open, onClose }: Props) {
                     value={form.college}
                     onChange={(e) => updateField('college', e.target.value)}
                     required
+                    disabled={!submissionsOpen}
                     className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-900"
                   />
                 </div>
@@ -346,6 +365,7 @@ export default function SubmitStoryModal({ open, onClose }: Props) {
                     value={form.city}
                     onChange={(e) => updateField('city', e.target.value)}
                     required
+                    disabled={!submissionsOpen}
                     className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-900"
                   />
                 </div>
@@ -359,6 +379,7 @@ export default function SubmitStoryModal({ open, onClose }: Props) {
                     value={form.state}
                     onChange={(e) => updateField('state', e.target.value)}
                     required
+                    disabled={!submissionsOpen}
                     className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-900"
                   />
                 </div>
@@ -369,7 +390,7 @@ export default function SubmitStoryModal({ open, onClose }: Props) {
               <div>
                 <h4 className="text-base font-semibold">Submission</h4>
                 <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                  Explain your story clearly so the News Pulse team can review it properly.
+                  Explain your story clearly so the News Pulse review desk can assess it for publication.
                 </p>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
@@ -381,6 +402,7 @@ export default function SubmitStoryModal({ open, onClose }: Props) {
                   <select
                     value={form.track}
                     onChange={(e) => updateField('track', e.target.value as YouthPulseTrackSlug)}
+                    disabled={!submissionsOpen}
                     className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-900"
                   >
                     {YOUTH_PULSE_TRACK_OPTIONS.map((option) => (
@@ -398,6 +420,7 @@ export default function SubmitStoryModal({ open, onClose }: Props) {
                   <select
                     value={form.submissionType}
                     onChange={(e) => updateField('submissionType', e.target.value as SubmissionTypeChoice)}
+                    disabled={!submissionsOpen}
                     className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-900"
                   >
                     {SUBMISSION_TYPE_CHOICES.map((option) => (
@@ -419,6 +442,7 @@ export default function SubmitStoryModal({ open, onClose }: Props) {
                   onChange={(e) => updateField('headline', e.target.value)}
                   required
                   maxLength={150}
+                  disabled={!submissionsOpen}
                   className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-900"
                 />
               </div>
@@ -432,6 +456,7 @@ export default function SubmitStoryModal({ open, onClose }: Props) {
                   onChange={(e) => updateField('story', e.target.value)}
                   required
                   rows={6}
+                  disabled={!submissionsOpen}
                   className="mt-1 w-full resize-y rounded-md border border-gray-300 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-900"
                 />
               </div>
@@ -441,6 +466,7 @@ export default function SubmitStoryModal({ open, onClose }: Props) {
                   <select
                     value={form.storySource}
                     onChange={(e) => updateField('storySource', e.target.value as StorySourceChoice)}
+                    disabled={!submissionsOpen}
                     className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 dark:border-gray-700 dark:bg-gray-900"
                   >
                     {STORY_SOURCE_CHOICES.map((option) => (
@@ -461,6 +487,7 @@ export default function SubmitStoryModal({ open, onClose }: Props) {
                   checked={form.truthfulnessConfirmed}
                   onChange={(e) => updateField('truthfulnessConfirmed', e.target.checked)}
                   required
+                  disabled={!submissionsOpen}
                   className="mt-1"
                 />
                 <span>I confirm this submission is truthful to the best of my knowledge</span>
@@ -471,6 +498,7 @@ export default function SubmitStoryModal({ open, onClose }: Props) {
                   checked={form.rightsConfirmed}
                   onChange={(e) => updateField('rightsConfirmed', e.target.checked)}
                   required
+                  disabled={!submissionsOpen}
                   className="mt-1"
                 />
                 <span>I confirm I have the right to share this content</span>
@@ -481,9 +509,10 @@ export default function SubmitStoryModal({ open, onClose }: Props) {
                   checked={form.reviewAcknowledged}
                   onChange={(e) => updateField('reviewAcknowledged', e.target.checked)}
                   required
+                  disabled={!submissionsOpen}
                   className="mt-1"
                 />
-                <span>I understand News Pulse may edit, review, reject, or not publish this submission</span>
+                <span>I understand this Youth Pulse submission will be reviewed by News Pulse before publication</span>
               </label>
               <label className="flex items-start gap-3 text-sm text-slate-700 dark:text-slate-300">
                 <input
@@ -491,6 +520,7 @@ export default function SubmitStoryModal({ open, onClose }: Props) {
                   checked={form.safetyConfirmed}
                   onChange={(e) => updateField('safetyConfirmed', e.target.checked)}
                   required
+                  disabled={!submissionsOpen}
                   className="mt-1"
                 />
                 <span>I confirm this submission does not contain false, abusive, hateful, defamatory, or unsafe content</span>
@@ -512,10 +542,10 @@ export default function SubmitStoryModal({ open, onClose }: Props) {
               </button>
               <button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || !submissionsOpen}
                 className="rounded-md bg-indigo-600 px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-70"
               >
-                {isSubmitting ? 'Submitting...' : 'Submit for Review'}
+                {isSubmitting ? 'Submitting...' : 'Submit to Youth Pulse'}
               </button>
             </div>
           </form>

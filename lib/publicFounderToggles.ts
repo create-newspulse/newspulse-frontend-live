@@ -3,12 +3,14 @@ import { getPublicApiBaseUrl } from './publicApiBase';
 export type PublicFounderToggles = {
   communityReporterClosed: boolean;
   reporterPortalClosed: boolean;
+  youthPulseSubmissionsClosed: boolean;
   updatedAt: string | null;
 };
 
 export const DEFAULT_PUBLIC_FOUNDER_TOGGLES: PublicFounderToggles = {
   communityReporterClosed: false,
   reporterPortalClosed: false,
+  youthPulseSubmissionsClosed: false,
   updatedAt: null,
 };
 
@@ -23,6 +25,9 @@ export function normalizePublicFounderToggles(payload: unknown): PublicFounderTo
   return {
     communityReporterClosed: Boolean(settings?.communityReporterClosed),
     reporterPortalClosed: Boolean(settings?.reporterPortalClosed),
+    youthPulseSubmissionsClosed: Boolean(
+      settings?.youthPulseSubmissionsClosed ?? settings?.youthPulseSubmissionClosed
+    ),
     updatedAt: typeof settings?.updatedAt === 'string' ? settings.updatedAt : null,
   };
 }

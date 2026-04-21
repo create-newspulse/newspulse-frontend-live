@@ -67,8 +67,6 @@ describe('submitCommunityStory (identity anchors)', () => {
       track: 'campus-buzz',
       submissionType: 'student-voice',
       storySource: 'first-hand',
-      supportingLink: 'https://example.com/proof',
-      attachmentLink: 'https://example.com/doc',
       truthfulnessConfirmed: true,
       rightsConfirmed: true,
       reviewAcknowledged: true,
@@ -82,20 +80,25 @@ describe('submitCommunityStory (identity anchors)', () => {
     expect(url).toBe('/api/public/youth-pulse/submit');
     expect(body.desk).toBe('youth-pulse');
     expect(body.track).toBe('campus-buzz');
-    expect(body.category).toBe('Campus Buzz');
+    expect(body.category).toBe('Youth / Campus');
     expect(body.submissionType).toBe('youth-pulse');
     expect(body.youthSubmissionType).toBe('student-voice');
     expect(body.storySource).toBe('first-hand');
+    expect(body.source).toBe('youth_pulse');
+    expect(body.fullName).toBe('Student Reporter');
+    expect(body.email).toBe('student@example.com');
     expect(body.reporterEmail).toBe('student@example.com');
     expect(body.reporterPhone).toBe('9999999999');
     expect(body.city).toBe('Ahmedabad');
     expect(body.state).toBe('Gujarat');
-    expect(body.supportingLink).toBe('https://example.com/proof');
-    expect(body.attachmentLink).toBe('https://example.com/doc');
+    expect(body.supportingLink).toBeUndefined();
+    expect(body.attachmentLink).toBeUndefined();
     expect(body.truthfulnessConfirmed).toBe(true);
     expect(body.reviewAcknowledged).toBe(true);
+    expect(body.moderationRequired).toBe(true);
     expect(body.autoPublish).toBe(false);
     expect(body.publishRequested).toBe(false);
+    expect(body.meta.source).toBe('youth_pulse');
     expect(body.storyText).toContain('clean-up drive');
   });
 });

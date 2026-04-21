@@ -67,8 +67,6 @@ export interface SubmitYouthPulseStoryPayload {
   track: YouthPulseTrackSlug;
   submissionType: YouthPulseSubmissionType;
   storySource: YouthPulseStorySource;
-  supportingLink?: string;
-  attachmentLink?: string;
   truthfulnessConfirmed: boolean;
   rightsConfirmed: boolean;
   reviewAcknowledged: boolean;
@@ -79,6 +77,7 @@ export interface SubmitYouthPulseStoryResult {
   ok: boolean;
   referenceId: string;
   status: string;
+  message?: string;
 }
 
 export const YOUTH_PULSE_TRACK_OPTIONS: Array<{ value: YouthPulseTrackSlug; label: string }> = [
@@ -105,6 +104,21 @@ export const YOUTH_PULSE_STORY_SOURCE_OPTIONS: Array<{ value: YouthPulseStorySou
 
 function getYouthPulseTrackLabel(track: YouthPulseTrackSlug): string {
   return YOUTH_PULSE_TRACK_OPTIONS.find((item) => item.value === track)?.label || 'Youth Pulse';
+}
+
+function getYouthPulseBackendCategory(track: YouthPulseTrackSlug): string {
+  switch (track) {
+    case 'govt-exam-updates':
+    case 'career-boosters':
+      return 'Education / School / College';
+    case 'young-achievers':
+      return 'Achievement / Inspiration';
+    case 'student-voices':
+    case 'campus-buzz':
+    case 'youth-pulse':
+    default:
+      return 'Youth / Campus';
+  }
 }
 
 export async function submitCommunityStory(
@@ -185,80 +199,104 @@ export async function submitYouthPulseStory(
 ): Promise<SubmitYouthPulseStoryResult> {
   const requestUrl = `/api/public/youth-pulse/submit`;
   const categoryLabel = getYouthPulseTrackLabel(payload.track);
+  const backendCategory = getYouthPulseBackendCategory(payload.track);
   const locationLabel = [payload.college, payload.city, payload.state].filter(Boolean).join(', ');
 
-  const res = await fetch(requestUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({
-      reporterType: 'community',
-      reporterName: payload.reporterName,
-      reporterEmail: payload.reporterEmail,
-      reporterPhone: payload.mobileNumber,
-      reporterWhatsApp: '',
+  const requestBody = {
+    reporterType: 'community',
+    reporterName: payload.reporterName,
+    fullName: payload.reporterName,
+    name: payload.reporterName,
+    reporterEmail: payload.reporterEmail,
+    email: payload.reporterEmail,
+    reporterPhone: payload.mobileNumber,
+    reporterWhatsApp: '',
+    phone: payload.mobileNumber,
+    whatsapp: '',
+    reporterCity: payload.city,
+    reporterDistrict: '',
+    reporterState: payload.state,
+    reporterCountry: '',
+    preferredLanguages: [],
+    consentToContact: false,
+    beats: [categoryLabel],
+    communityInterests: [categoryLabel],
+    ageGroup: '18-24',
+    category: backendCategory,
+    coverageScope: '',
+    headline: payload.headline,
+    storyText: payload.story,
+    story: payload.story,
+    location: locationLabel,
+    college: payload.college,
+    campusName: payload.college,
+    city: payload.city,
+    state: payload.state,
+    desk: 'youth-pulse',
+    track: payload.track,
+    trackLabel: categoryLabel,
+    submissionType: 'youth-pulse',
+    youthSubmissionType: payload.submissionType,
+    storySource: payload.storySource,
+    source: 'youth_pulse',
+    autoPublish: false,
+    publishRequested: false,
+    moderationRequired: true,
+    acceptPolicy: true,
+    confirm: true,
+    truthfulnessConfirmed: payload.truthfulnessConfirmed,
+    rightsConfirmed: payload.rightsConfirmed,
+    reviewAcknowledged: payload.reviewAcknowledged,
+    safetyConfirmed: payload.safetyConfirmed,
+    reporterProfile: {
+      fullName: payload.reporterName,
+      email: payload.reporterEmail,
       phone: payload.mobileNumber,
-      whatsapp: '',
-      reporterCity: payload.city,
-      reporterDistrict: '',
-      reporterState: payload.state,
-      reporterCountry: '',
-      preferredLanguages: [],
-      consentToContact: false,
-      beats: [categoryLabel],
-      communityInterests: [categoryLabel],
-      ageGroup: '18-24',
-      category: categoryLabel,
-      coverageScope: '',
-      headline: payload.headline,
-      storyText: payload.story,
-      story: payload.story,
-      name: payload.reporterName,
-      location: locationLabel,
-      college: payload.college,
-      campusName: payload.college,
       city: payload.city,
       state: payload.state,
-      desk: 'youth-pulse',
+      reporterType: 'community',
+      beats: [categoryLabel],
+    },
+    meta: {
+      form: 'youth-pulse-public-submit',
+      college: payload.college,
+      city: payload.city,
+      state: payload.state,
+      category: backendCategory,
       track: payload.track,
       trackLabel: categoryLabel,
-      submissionType: 'youth-pulse',
       youthSubmissionType: payload.submissionType,
       storySource: payload.storySource,
-      supportingLink: payload.supportingLink || '',
-      attachmentLink: payload.attachmentLink || '',
-      source: 'youth-pulse-public-frontend',
-      autoPublish: false,
-      publishRequested: false,
-      moderationRequired: true,
-      acceptPolicy: true,
-      confirm: true,
-      truthfulnessConfirmed: payload.truthfulnessConfirmed,
-      rightsConfirmed: payload.rightsConfirmed,
-      reviewAcknowledged: payload.reviewAcknowledged,
-      safetyConfirmed: payload.safetyConfirmed,
-      reporterProfile: {
-        fullName: payload.reporterName,
-        email: payload.reporterEmail,
-        phone: payload.mobileNumber,
-        city: payload.city,
-        state: payload.state,
-        reporterType: 'community',
-        beats: [categoryLabel],
-      },
-      meta: {
-        form: 'youth-pulse-public-submit',
-        college: payload.college,
-        city: payload.city,
-        state: payload.state,
-        track: payload.track,
-        trackLabel: categoryLabel,
-        youthSubmissionType: payload.submissionType,
-        storySource: payload.storySource,
-        supportingLink: payload.supportingLink || '',
-        attachmentLink: payload.attachmentLink || '',
-      },
-    }),
-  });
+      source: 'youth_pulse',
+    },
+  };
+
+  if (process.env.NODE_ENV !== 'production') {
+    console.info('[submitYouthPulseStory] request', {
+      requestUrl,
+      method: 'POST',
+      requestBody,
+    });
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(requestUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(requestBody),
+    });
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('[submitYouthPulseStory] network failure', {
+        requestUrl,
+        method: 'POST',
+        requestBody,
+        error,
+      });
+    }
+    throw error;
+  }
 
   let data: any = null;
   try {
@@ -267,10 +305,20 @@ export async function submitYouthPulseStory(
 
   const referenceId = data?.referenceId || data?.storyId || data?.id || data?.reference || '';
   const status = data?.status || 'Under review';
+  const message = typeof data?.message === 'string' ? data.message : undefined;
 
   if (!res.ok) {
-    return { ok: false, referenceId, status };
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('[submitYouthPulseStory] request failed', {
+        requestUrl,
+        method: 'POST',
+        status: res.status,
+        requestBody,
+        response: data,
+      });
+    }
+    return { ok: false, referenceId, status, message };
   }
 
-  return { ok: true, referenceId, status };
+  return { ok: true, referenceId, status, message };
 }

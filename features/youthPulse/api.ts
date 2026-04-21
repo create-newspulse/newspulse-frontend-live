@@ -1,6 +1,8 @@
 import { youthCategories, youthStories } from "../../utils/youthData";
 import type { YouthCategory, YouthStory } from "./types";
 import { getApiOrigin } from '../../lib/publicNewsApi';
+import { resolveArticleSlug } from '../../lib/articleSlugs';
+import { buildNewsUrl } from '../../lib/newsRoutes';
 
 type FetchOpts = {
   signal?: AbortSignal;
@@ -69,6 +71,21 @@ function formatDateLabel(iso?: string): string {
 
 function normalizeDashText(value: unknown): string {
   return normalizeText(value).replace(/\s+/g, '-');
+}
+
+function resolveStoryLanguage(raw: any, fallbackLanguage?: string): string {
+  const value = String(
+    raw?.language
+      || raw?.lang
+      || raw?.sourceLang
+      || raw?.sourceLanguage
+      || fallbackLanguage
+      || 'en'
+  ).trim().toLowerCase();
+
+  if (value === 'hindi' || value === 'in') return 'hi';
+  if (value === 'gujarati') return 'gu';
+  return value || 'en';
 }
 
 function resolveYouthTrack(value: unknown): { slug: string; label: string } | null {
@@ -216,7 +233,7 @@ async function fetchYouthPulseArticles(limit: number, language?: string, opts: F
   }
 }
 
-function toYouthStory(raw: any, fallbackCategoryLabel?: string): YouthStory {
+function toYouthStory(raw: any, fallbackCategoryLabel?: string, requestedLanguage?: string): YouthStory {
   const id = raw?._id || raw?.id || raw?.slug || `${Date.now()}-${Math.random()}`;
   const title = String(raw?.title || 'Untitled').trim();
   const summary = String(raw?.summary || raw?.excerpt || '').trim();
@@ -228,9 +245,12 @@ function toYouthStory(raw: any, fallbackCategoryLabel?: string): YouthStory {
   const category = track.slug || 'youth-pulse';
   const categoryLabel = track.label || 'Youth Pulse';
   const editorialLabel = resolveYouthEditorialLabel(raw, categoryLabel);
-  const slug = String(raw?.slug || raw?._id || raw?.id || '').trim() || undefined;
+  const language = resolveStoryLanguage(raw, requestedLanguage);
+  const routeId = String(raw?._id || raw?.id || raw?.slug || '').trim();
+  const slug = String(resolveArticleSlug(raw, language) || raw?.slug || routeId).trim() || undefined;
+  const href = routeId || slug ? buildNewsUrl({ id: routeId || slug || '', slug: slug || routeId, lang: language }) : undefined;
 
-  return { id, title, summary, category, categoryLabel, editorialLabel, slug, image, date };
+  return { id, title, summary, category, categoryLabel, editorialLabel, slug, language, href, image, date };
 }
 
 export async function getYouthTopics(): Promise<YouthCategory[]> {
@@ -263,7 +283,7 @@ export async function getYouthTrendingByLanguage(
   opts: FetchOpts = {}
 ): Promise<YouthStory[]> {
   const items = sanitizePublicYouthItems(await fetchYouthPulseArticles(limit, language, opts));
-  if (items.length) return items.map((raw) => toYouthStory(raw));
+  if (items.length) return items.map((raw) => toYouthStory(raw, undefined, language));
 
   const list = getFallbackYouthStories();
   return list.slice(0, limit);
@@ -277,7 +297,7 @@ export async function getYouthByCategory(slug: string, language?: string, opts: 
   // If asking for the main category, just return the latest youth-pulse feed.
   if (normalizeText(slug) === 'youth pulse' || normalizeText(slug) === 'youth-pulse') {
     const items = sanitizePublicYouthItems(await fetchYouthPulseArticles(30, language, opts));
-    if (items.length) return items.map((raw) => toYouthStory(raw, 'Youth Pulse'));
+    if (items.length) return items.map((raw) => toYouthStory(raw, 'Youth Pulse', language));
     return getFallbackYouthStories();
   }
 
@@ -290,7 +310,7 @@ export async function getYouthByCategory(slug: string, language?: string, opts: 
     return needles.some((n) => (n && (tags.includes(n) || cat.includes(n) || text.includes(n))));
   });
 
-  if (filtered.length) return filtered.map((raw) => toYouthStory(raw, display || 'Youth Pulse'));
+  if (filtered.length) return filtered.map((raw) => toYouthStory(raw, display || 'Youth Pulse', language));
 
   return getFallbackYouthStories(slug);
 }

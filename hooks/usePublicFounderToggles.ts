@@ -34,6 +34,7 @@ export function usePublicFounderToggles(initialToggles?: PublicFounderToggles | 
           if (
             prev.communityReporterClosed === next.communityReporterClosed &&
             prev.reporterPortalClosed === next.reporterPortalClosed &&
+            prev.youthPulseSubmissionsClosed === next.youthPulseSubmissionsClosed &&
             prev.updatedAt === next.updatedAt
           ) {
             return prev;
