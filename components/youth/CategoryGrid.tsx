@@ -6,6 +6,15 @@ type Props = {
   categories: YouthCategory[];
 };
 
+const TRACK_ACCENT_CLASSES: Record<string, string> = {
+  'youth-pulse': 'border-t-blue-500',
+  'campus-buzz': 'border-t-orange-400',
+  'govt-exam-updates': 'border-t-cyan-500',
+  'career-boosters': 'border-t-amber-500',
+  'young-achievers': 'border-t-fuchsia-500',
+  'student-voices': 'border-t-violet-500',
+};
+
 export default function CategoryGrid({ categories }: Props) {
   return (
     <section className="mt-10" id="youth-categories">
@@ -19,14 +28,11 @@ export default function CategoryGrid({ categories }: Props) {
         {categories.map((cat) => (
           <Link key={cat.slug} href={`/youth-pulse/${cat.slug}`} className="group">
             <div
-              className="relative h-full overflow-hidden rounded-2xl border border-slate-200/85 bg-[linear-gradient(180deg,_rgba(255,255,255,0.98),_rgba(247,250,252,0.96))] p-5 shadow-[0_14px_34px_-24px_rgba(15,23,42,0.25)] transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:shadow-[0_18px_38px_-24px_rgba(15,23,42,0.28)] dark:border-gray-800 dark:bg-gray-900"
+              className={[
+                'relative h-full overflow-hidden rounded-2xl border border-slate-200 border-t-4 bg-white p-5 shadow-sm transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:border-slate-300 group-hover:shadow-md dark:border-gray-800 dark:bg-gray-900',
+                TRACK_ACCENT_CLASSES[cat.slug] || 'border-t-blue-500',
+              ].join(' ')}
             >
-              <div
-                className="absolute inset-x-0 -top-px h-1"
-                style={{
-                  backgroundImage: `linear-gradient(90deg, ${cat.fromHex}, ${cat.toHex})`,
-                }}
-              />
               <div className="flex items-start gap-3">
                 <div className="text-2xl" aria-hidden>
                   {cat.emoji}

@@ -1,0 +1,15 @@
+{
+  "active": true,
+  "featureActive": true,
+  "status": "active",
+  "placement": "homepage_sponsored_feature",
+  "sponsorName": "Acme Climate Lab",
+  "headline": "How cities can cool down before the next peak-heat week",
+  "shortSummary": "A premium sponsored feature presented by Acme Climate Lab, linking readers into a deeper partner story about practical urban cooling strategies.",
+  "ctaLabel": "Read sponsored article",
+  "imageSrc": "https://res.cloudinary.com/dc918or5b/image/upload/v1776768550/newspulse/articles/ftnhulq4ctyiwjnosofq.jpg",
+  "destinationUrl": "https://example.com/acme-climate-lab/cooling-cities",
+  "linkedArticleId": "69e7570cc4705a4a21073b8e",
+  "linkedArticleSlug": "gujarat-has-become-a-furnace-the-mercury-will-cross-43-c-in-5-days-the-prediction-of-a-heatwave-on-the-voting-day-has-in",
+  "sponsorDisclosure": "This sponsored feature is presented in partnership with Acme Climate Lab."
+}

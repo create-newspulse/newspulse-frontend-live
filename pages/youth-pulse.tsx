@@ -50,7 +50,7 @@ export default function YouthPulsePage({ initialFounderToggles }: YouthPulsePage
   };
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,_#f7fbff_0%,_#ffffff_18%,_#fffdf9_58%,_#ffffff_100%)] text-black dark:bg-dark-primary dark:text-dark-text">
+    <div className="min-h-screen bg-slate-50 text-black dark:bg-dark-primary dark:text-dark-text">
       <Head>
         <title>🎓 Youth Pulse • News Pulse</title>
         <meta
@@ -82,22 +82,22 @@ export default function YouthPulsePage({ initialFounderToggles }: YouthPulsePage
         <section
           id="submission-form"
           ref={submissionRef}
-          className="mt-12 overflow-hidden rounded-[2rem] border border-slate-200/85 bg-[linear-gradient(135deg,_rgba(224,242,254,0.95),_rgba(255,247,237,0.92))] p-8 shadow-[0_16px_38px_-28px_rgba(15,23,42,0.2)] dark:border-slate-800 dark:bg-slate-900"
+          className="mt-12 overflow-hidden rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900"
         >
           <div className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-start">
             <div className="max-w-3xl">
-              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-800 dark:text-cyan-300">
+              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-teal-700 dark:text-teal-300">
                 Contribution pathway
               </p>
               <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100">
                 Share your story with the News Pulse review desk
               </h2>
-              <p className="mt-4 text-base leading-7 text-slate-700 dark:text-slate-300">
+              <p className="mt-4 text-base leading-7 text-slate-600 dark:text-slate-300">
                 Bring us a campus development, exam update, youth achievement, civic issue, career lead, or a strong
                 youth perspective. Youth Pulse welcomes contributions, but publication remains moderation-first and
                 editorially reviewed.
               </p>
-              <div className="mt-5 rounded-2xl border border-white/70 bg-white/80 px-5 py-4 text-sm leading-6 text-slate-700 backdrop-blur dark:border-slate-700 dark:bg-slate-950/50 dark:text-slate-300">
+              <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-100 px-5 py-4 text-sm leading-6 text-slate-600 dark:border-slate-700 dark:bg-slate-950/50 dark:text-slate-300">
                 {submissionsClosed
                   ? 'Youth Pulse submissions are temporarily closed.'
                   : 'Submissions are reviewed by News Pulse before publication. Public readers see only approved published stories.'}
@@ -112,11 +112,11 @@ export default function YouthPulsePage({ initialFounderToggles }: YouthPulsePage
                 </button>
               </div>
             </div>
-            <aside className="rounded-[1.75rem] border border-white/80 bg-white/72 p-6 shadow-[0_16px_34px_-28px_rgba(15,23,42,0.22)] backdrop-blur dark:border-slate-700 dark:bg-slate-950/40">
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">
+            <aside className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-6 shadow-sm dark:border-slate-700 dark:bg-slate-950/40">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
                 What belongs here
               </p>
-              <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-700 dark:text-slate-300">
+              <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
                 <li>Campus developments with public relevance</li>
                 <li>Exam or career explainers that help real readers</li>
                 <li>Youth achievements, innovations, and grounded perspectives</li>
@@ -126,7 +126,7 @@ export default function YouthPulsePage({ initialFounderToggles }: YouthPulsePage
           </div>
         </section>
 
-        <section className="mt-8 rounded-[1.75rem] border border-slate-200/85 bg-[linear-gradient(180deg,_rgba(255,255,255,0.98),_rgba(248,250,252,0.95))] p-6 shadow-[0_14px_34px_-28px_rgba(15,23,42,0.2)] dark:border-slate-800 dark:bg-slate-900">
+        <section className="mt-8 rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-600 dark:text-slate-400">
             Trust and moderation
           </p>

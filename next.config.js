@@ -81,6 +81,8 @@ const nextConfig = {
       { protocol: 'https', hostname: 'static.toiimg.com', pathname: '/**' },
       { protocol: 'https', hostname: 'gnews.io', pathname: '/**' },
       { protocol: 'https', hostname: 'cdn.gulte.com', pathname: '/**' },
+      { protocol: 'https', hostname: 'fluidmechpumps.com', pathname: '/wp-content/uploads/**' },
+      { protocol: 'https', hostname: 'www.fluidmechpumps.com', pathname: '/wp-content/uploads/**' },
       // Ad creatives (sponsors may use AdRoll-hosted assets)
       { protocol: 'https', hostname: 's.adroll.com', pathname: '/**' },
       { protocol: 'https', hostname: '**.adroll.com', pathname: '/**' },
@@ -230,7 +232,7 @@ const nextConfig = {
       "style-src 'self' 'unsafe-inline'",
 
       // Images (ads + analytics + your image sources)
-      `img-src 'self' data: blob: https://*.googleusercontent.com https://*.gstatic.com https://tpc.googlesyndication.com https://pagead2.googlesyndication.com https://images.unsplash.com https://media.licdn.com https://static.toiimg.com https://gnews.io https://cdn.gulte.com https://res.cloudinary.com https://newspulse-backend-real.onrender.com${backend ? ` ${backend}` : ''} https://s.adroll.com https://*.adroll.com https://forever.travel-assets.com https://www.googletagmanager.com https://www.google-analytics.com`,
+      `img-src 'self' data: blob: https://*.googleusercontent.com https://*.gstatic.com https://tpc.googlesyndication.com https://pagead2.googlesyndication.com https://images.unsplash.com https://media.licdn.com https://static.toiimg.com https://gnews.io https://cdn.gulte.com https://res.cloudinary.com https://newspulse-backend-real.onrender.com${backend ? ` ${backend}` : ''} https://fluidmechpumps.com https://www.fluidmechpumps.com https://s.adroll.com https://*.adroll.com https://forever.travel-assets.com https://www.googletagmanager.com https://www.google-analytics.com`,
 
       // Fonts
       "font-src 'self' data: https://*.gstatic.com",

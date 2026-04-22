@@ -1,4 +1,12 @@
 {
-  "compilerOptions": {},
-  "include": []
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true
+  },
+  "include": ["tsconfig.placeholder.ts"]
 }

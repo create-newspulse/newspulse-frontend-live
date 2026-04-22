@@ -20,6 +20,12 @@ import { useBookmarks } from "../hooks/useBookmarks";
 import { resolveArticleSlug } from "../lib/articleSlugs";
 import { buildNewsUrl } from "../lib/newsRoutes";
 import { resolveSponsoredContentMeta } from "../lib/sponsoredContent";
+import HomepageSponsoredFeatureCard from "../components/home/HomepageSponsoredFeatureCard";
+import {
+  fetchHomepageSponsoredFeature,
+  normalizeHomepageSponsoredFeatureProps,
+  type HomepageSponsoredFeature,
+} from "../lib/publicSponsoredFeature";
 import { COVER_PLACEHOLDER_SRC, resolveCoverFitMode, resolveCoverImageUrl } from "../lib/coverImages";
 import { fetchCurrentWeather } from "../lib/fetchWeather";
 import { debugStoryCard, getStoryId, getStoryReactKey, getStorySlug, getStoryTranslationGroupId } from "../lib/storyIdentity";
@@ -33,6 +39,7 @@ import { useI18n } from "../src/i18n/LanguageProvider";
 import { resolveInspirationHubDroneTvEmbedUrl } from "../src/lib/inspirationHubSettings";
 import { usePublicFounderToggles } from "../hooks/usePublicFounderToggles";
 import { DEFAULT_PUBLIC_FOUNDER_TOGGLES, type PublicFounderToggles } from "../lib/publicFounderToggles";
+import { subscribePublicDataRefresh } from "../lib/publicDataRefresh";
 import {
   ArrowRight,
   Bell,
@@ -465,11 +472,23 @@ function clampNum(n: any, min: number, max: number, fallback: number) {
   return Math.min(max, Math.max(min, v));
 }
 
-export const getStaticProps: GetStaticProps = async ({ locale }) => {
+type HomePageStaticProps = {
+  messages: any;
+  initialHomepageSponsoredFeature: HomepageSponsoredFeature | null;
+};
+
+export const getStaticProps: GetStaticProps<HomePageStaticProps> = async ({ locale }) => {
   const { getMessages } = await import("../lib/getMessages");
+  const { normalizeSponsoredFeatureLang, resolvePublicHomepageSponsoredFeature } = await import("../lib/publicSponsoredFeatureSource");
+  const sponsoredFeatureResult = await resolvePublicHomepageSponsoredFeature({
+    placement: 'homepage',
+    lang: normalizeSponsoredFeatureLang(locale),
+  });
+
   return {
     props: {
       messages: await getMessages(locale as string),
+      initialHomepageSponsoredFeature: normalizeHomepageSponsoredFeatureProps(sponsoredFeatureResult.feature),
     },
   };
 };
@@ -663,238 +682,13 @@ function articleToFeedItem(a: Article, requestedLang: 'en' | 'hi' | 'gu') {
   };
 }
 
-type HomepageFeatureSelection = {
-  article: Article | null;
-  label: string;
-  dotColor?: string;
-};
-
-function normalizeFeatureText(value: unknown): string {
-  return String(value || '')
-    .normalize('NFKC')
-    .toLowerCase()
-    .replace(/[’']/g, '')
-    .replace(/[_/|]+/g, ' ')
-    .replace(/[^a-z0-9\s-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function toFeatureStringList(value: unknown): string[] {
-  if (value == null) return [];
-
-  if (Array.isArray(value)) {
-    return value.flatMap((entry) => toFeatureStringList(entry));
-  }
-
-  if (typeof value === 'object') {
-    const candidate =
-      (value as any)?.label ??
-      (value as any)?.name ??
-      (value as any)?.title ??
-      (value as any)?.value ??
-      (value as any)?.key ??
-      '';
-    return candidate ? [String(candidate)] : [];
-  }
-
-  if (typeof value === 'string') {
-    return value
-      .split(/[;,]+/g)
-      .map((entry) => String(entry || '').trim())
-      .filter(Boolean);
-  }
-
-  return [String(value)];
-}
-
-function readFeatureValue(article: any, keys: string[]): unknown {
-  if (!article || typeof article !== 'object') return undefined;
-
-  const containers = [
-    article,
-    article.meta,
-    article.metadata,
-    article.attributes,
-    article.flags,
-    article.settings,
-  ].filter((value) => value && typeof value === 'object');
-
-  for (const container of containers) {
-    for (const key of keys) {
-      const value = (container as any)?.[key];
-      if (value !== undefined && value !== null && value !== '') return value;
-    }
-  }
-
-  return undefined;
-}
-
-function hasTruthyFeatureFlag(article: any, keys: string[]): boolean {
-  const value = readFeatureValue(article, keys);
-  if (typeof value === 'boolean') return value;
-
-  const normalized = normalizeFeatureText(value);
-  return ['1', 'true', 'yes', 'active', 'enabled', 'on'].includes(normalized);
-}
-
-function isExplicitlyInactiveFeature(article: any): boolean {
-  const directFlags = [
-    readFeatureValue(article, ['active', 'isActive', 'enabled']),
-    readFeatureValue(article, ['sponsoredActive', 'sponsoredFeatureActive', 'featureActive']),
-  ];
-
-  for (const flag of directFlags) {
-    if (flag === false) return true;
-    const normalized = normalizeFeatureText(flag);
-    if (['0', 'false', 'no', 'inactive', 'disabled', 'off', 'expired'].includes(normalized)) return true;
-  }
-
-  const statusValues = [
-    readFeatureValue(article, ['status', 'featureStatus', 'publicationStatus']),
-    readFeatureValue(article, ['sponsoredStatus', 'sponsoredFeatureStatus']),
-  ];
-
-  return statusValues.some((value) => {
-    const normalized = normalizeFeatureText(value);
-    return ['inactive', 'disabled', 'draft', 'archived', 'expired'].includes(normalized);
-  });
-}
-
-function collectArticleFeatureTokens(article: any): string[] {
-  if (!article || typeof article !== 'object') return [];
-
-  const rawValues = [
-    readFeatureValue(article, ['tags', 'tag', 'keywords', 'labels', 'label', 'badges', 'badge', 'categories']),
-    readFeatureValue(article, ['featureType', 'featureLabel', 'placement', 'slot']),
-    readFeatureValue(article, ['type', 'storyType', 'articleType', 'contentType', 'format']),
-    readFeatureValue(article, ['topic', 'topics']),
-    readFeatureValue(article, ['category', 'categoryLabel', 'categoryName']),
-  ];
-
-  const normalized = rawValues
-    .flatMap((value) => toFeatureStringList(value))
-    .map((value) => normalizeFeatureText(value))
-    .filter(Boolean);
-
-  return Array.from(new Set(normalized));
-}
-
-function tokenMatchesAny(tokens: string[], patterns: RegExp[]): boolean {
-  return patterns.some((pattern) => tokens.some((token) => pattern.test(token)));
-}
-
-function scoreHomepageFeatureQuality(article: Article, requestedLang: 'en' | 'hi' | 'gu'): number {
-  const feedItem = articleToFeedItem(article, requestedLang);
-  const descriptionLength = String(feedItem?.desc || '').trim().length;
-  const titleLength = String(feedItem?.title || '').trim().length;
-  const hasLocation = Boolean(storyLocationLabel(article as any));
-
-  return (
-    (String(feedItem?.imageSrc || '').trim() ? 3 : 0) +
-    (descriptionLength >= 120 ? 2 : descriptionLength >= 48 ? 1 : 0) +
-    (hasLocation ? 1 : 0) +
-    (titleLength >= 40 ? 1 : 0)
-  );
-}
-
-function resolveHomepageFeatureSelection(options: {
-  latestRawStories: Article[] | null;
-  homeSectionNews: Record<string, Article[]>;
-  requestedLang: 'en' | 'hi' | 'gu';
-  fallbackArticle?: Article | null;
-}): HomepageFeatureSelection {
-  const { latestRawStories, homeSectionNews, requestedLang, fallbackArticle = null } = options;
-
-  const rawStories = [
-    ...(Array.isArray(latestRawStories) ? latestRawStories : []),
-    ...HOME_EDITORIAL_SECTIONS.flatMap((section) => (Array.isArray(homeSectionNews[section.key]) ? homeSectionNews[section.key] : [])),
-  ];
-
-  const seen = new Set<string>();
-  const candidates = rawStories
-    .map((article) => {
-      const identity = [
-        String((article as any)?._id || (article as any)?.id || '').trim().toLowerCase(),
-        String(resolveArticleSlug(article as any, requestedLang) || '').trim().toLowerCase(),
-        String((article as any)?.slug || '').trim().toLowerCase(),
-        String((article as any)?.title || '').trim().toLowerCase(),
-      ].find(Boolean);
-
-      if (!identity || seen.has(identity)) return null;
-      seen.add(identity);
-
-      const tokens = collectArticleFeatureTokens(article);
-      const qualityScore = scoreHomepageFeatureQuality(article, requestedLang);
-      const publishedTime = storyPublishedTimeValue(article);
-      const categoryKey = normalizeCategoryKey((article as any)?.category);
-      const sponsored = resolveSponsoredContentMeta(article, requestedLang);
-
-      const isEditorsPick =
-        hasTruthyFeatureFlag(article, ['isEditorsPick', 'editorsPick', 'editorPick', 'isEditorPick']) ||
-        tokenMatchesAny(tokens, [
-          /\beditors pick\b/,
-          /\beditor pick\b/,
-          /\beditorial pick\b/,
-          /\bdesk pick\b/,
-        ]);
-
-      const isTopExplainer =
-        hasTruthyFeatureFlag(article, ['isTopExplainer', 'topExplainer', 'isExplainer', 'explainer']) ||
-        tokenMatchesAny(tokens, [
-          /\btop explainer\b/,
-          /\bexplainer\b/,
-          /\bdeep dive\b/,
-        ]);
-
-      return {
-        article,
-        identity,
-        publishedTime,
-        qualityScore,
-        categoryKey,
-        isSponsoredFeature: sponsored.isFeatureActive,
-        isEditorsPick,
-        isTopExplainer,
-      };
-    })
-    .filter(Boolean) as Array<{
-      article: Article;
-      identity: string;
-      publishedTime: number;
-      qualityScore: number;
-      categoryKey: string;
-      isSponsoredFeature: boolean;
-      isEditorsPick: boolean;
-      isTopExplainer: boolean;
-    }>;
-
-  const byPriority = (left: { publishedTime: number; qualityScore: number; identity: string }, right: { publishedTime: number; qualityScore: number; identity: string }) => {
-    if (left.publishedTime !== right.publishedTime) return right.publishedTime - left.publishedTime;
-    if (left.qualityScore !== right.qualityScore) return right.qualityScore - left.qualityScore;
-    return left.identity.localeCompare(right.identity);
-  };
-
-  const editorialLatest = (Array.isArray(latestRawStories) ? latestRawStories : []).find((article) => {
-    if (!article) return false;
-    const sponsoredMeta = resolveSponsoredContentMeta(article, requestedLang);
-    return sponsoredMeta.isFeatureActive !== true;
-  });
-
-  const fallbackIsEditorial = fallbackArticle ? resolveSponsoredContentMeta(fallbackArticle, requestedLang).isFeatureActive !== true : false;
-  const editorialCandidates = candidates.filter((candidate) => candidate.isSponsoredFeature !== true).sort(byPriority);
-
-  const latestFallback =
-    (fallbackIsEditorial ? { article: fallbackArticle } : null) ||
-    (editorialLatest ? { article: editorialLatest } : null) ||
-    editorialCandidates[0] ||
-    null;
-
-  return {
-    article: latestFallback?.article || null,
-    label: 'Top Story',
-    dotColor: undefined,
-  };
+function collectHomepageStoryIdentifiers(article: any, requestedLang: 'en' | 'hi' | 'gu'): string[] {
+  return [
+    String((article as any)?._id || (article as any)?.id || '').trim().toLowerCase(),
+    String(resolveArticleSlug(article as any, requestedLang) || '').trim().toLowerCase(),
+    String((article as any)?.slug || '').trim().toLowerCase(),
+    String((article as any)?.title || '').trim().toLowerCase(),
+  ].filter(Boolean);
 }
 
 function labelKeyForCategory(key: string): string {
@@ -4047,7 +3841,7 @@ function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
   );
 }
 
-export default function UiPreviewV145() {
+export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomePageStaticProps) {
   const { t, lang, setLang } = useI18n();
   const router = useRouter();
   const { toggles: founderToggles } = usePublicFounderToggles();
@@ -4110,7 +3904,9 @@ export default function UiPreviewV145() {
   const [latestFromBackend, setLatestFromBackend] = useState<any[] | null>(null);
   const [latestRawStories, setLatestRawStories] = useState<Article[] | null>(null);
   const [topStory, setTopStory] = useState<Article | null>(null);
+  const [homepageSponsoredFeature, setHomepageSponsoredFeature] = useState<HomepageSponsoredFeature | null>(initialHomepageSponsoredFeature);
   const [homeSectionNews, setHomeSectionNews] = useState<Record<string, Article[]>>({});
+  const [homepagePublicRefreshTick, setHomepagePublicRefreshTick] = useState(0);
 
   const apiLang = useMemo(() => {
     const code = toUiLangCode(lang);
@@ -4146,6 +3942,14 @@ export default function UiPreviewV145() {
   // Real data hooks
   const youth = useYouthPulse();
 
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    return subscribePublicDataRefresh(() => {
+      setHomepagePublicRefreshTick((prev) => prev + 1);
+    });
+  }, []);
+
   // Keep preview prefs in sync with global language (source of truth for UI i18n)
   React.useEffect(() => {
     const code = toUiLangCode(lang);
@@ -4156,9 +3960,12 @@ export default function UiPreviewV145() {
   // Fetch homepage data (latest) from backend.
   React.useEffect(() => {
     const controller = new AbortController();
+    const isBackgroundRefresh = homepagePublicRefreshTick > 0;
 
-    setLatestFromBackend(null);
-    setLatestRawStories(null);
+    if (!isBackgroundRefresh) {
+      setLatestFromBackend(null);
+      setLatestRawStories(null);
+    }
 
     (async () => {
       // Latest news list (homepage)
@@ -4181,12 +3988,15 @@ export default function UiPreviewV145() {
     });
 
     return () => controller.abort();
-  }, [apiLang]);
+  }, [apiLang, homepagePublicRefreshTick]);
 
   React.useEffect(() => {
     const controller = new AbortController();
+    const isBackgroundRefresh = homepagePublicRefreshTick > 0;
 
-    setHomeSectionNews({});
+    if (!isBackgroundRefresh) {
+      setHomeSectionNews({});
+    }
 
     (async () => {
       const sectionEntries = await Promise.all(
@@ -4213,7 +4023,27 @@ export default function UiPreviewV145() {
     });
 
     return () => controller.abort();
-  }, [apiLang]);
+  }, [apiLang, homepagePublicRefreshTick]);
+
+  React.useEffect(() => {
+    const controller = new AbortController();
+
+    fetchHomepageSponsoredFeature({
+      lang: apiLang,
+      placement: 'homepage',
+      signal: controller.signal,
+    })
+      .then((feature) => {
+        if (controller.signal.aborted) return;
+        setHomepageSponsoredFeature(feature);
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setHomepageSponsoredFeature(null);
+      });
+
+    return () => controller.abort();
+  }, [apiLang, homepagePublicRefreshTick]);
 
 
   // Apply backend-controlled defaults (do not persist). Keep this one-shot.
@@ -4458,30 +4288,31 @@ export default function UiPreviewV145() {
     </div>
   );
 
-  const homepageFeatureSelection = React.useMemo(
-    () => resolveHomepageFeatureSelection({
-      latestRawStories,
-      homeSectionNews,
-      requestedLang: apiLang,
-      fallbackArticle: topStory,
-    }),
-    [apiLang, homeSectionNews, latestRawStories, topStory]
-  );
+  const homepageSponsoredFeatureIdentitySet = React.useMemo(() => {
+    const values = new Set<string>();
 
-  const homepageFeatureArticle = homepageFeatureSelection.article;
+    [
+      String(homepageSponsoredFeature?.linkedArticleId || '').trim().toLowerCase(),
+      String(homepageSponsoredFeature?.linkedArticleSlug || '').trim().toLowerCase(),
+      String(homepageSponsoredFeature?.headline || '').trim().toLowerCase(),
+    ]
+      .filter(Boolean)
+      .forEach((value) => values.add(value));
+
+    return values;
+  }, [homepageSponsoredFeature]);
+
+  const leadStoryIdentitySet = React.useMemo(() => {
+    const values = new Set<string>();
+    collectHomepageStoryIdentifiers(topStory, apiLang).forEach((value) => values.add(value));
+    homepageSponsoredFeatureIdentitySet.forEach((value) => values.add(value));
+    return values;
+  }, [apiLang, homepageSponsoredFeatureIdentitySet, topStory]);
 
   const centerFeedItems = React.useMemo(() => {
     if (!Array.isArray(latestFromBackend)) return latestFromBackend;
 
-    const topIdentifiers = new Set(
-      [
-        safeTitle((homepageFeatureArticle as any)?._id || (homepageFeatureArticle as any)?.id),
-        resolveArticleSlug(homepageFeatureArticle as any, apiLang),
-        safeTitle((homepageFeatureArticle as any)?.slug),
-      ]
-        .map((value) => String(value || '').trim().toLowerCase())
-        .filter(Boolean)
-    );
+    const topIdentifiers = leadStoryIdentitySet;
 
     const seen = new Set<string>();
     const withImage: any[] = [];
@@ -4504,7 +4335,7 @@ export default function UiPreviewV145() {
     }
 
     return [...withImage, ...withoutImage].slice(0, 6);
-  }, [apiLang, homepageFeatureArticle, latestFromBackend]);
+  }, [leadStoryIdentitySet, latestFromBackend]);
 
   const centerFeedIdentitySet = React.useMemo(() => {
     const values = Array.isArray(centerFeedItems) ? centerFeedItems : [];
@@ -4518,15 +4349,7 @@ export default function UiPreviewV145() {
   const moreReadItems = React.useMemo(() => {
     if (!Array.isArray(latestFromBackend)) return latestFromBackend;
 
-    const topIdentifiers = new Set(
-      [
-        safeTitle((homepageFeatureArticle as any)?._id || (homepageFeatureArticle as any)?.id),
-        resolveArticleSlug(homepageFeatureArticle as any, apiLang),
-        safeTitle((homepageFeatureArticle as any)?.slug),
-      ]
-        .map((value) => String(value || '').trim().toLowerCase())
-        .filter(Boolean)
-    );
+    const topIdentifiers = leadStoryIdentitySet;
 
     const withImage: any[] = [];
     const withoutImage: any[] = [];
@@ -4550,7 +4373,7 @@ export default function UiPreviewV145() {
     }
 
     return [...withImage, ...withoutImage].slice(0, 3);
-  }, [apiLang, centerFeedIdentitySet, homepageFeatureArticle, latestFromBackend]);
+  }, [centerFeedIdentitySet, leadStoryIdentitySet, latestFromBackend]);
 
   const homepageLeadIdentitySet = React.useMemo(() => {
     const values = new Set<string>();
@@ -4558,32 +4381,29 @@ export default function UiPreviewV145() {
     const collect = (item: any) => {
       [
         String(item?._id || item?.id || '').trim().toLowerCase(),
+        String(resolveArticleSlug(item as any, apiLang) || '').trim().toLowerCase(),
         String(item?.slug || '').trim().toLowerCase(),
       ]
         .filter(Boolean)
         .forEach((value) => values.add(value));
     };
 
-    collect(homepageFeatureArticle);
+    collect(topStory);
     if (Array.isArray(centerFeedItems)) centerFeedItems.forEach(collect);
     if (Array.isArray(moreReadItems)) moreReadItems.forEach(collect);
+    homepageSponsoredFeatureIdentitySet.forEach((value) => values.add(value));
 
     return values;
-  }, [centerFeedItems, homepageFeatureArticle, moreReadItems]);
+  }, [apiLang, centerFeedItems, homepageSponsoredFeatureIdentitySet, moreReadItems, topStory]);
 
   const spotlightExcludedIdentitySet = React.useMemo(() => {
     const values = new Set<string>();
 
-    [
-      String((homepageFeatureArticle as any)?._id || (homepageFeatureArticle as any)?.id || '').trim().toLowerCase(),
-      String(resolveArticleSlug(homepageFeatureArticle as any, apiLang) || '').trim().toLowerCase(),
-      String((homepageFeatureArticle as any)?.slug || '').trim().toLowerCase(),
-    ]
-      .filter(Boolean)
-      .forEach((value) => values.add(value));
+    collectHomepageStoryIdentifiers(topStory, apiLang).forEach((value) => values.add(value));
+    homepageSponsoredFeatureIdentitySet.forEach((value) => values.add(value));
 
     return values;
-  }, [apiLang, homepageFeatureArticle]);
+  }, [apiLang, homepageSponsoredFeatureIdentitySet, topStory]);
 
   const editorialSections = React.useMemo(() => {
     return HOME_EDITORIAL_SECTIONS.map((section) => {
@@ -4722,26 +4542,24 @@ export default function UiPreviewV145() {
 
   const heroLeftBlocks = sidebarBlocks.filter((b) => b.key === 'explore');
   const utilityLeftBlocks = sidebarBlocks.filter((b) => b.key !== 'explore');
-  const showUtilityRow = utilityLeftBlocks.length > 0 || moreReadItems == null || (Array.isArray(moreReadItems) && moreReadItems.length > 0) || youthPulseTrendingBlock != null;
+  const showUtilityRow = utilityLeftBlocks.length > 0;
   const heroCenterColClass = heroLeftBlocks.length > 0 ? 'lg:col-span-6' : 'lg:col-span-9';
-  const utilityCenterColClass = utilityLeftBlocks.length > 0 ? 'lg:col-span-6' : 'lg:col-span-9';
-  const utilityFeatureCardItem = React.useMemo(
-    () => ({
-      article: homepageFeatureArticle,
-      requestedLang: apiLang,
-      featureLabel: homepageFeatureSelection.label,
-      featureDotColor: homepageFeatureSelection.dotColor,
-    }),
-    [apiLang, homepageFeatureArticle, homepageFeatureSelection.dotColor, homepageFeatureSelection.label]
+  const rightRailNode = (
+    <div className="sticky top-4 grid gap-4">
+      <AdSlot slot="HOME_RIGHT_300x250" variant="right300" />
+
+      <FeedList
+        theme={theme}
+        title={t('home.latest')}
+        items={latestFromBackend}
+        lang={apiLang}
+      />
+
+      <AdSlot slot="HOME_RIGHT_300x600" variant="right300x600" className="hidden lg:block" />
+
+      {youthPulseTrendingBlock}
+    </div>
   );
-  const utilityCenterNode = showUtilityRow ? (
-    <FeaturedCard
-      theme={theme}
-      item={utilityFeatureCardItem}
-      onToast={onToast}
-      isLoading={latestFromBackend == null && !homepageFeatureArticle}
-    />
-  ) : null;
 
   const hasSnapshotsBlock = sidebarBlocks.some((b) => b.key === 'snapshots');
 
@@ -4936,10 +4754,10 @@ export default function UiPreviewV145() {
                   <FeaturedCard
                     theme={theme}
                     item={{
-                      article: homepageFeatureArticle,
+                      article: topStory,
                       requestedLang: apiLang,
-                      featureLabel: homepageFeatureSelection.label,
-                      featureDotColor: homepageFeatureSelection.dotColor,
+                      featureLabel: 'Top Story',
+                      featureDotColor: undefined,
                     }}
                     onToast={onToast}
                     isLoading={latestFromBackend == null}
@@ -4949,16 +4767,7 @@ export default function UiPreviewV145() {
               </main>
 
               <aside className="col-span-12 order-2 self-start lg:order-3 lg:col-span-3">
-                <div className="sticky top-4 grid gap-4">
-                  <AdSlot slot="HOME_RIGHT_300x250" variant="right300" />
-
-                  <FeedList
-                    theme={theme}
-                    title={t('home.latest')}
-                    items={latestFromBackend}
-                    lang={apiLang}
-                  />
-                </div>
+                {rightRailNode}
               </aside>
             </div>
 
@@ -4975,23 +4784,38 @@ export default function UiPreviewV145() {
                     </div>
                   </aside>
                 ) : null}
-
-                {utilityCenterNode ? (
-                  <main className={`col-span-12 order-1 lg:order-2 ${utilityCenterColClass}`}>
-                    {utilityCenterNode}
-                  </main>
-                ) : null}
-
-                <aside className="col-span-12 order-3 lg:order-3 lg:col-span-3">
-                  <div className="grid gap-4">
-                    <AdSlot slot="HOME_RIGHT_300x600" variant="right300x600" className="hidden lg:block" />
-                    {youthPulseTrendingBlock}
-                  </div>
-                </aside>
               </div>
             ) : null}
           </div>
         </div>
+
+        {homepageSponsoredFeature ? (
+          <section className="mt-8" aria-label="Homepage sponsored feature">
+            <div
+              className="overflow-hidden rounded-[32px] border shadow-[0_24px_72px_-48px_rgba(15,23,42,0.34)]"
+              style={{ background: theme.surface2, borderColor: theme.border }}
+            >
+              <div
+                className="border-b px-5 py-4 sm:px-6"
+                style={{
+                  borderColor: theme.border,
+                  background: theme.mode === 'dark'
+                    ? 'linear-gradient(135deg, rgba(245,158,11,0.18), rgba(120,53,15,0.12) 62%, transparent 100%)'
+                    : 'linear-gradient(135deg, rgba(245,158,11,0.12), rgba(251,191,36,0.08) 62%, rgba(255,255,255,0.92) 100%)',
+                }}
+              >
+                <div className="text-[11px] font-black uppercase tracking-[0.22em] text-amber-700">Sponsored Feature</div>
+                <div className="mt-1 text-sm font-medium" style={{ color: theme.sub }}>
+                  Dedicated sponsored content from the public partner-content inventory.
+                </div>
+              </div>
+
+              <div className="p-3 sm:p-4">
+                <HomepageSponsoredFeatureCard theme={theme} feature={homepageSponsoredFeature} />
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         {renderedEditorialSections.length ? (
           <div className="mt-8 grid gap-6 lg:gap-7">

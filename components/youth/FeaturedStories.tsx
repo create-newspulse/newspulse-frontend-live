@@ -35,7 +35,7 @@ export default function FeaturedStories({
           </p>
         </div>
         {ctaHref && ctaLabel ? (
-          <Link href={ctaHref} className="text-sm font-medium text-cyan-700 hover:text-cyan-800 dark:text-cyan-300 dark:hover:text-cyan-200">
+          <Link href={ctaHref} className="text-sm font-medium text-teal-700 hover:text-teal-800 dark:text-teal-300 dark:hover:text-teal-200">
             {ctaLabel}
           </Link>
         ) : null}
@@ -43,7 +43,7 @@ export default function FeaturedStories({
 
       <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {stories.length === 0 ? (
-          <div className="overflow-hidden rounded-2xl border border-slate-200/85 bg-[linear-gradient(180deg,_rgba(255,255,255,0.98),_rgba(247,250,252,0.96))] p-5 text-sm text-slate-600 shadow-[0_14px_34px_-24px_rgba(15,23,42,0.25)] dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300">
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300">
             {emptyMessage}
           </div>
         ) : null}
@@ -64,11 +64,11 @@ export default function FeaturedStories({
               <div className="p-5">
                 <div className="flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-wide">
                   {s.editorialLabel ? (
-                    <span className="rounded-full bg-cyan-50 px-2.5 py-1 text-cyan-900 ring-1 ring-cyan-100 dark:bg-slate-800 dark:text-slate-200">
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                       {s.editorialLabel}
                     </span>
                   ) : null}
-                  <span className="text-cyan-700 dark:text-cyan-300">{s.categoryLabel || s.category}</span>
+                  <span className="text-teal-700 dark:text-teal-300">{s.categoryLabel || s.category}</span>
                   {s.date ? <span className="text-slate-300">•</span> : null}
                   {s.date ? <span className="text-slate-500 dark:text-gray-400">{s.date}</span> : null}
                 </div>
@@ -81,12 +81,12 @@ export default function FeaturedStories({
           return (
             <article
               key={s.id}
-              className="group relative overflow-hidden rounded-2xl border border-slate-200/85 bg-[linear-gradient(180deg,_rgba(255,255,255,0.98),_rgba(247,250,252,0.96))] shadow-[0_16px_38px_-26px_rgba(15,23,42,0.26)] transition hover:shadow-[0_20px_42px_-26px_rgba(15,23,42,0.3)] dark:border-gray-800 dark:bg-gray-900"
+              className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:border-slate-300 hover:shadow-md dark:border-gray-800 dark:bg-gray-900"
             >
               {href ? (
                 <Link
                   href={href}
-                  className="block h-full focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900"
+                  className="block h-full focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900"
                   aria-label={`Open article: ${s.title}`}
                 >
                   {cardBody}

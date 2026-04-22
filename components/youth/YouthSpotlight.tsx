@@ -47,7 +47,7 @@ export default function YouthSpotlight({ stories }: Props) {
     <section className="mt-12">
       <div className="flex items-end justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-800 dark:text-cyan-300">
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-teal-700 dark:text-teal-300">
             Youth Pulse Spotlight
           </p>
           <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl dark:text-slate-100">
@@ -79,56 +79,57 @@ export default function YouthSpotlight({ stories }: Props) {
         ) : null}
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-[2rem] border border-slate-200/80 bg-[radial-gradient(circle_at_top_right,_rgba(125,211,252,0.16),_transparent_24%),linear-gradient(140deg,_#0f172a_0%,_#102a56_52%,_#1f4c7a_100%)] text-white shadow-[0_24px_70px_-36px_rgba(15,23,42,0.5)] dark:border-slate-800">
-        <div className="grid gap-0 lg:grid-cols-[1.6fr_1fr]">
+      <div className="mt-6 overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="grid gap-0 lg:grid-cols-[1.62fr_1fr]">
           <Link
             href={href}
-            className="group relative block overflow-hidden border-b border-white/10 lg:border-b-0 lg:border-r focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-inset"
+            className="group relative block overflow-hidden bg-slate-100 border-b border-slate-200 lg:border-b-0 lg:border-r lg:border-r-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-inset"
           >
             <StoryImage
               src={activeStory.image}
               alt={activeStory.title}
               variant="top"
-              className="h-full min-h-[260px] w-full rounded-none lg:min-h-[420px]"
+              className="h-full min-h-[280px] w-full rounded-none lg:min-h-[440px]"
             />
-            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,_rgba(15,23,42,0.08)_0%,_rgba(15,23,42,0.02)_38%,_rgba(15,23,42,0.42)_100%)]" />
+            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,_rgba(15,23,42,0.02)_0%,_rgba(15,23,42,0.01)_38%,_rgba(15,23,42,0.14)_100%)]" />
+            <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-slate-200/70" />
             <div className="pointer-events-none absolute left-5 top-5 sm:left-6 sm:top-6">
-              <div className="inline-flex rounded-full border border-white/20 bg-slate-950/30 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/92 backdrop-blur-sm">
+              <div className="inline-flex rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-teal-700 shadow-sm backdrop-blur-sm">
                 Youth Pulse Spotlight
               </div>
             </div>
           </Link>
 
-          <div className="flex min-w-0 flex-col justify-between p-6 sm:p-8 lg:p-9">
+          <div className="flex min-w-0 flex-col justify-between bg-slate-800 p-7 sm:p-9 lg:p-10">
             <div>
-              <div className="flex flex-wrap items-center gap-3 text-xs font-semibold uppercase tracking-wide text-sky-100/74">
+              <div className="flex flex-wrap items-center gap-3 text-xs font-semibold uppercase tracking-wide text-slate-300">
                 {activeStory.editorialLabel ? <span>{activeStory.editorialLabel}</span> : null}
                 <span>{activeStory.categoryLabel || activeStory.category}</span>
                 {activeStory.date ? <span>{activeStory.date}</span> : null}
               </div>
-              <h3 className="mt-4 text-2xl font-extrabold tracking-tight text-white sm:text-3xl xl:text-[2.1rem] xl:leading-[1.08]">
+              <h3 className="mt-5 text-2xl font-extrabold tracking-tight text-white sm:text-3xl xl:text-[2.1rem] xl:leading-[1.08]">
                 {activeStory.title}
               </h3>
-              <p className="mt-4 text-sm leading-6 text-sky-50/88 sm:text-base sm:leading-7">
+              <p className="mt-5 text-sm leading-6 text-slate-200 sm:text-base sm:leading-7">
                 {activeStory.summary || 'A standout Youth Pulse story selected to bring depth, prestige, and momentum to the vertical.'}
               </p>
             </div>
 
-            <div className="mt-7">
-              <div className="flex flex-col items-start gap-4 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="mt-8">
+              <div className="flex flex-col items-start gap-5 sm:flex-row sm:flex-wrap sm:items-center">
                 <Link
                   href={href}
-                  className="rounded-full bg-white px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-sky-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
+                  className="rounded-full bg-white px-6 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-300"
                 >
                   Read story
                 </Link>
-                <p className="max-w-md text-sm leading-6 text-sky-100/68">
+                <p className="max-w-md text-sm leading-6 text-slate-300">
                   Youth Pulse is an editorial vertical first: reported, curated, and selected for public credibility.
                 </p>
               </div>
 
               {canPaginate ? (
-                <div className="mt-6 flex items-center justify-between gap-4">
+                <div className="mt-7 flex items-center justify-between gap-4">
                   <div className="flex items-center gap-2">
                     {usableStories.map((story, index) => {
                       const isActive = index === activeIndex;
@@ -139,7 +140,7 @@ export default function YouthSpotlight({ stories }: Props) {
                           onClick={() => setActiveIndex(index)}
                           className={[
                             'h-2.5 rounded-full transition',
-                            isActive ? 'w-8 bg-white' : 'w-2.5 bg-white/40 hover:bg-white/65',
+                            isActive ? 'w-8 bg-white' : 'w-2.5 bg-slate-400 hover:bg-slate-300',
                           ].join(' ')}
                           aria-label={`Go to spotlight story ${index + 1}`}
                           aria-pressed={isActive}
@@ -152,7 +153,7 @@ export default function YouthSpotlight({ stories }: Props) {
                     <button
                       type="button"
                       onClick={goPrev}
-                      className="rounded-full border border-white/16 bg-white/10 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/16"
+                      className="rounded-full border border-white/20 bg-white/5 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
                       aria-label="Previous spotlight story"
                     >
                       ←
@@ -160,7 +161,7 @@ export default function YouthSpotlight({ stories }: Props) {
                     <button
                       type="button"
                       onClick={goNext}
-                      className="rounded-full border border-white/16 bg-white/10 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/16"
+                      className="rounded-full border border-white/20 bg-white/5 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
                       aria-label="Next spotlight story"
                     >
                       →
