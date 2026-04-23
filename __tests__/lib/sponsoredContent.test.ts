@@ -1,6 +1,70 @@
 import { resolveSponsoredContentMeta } from '../../lib/sponsoredContent';
 
 describe('sponsoredContent', () => {
+  test('uses article-level sponsor destination url for the disclosure CTA instead of an image url', () => {
+    const meta = resolveSponsoredContentMeta(
+      {
+        _id: 'article-123',
+        slug: 'sponsored-story',
+        sponsoredArticle: true,
+        sponsorName: 'Fluidmech',
+        sponsorCtaText: 'Explore Fluidmac Pumps',
+        sponsorDestinationUrl: 'https://fluidmechpumps.com/',
+        sponsorCallToAction: {
+          url: 'https://fluidmechpumps.com/wp-content/uploads/2024/03/HORIZONTAL-SIDE-SUCTION-PUMP.jpg',
+        },
+      },
+      'en'
+    );
+
+    expect(meta.sponsorDestinationHref).toBe('https://fluidmechpumps.com/');
+    expect(meta.sponsorCtaLabel).toBe('Explore Fluidmac Pumps');
+  });
+
+  test('falls back to linked sponsored feature destination when article sponsor target resolves to an image', () => {
+    const meta = resolveSponsoredContentMeta(
+      {
+        _id: 'article-123',
+        slug: 'sponsored-story',
+        sourceNewsId: 'news-123',
+        sponsoredArticle: true,
+        sponsorName: 'Fluidmech',
+        sponsorCtaText: 'Explore Fluidmac Pumps',
+        sponsorDestinationUrl: 'https://fluidmechpumps.com/wp-content/uploads/2024/03/HORIZONTAL-SIDE-SUCTION-PUMP.jpg',
+        sponsorFeatureLinkedId: 'feature-9',
+        linkedSponsoredFeature: {
+          id: 'feature-9',
+          linkedArticleId: 'news-123',
+          linkedArticleSlug: 'sponsored-story',
+          ctaText: 'Explore Fluidmac Pumps',
+          url: 'https://fluidmechpumps.com/wp-content/uploads/2024/03/HORIZONTAL-SIDE-SUCTION-PUMP.jpg',
+          destinationUrl: 'https://fluidmechpumps.com/',
+        },
+      },
+      'en'
+    );
+
+    expect(meta.sponsorDestinationHref).toBe('https://fluidmechpumps.com/');
+    expect(meta.sponsorCtaLabel).toBe('Explore Fluidmac Pumps');
+  });
+
+  test('hides the disclosure CTA when the only resolved sponsor target is an image url', () => {
+    const meta = resolveSponsoredContentMeta(
+      {
+        _id: 'article-123',
+        slug: 'sponsored-story',
+        sponsoredArticle: true,
+        sponsorName: 'Fluidmech',
+        sponsorCtaText: 'Explore Fluidmac Pumps',
+        sponsorDestinationUrl: 'https://fluidmechpumps.com/wp-content/uploads/2024/03/HORIZONTAL-SIDE-SUCTION-PUMP.jpg',
+      },
+      'en'
+    );
+
+    expect(meta.sponsorDestinationHref).toBe('');
+    expect(meta.sponsorCtaLabel).toBe('');
+  });
+
   test('keeps article disclosure-only when no article CTA and no real linked feature exist', () => {
     const meta = resolveSponsoredContentMeta(
       {

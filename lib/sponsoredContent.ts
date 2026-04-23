@@ -109,6 +109,27 @@ function normalizeDestinationHref(value: unknown): { href: string; isExternal: b
   return { href: '', isExternal: false };
 }
 
+function isImageAssetHref(value: string): boolean {
+  const raw = String(value || '').trim();
+  if (!raw) return false;
+
+  try {
+    const url = new URL(raw, raw.startsWith('/') ? 'https://example.com' : undefined);
+    return /\.(?:jpe?g|png|webp)(?:$|[?#])/i.test(url.pathname);
+  } catch {
+    return /\.(?:jpe?g|png|webp)(?:$|[?#])/i.test(raw);
+  }
+}
+
+function normalizeSponsorDestinationHref(value: unknown): { href: string; isExternal: boolean } {
+  const destination = normalizeDestinationHref(value);
+  if (!destination.href) return destination;
+  if (isImageAssetHref(destination.href)) {
+    return { href: '', isExternal: false };
+  }
+  return destination;
+}
+
 function collectContainers(article: any, nestedKeys: string[]): Record<string, unknown>[] {
   const candidates: Array<Record<string, unknown> | null | undefined> = [
     article,
@@ -264,7 +285,9 @@ function extractCta(containers: Array<Record<string, unknown>>): { label: string
 function extractSponsorCta(containers: Array<Record<string, unknown>>): { label: string; url: string } {
   const ctaContainer = readFirstValue(containers, ['sponsorCallToAction', 'sponsorCta', 'sponsorButton']) as any;
   const directLabel = cleanText(readFirstValue(containers, ['sponsorCtaText', 'sponsorCtaLabel']));
-  const directUrl = cleanText(readFirstValue(containers, ['sponsorCtaUrl']));
+  const directUrl = cleanText(
+    readFirstValue(containers, ['sponsorDestinationUrl', 'sponsorDestinationHref', 'sponsorTargetUrl', 'sponsorCtaUrl'])
+  );
 
   const objectLabel = cleanText(
     ctaContainer && typeof ctaContainer === 'object'
@@ -274,7 +297,7 @@ function extractSponsorCta(containers: Array<Record<string, unknown>>): { label:
 
   const objectUrl = cleanText(
     ctaContainer && typeof ctaContainer === 'object'
-      ? ctaContainer.url || ctaContainer.href || ctaContainer.link || ctaContainer.targetUrl || ctaContainer.destinationUrl
+      ? ctaContainer.destinationUrl || ctaContainer.targetUrl || ctaContainer.linkUrl || ctaContainer.ctaUrl || ctaContainer.link
       : ''
   );
 
@@ -353,7 +376,7 @@ export function resolveSponsoredContentMeta(article: any, lang: SupportedLang): 
   const directDestination = normalizeDestinationHref(
     articleCta.url || readFirstValue(articleContainers, ['destinationUrl', 'targetUrl', 'linkUrl', 'ctaUrl', 'href', 'url', 'permalink', 'canonicalUrl'])
   );
-  const articleSponsorDestination = normalizeDestinationHref(articleSponsorCta.url);
+  const articleSponsorDestination = normalizeSponsorDestinationHref(articleSponsorCta.url);
 
   const articleFeatureRelationId = cleanText(
     readFirstValue(articleContainers, ['sponsorFeatureLinkedId', 'linkedSponsoredFeatureId', 'linkedFeatureId'])
@@ -408,9 +431,8 @@ export function resolveSponsoredContentMeta(article: any, lang: SupportedLang): 
 
   const linkedFeatureCta = hasRealLinkedFeatureRelation ? extractCta(linkedFeatureContainers) : { label: '', url: '' };
   const linkedFeatureDestination = hasRealLinkedFeatureRelation
-    ? normalizeDestinationHref(
-        linkedFeatureCta.url ||
-          readFirstValue(linkedFeatureContainers, ['destinationUrl', 'targetUrl', 'linkUrl', 'ctaUrl', 'href', 'url', 'permalink', 'canonicalUrl'])
+    ? normalizeSponsorDestinationHref(
+        readFirstValue(linkedFeatureContainers, ['destinationUrl', 'targetUrl', 'linkUrl', 'ctaUrl'])
       )
     : { href: '', isExternal: false };
 
