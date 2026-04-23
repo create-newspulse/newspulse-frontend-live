@@ -17,6 +17,7 @@ describe('publicSponsoredFeature', () => {
         linkedArticle: {
           _id: 'article-123',
           slug: 'acme-clean-energy',
+          summary: 'Linked sponsored article summary should take priority.',
           sponsoredContent: {
             isSponsored: true,
             sponsorName: 'Acme Brand',
@@ -31,6 +32,7 @@ describe('publicSponsoredFeature', () => {
     expect(feature?.destinationIsExternal).toBe(false);
     expect(feature?.linkedArticleId).toBe('article-123');
     expect(feature?.linkedArticleSlug).toBe('acme-clean-energy');
+    expect(feature?.shortSummary).toBe('Linked sponsored article summary should take priority.');
   });
 
   test('uses a direct destination url when no linked sponsored article exists', () => {

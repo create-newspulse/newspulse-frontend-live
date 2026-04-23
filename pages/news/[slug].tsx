@@ -608,14 +608,14 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                           ) : null}
                         </div>
 
-                        {sponsoredMeta.destinationHref && sponsoredMeta.ctaLabel ? (
+                        {sponsoredMeta.sponsorDestinationHref && sponsoredMeta.sponsorCtaLabel ? (
                           <a
-                            href={sponsoredMeta.destinationHref}
-                            target={sponsoredMeta.destinationIsExternal ? '_blank' : undefined}
-                            rel={sponsoredMeta.destinationIsExternal ? 'sponsored noopener noreferrer' : undefined}
+                            href={sponsoredMeta.sponsorDestinationHref}
+                            target={sponsoredMeta.sponsorDestinationIsExternal ? '_blank' : undefined}
+                            rel={sponsoredMeta.sponsorDestinationIsExternal ? 'sponsored noopener noreferrer' : undefined}
                             className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-amber-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-800"
                           >
-                            {sponsoredMeta.ctaLabel}
+                            {sponsoredMeta.sponsorCtaLabel}
                           </a>
                         ) : null}
                       </div>

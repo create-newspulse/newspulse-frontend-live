@@ -691,6 +691,12 @@ function collectHomepageStoryIdentifiers(article: any, requestedLang: 'en' | 'hi
   ].filter(Boolean);
 }
 
+function isHomepageSponsoredContent(article: any, requestedLang: 'en' | 'hi' | 'gu'): boolean {
+  if (!article || typeof article !== 'object') return false;
+  const sponsoredMeta = resolveSponsoredContentMeta(article, requestedLang);
+  return sponsoredMeta.isFeatureActive === true || sponsoredMeta.isArticle === true;
+}
+
 function labelKeyForCategory(key: string): string {
   if (key === 'science-technology') return 'categories.scienceTechnology';
   if (key === 'web-stories') return 'categories.webStories';
@@ -3971,10 +3977,11 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
       // Latest news list (homepage)
       const latestResp = await fetchPublicNews({ language: apiLang, limit: 12, signal: controller.signal });
       if (controller.signal.aborted) return;
-      const latestArticles = latestResp.items || [];
-      setTopStory(latestArticles[0] || null);
-      setLatestRawStories(Array.isArray(latestArticles) ? latestArticles : []);
-      setLatestFromBackend(latestArticles.map((a) => articleToFeedItem(a as any, apiLang)));
+      const latestArticles = Array.isArray(latestResp.items) ? latestResp.items : [];
+      const editorialLatestArticles = latestArticles.filter((article) => !isHomepageSponsoredContent(article, apiLang));
+      setTopStory(editorialLatestArticles[0] || null);
+      setLatestRawStories(editorialLatestArticles);
+      setLatestFromBackend(editorialLatestArticles.map((a) => articleToFeedItem(a as any, apiLang)));
       const breakingResp = await fetchPublicNews({ category: 'breaking', language: apiLang, limit: 10, signal: controller.signal });
       if (controller.signal.aborted) return;
 
@@ -4009,7 +4016,12 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
             signal: controller.signal,
           });
 
-          const items = Array.isArray(resp?.items) ? resp.items.slice().sort((left, right) => storyPublishedTimeValue(right) - storyPublishedTimeValue(left)) : [];
+          const items = Array.isArray(resp?.items)
+            ? resp.items
+                .filter((article) => !isHomepageSponsoredContent(article, apiLang))
+                .slice()
+                .sort((left, right) => storyPublishedTimeValue(right) - storyPublishedTimeValue(left))
+            : [];
 
           return [section.key, items] as const;
         })
@@ -4467,6 +4479,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
 
         if (!identity || seen.has(identity)) return null;
         if (spotlightExcludedIdentitySet.has(identity)) return null;
+        if (isHomepageSponsoredContent(article, apiLang)) return null;
 
         const sortTime = storyPublishedTimeValue(article);
         if (!sortTime) return null;
@@ -4792,11 +4805,11 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
         {homepageSponsoredFeature ? (
           <section className="mt-8" aria-label="Homepage sponsored feature">
             <div
-              className="overflow-hidden rounded-[32px] border shadow-[0_24px_72px_-48px_rgba(15,23,42,0.34)]"
+              className="overflow-hidden rounded-[28px] border shadow-[0_20px_52px_-42px_rgba(15,23,42,0.28)]"
               style={{ background: theme.surface2, borderColor: theme.border }}
             >
               <div
-                className="border-b px-5 py-4 sm:px-6"
+                className="border-b px-4 py-3 sm:px-5"
                 style={{
                   borderColor: theme.border,
                   background: theme.mode === 'dark'
@@ -4805,12 +4818,9 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
                 }}
               >
                 <div className="text-[11px] font-black uppercase tracking-[0.22em] text-amber-700">Sponsored Feature</div>
-                <div className="mt-1 text-sm font-medium" style={{ color: theme.sub }}>
-                  Dedicated sponsored content from the public partner-content inventory.
-                </div>
               </div>
 
-              <div className="p-3 sm:p-4">
+              <div className="p-2.5 sm:p-3">
                 <HomepageSponsoredFeatureCard theme={theme} feature={homepageSponsoredFeature} />
               </div>
             </div>

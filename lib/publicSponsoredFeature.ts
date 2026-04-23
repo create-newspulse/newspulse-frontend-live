@@ -166,6 +166,34 @@ function resolveLinkedArticleIdentity(candidate: any, lang: SupportedSponsoredFe
   return { id: linkedId, slug: linkedSlug, href };
 }
 
+function resolveLinkedArticleSummary(candidate: any, lang: SupportedSponsoredFeatureLang): string {
+  const linked =
+    candidate?.linkedSponsoredArticle ||
+    candidate?.linkedArticle ||
+    candidate?.sponsoredArticle ||
+    candidate?.article ||
+    null;
+
+  if (!linked || typeof linked !== 'object') return '';
+
+  return pickFirstText(linked, [
+    ['translations', lang, 'summary'],
+    ['translations', lang, 'excerpt'],
+    ['i18n', lang, 'summary'],
+    ['i18n', lang, 'excerpt'],
+    ['localized', lang, 'summary'],
+    ['localized', lang, 'excerpt'],
+    ['locales', lang, 'summary'],
+    ['locales', lang, 'excerpt'],
+    ['summary'],
+    ['excerpt'],
+    ['description'],
+    ['dek'],
+    ['deck'],
+    ['subtitle'],
+  ]);
+}
+
 function resolveDirectDestination(candidate: any): { href: string; isExternal: boolean } {
   const href = pickFirstText(candidate, [
     ['href'],
@@ -253,7 +281,7 @@ export function normalizeHomepageSponsoredFeature(
     ['content', 'title'],
   ]);
 
-  const shortSummary = pickFirstText(candidate, [
+  const shortSummary = resolveLinkedArticleSummary(candidate, lang) || pickFirstText(candidate, [
     ['shortSummary'],
     ['summary'],
     ['excerpt'],

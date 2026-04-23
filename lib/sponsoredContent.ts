@@ -12,6 +12,9 @@ export type SponsoredContentMeta = {
   ctaLabel: string;
   destinationHref: string;
   destinationIsExternal: boolean;
+  sponsorDestinationHref: string;
+  sponsorDestinationIsExternal: boolean;
+  sponsorCtaLabel: string;
 };
 
 function normalizeText(value: unknown): string {
@@ -106,7 +109,7 @@ function normalizeDestinationHref(value: unknown): { href: string; isExternal: b
   return { href: '', isExternal: false };
 }
 
-function collectContainers(article: any): Record<string, unknown>[] {
+function collectContainers(article: any, nestedKeys: string[]): Record<string, unknown>[] {
   const candidates: Array<Record<string, unknown> | null | undefined> = [
     article,
     article?.meta,
@@ -114,25 +117,6 @@ function collectContainers(article: any): Record<string, unknown>[] {
     article?.attributes,
     article?.flags,
     article?.settings,
-  ];
-
-  const nestedKeys = [
-    'sponsoredContent',
-    'sponsorship',
-    'sponsor',
-    'sponsorDetails',
-    'sponsorMeta',
-    'sponsoredFeature',
-    'sponsoredArticle',
-    'sponsoredCampaign',
-    'campaign',
-    'promotion',
-    'promo',
-    'brandedContent',
-    'partnerContent',
-    'advertiser',
-    'callToAction',
-    'cta',
   ];
 
   for (const container of [...candidates]) {
@@ -151,6 +135,31 @@ function collectContainers(article: any): Record<string, unknown>[] {
     return true;
   });
 }
+
+const ARTICLE_SPONSORED_NESTED_KEYS = [
+  'sponsoredContent',
+  'sponsorship',
+  'sponsor',
+  'sponsorDetails',
+  'sponsorMeta',
+  'sponsoredArticle',
+  'brandedContent',
+  'partnerContent',
+  'advertiser',
+  'callToAction',
+  'cta',
+];
+
+const LINKED_FEATURE_NESTED_KEYS = [
+  'linkedSponsoredFeature',
+  'linkedFeature',
+  'homepageSponsoredFeature',
+  'sponsoredFeature',
+  'sponsoredCampaign',
+  'campaign',
+  'promotion',
+  'promo',
+];
 
 function readFirstValue(containers: Array<Record<string, unknown>>, keys: string[]): unknown {
   for (const container of containers) {
@@ -196,6 +205,39 @@ function tokenMatches(tokens: string[], patterns: RegExp[]): boolean {
   return patterns.some((pattern) => tokens.some((token) => pattern.test(token)));
 }
 
+function isReadStoryCtaLabel(value: string): boolean {
+  const normalized = normalizeText(value);
+  return [
+    'read sponsored story',
+    'read sponsored article',
+    'read sponsored feature',
+    'read story',
+    'read article',
+    'read feature',
+    'continue reading',
+  ].includes(normalized);
+}
+
+function getFallbackSponsorCtaLabel(tokens: string[], sponsorName: string): string {
+  const productOrServiceLike = tokenMatches(tokens, [
+    /\bproduct\b/,
+    /\bproducts\b/,
+    /\bservice\b/,
+    /\bservices\b/,
+    /\bsolution\b/,
+    /\bsolutions\b/,
+    /\bequipment\b/,
+    /\bpump\b/,
+    /\bpumps\b/,
+    /\bcatalog\b/,
+    /\bshop\b/,
+    /\bstore\b/,
+    /\bbrand\b/,
+  ]) || /\b(products?|services?|solutions?|equipment|pump|pumps|shop|store)\b/i.test(String(sponsorName || ''));
+
+  return productOrServiceLike ? 'Explore products' : 'Visit sponsor website';
+}
+
 function extractCta(containers: Array<Record<string, unknown>>): { label: string; url: string } {
   const ctaContainer = readFirstValue(containers, ['callToAction', 'cta', 'ctaButton', 'action']) as any;
   const directLabel = cleanText(readFirstValue(containers, ['ctaLabel', 'ctaText', 'buttonLabel', 'buttonText', 'actionLabel', 'actionText', 'linkText']));
@@ -219,8 +261,35 @@ function extractCta(containers: Array<Record<string, unknown>>): { label: string
   };
 }
 
+function extractSponsorCta(containers: Array<Record<string, unknown>>): { label: string; url: string } {
+  const ctaContainer = readFirstValue(containers, ['sponsorCallToAction', 'sponsorCta', 'sponsorButton']) as any;
+  const directLabel = cleanText(readFirstValue(containers, ['sponsorCtaText', 'sponsorCtaLabel']));
+  const directUrl = cleanText(readFirstValue(containers, ['sponsorCtaUrl']));
+
+  const objectLabel = cleanText(
+    ctaContainer && typeof ctaContainer === 'object'
+      ? ctaContainer.label || ctaContainer.text || ctaContainer.title || ctaContainer.name || ctaContainer.buttonText
+      : ''
+  );
+
+  const objectUrl = cleanText(
+    ctaContainer && typeof ctaContainer === 'object'
+      ? ctaContainer.url || ctaContainer.href || ctaContainer.link || ctaContainer.targetUrl || ctaContainer.destinationUrl
+      : ''
+  );
+
+  return {
+    label: directLabel || objectLabel,
+    url: directUrl || objectUrl,
+  };
+}
+
 export function resolveSponsoredContentMeta(article: any, lang: SupportedLang): SponsoredContentMeta {
-  const containers = collectContainers(article);
+  const articleContainers = collectContainers(article, ARTICLE_SPONSORED_NESTED_KEYS);
+  const linkedFeatureContainers = collectContainers(article, LINKED_FEATURE_NESTED_KEYS).filter(
+    (container) => !articleContainers.includes(container)
+  );
+  const containers = [...articleContainers, ...linkedFeatureContainers];
   const tokens = collectTokens(article, containers);
   const sponsorName = cleanText(
     readFirstValue(containers, ['sponsorName', 'sponsor', 'brandName', 'brand', 'advertiserName', 'partnerName', 'sponsoredBy'])
@@ -276,12 +345,74 @@ export function resolveSponsoredContentMeta(article: any, lang: SupportedLang): 
     readFirstValue(containers, ['linkedArticleId', 'sponsoredArticleId', 'targetArticleId', 'destinationArticleId'])
   );
   const currentId = cleanText(article?._id || article?.id);
+  const currentSourceId = cleanText(article?.sourceNewsId);
   const currentSlug = cleanText(resolveArticleSlug(article, lang) || article?.slug);
 
-  const cta = extractCta(containers);
+  const articleCta = extractCta(articleContainers);
+  const articleSponsorCta = extractSponsorCta(articleContainers);
   const directDestination = normalizeDestinationHref(
-    cta.url || readFirstValue(containers, ['destinationUrl', 'targetUrl', 'linkUrl', 'ctaUrl', 'href', 'url', 'permalink', 'canonicalUrl'])
+    articleCta.url || readFirstValue(articleContainers, ['destinationUrl', 'targetUrl', 'linkUrl', 'ctaUrl', 'href', 'url', 'permalink', 'canonicalUrl'])
   );
+  const articleSponsorDestination = normalizeDestinationHref(articleSponsorCta.url);
+
+  const articleFeatureRelationId = cleanText(
+    readFirstValue(articleContainers, ['sponsorFeatureLinkedId', 'linkedSponsoredFeatureId', 'linkedFeatureId'])
+  );
+
+  const linkedFeatureRelationId = cleanText(
+    readFirstValue(linkedFeatureContainers, [
+      'linkedSponsoredFeatureId',
+      'linkedFeatureId',
+      'sponsoredFeatureId',
+      'featureId',
+      'campaignId',
+      '_id',
+      'id',
+    ])
+  );
+  const linkedFeatureArticleId = cleanText(
+    readFirstValue(linkedFeatureContainers, [
+      'linkedArticleId',
+      'linkedSponsoredArticleId',
+      'sponsoredArticleId',
+      'targetArticleId',
+      'destinationArticleId',
+    ])
+  );
+  const linkedFeatureArticleSlug = cleanText(
+    readFirstValue(linkedFeatureContainers, [
+      'linkedArticleSlug',
+      'linkedSponsoredArticleSlug',
+      'sponsoredArticleSlug',
+      'targetArticleSlug',
+      'destinationArticleSlug',
+    ])
+  );
+  const linkedFeatureRelationStatus = normalizeText(
+    readFirstValue(linkedFeatureContainers, ['status', 'featureStatus', 'sponsoredFeatureStatus', 'campaignStatus'])
+  );
+  const linkedFeatureRelationActive =
+    isTruthyFlag(readFirstValue(linkedFeatureContainers, ['published', 'isPublished', 'active', 'enabled', 'featureActive', 'sponsoredFeatureActive'])) ||
+    ['published', 'active', 'enabled', 'live', 'running', 'on'].includes(linkedFeatureRelationStatus);
+  const linkedFeatureTargetsCurrentArticle = Boolean(
+    (linkedFeatureArticleId && [currentId, currentSourceId].filter(Boolean).includes(linkedFeatureArticleId))
+    || (linkedFeatureArticleSlug && currentSlug && linkedFeatureArticleSlug === currentSlug)
+  );
+  const hasRealLinkedFeatureRelation = Boolean(
+    linkedFeatureTargetsCurrentArticle
+    && (
+      (articleFeatureRelationId && linkedFeatureRelationId && articleFeatureRelationId === linkedFeatureRelationId)
+      || (!articleFeatureRelationId && (linkedFeatureRelationId || linkedFeatureRelationActive))
+    )
+  );
+
+  const linkedFeatureCta = hasRealLinkedFeatureRelation ? extractCta(linkedFeatureContainers) : { label: '', url: '' };
+  const linkedFeatureDestination = hasRealLinkedFeatureRelation
+    ? normalizeDestinationHref(
+        linkedFeatureCta.url ||
+          readFirstValue(linkedFeatureContainers, ['destinationUrl', 'targetUrl', 'linkUrl', 'ctaUrl', 'href', 'url', 'permalink', 'canonicalUrl'])
+      )
+    : { href: '', isExternal: false };
 
   const linkedDestination = linkedArticleId || linkedArticleSlug
     ? {
@@ -297,7 +428,11 @@ export function resolveSponsoredContentMeta(article: any, lang: SupportedLang): 
       }
     : { href: '', isExternal: false };
 
-  const destination = linkedDestination.href ? linkedDestination : (directDestination.href ? directDestination : currentArticleDestination);
+  const destination = linkedDestination.href
+    ? linkedDestination
+    : (explicitSponsoredArticle
+      ? currentArticleDestination
+      : (directDestination.href ? directDestination : currentArticleDestination));
   const isFeatureActive = isActive && (explicitSponsoredFeature || Boolean(linkedDestination.href) || Boolean(directDestination.href && !explicitSponsoredArticle));
   const isArticle = isActive && (explicitSponsoredArticle || explicitSponsored || isFeatureActive);
 
@@ -307,11 +442,24 @@ export function resolveSponsoredContentMeta(article: any, lang: SupportedLang): 
       : (isArticle || isFeatureActive ? 'This story is presented as sponsored content.' : '')
   );
 
-  const ctaLabel = cleanText(cta.label) || (
+  const ctaLabel = cleanText(articleCta.label) || (
     destination.href
       ? (destination.isExternal ? 'Visit sponsor' : (isFeatureActive ? 'Read sponsored feature' : 'Read sponsored story'))
       : ''
   );
+
+  const sponsorDestination = articleSponsorDestination.href
+    ? articleSponsorDestination
+    : (hasRealLinkedFeatureRelation && linkedFeatureDestination.href ? linkedFeatureDestination : { href: '', isExternal: false });
+  const sponsorCtaLabel = sponsorDestination.href
+    ? (() => {
+        const directLabel = articleSponsorDestination.href
+          ? cleanText(articleSponsorCta.label)
+          : cleanText(linkedFeatureCta.label);
+        if (directLabel && !isReadStoryCtaLabel(directLabel)) return directLabel;
+        return getFallbackSponsorCtaLabel(tokens, sponsorName);
+      })()
+    : '';
 
   return {
     isActive,
@@ -322,5 +470,8 @@ export function resolveSponsoredContentMeta(article: any, lang: SupportedLang): 
     ctaLabel,
     destinationHref: destination.href,
     destinationIsExternal: destination.isExternal,
+    sponsorDestinationHref: sponsorDestination.href,
+    sponsorDestinationIsExternal: sponsorDestination.isExternal,
+    sponsorCtaLabel,
   };
 }
