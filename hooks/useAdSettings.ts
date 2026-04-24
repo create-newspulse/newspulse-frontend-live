@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { subscribePublicDataRefresh } from '../lib/publicDataRefresh';
 import { isSafeMode } from '../utils/safeMode';
 
-export type AdSlotName = 'HOME_728x90' | 'HOME_RIGHT_300x250' | 'ARTICLE_INLINE';
+export type AdSlotName = 'HOME_728x90' | 'HOME_LEFT_300x250' | 'HOME_LEFT_300x600' | 'HOME_RIGHT_300x250' | 'ARTICLE_INLINE';
 
 type AdSettingsResponse = {
   ok: boolean;
@@ -12,6 +12,8 @@ type AdSettingsResponse = {
 
 const DEFAULT_SLOT_ENABLED: Record<AdSlotName, boolean> = {
   HOME_728x90: true,
+  HOME_LEFT_300x250: true,
+  HOME_LEFT_300x600: true,
   HOME_RIGHT_300x250: true,
   ARTICLE_INLINE: true,
 };
@@ -47,6 +49,8 @@ async function fetchSlotEnabledOnce(): Promise<Record<AdSlotName, boolean>> {
       const slotEnabledRaw = json && typeof json === 'object' ? (json as any).slotEnabled : null;
       const next: Record<AdSlotName, boolean> = {
         HOME_728x90: coerceEnabled(slotEnabledRaw?.HOME_728x90),
+        HOME_LEFT_300x250: coerceEnabled(slotEnabledRaw?.HOME_LEFT_300x250),
+        HOME_LEFT_300x600: coerceEnabled(slotEnabledRaw?.HOME_LEFT_300x600),
         HOME_RIGHT_300x250: coerceEnabled(slotEnabledRaw?.HOME_RIGHT_300x250),
         ARTICLE_INLINE: coerceEnabled(slotEnabledRaw?.ARTICLE_INLINE),
       };
@@ -83,6 +87,8 @@ async function refreshSlotEnabled(): Promise<Record<AdSlotName, boolean>> {
       const slotEnabledRaw = json && typeof json === 'object' ? (json as any).slotEnabled : null;
       const next: Record<AdSlotName, boolean> = {
         HOME_728x90: coerceEnabled(slotEnabledRaw?.HOME_728x90),
+        HOME_LEFT_300x250: coerceEnabled(slotEnabledRaw?.HOME_LEFT_300x250),
+        HOME_LEFT_300x600: coerceEnabled(slotEnabledRaw?.HOME_LEFT_300x600),
         HOME_RIGHT_300x250: coerceEnabled(slotEnabledRaw?.HOME_RIGHT_300x250),
         ARTICLE_INLINE: coerceEnabled(slotEnabledRaw?.ARTICLE_INLINE),
       };

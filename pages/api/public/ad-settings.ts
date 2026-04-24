@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 
 import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
 
-type SlotName = 'HOME_728x90' | 'HOME_RIGHT_300x250' | 'ARTICLE_INLINE';
+type SlotName = 'HOME_728x90' | 'HOME_LEFT_300x250' | 'HOME_LEFT_300x600' | 'HOME_RIGHT_300x250' | 'ARTICLE_INLINE';
 
 export type PublicAdSettingsResponse = {
   ok: boolean;
@@ -13,6 +13,8 @@ const DEFAULT_SETTINGS: PublicAdSettingsResponse = {
   ok: true,
   slotEnabled: {
     HOME_728x90: true,
+    HOME_LEFT_300x250: true,
+    HOME_LEFT_300x600: true,
     HOME_RIGHT_300x250: true,
     ARTICLE_INLINE: true,
   },
@@ -42,6 +44,8 @@ function sanitize(upstream: any): PublicAdSettingsResponse {
     ok: s?.ok === true,
     slotEnabled: {
       HOME_728x90: coerceEnabled(slotEnabledRaw?.HOME_728x90),
+      HOME_LEFT_300x250: coerceEnabled(slotEnabledRaw?.HOME_LEFT_300x250),
+      HOME_LEFT_300x600: coerceEnabled(slotEnabledRaw?.HOME_LEFT_300x600),
       HOME_RIGHT_300x250: coerceEnabled(slotEnabledRaw?.HOME_RIGHT_300x250),
       ARTICLE_INLINE: coerceEnabled(slotEnabledRaw?.ARTICLE_INLINE),
     },

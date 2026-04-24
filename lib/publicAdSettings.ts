@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-export type AdSlotName = 'HOME_728x90' | 'HOME_RIGHT_300x250';
+export type AdSlotName = 'HOME_728x90' | 'HOME_LEFT_300x250' | 'HOME_LEFT_300x600' | 'HOME_RIGHT_300x250';
 
 export type PublicAdSettingsResponse = {
   ok: boolean;
@@ -11,6 +11,8 @@ const DEFAULT: PublicAdSettingsResponse = {
   ok: true,
   slotEnabled: {
     HOME_728x90: true,
+    HOME_LEFT_300x250: true,
+    HOME_LEFT_300x600: true,
     HOME_RIGHT_300x250: true,
   },
 };
@@ -51,6 +53,8 @@ export async function fetchPublicAdSettingsOnce(): Promise<PublicAdSettingsRespo
         ok: data?.ok === true,
         slotEnabled: {
           HOME_728x90: slotEnabledRaw?.HOME_728x90 !== false,
+          HOME_LEFT_300x250: slotEnabledRaw?.HOME_LEFT_300x250 !== false,
+          HOME_LEFT_300x600: slotEnabledRaw?.HOME_LEFT_300x600 !== false,
           HOME_RIGHT_300x250: slotEnabledRaw?.HOME_RIGHT_300x250 !== false,
         },
       };

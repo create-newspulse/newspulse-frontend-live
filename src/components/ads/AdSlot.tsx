@@ -33,6 +33,8 @@ type HomepageUnitConfig = {
 
 const STRICT_SLOT_CONFIG: Record<string, StrictSlotConfig> = {
   HOME_BILLBOARD_970x250: { w: 970, h: 250, maxW: 970, objectFit: 'cover' },
+  HOME_LEFT_300x250: { w: 300, h: 250, maxW: 300, objectFit: 'contain' },
+  HOME_LEFT_300x600: { w: 300, h: 600, maxW: 300, objectFit: 'contain' },
   HOME_RIGHT_300x600: { w: 300, h: 600, maxW: 300, objectFit: 'contain' },
 };
 
@@ -74,6 +76,10 @@ function defaultVariantForSlot(normalizedSlot: string): Variant {
       return 'billboard970x250';
     case 'FOOTER_BANNER_728x90':
       return 'homeBanner';
+    case 'HOME_LEFT_300x250':
+      return 'right300';
+    case 'HOME_LEFT_300x600':
+      return 'right300x600';
     case 'HOME_RIGHT_300x250':
       return 'right300';
     case 'HOME_RIGHT_300x600':

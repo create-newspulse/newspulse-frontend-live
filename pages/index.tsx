@@ -4555,8 +4555,28 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
 
   const heroLeftBlocks = sidebarBlocks.filter((b) => b.key === 'explore');
   const utilityLeftBlocks = sidebarBlocks.filter((b) => b.key !== 'explore');
-  const showUtilityRow = utilityLeftBlocks.length > 0;
   const heroCenterColClass = heroLeftBlocks.length > 0 ? 'lg:col-span-6' : 'lg:col-span-9';
+  const heroLeftRailAdNode = (
+    <div className="hidden lg:block">
+      <AdSlot slot="HOME_LEFT_300x600" variant="right300x600" />
+    </div>
+  );
+  const leftRailAdNode = (
+    <div className="hidden lg:block">
+      <AdSlot slot="HOME_LEFT_300x250" variant="right300" />
+    </div>
+  );
+  const leftRailBlocks = heroLeftBlocks
+    .map((block) => ({ key: block.key, node: block.node }))
+    .concat(
+      utilityLeftBlocks.flatMap((block) =>
+        block.key === 'liveTvCard'
+          ? [{ key: block.key, node: block.node }, { key: 'heroLeftRailAd', node: heroLeftRailAdNode }]
+          : [{ key: block.key, node: block.node }]
+      )
+    )
+    .concat([{ key: 'leftRailAd', node: leftRailAdNode }]);
+  const showLeftRail = leftRailBlocks.length > 0;
   const rightRailNode = (
     <div className="sticky top-4 grid gap-4">
       <AdSlot slot="HOME_RIGHT_300x250" variant="right300" />
@@ -4750,10 +4770,10 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
 
           <div className="relative grid gap-6">
             <div className="grid grid-cols-12 items-start gap-6 lg:gap-8">
-              {heroLeftBlocks.length ? (
+              {showLeftRail ? (
                 <aside className="col-span-12 order-3 lg:order-1 lg:col-span-3">
-                  <div className="sticky top-4 grid gap-4">
-                    {heroLeftBlocks.map((b) => (
+                  <div className="grid gap-4">
+                    {leftRailBlocks.map((b) => (
                       <React.Fragment key={b.key}>
                         {b.node}
                       </React.Fragment>
@@ -4783,22 +4803,6 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
                 {rightRailNode}
               </aside>
             </div>
-
-            {showUtilityRow ? (
-              <div className="grid grid-cols-12 gap-6 lg:gap-8">
-                {utilityLeftBlocks.length ? (
-                  <aside className="col-span-12 order-2 lg:order-1 lg:col-span-3">
-                    <div className="grid gap-4">
-                      {utilityLeftBlocks.map((b) => (
-                        <React.Fragment key={b.key}>
-                          {b.node}
-                        </React.Fragment>
-                      ))}
-                    </div>
-                  </aside>
-                ) : null}
-              </div>
-            ) : null}
           </div>
         </div>
 
