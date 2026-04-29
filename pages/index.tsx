@@ -3871,6 +3871,9 @@ function PreferencesDrawer({ theme, open, onClose, moduleState, onToast }: any) 
 
 function AppPromoSection({ theme, onToast }: any) {
   const { t } = useI18n();
+  const titlePrefix = t('home.appPromoTitlePrefix');
+  const titleSuffix = t('home.appPromoTitleSuffix');
+  const titleSuffixNeedsLeadingSpace = !String(titleSuffix || '').trimStart().startsWith(',');
 
   return (
     <div className="mx-auto w-full max-w-[1440px] px-4 md:px-8 pb-10 pt-2">
@@ -3879,7 +3882,7 @@ function AppPromoSection({ theme, onToast }: any) {
           <div className="grid gap-6 lg:grid-cols-12 lg:items-center">
             <div className="lg:col-span-6">
               <div className="text-4xl sm:text-5xl font-black leading-[1.05]" style={{ color: theme.text }}>
-                {t('home.appPromoTitlePrefix')}{" "}
+                {titlePrefix ? <>{titlePrefix} </> : null}
                 <span
                   className="px-2 py-1 rounded-2xl"
                   style={{
@@ -3890,8 +3893,9 @@ function AppPromoSection({ theme, onToast }: any) {
                   }}
                 >
                   <span style={{ color: theme.accent }}>News</span> <span style={{ color: theme.accent2 }}>Pulse</span>
-                </span>{" "}
-                {t('home.appPromoTitleSuffix')}
+                </span>
+                {titleSuffixNeedsLeadingSpace ? ' ' : ''}
+                {titleSuffix}
               </div>
 
               <div className="mt-4 text-sm sm:text-base" style={{ color: theme.sub }}>
