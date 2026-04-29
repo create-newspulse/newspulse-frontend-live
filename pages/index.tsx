@@ -3872,6 +3872,8 @@ function PreferencesDrawer({ theme, open, onClose, moduleState, onToast }: any) 
 function AppPromoSection({ theme, onToast }: any) {
   const { t } = useI18n();
   const titlePrefix = t('home.appPromoTitlePrefix');
+  const brandFirst = t('home.appPromoBrandFirst') || 'News';
+  const brandSecond = t('home.appPromoBrandSecond') || 'Pulse';
   const titleSuffix = t('home.appPromoTitleSuffix');
   const titleSuffixNeedsLeadingSpace = !String(titleSuffix || '').trimStart().startsWith(',');
 
@@ -3892,7 +3894,7 @@ function AppPromoSection({ theme, onToast }: any) {
                         : "linear-gradient(90deg, rgba(37,99,235,0.12), rgba(124,58,237,0.10))",
                   }}
                 >
-                  <span style={{ color: theme.accent }}>News</span> <span style={{ color: theme.accent2 }}>Pulse</span>
+                  <span style={{ color: theme.accent }}>{brandFirst}</span> <span style={{ color: theme.accent2 }}>{brandSecond}</span>
                 </span>
                 {titleSuffixNeedsLeadingSpace ? ' ' : ''}
                 {titleSuffix}

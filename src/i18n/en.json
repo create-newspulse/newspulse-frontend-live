@@ -168,6 +168,8 @@
     "snapshotMarkets": "Markets",
     "snapshotGold": "Gold",
     "appPromoTitlePrefix": "",
+    "appPromoBrandFirst": "News",
+    "appPromoBrandSecond": "Pulse",
     "appPromoTitleSuffix": ", Now Everywhere",
     "appPromoSubtitle": "Download our mobile app and stay connected to every story, anytime and anywhere.",
     "appPromoRating": "4.8 Rating",
