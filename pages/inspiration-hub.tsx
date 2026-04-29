@@ -7,19 +7,23 @@ import PositiveStoriesSection from '../components/inspiration/PositiveStoriesSec
 import { getInspirationHubContent } from '../data/inspirationHubContent';
 import type { GetStaticProps } from 'next';
 import { usePublicSettings } from '../src/context/PublicSettingsContext';
-import { resolveInspirationHubDroneTvEmbedUrl } from '../src/lib/inspirationHubSettings';
+import { resolveInspirationHubDroneTvSettings, resolveInspirationHubSectionText } from '../src/lib/inspirationHubSettings';
 import { useI18n } from '../src/i18n/LanguageProvider';
 
 export default function InspirationHubPage() {
   const { lang, t } = useI18n();
   const { settings } = usePublicSettings();
-  const droneVideoEmbedUrl = resolveInspirationHubDroneTvEmbedUrl(settings, 'categoryPage');
+  const sectionSettings = resolveInspirationHubSectionText(settings);
+  const droneTvSettings = resolveInspirationHubDroneTvSettings(settings, 'categoryPage');
   const content = getInspirationHubContent(lang);
+  const sectionTitle = sectionSettings?.title || t('categories.inspirationHub');
+  const sectionSubtitle = sectionSettings?.subtitle || t('inspirationHub.page.subtitle');
+  const droneVoiceTitle = droneTvSettings?.title || t('inspirationHub.page.drone.title');
   const voiceText = [
     t('inspirationHub.voice.intro'),
-    t('categories.inspirationHub'),
-    t('inspirationHub.page.subtitle'),
-    t('inspirationHub.page.drone.title'),
+    sectionTitle,
+    sectionSubtitle,
+    droneVoiceTitle,
     ...content.scenicMediaItems.map((item) => `${item.title}. ${item.description}`),
     t('inspirationHub.page.dailyWonders.title'),
     ...content.dailyWonderQuotes.map((item) => `${item.quote}. ${item.support}`),
@@ -48,21 +52,28 @@ export default function InspirationHubPage() {
             transition={{ duration: 0.45 }}
           >
             <InspirationHero
-              title={t('categories.inspirationHub')}
-              subtitle={t('inspirationHub.page.subtitle')}
+              title={sectionTitle}
+              subtitle={sectionSubtitle}
               voiceText={voiceText}
             />
           </motion.div>
 
           <div className="mt-8 grid gap-8 lg:gap-10">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.2 }}
-              transition={{ duration: 0.45 }}
-            >
-              <DroneTVSection items={content.scenicMediaItems} videoEmbedUrl={droneVideoEmbedUrl} />
-            </motion.div>
+            {droneTvSettings ? (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.2 }}
+                transition={{ duration: 0.45 }}
+              >
+                <DroneTVSection
+                  items={content.scenicMediaItems}
+                  videoEmbedUrl={droneTvSettings?.embedUrl}
+                  videoTitle={droneTvSettings?.title}
+                  videoSubtitle={droneTvSettings?.subtitle}
+                />
+              </motion.div>
+            ) : null}
 
             <motion.div
               initial={{ opacity: 0, y: 20 }}

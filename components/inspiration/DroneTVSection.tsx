@@ -5,15 +5,21 @@ import { useI18n } from "../../src/i18n/LanguageProvider";
 type Props = {
   items: ScenicMediaItem[];
   videoEmbedUrl?: string | null;
+  videoTitle?: string;
+  videoSubtitle?: string;
 };
 
-export default function DroneTVSection({ items, videoEmbedUrl }: Props) {
+export default function DroneTVSection({ items, videoEmbedUrl, videoTitle, videoSubtitle }: Props) {
   const { t } = useI18n();
   const featured = items[0];
   const secondary = items.slice(1);
-  const showSettingsFallback = videoEmbedUrl === null;
+  const hasAdminText = !!videoTitle?.trim() || !!videoSubtitle?.trim();
+  const isSettingsDriven = videoEmbedUrl !== undefined || hasAdminText;
+  const displayTitle = videoTitle?.trim() || t("inspirationHub.page.drone.title");
+  const displaySubtitle = videoSubtitle?.trim() || t("inspirationHub.page.drone.description");
+  const showSettingsFallback = isSettingsDriven && videoEmbedUrl === null;
   const showSettingsVideo = typeof videoEmbedUrl === "string" && videoEmbedUrl.trim().length > 0;
-  const showFallbackCards = !showSettingsVideo;
+  const showFallbackCards = !isSettingsDriven && !showSettingsVideo;
 
   if (!featured) return null;
 
@@ -27,10 +33,10 @@ export default function DroneTVSection({ items, videoEmbedUrl }: Props) {
               {t("inspirationHub.page.drone.eyebrow")}
             </div>
             <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950 sm:text-[2rem]">
-              {t("inspirationHub.page.drone.title")}
+              {displayTitle}
             </h2>
             <p className="mt-3 text-sm leading-6 text-slate-600 sm:text-[15px]">
-              {t("inspirationHub.page.drone.description")}
+              {displaySubtitle}
             </p>
           </div>
 

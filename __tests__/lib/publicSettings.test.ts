@@ -7,7 +7,9 @@ import {
   isTickerEnabled,
   mergePublicSettingsWithDefaults,
   fetchPublicSettings,
+  normalizePublicSettings,
 } from '../../src/lib/publicSettings';
+import { resolveInspirationHubDroneTvSettings } from '../../src/lib/inspirationHubSettings';
 
 describe('publicSettings helpers', () => {
   test('getOrderedEnabledKeys sorts by order and filters disabled', () => {
@@ -146,5 +148,249 @@ describe('publicSettings helpers', () => {
 
     // Cleanup
     (global as any).fetch = originalFetch;
+  });
+
+  test('Inspiration Hub master switch hides DroneTV on all public surfaces', () => {
+    const settings = normalizePublicSettings({
+      published: {
+        inspirationHub: {
+          enabled: false,
+          droneTv: {
+            enabled: true,
+            embedUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+            showOnHomepage: true,
+            showOnCategoryPage: true,
+          },
+        },
+      },
+    });
+
+    expect(resolveInspirationHubDroneTvSettings(settings, 'homepage')).toBeNull();
+    expect(resolveInspirationHubDroneTvSettings(settings, 'categoryPage')).toBeNull();
+  });
+
+  test('missing Inspiration Hub settings do not fall back to showing DroneTV', () => {
+    const settings = normalizePublicSettings({
+      published: {
+        modules: {},
+        tickers: {},
+      },
+    });
+
+    expect(settings.inspirationHub).toBeNull();
+    expect(resolveInspirationHubDroneTvSettings(settings, 'homepage')).toBeUndefined();
+    expect(resolveInspirationHubDroneTvSettings(settings, 'categoryPage')).toBeUndefined();
+  });
+
+  test('DroneTV video switch hides only the video block while hub remains enabled', () => {
+    const settings = normalizePublicSettings({
+      published: {
+        inspirationHub: {
+          enabled: true,
+          droneTv: {
+            enabled: false,
+            embedUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+            showOnHomepage: true,
+          },
+        },
+      },
+    });
+
+    expect(settings.inspirationHub?.enabled).toBe(true);
+    expect(resolveInspirationHubDroneTvSettings(settings, 'homepage')).toBeNull();
+  });
+
+  test('DroneTV placement toggles control homepage and Inspiration Hub page separately', () => {
+    const settings = normalizePublicSettings({
+      published: {
+        inspirationHub: {
+          enabled: true,
+          droneTv: {
+            enabled: true,
+            embedUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+            showOnHomepage: true,
+            showOnCategoryPage: false,
+          },
+        },
+      },
+    });
+
+    expect(resolveInspirationHubDroneTvSettings(settings, 'homepage')?.embedUrl).toBe('https://www.youtube.com/embed/dQw4w9WgXcQ');
+    expect(resolveInspirationHubDroneTvSettings(settings, 'categoryPage')).toBeNull();
+  });
+
+  test('flat Inspiration Hub admin aliases are normalized strictly', () => {
+    const settings = normalizePublicSettings({
+      published: {
+        inspirationHub: {
+          enableInspirationHub: true,
+          enableDroneTVVideo: true,
+          showHome: false,
+          pageEnabled: true,
+          videoTitle: 'DroneTV',
+          videoSubtitle: 'Stories, views, and inspiration from above',
+          youtubeUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        },
+      },
+    });
+
+    expect(settings.inspirationHub?.enabled).toBe(true);
+    expect(settings.inspirationHub?.droneTv.enabled).toBe(true);
+    expect(settings.inspirationHub?.droneTv.homepageEnabled).toBe(false);
+    expect(settings.inspirationHub?.droneTv.categoryPageEnabled).toBe(true);
+    expect(resolveInspirationHubDroneTvSettings(settings, 'homepage')).toBeNull();
+    expect(resolveInspirationHubDroneTvSettings(settings, 'categoryPage')?.title).toBe('DroneTV');
+  });
+
+  test('explicit Inspiration Hub homepage module false hides the homepage block only when present', () => {
+    const shouldShowHomepageHub = (settings: ReturnType<typeof normalizePublicSettings>) =>
+      settings.inspirationHub?.enabled === true &&
+      settings.inspirationHub.droneTv.homepageEnabled === true &&
+      settings.inspirationHub.homepageModuleEnabled !== false;
+
+    const missingModule = normalizePublicSettings({
+      published: {
+        homepage: { modules: {} },
+        inspirationHub: {
+          enabled: true,
+          droneTvEnabled: true,
+          showOnHomepage: true,
+          embedUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+        },
+      },
+    });
+    expect(shouldShowHomepageHub(missingModule)).toBe(true);
+
+    const explicitOff = normalizePublicSettings({
+      published: {
+        homepage: { modules: { inspirationHub: { enabled: false } } },
+        inspirationHub: {
+          enabled: true,
+          droneTvEnabled: true,
+          showOnHomepage: true,
+          embedUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+        },
+      },
+    });
+    expect(shouldShowHomepageHub(explicitOff)).toBe(false);
+    expect(resolveInspirationHubDroneTvSettings(explicitOff, 'homepage')?.embedUrl).toBe('https://www.youtube.com/embed/dQw4w9WgXcQ');
+  });
+
+  test('homepage DroneTV shows when required flat fields are on and URL exists', () => {
+    const settings = normalizePublicSettings({
+      published: {
+        inspirationHub: {
+          isEnabled: true,
+          enableDroneTVVideo: true,
+          homepageEnabled: true,
+          droneTvYoutubeUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        },
+      },
+    });
+
+    const homepage = resolveInspirationHubDroneTvSettings(settings, 'homepage');
+    expect(settings.inspirationHub?.enabled).toBe(true);
+    expect(settings.inspirationHub?.droneTv.enabled).toBe(true);
+    expect(settings.inspirationHub?.droneTv.homepageEnabled).toBe(true);
+    expect(homepage?.embedUrl).toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0&modestbranding=1&playsinline=1');
+    expect(homepage?.title).toBe('');
+    expect(homepage?.subtitle).toBe('');
+  });
+
+  test('homepage DroneTV hides when master switch is explicitly false', () => {
+    const settings = normalizePublicSettings({
+      published: {
+        inspirationHub: {
+          enableInspirationHub: false,
+          enableDroneTVVideo: true,
+          showOnHomepage: true,
+          embedUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+        },
+      },
+    });
+
+    expect(settings.inspirationHub?.enabled).toBe(false);
+    expect(resolveInspirationHubDroneTvSettings(settings, 'homepage')).toBeNull();
+  });
+
+  test('homepage Inspiration Hub master and child switches resolve independently', () => {
+    const shouldShowHomepageHub = (settings: ReturnType<typeof normalizePublicSettings>) =>
+      settings.inspirationHub?.enabled === true && settings.inspirationHub.droneTv.homepageEnabled === true;
+
+    const masterOff = normalizePublicSettings({
+      published: {
+        inspirationHub: {
+          enabled: false,
+          droneTvEnabled: true,
+          showOnHomepage: true,
+          embedUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+        },
+      },
+    });
+    expect(shouldShowHomepageHub(masterOff)).toBe(false);
+    expect(resolveInspirationHubDroneTvSettings(masterOff, 'homepage')).toBeNull();
+
+    const homepageOff = normalizePublicSettings({
+      published: {
+        inspirationHub: {
+          enabled: true,
+          droneTvEnabled: true,
+          showOnHomepage: false,
+          embedUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+        },
+      },
+    });
+    expect(shouldShowHomepageHub(homepageOff)).toBe(false);
+    expect(resolveInspirationHubDroneTvSettings(homepageOff, 'homepage')).toBeNull();
+
+    const allOn = normalizePublicSettings({
+      published: {
+        inspirationHub: {
+          enabled: true,
+          droneTvEnabled: true,
+          showOnHomepage: true,
+          videoTitle: 'DroneTV',
+          videoSubtitle: 'Stories, views, and inspiration from above',
+          embedUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+        },
+      },
+    });
+    expect(shouldShowHomepageHub(allOn)).toBe(true);
+    expect(resolveInspirationHubDroneTvSettings(allOn, 'homepage')?.title).toBe('DroneTV');
+
+    const droneOff = normalizePublicSettings({
+      published: {
+        inspirationHub: {
+          enabled: true,
+          droneTvEnabled: false,
+          showOnHomepage: true,
+          embedUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+        },
+      },
+    });
+    expect(shouldShowHomepageHub(droneOff)).toBe(true);
+    expect(resolveInspirationHubDroneTvSettings(droneOff, 'homepage')).toBeNull();
+  });
+
+  test('DroneTV resolver returns admin title subtitle and embed URL', () => {
+    const settings = normalizePublicSettings({
+      published: {
+        inspirationHub: {
+          enabled: true,
+          droneTv: {
+            enabled: true,
+            videoTitle: 'DroneTV',
+            videoSubtitle: 'Stories, views, and inspiration from above',
+            droneTvEmbedUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+            showOnHomepage: true,
+          },
+        },
+      },
+    });
+
+    const homepage = resolveInspirationHubDroneTvSettings(settings, 'homepage');
+    expect(homepage?.title).toBe('DroneTV');
+    expect(homepage?.subtitle).toBe('Stories, views, and inspiration from above');
+    expect(homepage?.embedUrl).toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0&modestbranding=1&playsinline=1');
   });
 });

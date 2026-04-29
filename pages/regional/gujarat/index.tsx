@@ -558,7 +558,7 @@ export default function GujaratIndexPage() {
 
       <AdSlot
         slot="FOOTER_BANNER_728x90"
-        variant="homeBanner"
+        variant="banner728x90"
         className="mx-auto w-full max-w-[1440px] px-4 md:px-8 my-2"
       />
 

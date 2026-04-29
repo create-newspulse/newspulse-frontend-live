@@ -36,7 +36,7 @@ import InspirationHubHomepageSection from "../components/home/InspirationHubHome
 import type { GetStaticProps } from "next";
 import { AnimatePresence, motion } from "framer-motion";
 import { useI18n } from "../src/i18n/LanguageProvider";
-import { resolveInspirationHubDroneTvEmbedUrl } from "../src/lib/inspirationHubSettings";
+import { resolveInspirationHubDroneTvSettings, resolveInspirationHubSectionText } from "../src/lib/inspirationHubSettings";
 import { usePublicFounderToggles } from "../hooks/usePublicFounderToggles";
 import { DEFAULT_PUBLIC_FOUNDER_TOGGLES, type PublicFounderToggles } from "../lib/publicFounderToggles";
 import { subscribePublicDataRefresh } from "../lib/publicDataRefresh";
@@ -4404,7 +4404,24 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
 
   const liveTvEnabled = effectiveSettings.liveTv.enabled === true;
   const liveTvEmbedUrl = effectiveSettings.liveTv.embedUrl;
-  const inspirationHomepageDroneTvEmbedUrl = resolveInspirationHubDroneTvEmbedUrl(effectiveSettings, 'homepage');
+  const inspirationHomepageSectionText = resolveInspirationHubSectionText(effectiveSettings);
+  const inspirationHomepageDroneTvSettings = resolveInspirationHubDroneTvSettings(effectiveSettings, 'homepage');
+  const inspirationHubEnabled = effectiveSettings.inspirationHub?.enabled === true;
+  const inspirationHubHomepageEnabled = effectiveSettings.inspirationHub?.droneTv.homepageEnabled === true;
+  const inspirationHubHomepageModuleEnabled = effectiveSettings.inspirationHub?.homepageModuleEnabled !== false;
+  const showInspirationHubHomepageSection = inspirationHubEnabled && inspirationHubHomepageEnabled && inspirationHubHomepageModuleEnabled;
+  const showInspirationHubHomepageDroneTv = !!inspirationHomepageDroneTvSettings?.embedUrl;
+
+  React.useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return;
+    const embedExists = !!inspirationHomepageDroneTvSettings?.embedUrl;
+    console.debug('[InspirationHubHomepage]', {
+      inspirationHubEnabled,
+      droneTvEnabled: effectiveSettings.inspirationHub?.droneTv.enabled === true,
+      showOnHomepage: inspirationHubHomepageEnabled,
+      hasEmbedOrYoutubeUrl: embedExists,
+    });
+  }, [effectiveSettings.inspirationHub, inspirationHomepageDroneTvSettings?.embedUrl, inspirationHubEnabled, inspirationHubHomepageEnabled]);
 
   const moduleState = {
     categoryStrip: showCategoryStrip,
@@ -4825,31 +4842,33 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
 
   const heroLeftBlocks = sidebarBlocks.filter((b) => b.key === 'explore');
   const utilityLeftBlocks = sidebarBlocks.filter((b) => b.key !== 'explore');
-  const heroCenterColClass = heroLeftBlocks.length > 0 ? 'lg:col-span-6' : 'lg:col-span-9';
+  const hasSafeLeftRailPlacement = heroLeftBlocks.length > 0;
+  const heroCenterColClass = hasSafeLeftRailPlacement ? 'lg:col-span-6' : 'lg:col-span-9';
   const heroLeftRailAdNode = (
-    <div className="hidden lg:block">
+    <div>
       <AdSlot slot="HOME_LEFT_300x600" variant="right300x600" />
     </div>
   );
   const leftRailAdNode = (
-    <div className="hidden lg:block">
+    <div>
       <AdSlot slot="HOME_LEFT_300x250" variant="right300" />
     </div>
   );
-  const leftRailBlocks = heroLeftBlocks
-    .map((block) => ({ key: block.key, node: block.node }))
-    .concat(
-      utilityLeftBlocks.flatMap((block) =>
-        block.key === 'liveTvCard'
-          ? [{ key: block.key, node: block.node }, { key: 'heroLeftRailAd', node: heroLeftRailAdNode }]
-          : [{ key: block.key, node: block.node }]
-      )
-    )
-    .concat([{ key: 'leftRailAd', node: leftRailAdNode }]);
+  const leftRailTallAdBlock = { key: 'heroLeftRailAd', node: heroLeftRailAdNode };
+  const leftRailSmallAdBlock = { key: 'leftRailAd', node: leftRailAdNode };
+  const leftRailBlocks = hasSafeLeftRailPlacement
+    ? heroLeftBlocks
+        .map((block) => ({ key: block.key, node: block.node }))
+        .concat([leftRailTallAdBlock])
+        .concat(utilityLeftBlocks.map((block) => ({ key: block.key, node: block.node })))
+        .concat([leftRailSmallAdBlock])
+    : [];
   const showLeftRail = leftRailBlocks.length > 0;
+  const rightRailTopAdNode = <AdSlot slot="HOME_RIGHT_300x250" variant="right300" />;
+  const rightRailTallAdNode = <AdSlot slot="HOME_RIGHT_300x600" variant="right300x600" />;
   const rightRailNode = (
     <div className="sticky top-4 grid gap-4">
-      <AdSlot slot="HOME_RIGHT_300x250" variant="right300" />
+      {rightRailTopAdNode}
 
       <FeedList
         theme={theme}
@@ -4858,7 +4877,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
         lang={apiLang}
       />
 
-      <AdSlot slot="HOME_RIGHT_300x600" variant="right300x600" className="hidden lg:block" />
+      {rightRailTallAdNode}
 
       {/* Required order: 300x600 ad slot -> Viral Videos -> Youth Pulse trending */}
       <ViralVideosRightRailBlock theme={theme} lang={apiLang} />
@@ -5121,13 +5140,20 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
           </div>
         ) : null}
 
+        {showInspirationHubHomepageSection ? (
         <div className="mt-8">
           <InspirationHubHomepageSection
             theme={theme}
             href={localizePath('/inspiration-hub', apiLang)}
-            droneVideoEmbedUrl={inspirationHomepageDroneTvEmbedUrl}
+            sectionTitle={inspirationHomepageSectionText?.title}
+            sectionSubtitle={inspirationHomepageSectionText?.subtitle}
+            droneVideoEmbedUrl={inspirationHomepageDroneTvSettings?.embedUrl}
+            droneVideoTitle={inspirationHomepageDroneTvSettings?.title}
+            droneVideoSubtitle={inspirationHomepageDroneTvSettings?.subtitle}
+            showDroneTv={showInspirationHubHomepageDroneTv}
           />
         </div>
+        ) : null}
       </div>
 
       {/* APP PROMO + FOOTER */}
@@ -5137,7 +5163,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
             <>
               <AdSlot
                 slot="FOOTER_BANNER_728x90"
-                variant="homeBanner"
+                variant="banner728x90"
                 className="mx-auto w-full max-w-[1440px] px-4 md:px-8 my-2"
               />
               {b.node}

@@ -32,6 +32,58 @@ function clampNum(n: unknown, min: number, max: number, fallback: number): numbe
   return Math.min(max, Math.max(min, v));
 }
 
+function firstString(root: JsonRecord, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = (root as any)[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+function firstBoolean(root: JsonRecord, keys: string[]): boolean | undefined {
+  for (const key of keys) {
+    const value = (root as any)[key];
+    if (typeof value === 'boolean') return value;
+  }
+  return undefined;
+}
+
+function getPublishedInspirationHub(raw: unknown): JsonRecord | null {
+  const root = isRecord(raw) ? raw : null;
+  if (!root) return null;
+
+  const candidates = [
+    (root as any)?.settings?.inspirationHub,
+    (root as any)?.published?.inspirationHub,
+    (root as any)?.public?.inspirationHub,
+    (root as any)?.data?.inspirationHub,
+    (root as any)?.data?.published?.inspirationHub,
+    (root as any)?.data?.public?.inspirationHub,
+  ];
+
+  for (const candidate of candidates) {
+    if (isRecord(candidate)) return candidate;
+  }
+
+  return null;
+}
+
+function hasPublishedInspirationHub(raw: unknown): boolean {
+  return !!getPublishedInspirationHub(raw);
+}
+
+function withCompatibleSettingsShape(raw: unknown): unknown {
+  if (!isRecord(raw)) return raw;
+
+  const merged = mergePublicSettingsResponseWithDefaults(raw);
+  return {
+    ...raw,
+    settings: merged.settings,
+    version: (raw as any).version ?? merged.version,
+    updatedAt: (raw as any).updatedAt ?? merged.updatedAt,
+  };
+}
+
 function mapSiteSettingsToPublicSettingsResponse(raw: unknown): PublicSettingsResponse | null {
   // Backend shapes we accept:
   // - { ok: true, settings: { ... } }
@@ -98,6 +150,42 @@ function mapSiteSettingsToPublicSettingsResponse(raw: unknown): PublicSettingsRe
       : null;
   if (inspirationHubRaw) {
     out.settings.inspirationHub = { ...inspirationHubRaw } as any;
+  } else {
+    const enabled = firstBoolean(settings, ['enabled', 'isEnabled', 'inspirationHubEnabled', 'enableInspirationHub', 'showInspirationHub']);
+    const videoEnabled = firstBoolean(settings, ['droneTvEnabled', 'droneTVEnabled', 'enableDroneTvVideo', 'enableDroneTVVideo', 'droneTvVideoEnabled', 'droneTVVideoEnabled', 'droneVideoEnabled']);
+    const showOnHomepage = firstBoolean(settings, ['showOnHomepage', 'homepageEnabled', 'showHome']);
+    const showOnInspirationHubPage = firstBoolean(settings, ['showOnInspirationHubPage', 'pageEnabled', 'showOnCategoryPage', 'inspirationHubPageEnabled', 'categoryPageEnabled']);
+    const sectionTitle = firstString(settings, ['sectionTitle', 'inspirationHubTitle', 'hubTitle']);
+    const sectionSubtitle = firstString(settings, ['sectionSubtitle', 'inspirationHubSubtitle', 'hubSubtitle']);
+    const videoTitle = firstString(settings, ['videoTitle', 'droneTvTitle', 'droneTVTitle']);
+    const videoSubtitle = firstString(settings, ['videoSubtitle', 'droneTvSubtitle', 'droneTVSubtitle']);
+    const embedUrl = firstString(settings, ['embedUrl', 'droneTvEmbedUrl', 'droneTVEmbedUrl', 'videoUrl', 'youtubeUrl', 'droneTvYoutubeUrl', 'droneTVYoutubeUrl', 'url', 'droneTvUrl', 'droneTVUrl']);
+
+    if (
+      typeof enabled === 'boolean' ||
+      typeof videoEnabled === 'boolean' ||
+      typeof showOnHomepage === 'boolean' ||
+      typeof showOnInspirationHubPage === 'boolean' ||
+      sectionTitle ||
+      sectionSubtitle ||
+      videoTitle ||
+      videoSubtitle ||
+      embedUrl
+    ) {
+      out.settings.inspirationHub = {
+        enabled,
+        title: sectionTitle,
+        subtitle: sectionSubtitle,
+        droneTv: {
+          enabled: videoEnabled,
+          title: videoTitle,
+          subtitle: videoSubtitle,
+          embedUrl,
+          showOnHomepage,
+          showOnCategoryPage: showOnInspirationHubPage,
+        },
+      } as any;
+    }
   }
 
   // Tickers
@@ -227,7 +315,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json(local);
   }
 
-  // 1) Preferred backend contract: GET {origin}/api/public/settings
+  // 0) Preferred admin-published public settings contract.
+  // This is the source that includes Inspiration Hub / DroneTV settings.
+  try {
+    const upstream = await fetch(`${origin}/api/settings/public`, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'Cache-Control': 'no-store',
+        Pragma: 'no-cache',
+      },
+      cache: 'no-store',
+    });
+
+    const json = await upstream.json().catch(() => null);
+    if (upstream.ok && hasPublishedInspirationHub(json)) {
+      return res.status(200).json(withCompatibleSettingsShape(json));
+    }
+  } catch {
+    // Try compatibility fallbacks below
+  }
+
+  // 1) Back-compat backend contract: GET {origin}/api/public/settings
   try {
     const upstream = await fetch(`${origin}/api/public/settings`, {
       method: 'GET',
@@ -244,6 +353,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (shouldUseLocalDevelopmentSettingsFallback(origin, json)) {
         const local = await readPublishedLocal();
         return res.status(200).json(local);
+      }
+      if (!hasPublishedInspirationHub(json)) {
+        try {
+          const publishedUpstream = await fetch(`${origin}/api/settings/public`, {
+            method: 'GET',
+            headers: {
+              Accept: 'application/json',
+              'Cache-Control': 'no-store',
+              Pragma: 'no-cache',
+            },
+            cache: 'no-store',
+          });
+          const publishedJson = await publishedUpstream.json().catch(() => null);
+          if (publishedUpstream.ok && hasPublishedInspirationHub(publishedJson)) {
+            return res.status(200).json(withCompatibleSettingsShape(publishedJson));
+          }
+        } catch {
+          // Keep the older settings response below.
+        }
       }
       return res.status(200).json(json);
     }

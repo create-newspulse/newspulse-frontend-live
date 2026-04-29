@@ -2,6 +2,7 @@ import React from 'react';
 
 import { usePublicAdSlot, type PublicAd } from '../../../hooks/usePublicAdSlot';
 import { normalizeSlot } from '../../lib/adSlots';
+import { getPublicAdOpportunityType } from '../../lib/publicAdOpportunities';
 import { useLanguage } from '../../i18n/language';
 
 type Variant =
@@ -75,7 +76,7 @@ function defaultVariantForSlot(normalizedSlot: string): Variant {
     case 'HOME_BILLBOARD_970x250':
       return 'billboard970x250';
     case 'FOOTER_BANNER_728x90':
-      return 'homeBanner';
+      return 'banner728x90';
     case 'HOME_LEFT_300x250':
       return 'right300';
     case 'HOME_LEFT_300x600':
@@ -493,12 +494,40 @@ function Right300x600Placeholder({ normalizedSlot }: { normalizedSlot: string })
 }
 
 function FooterBanner728Placeholder({ normalizedSlot }: { normalizedSlot: string }) {
+  const { t } = useLanguage();
+  const categories = [
+    t('categories.breaking') || 'Breaking',
+    t('categories.regional') || 'Regional',
+    t('categories.national') || 'National',
+    t('categories.international') || 'International',
+    t('categories.business') || 'Business',
+    t('categories.scienceTechnology') || 'Science & Technology',
+  ]
+    .filter(Boolean)
+    .join(' • ');
+
   return (
-    <div className="mx-auto w-full max-w-[728px] rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden h-[90px] flex items-center justify-between gap-4 px-4">
-      <div className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-slate-500">ADVERTISEMENT</div>
-      <a href={getAdvertiseHref(normalizedSlot)} className="shrink-0 text-sm font-semibold underline text-slate-700">
-        Advertise Here
-      </a>
+    <div
+      className="mx-auto w-full max-w-[728px] overflow-hidden rounded-2xl border border-slate-200/80 bg-white/80 px-3 py-2 shadow-sm backdrop-blur sm:px-4"
+      style={{ aspectRatio: '728 / 90', minHeight: 90 }}
+      data-ad-slot={normalizedSlot}
+    >
+      <div className="flex h-full min-h-[74px] w-full items-center justify-between gap-3 sm:gap-4">
+        <div className="min-w-0 flex items-center gap-3">
+          <AdBadge />
+
+          <div className="min-w-0">
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <div className="font-extrabold text-slate-900">{t('brand.name') || 'News Pulse'}</div>
+              <div className="truncate text-xs text-slate-500">{t('brand.tagline') || "Your pulse on the world's latest news"}</div>
+            </div>
+
+            {categories ? <div className="mt-0.5 truncate text-[12px] text-slate-600">{categories}</div> : null}
+          </div>
+        </div>
+
+        <AdvertiseLink normalizedSlot={normalizedSlot}>{t('common.advertiseHere') || 'Advertise Here'}</AdvertiseLink>
+      </div>
     </div>
   );
 }
@@ -537,13 +566,15 @@ export default function AdSlot({ slot, variant, className = '', renderMode = 'de
   const { t, language } = useLanguage();
 
   const normalizedSlot = React.useMemo(() => normalizeSlot(slot), [slot]);
+  const opportunityType = React.useMemo(() => getPublicAdOpportunityType(normalizedSlot), [normalizedSlot]);
+  const shouldRenderDisplaySlot = !opportunityType || opportunityType === 'display-slot';
   const effectiveVariant = variant ?? defaultVariantForSlot(normalizedSlot);
   const { reserve } = sizing(effectiveVariant);
 
   const strictConfig = getStrictSlotConfig(normalizedSlot);
   const homepageUnitConfig = getHomepageUnitConfig(normalizedSlot);
   const { enabled, ad, isLoading, hasResolved } = usePublicAdSlot({
-    slot: normalizedSlot,
+    slot: shouldRenderDisplaySlot ? normalizedSlot : '',
     language,
   });
 
@@ -552,7 +583,7 @@ export default function AdSlot({ slot, variant, className = '', renderMode = 'de
     setImgError(false);
   }, [ad?.imageUrl]);
 
-  if (!enabled) return null;
+  if (!shouldRenderDisplaySlot || !enabled) return null;
 
   const imageUrl = (ad?.imageUrl || '').trim();
   const isArticleVariant = effectiveVariant === 'articleInline' || effectiveVariant === 'articleEnd';

@@ -1,37 +1,22 @@
 import React, { useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import Toast from "../components/community-reporter/Toast";
+import {
+  PUBLIC_AD_INQUIRY_OPTIONS,
+  getPublicAdOpportunityLabel,
+  normalizePublicAdInquiryValue,
+} from "../src/lib/publicAdOpportunities";
 
 const CONTACT_EMAIL = "newspulse.ads@gmail.com";
 const SUBMIT_SUCCESS_MESSAGE = "Inquiry sent successfully. Our ads team will contact you shortly.";
 const SUBMIT_ERROR_MESSAGE = "Inquiry could not be sent right now. Please email newspulse.ads@gmail.com directly.";
 
-const AD_SLOT_OPTIONS = [
-  { value: 'NOT_SURE', label: 'Not sure / Need suggestion' },
-  { value: 'HOME_728x90', label: 'Home Banner 728x90' },
-  { value: 'FOOTER_BANNER_728x90', label: 'Footer Banner 728x90' },
-  { value: 'HOME_RIGHT_300x250', label: 'Home Right Rail 300x250' },
-  { value: 'HOME_RIGHT_300x600', label: 'Home Right Rail 300x600 Half Page' },
-  { value: 'HOME_BILLBOARD_970x250', label: 'Home Billboard 970x250 Premium' },
-  { value: 'LIVE_UPDATE_SPONSOR', label: 'Live Update Sponsor' },
-  { value: 'BREAKING_SPONSOR', label: 'Breaking Sponsor' },
-  { value: 'ARTICLE_INLINE', label: 'Article Inline' },
-  { value: 'ARTICLE_END', label: 'Article End' },
-  { value: 'SPONSORED_FEATURE', label: 'Sponsored Feature' },
-  { value: 'SPONSORED_ARTICLE', label: 'Sponsored Article' },
-  { value: 'COMBO_CAMPAIGN', label: 'Combo Campaign' },
-  { value: 'BREAKING_TICKER_RED', label: 'Breaking ticker red' },
-  { value: 'LIVE_UPDATES_TICKER_BLUE', label: 'Live Updates ticker blue' },
-  { value: 'BREAKING_PAGE_SPONSOR_LINE', label: '/breaking page sponsor line' },
-];
-
 function normalizeAdSlotValue(value: string): string {
-  const normalized = String(value || '').trim();
-  return AD_SLOT_OPTIONS.some((option) => option.value === normalized) ? normalized : 'NOT_SURE';
+  return normalizePublicAdInquiryValue(value);
 }
 
 function getAdSlotLabel(value: string): string {
-  return AD_SLOT_OPTIONS.find((option) => option.value === value)?.label || AD_SLOT_OPTIONS[0].label;
+  return getPublicAdOpportunityLabel(value);
 }
 
 function buildDefaultMessage(): string {
@@ -220,8 +205,8 @@ export default function AdvertisePage() {
                   defaultValue={slot}
                   className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-200"
                 >
-                  {AD_SLOT_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
+                  {PUBLIC_AD_INQUIRY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value} data-opportunity-type={option.type}>
                       {option.label}
                     </option>
                   ))}

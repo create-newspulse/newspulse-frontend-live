@@ -50,27 +50,39 @@ export type PublicSettings = {
 
 export type PublicInspirationHubSettings = {
   enabled?: boolean;
+  title?: string;
+  subtitle?: string;
   droneTv?: {
     enabled?: boolean;
+    title?: string;
+    subtitle?: string;
     url?: string;
     videoUrl?: string;
     youtubeUrl?: string;
     embedUrl?: string;
     showOnHomepage?: boolean;
     homepageEnabled?: boolean;
+    showHome?: boolean;
     showOnCategoryPage?: boolean;
     categoryPageEnabled?: boolean;
+    showOnInspirationHubPage?: boolean;
+    pageEnabled?: boolean;
   };
 };
 
 export type NormalizedInspirationHubSettings = {
   enabled: boolean;
+  title: string;
+  subtitle: string;
   droneTv: {
     enabled: boolean;
+    title: string;
+    subtitle: string;
     embedUrl: string;
     homepageEnabled: boolean;
     categoryPageEnabled: boolean;
   };
+  homepageModuleEnabled?: boolean;
 };
 
 export type PublicSettingsResponse = {
@@ -205,7 +217,11 @@ function getUiBoolean(ui: JsonRecord | null, key: string, fallback: boolean): bo
 }
 
 function normalizeFromAdminPublishedShape(payload: JsonRecord, defaults: PublicSettings): PublicSettings {
-  const homeModules = isRecord((payload as any).homeModules) ? ((payload as any).homeModules as JsonRecord) : null;
+  const homeModules = isRecord((payload as any).homepageModules)
+    ? ((payload as any).homepageModules as JsonRecord)
+    : isRecord((payload as any).homeModules)
+      ? ((payload as any).homeModules as JsonRecord)
+      : null;
   const ui = isRecord((payload as any).ui) ? ((payload as any).ui as JsonRecord) : null;
   const tickersRaw = isRecord((payload as any).tickers) ? ((payload as any).tickers as JsonRecord) : null;
 
@@ -229,6 +245,7 @@ function normalizeFromAdminPublishedShape(payload: JsonRecord, defaults: PublicS
     breakingMode: normalizeBreakingMode((payload as any).breakingMode, defaults.breakingMode ?? 'auto'),
     footerText: typeof (payload as any).footerText === 'string' ? String((payload as any).footerText) : defaults.footerText,
     languageTheme: normalizeLanguageTheme((payload as any).languageTheme) ?? defaults.languageTheme,
+    inspirationHub: normalizeInspirationHubSettings((payload as any).inspirationHub) ?? normalizeInspirationHubSettings((payload as any)?.homepage?.inspirationHub) ?? defaults.inspirationHub,
   };
 
   // Tickers: show/hide comes from UI flags (fallback true)
@@ -407,64 +424,99 @@ function normalizeInspirationHubSettings(raw: unknown): PublicInspirationHubSett
   const droneTv = getRecord(raw, 'droneTv') ?? getRecord(raw, 'droneTV');
   const out: PublicInspirationHubSettings = {};
 
-  const enabled = getFirstBoolean(raw, ['enabled']);
+  const enabled = getFirstBoolean(raw, ['enabled', 'isEnabled', 'inspirationHubEnabled', 'enableInspirationHub', 'showInspirationHub']);
   if (typeof enabled === 'boolean') out.enabled = enabled;
 
-  const rootDroneEnabled = getFirstBoolean(raw, ['droneTvEnabled', 'droneTVEnabled']);
-  const rootRawUrl = getFirstString(raw, ['embedUrl', 'videoUrl', 'youtubeUrl', 'url']);
-  const rootHomepageEnabled = getFirstBoolean(raw, ['showOnHomepage', 'homepageEnabled']);
-  const rootCategoryPageEnabled = getFirstBoolean(raw, ['showOnCategoryPage', 'categoryPageEnabled']);
+  const rootDroneEnabled = getFirstBoolean(raw, ['droneTvEnabled', 'droneTVEnabled', 'enableDroneTvVideo', 'enableDroneTVVideo', 'droneTvVideoEnabled', 'droneTVVideoEnabled', 'droneVideoEnabled']);
+  const sectionTitle = getFirstString(raw, ['sectionTitle', 'title', 'inspirationHubTitle', 'hubTitle']);
+  const sectionSubtitle = getFirstString(raw, ['sectionSubtitle', 'subtitle', 'description', 'inspirationHubSubtitle', 'hubSubtitle']);
+  const rootTitle = getFirstString(raw, ['videoTitle', 'droneTvTitle', 'droneTVTitle']);
+  const rootSubtitle = getFirstString(raw, ['videoSubtitle', 'droneTvSubtitle', 'droneTVSubtitle']);
+  const rootRawUrl = getFirstString(raw, ['embedUrl', 'droneTvEmbedUrl', 'droneTVEmbedUrl', 'videoUrl', 'youtubeUrl', 'droneTvYoutubeUrl', 'droneTVYoutubeUrl', 'url', 'droneTvUrl', 'droneTVUrl']);
+  const rootHomepageEnabled = getFirstBoolean(raw, ['showOnHomepage', 'homepageEnabled', 'showHome']);
+  const rootCategoryPageEnabled = getFirstBoolean(raw, ['showOnInspirationHubPage', 'pageEnabled', 'showOnCategoryPage', 'inspirationHubPageEnabled', 'categoryPageEnabled']);
 
-  if (droneTv || typeof rootDroneEnabled === 'boolean' || !!rootRawUrl || typeof rootHomepageEnabled === 'boolean' || typeof rootCategoryPageEnabled === 'boolean') {
+  if (sectionTitle) out.title = sectionTitle;
+  if (sectionSubtitle) out.subtitle = sectionSubtitle;
+
+  if (droneTv || typeof rootDroneEnabled === 'boolean' || !!rootTitle || !!rootSubtitle || !!rootRawUrl || typeof rootHomepageEnabled === 'boolean' || typeof rootCategoryPageEnabled === 'boolean') {
     out.droneTv = {};
 
-    const droneEnabled = getFirstBoolean(droneTv, ['enabled']) ?? rootDroneEnabled;
+    const droneEnabled = getFirstBoolean(droneTv, ['enabled', 'enableDroneTvVideo', 'enableDroneTVVideo', 'droneTvVideoEnabled', 'droneTVVideoEnabled', 'droneVideoEnabled']) ?? rootDroneEnabled;
     if (typeof droneEnabled === 'boolean') out.droneTv.enabled = droneEnabled;
 
-    const rawUrl = getFirstString(droneTv, ['embedUrl', 'videoUrl', 'youtubeUrl', 'url']) || rootRawUrl;
-    if (rawUrl) out.droneTv.url = rawUrl;
+    const title = getFirstString(droneTv, ['videoTitle', 'title', 'droneTvTitle', 'droneTVTitle']) || rootTitle;
+    if (title) out.droneTv.title = title;
 
-    const homepageEnabled = getFirstBoolean(droneTv, ['showOnHomepage', 'homepageEnabled']) ?? rootHomepageEnabled;
+    const subtitle = getFirstString(droneTv, ['videoSubtitle', 'subtitle', 'description', 'droneTvSubtitle', 'droneTVSubtitle']) || rootSubtitle;
+    if (subtitle) out.droneTv.subtitle = subtitle;
+
+    const rawUrl = getFirstString(droneTv, ['embedUrl', 'droneTvEmbedUrl', 'droneTVEmbedUrl', 'videoUrl', 'youtubeUrl', 'droneTvYoutubeUrl', 'droneTVYoutubeUrl', 'url', 'droneTvUrl', 'droneTVUrl']) || rootRawUrl;
+    if (rawUrl) {
+      out.droneTv.url = rawUrl;
+      out.droneTv.embedUrl = rawUrl;
+    }
+
+    const homepageEnabled = getFirstBoolean(droneTv, ['showOnHomepage', 'homepageEnabled', 'showHome']) ?? rootHomepageEnabled;
     if (typeof homepageEnabled === 'boolean') out.droneTv.showOnHomepage = homepageEnabled;
 
-    const categoryPageEnabled = getFirstBoolean(droneTv, ['showOnCategoryPage', 'categoryPageEnabled']) ?? rootCategoryPageEnabled;
+    const categoryPageEnabled = getFirstBoolean(droneTv, ['showOnInspirationHubPage', 'pageEnabled', 'showOnCategoryPage', 'inspirationHubPageEnabled', 'categoryPageEnabled']) ?? rootCategoryPageEnabled;
     if (typeof categoryPageEnabled === 'boolean') out.droneTv.showOnCategoryPage = categoryPageEnabled;
   }
 
   return Object.keys(out).length ? out : undefined;
 }
 
-function normalizeInspirationHubFrom(raw: unknown): NormalizedInspirationHubSettings | null {
+function normalizeInspirationHubFrom(raw: unknown, options?: { homepageModuleEnabled?: boolean }): NormalizedInspirationHubSettings | null {
   if (!isRecord(raw)) return null;
 
   const droneTv = getRecord(raw, 'droneTv') ?? getRecord(raw, 'droneTV');
-  const blockEnabled = normalizeEnabled((raw as any).enabled, true);
+  const blockEnabled = normalizeEnabled((raw as any).enabled ?? (raw as any).isEnabled ?? (raw as any).inspirationHubEnabled ?? (raw as any).enableInspirationHub ?? (raw as any).showInspirationHub, false);
   const droneEnabled = normalizeEnabled(
-    (droneTv as any)?.enabled ?? (raw as any).droneTvEnabled ?? (raw as any).droneTVEnabled,
-    true
+    (droneTv as any)?.enabled ?? (droneTv as any)?.enableDroneTvVideo ?? (droneTv as any)?.enableDroneTVVideo ?? (droneTv as any)?.droneTvVideoEnabled ?? (droneTv as any)?.droneTVVideoEnabled ?? (droneTv as any)?.droneVideoEnabled ?? (raw as any).droneTvEnabled ?? (raw as any).droneTVEnabled ?? (raw as any).enableDroneTvVideo ?? (raw as any).enableDroneTVVideo ?? (raw as any).droneTvVideoEnabled ?? (raw as any).droneTVVideoEnabled ?? (raw as any).droneVideoEnabled,
+    false
   );
   const homepageEnabled = normalizeEnabled(
-    (droneTv as any)?.showOnHomepage ?? (droneTv as any)?.homepageEnabled ?? (raw as any).showOnHomepage ?? (raw as any).homepageEnabled,
-    true
+    (droneTv as any)?.showOnHomepage ?? (droneTv as any)?.homepageEnabled ?? (droneTv as any)?.showHome ?? (raw as any).showOnHomepage ?? (raw as any).homepageEnabled ?? (raw as any).showHome,
+    false
   );
   const categoryPageEnabled = normalizeEnabled(
-    (droneTv as any)?.showOnCategoryPage ?? (droneTv as any)?.categoryPageEnabled ?? (raw as any).showOnCategoryPage ?? (raw as any).categoryPageEnabled,
-    true
+    (droneTv as any)?.showOnInspirationHubPage ?? (droneTv as any)?.pageEnabled ?? (droneTv as any)?.showOnCategoryPage ?? (droneTv as any)?.inspirationHubPageEnabled ?? (droneTv as any)?.categoryPageEnabled ?? (raw as any).showOnInspirationHubPage ?? (raw as any).pageEnabled ?? (raw as any).showOnCategoryPage ?? (raw as any).inspirationHubPageEnabled ?? (raw as any).categoryPageEnabled,
+    false
   );
+  const sectionTitle = getFirstString(raw, ['sectionTitle', 'title', 'inspirationHubTitle', 'hubTitle']);
+  const sectionSubtitle = getFirstString(raw, ['sectionSubtitle', 'subtitle', 'description', 'inspirationHubSubtitle', 'hubSubtitle']);
+  const droneTitle =
+    getFirstString(droneTv, ['videoTitle', 'title', 'droneTvTitle', 'droneTVTitle']) ||
+    getFirstString(raw, ['videoTitle', 'droneTvTitle', 'droneTVTitle']);
+  const droneSubtitle =
+    getFirstString(droneTv, ['videoSubtitle', 'subtitle', 'description', 'droneTvSubtitle', 'droneTVSubtitle']) ||
+    getFirstString(raw, ['videoSubtitle', 'droneTvSubtitle', 'droneTVSubtitle']);
   const embedUrl = normalizePreferredYouTubeEmbedUrl(
-    getFirstString(droneTv, ['embedUrl', 'videoUrl', 'youtubeUrl', 'url']) ||
-      getFirstString(raw, ['embedUrl', 'videoUrl', 'youtubeUrl', 'url'])
+    getFirstString(droneTv, ['embedUrl', 'droneTvEmbedUrl', 'droneTVEmbedUrl', 'videoUrl', 'youtubeUrl', 'droneTvYoutubeUrl', 'droneTVYoutubeUrl', 'url', 'droneTvUrl', 'droneTVUrl']) ||
+      getFirstString(raw, ['embedUrl', 'droneTvEmbedUrl', 'droneTVEmbedUrl', 'videoUrl', 'youtubeUrl', 'droneTvYoutubeUrl', 'droneTVYoutubeUrl', 'url', 'droneTvUrl', 'droneTVUrl'])
   );
 
   return {
     enabled: blockEnabled,
+    title: sectionTitle || '',
+    subtitle: sectionSubtitle || '',
     droneTv: {
       enabled: droneEnabled,
+      title: droneTitle || '',
+      subtitle: droneSubtitle || '',
       embedUrl,
       homepageEnabled,
       categoryPageEnabled,
     },
+    homepageModuleEnabled: options?.homepageModuleEnabled,
   };
+}
+
+function getExplicitModuleEnabled(rawModule: unknown): boolean | undefined {
+  if (typeof rawModule === 'boolean') return rawModule;
+  if (!isRecord(rawModule)) return undefined;
+  return typeof (rawModule as any).enabled === 'boolean' ? (rawModule as any).enabled : undefined;
 }
 
 export function mergePublicSettingsWithDefaults(raw: unknown, defaults: PublicSettings = DEFAULT_PUBLIC_SETTINGS): PublicSettings {
@@ -483,7 +535,7 @@ export function mergePublicSettingsWithDefaults(raw: unknown, defaults: PublicSe
       : root;
 
   // New admin-published shape: { homeModules, ui, tickers }
-  if (isRecord((payload as any).homeModules) || isRecord((payload as any).ui)) {
+  if (isRecord((payload as any).homepageModules) || isRecord((payload as any).homeModules) || isRecord((payload as any).ui)) {
     return normalizeFromAdminPublishedShape(payload, defaults);
   }
 
@@ -705,6 +757,7 @@ export function normalizePublicSettings(raw: unknown, defaults: NormalizedPublic
 
   const homepageModules =
     getRecord(published, 'homepage', 'modules') ??
+    getRecord(published, 'homepageModules') ??
     getRecord(published, 'homeModules') ??
     getRecord(published, 'modules') ??
     ({} as JsonRecord);
@@ -713,6 +766,11 @@ export function normalizePublicSettings(raw: unknown, defaults: NormalizedPublic
   const exploreRaw = (homepageModules as any).explore ?? (homepageModules as any).exploreCategories;
   const trendingRaw = (homepageModules as any).trending ?? (homepageModules as any).trendingStrip;
   const liveTvCardRaw = (homepageModules as any).liveTvCard;
+  const inspirationHubModuleRaw =
+    (homepageModules as any).inspirationHub ??
+    (homepageModules as any).inspirationHubHomepage ??
+    (homepageModules as any).inspiration;
+  const inspirationHubModuleEnabled = getExplicitModuleEnabled(inspirationHubModuleRaw);
 
   const tickers = getRecord(published, 'tickers') ?? getRecord(published, 'homepage', 'tickers') ?? ({} as JsonRecord);
   const liveTickerRaw = (tickers as any).live;
@@ -776,7 +834,7 @@ export function normalizePublicSettings(raw: unknown, defaults: NormalizedPublic
       languages: normalizeLanguages(languagesRaw, defaults.languageTheme.languages),
       themePreset: normalizeThemePreset(themePresetRaw) ?? defaults.languageTheme.themePreset,
     },
-    inspirationHub: normalizeInspirationHubFrom(inspirationHub),
+    inspirationHub: normalizeInspirationHubFrom(inspirationHub, { homepageModuleEnabled: inspirationHubModuleEnabled }),
   };
 
   return out;

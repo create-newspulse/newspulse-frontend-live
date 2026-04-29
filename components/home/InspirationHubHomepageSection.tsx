@@ -10,27 +10,38 @@ import InspirationListenButton from "../inspiration/InspirationListenButton";
 type InspirationHubHomepageSectionProps = {
   theme: any;
   href: string;
+  sectionTitle?: string;
+  sectionSubtitle?: string;
   droneVideoEmbedUrl?: string | null;
+  droneVideoTitle?: string;
+  droneVideoSubtitle?: string;
+  showDroneTv?: boolean;
 };
 
-export default function InspirationHubHomepageSection({ theme, href, droneVideoEmbedUrl }: InspirationHubHomepageSectionProps) {
+export default function InspirationHubHomepageSection({ theme, href, sectionTitle, sectionSubtitle, droneVideoEmbedUrl, droneVideoTitle, droneVideoSubtitle, showDroneTv = true }: InspirationHubHomepageSectionProps) {
   const { lang, t } = useI18n();
   const content = getInspirationHubContent(lang);
   const sections = Array.isArray((inspirationData as any)?.sections) ? (inspirationData as any).sections : [];
   const drone = sections.find((item: any) => item?.id === "drone-tv") || null;
-  const fallbackEmbedUrl = sanitizeEmbedUrl(drone?.videoUrl);
-  const embedUrl = typeof droneVideoEmbedUrl === "string" ? droneVideoEmbedUrl : fallbackEmbedUrl;
+  const fallbackEmbedUrl = showDroneTv ? sanitizeEmbedUrl(drone?.videoUrl) : "";
+  const embedUrl = showDroneTv && typeof droneVideoEmbedUrl === "string" ? droneVideoEmbedUrl : fallbackEmbedUrl;
   const hasEmbed = !!embedUrl;
   const isSettingsDriven = droneVideoEmbedUrl !== undefined;
+  const hasAdminDroneTitle = !!droneVideoTitle?.trim();
+  const hasAdminDroneSubtitle = !!droneVideoSubtitle?.trim();
+  const displaySectionTitle = sectionTitle?.trim() || t("categories.inspirationHub");
+  const displaySectionSubtitle = sectionSubtitle?.trim() || t("inspirationHub.homepage.subtitle");
+  const displayDroneTitle = droneVideoTitle?.trim() || t("inspirationHub.homepage.drone.title") || "DroneTV";
+  const displayDroneSubtitle = droneVideoSubtitle?.trim() || t("inspirationHub.homepage.drone.description") || "Stories, views, and inspiration from above";
 
   const featuredMedia = content.scenicMediaItems[0];
   const featuredQuote = content.dailyWonderQuotes[0];
   const supportingQuotes = content.dailyWonderQuotes.slice(1, 3);
   const voiceText = [
     t("inspirationHub.voice.intro"),
-    t("categories.inspirationHub"),
-    t("inspirationHub.homepage.subtitle"),
-    t("inspirationHub.homepage.drone.title"),
+    displaySectionTitle,
+    displaySectionSubtitle,
+    showDroneTv ? displayDroneTitle : "",
     featuredMedia ? `${featuredMedia.title}. ${featuredMedia.description}` : "",
     t("inspirationHub.homepage.wonders.title"),
     ...content.dailyWonderQuotes.slice(0, 3).map((quote) => quote.quote),
@@ -65,10 +76,10 @@ export default function InspirationHubHomepageSection({ theme, href, droneVideoE
               {t("inspirationHub.badge")}
             </div>
             <h2 className="mt-3 text-2xl font-black tracking-tight sm:text-[2rem]" style={{ color: theme.text }}>
-              {t("categories.inspirationHub")}
+              {displaySectionTitle}
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 sm:text-[15px]" style={{ color: theme.sub }}>
-              {t("inspirationHub.homepage.subtitle")}
+              {displaySectionSubtitle}
             </p>
           </div>
 
@@ -89,7 +100,8 @@ export default function InspirationHubHomepageSection({ theme, href, droneVideoE
         </div>
       </div>
 
-      <div className="grid gap-5 p-4 sm:p-6 lg:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)] lg:items-stretch">
+      <div className={`grid gap-5 p-4 sm:p-6 ${showDroneTv ? "lg:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)]" : "lg:grid-cols-1"} lg:items-stretch`}>
+        {showDroneTv ? (
         <div
           className="overflow-hidden rounded-[28px] border shadow-[0_24px_56px_-40px_rgba(15,23,42,0.38)]"
           style={{ borderColor: theme.border, background: theme.surface }}
@@ -100,10 +112,10 @@ export default function InspirationHubHomepageSection({ theme, href, droneVideoE
                 {t("inspirationHub.homepage.drone.eyebrow")}
               </div>
               <h3 className="mt-2 text-xl font-black tracking-tight sm:text-2xl" style={{ color: theme.text }}>
-                {t("inspirationHub.homepage.drone.title")}
+                {displayDroneTitle}
               </h3>
               <p className="mt-2 max-w-2xl text-sm leading-6" style={{ color: theme.sub }}>
-                {t("inspirationHub.homepage.drone.description")}
+                {displayDroneSubtitle}
               </p>
             </div>
 
@@ -113,9 +125,7 @@ export default function InspirationHubHomepageSection({ theme, href, droneVideoE
             >
               <Play className="h-3.5 w-3.5" />
               {hasEmbed
-                ? isSettingsDriven
-                  ? t("inspirationHub.homepage.drone.activeBadge")
-                  : t("inspirationHub.homepage.drone.autoEmbedBadge")
+                ? t("inspirationHub.homepage.drone.autoEmbedBadge")
                 : t("inspirationHub.homepage.drone.placeholderBadge")}
             </div>
           </div>
@@ -151,9 +161,11 @@ export default function InspirationHubHomepageSection({ theme, href, droneVideoE
                     <div className="absolute inset-x-6 bottom-6">
                       <div className="max-w-md rounded-[24px] border px-4 py-4 backdrop-blur-md" style={{ borderColor: "rgba(255,255,255,0.16)", background: "rgba(15,23,42,0.18)", color: "#f8fafc" }}>
                         <div className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-white/80">{t("inspirationHub.homepage.drone.placeholderEyebrow")}</div>
-                        <div className="mt-2 text-xl font-black tracking-tight">{t("inspirationHub.homepage.drone.placeholderTitle")}</div>
+                        <div className="mt-2 text-xl font-black tracking-tight">{hasAdminDroneTitle ? displayDroneTitle : t("inspirationHub.homepage.drone.placeholderTitle")}</div>
                         <div className="mt-2 text-sm leading-6 text-white/80">
-                          {isSettingsDriven
+                          {hasAdminDroneSubtitle
+                            ? displayDroneSubtitle
+                            : isSettingsDriven
                             ? t("inspirationHub.homepage.drone.settingsFallback")
                             : t("inspirationHub.homepage.drone.staticFallback")}
                         </div>
@@ -177,7 +189,7 @@ export default function InspirationHubHomepageSection({ theme, href, droneVideoE
                           {t("inspirationHub.homepage.drone.streamBadge")}
                         </div>
                         <div className="mt-3 text-lg font-black tracking-tight text-white sm:text-xl">
-                          {t("inspirationHub.homepage.drone.placeholderTitle")}
+                          {hasAdminDroneTitle ? displayDroneTitle : t("inspirationHub.homepage.drone.placeholderTitle")}
                         </div>
                       </div>
                     </div>
@@ -200,6 +212,7 @@ export default function InspirationHubHomepageSection({ theme, href, droneVideoE
             </div>
           </div>
         </div>
+        ) : null}
 
         <div
           className="overflow-hidden rounded-[28px] border shadow-[0_22px_52px_-40px_rgba(15,23,42,0.34)]"
