@@ -1,11 +1,16 @@
 import React, { useMemo, useState } from "react";
 import Toast from "../components/community-reporter/Toast";
 
-function normalizeBaseUrl(raw: string): string {
-  return String(raw || '').trim().replace(/\/+$/g, '');
-}
+function buildMailtoHref(email: string, subject: string, fields: { name: string; email: string; message: string }): string {
+  const body = [
+    `Name: ${fields.name || '-'}`,
+    `Email: ${fields.email || '-'}`,
+    '',
+    fields.message || '-',
+  ].join('\n');
 
-const DEFAULT_BACKEND_API_BASE = 'https://newspulse-backend-real.onrender.com';
+  return `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
 
 export default function AdvertisePage() {
   const email = "newspulse.ads@gmail.com";
@@ -50,36 +55,12 @@ export default function AdvertisePage() {
               const fromEmail = String(fd.get("email") || "").trim();
               const message = String(fd.get("message") || "").trim();
 
-              try {
-                const API =
-                  normalizeBaseUrl(process.env.NEXT_PUBLIC_API_BASE || '') ||
-                  DEFAULT_BACKEND_API_BASE;
-
-                const url = `${API}/api/public/ads/inquiry`;
-
-                const res = await fetch(url, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-                  body: JSON.stringify({ name, email: fromEmail, message }),
-                });
-
-                if (!res.ok) {
-                  const data = await res.json().catch(() => null);
-                  const msg = data && typeof data === 'object' ? String((data as any).message || (data as any).error || '') : '';
-                  throw new Error(msg || `Request failed (${res.status})`);
-                }
-
-                setToast('Inquiry sent');
-                setStatus(null);
-                setError(null);
-                form.reset();
-                setTimeout(() => setToast(null), 2500);
-              } catch (err: any) {
-                setError(err?.message || 'Could not send inquiry.');
-                setStatus(null);
-              } finally {
-                setIsSubmitting(false);
-              }
+              const href = buildMailtoHref(email, defaultSubject, { name, email: fromEmail, message });
+              window.location.href = href;
+              setToast('Opening email app');
+              setStatus('Your email app should open with the inquiry details filled in.');
+              setError(null);
+              setIsSubmitting(false);
             }}
           >
             <div>
@@ -123,7 +104,7 @@ export default function AdvertisePage() {
               </button>
               <a
                 className="text-sm font-semibold underline text-slate-700"
-                href={`mailto:${email}?subject=${encodeURIComponent(defaultSubject)}`}
+                href={buildMailtoHref(email, defaultSubject, { name: '', email: '', message: '' })}
               >
                 Or email us directly
               </a>

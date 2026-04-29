@@ -464,13 +464,22 @@ function Billboard970Placeholder() {
 }
 
 function Right300x600Placeholder() {
+  const { t } = useLanguage();
+
   return (
     <div className="mx-auto w-full max-w-[300px] rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div className="relative w-full h-[600px] flex items-center justify-center bg-white">
-        <div className="absolute top-3 left-3">
+      <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+        <div className="flex items-center gap-2 min-w-0">
           <AdBadge />
+          <div className="font-extrabold text-slate-900 truncate">{t('brand.name') || 'News Pulse'}</div>
         </div>
-        <div className="rounded-2xl border border-dashed border-slate-300/80 bg-white/40 flex items-center justify-center w-[calc(100%-2rem)] h-[calc(100%-2rem)] text-slate-500">
+        <a href="/advertise" className="shrink-0 text-xs font-semibold underline text-slate-700">
+          {t('common.advertiseHere') || 'Advertise Here'}
+        </a>
+      </div>
+
+      <div className="p-4">
+        <div className="rounded-2xl border border-dashed border-slate-300/80 bg-white/40 flex items-center justify-center mx-auto w-full max-w-[300px] h-[600px] text-slate-500">
           300×600
         </div>
       </div>

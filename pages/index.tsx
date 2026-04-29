@@ -204,6 +204,25 @@ const HOME_SPOTLIGHT_MAX_GLAMOUR_ITEMS = 1;
 const HOME_SPOTLIGHT_SOURCE_LIMIT = 18;
 const HOME_SPOTLIGHT_ROTATE_MS = 5000;
 const HOME_SPOTLIGHT_FRESH_HOURS = 72;
+const HOME_FRESH_SUMMARY_STORY_LIMIT = 3;
+const HOME_FRESH_COMPACT_STORY_LIMIT = 14;
+const HOME_FRESH_STORY_LIMIT = HOME_FRESH_SUMMARY_STORY_LIMIT + HOME_FRESH_COMPACT_STORY_LIMIT;
+const HOME_FRESH_SOURCE_LIMIT = 40;
+const HOME_YOUTH_TRENDING_VISIBLE_LIMIT = 9;
+const HOME_YOUTH_TRENDING_FALLBACK_ITEMS = [
+  {
+    id: 'home-youth-trending-fallback-study-habits',
+    title: 'How Students Can Build Better Study Habits With Simple Daily Routines',
+  },
+  {
+    id: 'home-youth-trending-fallback-exam-stress',
+    title: 'Smart Ways To Prepare For Exams Without Last-Minute Stress',
+  },
+  {
+    id: 'home-youth-trending-fallback-career-skills',
+    title: 'Simple Career Skills Every Student Should Learn Early',
+  },
+];
 
 const CATEGORY_THEME: Record<string, { base: string; icon: string; hover: string; ring: string; active: string; dot: string }> = {
   breaking: {
@@ -2396,7 +2415,7 @@ function CenterStoryFeed({ theme, items, lang }: any) {
   const isLoading = items == null;
   const listItems: any[] = Array.isArray(items) ? items : [];
 
-  const visibleItems = React.useMemo(() => listItems.slice(0, 6), [listItems]);
+  const visibleItems = React.useMemo(() => listItems.slice(0, HOME_FRESH_STORY_LIMIT), [listItems]);
 
   const lineClamp2: React.CSSProperties = {
     display: '-webkit-box',
@@ -2425,10 +2444,10 @@ function CenterStoryFeed({ theme, items, lang }: any) {
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="text-[13px] font-extrabold uppercase tracking-[0.18em]" style={{ color: theme.sub }}>
-              {t('home.freshUpdates')}
+              NEWS PULSE
             </div>
             <div className="mt-1 text-lg font-black tracking-tight" style={{ color: theme.text }}>
-              Continuous live homepage flow
+              Fresh Stories
             </div>
           </div>
 
@@ -2442,7 +2461,7 @@ function CenterStoryFeed({ theme, items, lang }: any) {
         </div>
       </div>
 
-      <div className="grid gap-3 p-4 sm:p-5">
+      <div className="grid gap-3 px-4 pb-5 pt-4 sm:px-5 sm:pb-5 sm:pt-5">
         {isLoading
           ? Array.from({ length: 5 }).map((_, index) => (
               <div
@@ -2467,7 +2486,7 @@ function CenterStoryFeed({ theme, items, lang }: any) {
               const imageSrc = String(item?.imageSrc || '').trim();
               const summary = String(item?.desc || '').trim();
               const readMinutes = estimateReadMinutes(`${String(item?.title || '').trim()} ${summary}`);
-              const showSummary = index < 2 && summary;
+              const showSummary = index < HOME_FRESH_SUMMARY_STORY_LIMIT && summary;
               const storyKey = getStoryReactKey(item, href);
 
               debugStoryCard('home-fresh-updates', item, imageSrc);
@@ -2714,12 +2733,12 @@ function MoreReadsSection({ theme, items, lang }: any) {
   );
 }
 
-function FeedList({ theme, title, items, lang }: any) {
+function FeedList({ theme, items, lang }: any) {
   const { t } = useI18n();
   const safeLang = (lang === 'hi' || lang === 'gu') ? lang : 'en';
   const prefix = safeLang === 'en' ? '' : `/${safeLang}`;
 
-  const MAX_ITEMS = 6;
+  const MAX_ITEMS = 8;
   const CATEGORY_ORDER = [
     'regional',
     'national',
@@ -2813,11 +2832,11 @@ function FeedList({ theme, title, items, lang }: any) {
             <div className="flex min-w-0 items-center gap-2">
               <span className="inline-block h-2.5 w-2.5 rounded-full" aria-hidden="true" style={{ background: theme.accent }} />
               <div className="truncate text-sm font-extrabold uppercase tracking-[0.16em]" style={{ color: theme.sub }}>
-                {title}
+                LATEST
               </div>
             </div>
             <div className="mt-1 text-base font-black tracking-tight" style={{ color: theme.text }}>
-              Real-time homepage desk
+              News Pulse
             </div>
           </div>
 
@@ -3457,7 +3476,7 @@ function HomeSpotlightCarousel({ theme, title, href, items, lang, Icon }: any) {
             <div className="flex items-center gap-2">
               {slides.map((slide: any, index: number) => {
                 const isActive = index === activeIndex;
-                const key = getStoryReactKey(slide, `${String(slide?.id || slide?.slug || index)}`);
+                const key = `${getStoryReactKey(slide, `${String(slide?.id || slide?.slug || index)}`)}-${index}`;
                 return (
                   <button
                     key={key}
@@ -4197,7 +4216,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
 
     (async () => {
       // Latest news list (homepage)
-      const latestResp = await fetchPublicNews({ language: apiLang, limit: 12, signal: controller.signal });
+      const latestResp = await fetchPublicNews({ language: apiLang, limit: HOME_FRESH_SOURCE_LIMIT, signal: controller.signal });
       if (controller.signal.aborted) return;
       const latestArticles = Array.isArray(latestResp.items) ? latestResp.items : [];
       const editorialLatestArticles = latestArticles.filter((article) => !isHomepageSponsoredContent(article, apiLang));
@@ -4493,7 +4512,15 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
   const localizedYouthPulseHref = localizePath('/youth-pulse', apiLang);
   const viralVideosFrontendEnabled = founderToggles.viralVideosFrontendEnabled !== false;
 
-  const youthPulseTrendingBlock = !youth.loading && youth.trending.length === 0 ? null : (
+  const rightRailYouthTrendingItems = React.useMemo(() => {
+    const items = Array.isArray(youth.trending) ? youth.trending.slice(0, HOME_YOUTH_TRENDING_VISIBLE_LIMIT) : [];
+    if (!youth.loading && items.length > 0 && items.length < HOME_YOUTH_TRENDING_VISIBLE_LIMIT) {
+      return [...items, ...HOME_YOUTH_TRENDING_FALLBACK_ITEMS].slice(0, HOME_YOUTH_TRENDING_VISIBLE_LIMIT);
+    }
+    return items;
+  }, [youth.loading, youth.trending]);
+
+  const youthPulseTrendingBlock = !youth.loading && rightRailYouthTrendingItems.length === 0 ? null : (
     <div className="overflow-hidden rounded-[28px] border shadow-[0_18px_42px_-34px_rgba(15,23,42,0.30)]" style={{ background: theme.surface2, borderColor: theme.border }}>
       <div
         className="flex items-center justify-between gap-3 border-b px-4 py-4"
@@ -4505,15 +4532,35 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
         }}
       >
         <div className="min-w-0">
-          <div className="text-[12px] font-extrabold uppercase tracking-[0.16em]" style={{ color: theme.sub }}>Youth desk</div>
+          <div className="text-[12px] font-extrabold uppercase tracking-[0.16em]" style={{ color: theme.sub }}>YOUTH DESK</div>
           <div className="mt-1 text-sm font-black tracking-tight" style={{ color: theme.text }}>{t('home.youthPulseTrending')}</div>
         </div>
         <a href={localizedYouthPulseHref} className="shrink-0 whitespace-nowrap text-xs font-semibold" style={{ color: theme.accent2 }}>{t('common.viewAll')} →</a>
       </div>
-      <div className="grid gap-3 p-4">
-        {(youth.trending.slice(0, 6)).map((y: any) => (
-          <a key={String(y.id)} href={localizedYouthPulseHref} className="rounded-[22px] border px-3 py-3 text-sm shadow-[0_14px_28px_-26px_rgba(15,23,42,0.24)] hover:opacity-95" style={{ background: theme.surface, borderColor: theme.border, color: theme.text }}>
-            {y.title}
+      <div className="grid gap-2.5 p-4">
+        {rightRailYouthTrendingItems.map((y: any) => (
+          <a
+            key={String(y.id)}
+            href={localizedYouthPulseHref}
+            className="group flex items-center gap-3 rounded-[20px] border px-3.5 py-3 text-sm shadow-[0_14px_30px_-28px_rgba(15,23,42,0.32)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_34px_-28px_rgba(15,23,42,0.36)]"
+            style={{ background: theme.surface, borderColor: theme.border, color: theme.text }}
+          >
+            <span
+              aria-hidden="true"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border"
+              style={{
+                borderColor: theme.mode === 'dark' ? 'rgba(148,163,184,0.22)' : 'rgba(99,102,241,0.18)',
+                background: theme.mode === 'dark'
+                  ? 'linear-gradient(135deg, rgba(79,70,229,0.22), rgba(14,165,233,0.12))'
+                  : 'linear-gradient(135deg, rgba(79,70,229,0.12), rgba(14,165,233,0.08))',
+              }}
+            >
+              <GraduationCap className="h-3.5 w-3.5" style={{ color: theme.accent2 }} />
+            </span>
+            <span className="min-w-0 flex-1 font-semibold leading-snug">
+              {y.title}
+            </span>
+            <ChevronRight className="h-4 w-4 shrink-0 opacity-45 transition group-hover:translate-x-0.5 group-hover:opacity-75" />
           </a>
         ))}
         {youth.loading && !youth.trending.length ? (
@@ -4559,7 +4606,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
       const identity = id || slug || String(item?.title || '').trim().toLowerCase();
 
       if (!identity || seen.has(identity)) continue;
-      if ((id && topIdentifiers.has(id)) || (slug && topIdentifiers.has(slug))) continue;
+      if (topIdentifiers.has(identity) || (id && topIdentifiers.has(id)) || (slug && topIdentifiers.has(slug))) continue;
 
       seen.add(identity);
       if (String(item?.imageSrc || '').trim()) {
@@ -4569,7 +4616,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
       }
     }
 
-    return [...withImage, ...withoutImage].slice(0, 6);
+    return [...withImage, ...withoutImage].slice(0, HOME_FRESH_STORY_LIMIT);
   }, [leadStoryIdentitySet, latestFromBackend]);
 
   const centerFeedIdentitySet = React.useMemo(() => {
@@ -4981,21 +5028,9 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
 
       {/* HERO ROW */}
       <div className="mx-auto w-full max-w-[1440px] px-4 md:px-8 pb-10 pt-4">
-        <div
-          className="relative overflow-hidden rounded-[34px] border p-3 shadow-[0_40px_100px_-82px_rgba(15,23,42,0.46)] sm:p-4 lg:p-5"
-          style={{ background: theme.surface2, borderColor: theme.border }}
-        >
-          <div
-            className="pointer-events-none absolute inset-0"
-            style={{
-              background: theme.mode === 'dark'
-                ? 'radial-gradient(circle at top left, rgba(56,189,248,0.10), transparent 34%), radial-gradient(circle at 82% 16%, rgba(167,139,250,0.10), transparent 32%), radial-gradient(circle at 52% 100%, rgba(16,185,129,0.08), transparent 34%)'
-                : 'radial-gradient(circle at top left, rgba(37,99,235,0.08), transparent 34%), radial-gradient(circle at 82% 16%, rgba(124,58,237,0.07), transparent 32%), radial-gradient(circle at 52% 100%, rgba(16,185,129,0.06), transparent 34%)',
-            }}
-          />
-
+        <div className="relative">
           <div className="relative grid gap-6">
-            <div className="grid grid-cols-12 items-start gap-6 lg:gap-8">
+            <div className="grid grid-cols-12 items-start gap-4 lg:gap-5">
               {showLeftRail ? (
                 <aside className="col-span-12 order-3 lg:order-1 lg:col-span-3">
                   <div className="grid gap-4">
@@ -5033,7 +5068,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
         </div>
 
         {homepageSponsoredFeature ? (
-          <section className="mt-8" aria-label="Homepage sponsored feature">
+          <section className="mt-4" aria-label="Homepage sponsored feature">
             <div
               className="overflow-hidden rounded-[28px] border shadow-[0_20px_52px_-42px_rgba(15,23,42,0.28)]"
               style={{ background: theme.surface2, borderColor: theme.border }}
