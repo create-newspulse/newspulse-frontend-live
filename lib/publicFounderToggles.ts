@@ -4,6 +4,7 @@ export type PublicFounderToggles = {
   communityReporterClosed: boolean;
   reporterPortalClosed: boolean;
   youthPulseSubmissionsClosed: boolean;
+  viralVideosFrontendEnabled: boolean;
   updatedAt: string | null;
 };
 
@@ -11,6 +12,7 @@ export const DEFAULT_PUBLIC_FOUNDER_TOGGLES: PublicFounderToggles = {
   communityReporterClosed: false,
   reporterPortalClosed: false,
   youthPulseSubmissionsClosed: false,
+  viralVideosFrontendEnabled: true,
   updatedAt: null,
 };
 
@@ -21,6 +23,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function normalizePublicFounderToggles(payload: unknown): PublicFounderToggles {
   const root = isRecord(payload) ? payload : null;
   const settings = root && isRecord(root.settings) ? root.settings : root;
+  const viralVideos = settings && isRecord((settings as any).viralVideos) ? (settings as any).viralVideos : null;
+  const features = settings && isRecord((settings as any).features) ? (settings as any).features : null;
+  const featureViralVideos = features && isRecord((features as any).viralVideos) ? (features as any).viralVideos : null;
+  const viralVideosFrontendEnabled =
+    (viralVideos as any)?.frontendEnabled ??
+    (featureViralVideos as any)?.frontendEnabled ??
+    (settings as any)?.viralVideosFrontendEnabled ??
+    (settings as any)?.viralVideos?.enabled ??
+    (settings as any)?.showViralVideos;
 
   return {
     communityReporterClosed: Boolean(settings?.communityReporterClosed),
@@ -28,6 +39,7 @@ export function normalizePublicFounderToggles(payload: unknown): PublicFounderTo
     youthPulseSubmissionsClosed: Boolean(
       settings?.youthPulseSubmissionsClosed ?? settings?.youthPulseSubmissionClosed
     ),
+    viralVideosFrontendEnabled: typeof viralVideosFrontendEnabled === 'boolean' ? viralVideosFrontendEnabled : true,
     updatedAt: typeof settings?.updatedAt === 'string' ? settings.updatedAt : null,
   };
 }

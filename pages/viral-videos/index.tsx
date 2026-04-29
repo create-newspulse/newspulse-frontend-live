@@ -1,6 +1,7 @@
 import type { GetServerSideProps } from 'next';
 
 import CategoryFeedPage from '../../components/CategoryFeedPage';
+import { fetchServerPublicFounderToggles } from '../../lib/publicFounderToggles';
 
 type Props = {
   messages: any;
@@ -8,6 +9,17 @@ type Props = {
 };
 
 export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
+  const featureToggles = await fetchServerPublicFounderToggles();
+
+  if (featureToggles.viralVideosFrontendEnabled === false) {
+    return {
+      redirect: {
+        destination: '/',
+        permanent: false,
+      },
+    };
+  }
+
   const locale = (ctx.locale || 'en') as string;
   const { getMessages } = await import('../../lib/getMessages');
   const messages = await getMessages(locale);

@@ -753,11 +753,11 @@ function getCats() {
 }
 
 function getVisibleCats(founderToggles: PublicFounderToggles = DEFAULT_PUBLIC_FOUNDER_TOGGLES) {
-  if (founderToggles.communityReporterClosed) {
-    return CATEGORIES.filter((category) => category.key !== 'community');
-  }
-
-  return [...CATEGORIES];
+  return CATEGORIES.filter((category) => {
+    if (category.key === 'community' && founderToggles.communityReporterClosed) return false;
+    if (category.key === 'viral-videos' && founderToggles.viralVideosFrontendEnabled === false) return false;
+    return true;
+  });
 }
 
 function localizePath(path: string, lang: 'en' | 'hi' | 'gu') {
@@ -3481,7 +3481,7 @@ function HomeSpotlightCarousel({ theme, title, href, items, lang, Icon }: any) {
   );
 }
 
-function QuickToolsCard({ theme, onToast }: any) {
+function QuickToolsCard({ theme, onToast, viralVideosFrontendEnabled = true }: any) {
   const { t } = useI18n();
   return (
     <Surface theme={theme} className="p-4">
@@ -3504,12 +3504,234 @@ function QuickToolsCard({ theme, onToast }: any) {
         <Button theme={theme} variant="soft" className="w-full justify-start" onClick={() => onToast("Swipe-to-Listen (planned)")}>
           <Play className="h-4 w-4" /> {t('home.swipeToListen')}
         </Button>
-        <Button theme={theme} variant="soft" className="w-full justify-start" onClick={() => onToast("Viral Videos (planned)")}>
-          <Video className="h-4 w-4" /> {t('categories.viralVideos')}
-        </Button>
+        {viralVideosFrontendEnabled ? (
+          <Button theme={theme} variant="soft" className="w-full justify-start" onClick={() => onToast("Viral Videos (planned)")}>
+            <Video className="h-4 w-4" /> {t('categories.viralVideos')}
+          </Button>
+        ) : null}
       </div>
     </Surface>
   );
+}
+
+function pickFirstString(...values: any[]): string {
+  for (const value of values) {
+    const text = String(value || '').trim();
+    if (text) return text;
+  }
+  return '';
+}
+
+function getViralVideoMediaUrl(item: any): string {
+  const media = Array.isArray(item?.media) ? item.media[0] : item?.media;
+  return pickFirstString(
+    item?.thumbnailUrl,
+    item?.thumbnail,
+    item?.imageUrl,
+    item?.coverImage,
+    item?.posterUrl,
+    item?.poster,
+    item?.image,
+    item?.video?.thumbnailUrl,
+    item?.video?.thumbnail,
+    item?.video?.poster,
+    item?.video?.posterUrl,
+    item?.media?.thumbnailUrl,
+    item?.media?.thumbnail,
+    item?.media?.posterUrl,
+    item?.media?.poster,
+    media?.thumbnailUrl,
+    media?.thumbnail,
+    media?.posterUrl,
+    media?.poster
+  );
+}
+
+function pickFeaturedViralVideo(payload: any): any | null {
+  const candidates = [
+    payload?.item,
+    payload?.video,
+    payload?.featured,
+    payload?.data?.item,
+    payload?.data?.video,
+    payload?.data?.featured,
+    ...(Array.isArray(payload?.items) ? payload.items : []),
+    ...(Array.isArray(payload?.data?.items) ? payload.data.items : []),
+  ].filter(Boolean);
+
+  return candidates[0] || null;
+}
+
+function getCleanViralVideoHeadline(item: any): string {
+  const title = String(item?.title || '').replace(/\s+/g, ' ').trim();
+  if (!title || title.length > 72) return '';
+  return title;
+}
+
+function isEligibleRightRailViralVideo(item: any): boolean {
+  if (!item) return false;
+  const status = String(item?.status || '').trim().toLowerCase();
+  const hasRequiredMedia = Boolean(pickFirstString(item?.thumbnailUrl, item?.videoUrl));
+  return status === 'published' && item?.homepageFeatured === true && hasRequiredMedia;
+}
+
+function ViralVideosRightRailBlock({ theme, lang }: any) {
+  const { t } = useI18n();
+  const safeLang = lang === 'hi' || lang === 'gu' ? lang : 'en';
+  const localizedHref = localizePath('/viral-videos', safeLang);
+  const [resolved, setResolved] = React.useState(false);
+  const [frontendEnabled, setFrontendEnabled] = React.useState(false);
+  const [item, setItem] = React.useState<any | null>(null);
+
+  React.useEffect(() => {
+    let mounted = true;
+    let inFlightController: AbortController | null = null;
+    const isFastRefreshEnv = process.env.NODE_ENV !== 'production'
+      || (typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname));
+    const pollMs = isFastRefreshEnv ? 4000 : 20000;
+
+    const loadFeaturedVideo = async (initial = false) => {
+      inFlightController?.abort();
+      const controller = new AbortController();
+      inFlightController = controller;
+
+      if (initial) setResolved(false);
+
+      try {
+        const params = new URLSearchParams();
+        if (safeLang) params.set('language', safeLang);
+        params.set('t', String(Date.now()));
+
+        const response = await fetch(`/api/public/viral-videos/featured?${params.toString()}`, {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+        const payload = await response.json().catch(() => null);
+
+        if (!mounted || controller.signal.aborted) return;
+        const settings = payload?.settings || payload?.data?.settings || null;
+        if (!response.ok || settings?.frontendEnabled !== true) {
+          setFrontendEnabled(false);
+          setItem(null);
+          setResolved(true);
+          return;
+        }
+
+        setFrontendEnabled(true);
+        const nextItem = pickFeaturedViralVideo(payload);
+        setItem(isEligibleRightRailViralVideo(nextItem) ? nextItem : null);
+        setResolved(true);
+      } catch {
+        if (mounted && !controller.signal.aborted) {
+          setFrontendEnabled(false);
+          setItem(null);
+          setResolved(true);
+        }
+      } finally {
+        if (inFlightController === controller) inFlightController = null;
+      }
+    };
+
+    void loadFeaturedVideo(true);
+    const intervalId = window.setInterval(() => {
+      void loadFeaturedVideo();
+    }, pollMs);
+
+    return () => {
+      mounted = false;
+      inFlightController?.abort();
+      window.clearInterval(intervalId);
+    };
+  }, [safeLang]);
+
+  if (!resolved || !frontendEnabled) return null;
+
+  const itemHref = item?.slug ? `${localizedHref}#${encodeURIComponent(String(item.slug))}` : localizedHref;
+  const title = item ? getCleanViralVideoHeadline(item) : 'No viral videos yet';
+  const thumbnail = item ? (getViralVideoMediaUrl(item) || COVER_PLACEHOLDER_SRC) : '';
+  const placeholderSubtext = item ? '' : 'New short videos will appear here';
+  const videoLabel = safeLang === 'gu' ? '\u0ab5\u0abf\u0aa1\u0abf\u0aaf\u0acb' : 'VIDEO';
+  const viewMoreLabel = safeLang === 'gu' ? '\u0ab5\u0aa7\u0ac1 \u0a9c\u0ac1\u0a93' : 'View more';
+
+  return (
+    <section aria-label={t('categories.viralVideos')} className="relative w-full overflow-hidden rounded-[20px] border p-[14px] shadow-[0_22px_46px_-34px_rgba(15,23,42,0.28)]"
+      style={{
+        borderColor: theme.mode === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(15,23,42,0.08)',
+        background: theme.mode === 'dark'
+          ? 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03))'
+          : 'linear-gradient(180deg, rgba(255,255,255,0.96), rgba(248,250,252,0.94))',
+      }}
+    >
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-[11px] font-extrabold uppercase tracking-[0.18em]" style={{ color: theme.sub }}>
+            SHORT VIDEO DESK
+          </div>
+          <div className="mt-1 text-sm font-black tracking-tight" style={{ color: theme.text }}>
+            {t('categories.viralVideos')}
+          </div>
+        </div>
+        <Link
+          href={localizedHref}
+          className="shrink-0 whitespace-nowrap text-[11px] font-bold"
+          style={{ color: theme.accent2 }}
+        >
+          View all →
+        </Link>
+      </div>
+
+      <Link
+        href={itemHref}
+        className="group relative block w-full overflow-hidden rounded-[18px] border shadow-[0_24px_54px_-34px_rgba(15,23,42,0.55)]"
+        style={{
+          borderColor: 'rgba(255,255,255,0.16)',
+          background: 'linear-gradient(180deg, #0f172a 0%, #020617 100%)',
+          boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.05), 0 24px 54px -34px rgba(15,23,42,0.55)',
+        }}
+      >
+        <div className="relative w-full overflow-hidden aspect-[9/16] min-h-[520px] max-h-[620px]">
+          {thumbnail ? (
+            <img
+              src={thumbnail}
+              alt={title || 'Viral video'}
+              className="block h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
+              loading="lazy"
+            />
+          ) : (
+            <div className="h-full w-full bg-[radial-gradient(circle_at_top,rgba(125,211,252,0.16),transparent_22%),radial-gradient(circle_at_bottom,rgba(59,130,246,0.18),transparent_28%),linear-gradient(180deg,#172033_0%,#060b16_100%)]" />
+          )}
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.62)_0%,rgba(2,6,23,0.16)_24%,rgba(2,6,23,0.06)_50%,rgba(2,6,23,0.74)_100%)]" />
+          <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10" />
+          <div className="absolute inset-x-0 top-0 flex items-center justify-between gap-2 p-3">
+            <span className="rounded-full bg-black/44 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-sm ring-1 ring-white/18 backdrop-blur">
+              {videoLabel}
+            </span>
+            <span className="rounded-full bg-black/40 px-2.5 py-1 text-[10px] font-bold text-white ring-1 ring-white/20 backdrop-blur transition group-hover:bg-black/56">
+              {viewMoreLabel}
+            </span>
+          </div>
+          <span className="absolute left-1/2 top-1/2 grid h-16 w-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/18 text-white shadow-[0_18px_36px_-18px_rgba(0,0,0,0.85)] ring-1 ring-white/30 backdrop-blur-md transition group-hover:scale-105 group-hover:bg-white/22">
+            <Play className="ml-0.5 h-7 w-7 fill-current" />
+          </span>
+          {title ? (
+            <div className="absolute inset-x-0 bottom-0 p-4">
+              <h3 className="line-clamp-2 text-[15px] font-black leading-tight text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.55)]">
+                {title}
+              </h3>
+              {!item && placeholderSubtext ? (
+                <div className="mt-1 text-[11px] font-medium text-white/72 drop-shadow-[0_2px_10px_rgba(0,0,0,0.4)]">
+                  {placeholderSubtext}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      </Link>
+    </section>
+  );
+
 }
 
 function SnapshotsCard({ theme }: any) {
@@ -4269,6 +4491,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
   const showAnyTicker = tickerBlocks.length > 0;
 
   const localizedYouthPulseHref = localizePath('/youth-pulse', apiLang);
+  const viralVideosFrontendEnabled = founderToggles.viralVideosFrontendEnabled !== false;
 
   const youthPulseTrendingBlock = !youth.loading && youth.trending.length === 0 ? null : (
     <div className="overflow-hidden rounded-[28px] border shadow-[0_18px_42px_-34px_rgba(15,23,42,0.30)]" style={{ background: theme.surface2, borderColor: theme.border }}>
@@ -4590,6 +4813,9 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
 
       <AdSlot slot="HOME_RIGHT_300x600" variant="right300x600" className="hidden lg:block" />
 
+      {/* Required order: 300x600 ad slot -> Viral Videos -> Youth Pulse trending */}
+      <ViralVideosRightRailBlock theme={theme} lang={apiLang} />
+
       {youthPulseTrendingBlock}
     </div>
   );
@@ -4906,18 +5132,20 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
           >
             <Home className="h-4 w-4" /> {t('common.home')}
           </Link>
-          <Link
-            href="/viral-videos"
-            onClick={() => setMobileLeftOpen(false)}
-            className={cx(
-              "w-full justify-start inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold border transition-all duration-200 focus-visible:outline-none",
-              MENU_QUICK_THEME.videos.base,
-              MENU_QUICK_THEME.videos.hover,
-              MENU_QUICK_THEME.videos.ring
-            )}
-          >
-            <Video className="h-4 w-4" /> {t('common.videos')}
-          </Link>
+          {viralVideosFrontendEnabled ? (
+            <Link
+              href="/viral-videos"
+              onClick={() => setMobileLeftOpen(false)}
+              className={cx(
+                "w-full justify-start inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold border transition-all duration-200 focus-visible:outline-none",
+                MENU_QUICK_THEME.videos.base,
+                MENU_QUICK_THEME.videos.hover,
+                MENU_QUICK_THEME.videos.ring
+              )}
+            >
+              <Video className="h-4 w-4" /> {t('common.videos')}
+            </Link>
+          ) : null}
           <Link
             href="/search"
             onClick={() => setMobileLeftOpen(false)}

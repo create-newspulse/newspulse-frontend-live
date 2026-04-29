@@ -10,8 +10,11 @@ import { subscribePublicDataRefresh } from '../lib/publicDataRefresh';
 const FOUNDER_TOGGLE_DEDUPE_MS = 5_000;
 const FOUNDER_TOGGLE_POLL_MS = 15_000;
 
-export function usePublicFounderToggles(initialToggles?: PublicFounderToggles | null) {
-  const [toggles, setToggles] = useState<PublicFounderToggles>(initialToggles ?? DEFAULT_PUBLIC_FOUNDER_TOGGLES);
+export function usePublicFounderToggles(initialToggles?: Partial<PublicFounderToggles> | null) {
+  const [toggles, setToggles] = useState<PublicFounderToggles>({
+    ...DEFAULT_PUBLIC_FOUNDER_TOGGLES,
+    ...(initialToggles ?? {}),
+  });
   const [isLoading, setIsLoading] = useState<boolean>(!initialToggles);
   const inFlightRef = useRef<Promise<void> | null>(null);
   const lastRefreshAtRef = useRef<number>(0);
@@ -35,6 +38,7 @@ export function usePublicFounderToggles(initialToggles?: PublicFounderToggles | 
             prev.communityReporterClosed === next.communityReporterClosed &&
             prev.reporterPortalClosed === next.reporterPortalClosed &&
             prev.youthPulseSubmissionsClosed === next.youthPulseSubmissionsClosed &&
+            prev.viralVideosFrontendEnabled === next.viralVideosFrontendEnabled &&
             prev.updatedAt === next.updatedAt
           ) {
             return prev;
