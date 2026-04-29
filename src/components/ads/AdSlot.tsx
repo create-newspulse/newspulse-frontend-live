@@ -110,6 +110,11 @@ function getHomepageUnitConfig(normalizedSlot: string): HomepageUnitConfig | nul
   return HOMEPAGE_UNIT_CONFIG[normalizedSlot] || null;
 }
 
+function getAdvertiseHref(normalizedSlot?: string): string {
+  const slot = String(normalizedSlot || '').trim();
+  return slot ? `/advertise?slot=${encodeURIComponent(slot)}` : '/advertise';
+}
+
 function HomepageUnitFrame({
   normalizedSlot,
   config,
@@ -184,7 +189,7 @@ function AdPlaceholder({
           </div>
         </div>
 
-        <AdvertiseLink>{t('common.advertiseHere') || 'Advertise Here'}</AdvertiseLink>
+        <AdvertiseLink normalizedSlot={normalizedSlot}>{t('common.advertiseHere') || 'Advertise Here'}</AdvertiseLink>
       </div>
     </HomepageUnitFrame>
   );
@@ -245,7 +250,7 @@ function ArticleAdPlaceholder({ normalizedSlot }: { normalizedSlot: string }) {
   return (
     <ArticleAdBlock normalizedSlot={normalizedSlot}>
       <a
-        href="/advertise"
+        href={getAdvertiseHref(normalizedSlot)}
         className="flex w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-4 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
         style={{ aspectRatio: '300 / 250' }}
       >
@@ -272,11 +277,11 @@ function BareArticleAdFrame({
   );
 }
 
-function BareArticleAdPlaceholder() {
+function BareArticleAdPlaceholder({ normalizedSlot }: { normalizedSlot: string }) {
   return (
     <BareArticleAdFrame dimensions={{ width: 300, height: 250 }}>
       <a
-        href="/advertise"
+        href={getAdvertiseHref(normalizedSlot)}
         className="flex h-full w-full items-center justify-center px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
       >
         Advertise Here
@@ -358,10 +363,10 @@ function StrictFramedAd({
   );
 }
 
-function AdvertiseLink({ children }: { children: React.ReactNode }) {
+function AdvertiseLink({ normalizedSlot, children }: { normalizedSlot?: string; children: React.ReactNode }) {
   return (
     <a
-      href="/advertise"
+      href={getAdvertiseHref(normalizedSlot)}
       className="shrink-0 inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-bold border border-slate-200 bg-white/90 text-slate-900 hover:bg-white"
     >
       {children}
@@ -369,7 +374,7 @@ function AdvertiseLink({ children }: { children: React.ReactNode }) {
   );
 }
 
-function HomeBannerPlaceholder() {
+function HomeBannerPlaceholder({ normalizedSlot }: { normalizedSlot: string }) {
   const { t } = useLanguage();
 
   const chips = [
@@ -399,13 +404,13 @@ function HomeBannerPlaceholder() {
           </div>
         </div>
 
-        <AdvertiseLink>{t('common.advertiseHere') || 'Advertise Here'}</AdvertiseLink>
+        <AdvertiseLink normalizedSlot={normalizedSlot}>{t('common.advertiseHere') || 'Advertise Here'}</AdvertiseLink>
       </div>
     </div>
   );
 }
 
-function BannerImageBlockedPlaceholder() {
+function BannerImageBlockedPlaceholder({ normalizedSlot }: { normalizedSlot: string }) {
   return (
     <div className="w-full rounded-2xl border border-slate-200/80 bg-white/70 backdrop-blur px-4 py-3 shadow-sm">
       <div className="min-h-[56px] md:min-h-[72px] flex items-center justify-between gap-4">
@@ -418,13 +423,13 @@ function BannerImageBlockedPlaceholder() {
           </div>
         </div>
 
-        <AdvertiseLink>Advertise Here</AdvertiseLink>
+        <AdvertiseLink normalizedSlot={normalizedSlot}>Advertise Here</AdvertiseLink>
       </div>
     </div>
   );
 }
 
-function Right300Placeholder() {
+function Right300Placeholder({ normalizedSlot }: { normalizedSlot: string }) {
   const { t } = useLanguage();
 
   return (
@@ -434,7 +439,7 @@ function Right300Placeholder() {
           <AdBadge />
           <div className="font-extrabold text-slate-900">{t('brand.name') || 'News Pulse'}</div>
         </div>
-        <a href="/advertise" className="text-xs font-semibold underline text-slate-700">
+        <a href={getAdvertiseHref(normalizedSlot)} className="text-xs font-semibold underline text-slate-700">
           {t('common.advertiseHere') || 'Advertise Here'}
         </a>
       </div>
@@ -463,7 +468,7 @@ function Billboard970Placeholder() {
   );
 }
 
-function Right300x600Placeholder() {
+function Right300x600Placeholder({ normalizedSlot }: { normalizedSlot: string }) {
   const { t } = useLanguage();
 
   return (
@@ -473,7 +478,7 @@ function Right300x600Placeholder() {
           <AdBadge />
           <div className="font-extrabold text-slate-900 truncate">{t('brand.name') || 'News Pulse'}</div>
         </div>
-        <a href="/advertise" className="shrink-0 text-xs font-semibold underline text-slate-700">
+        <a href={getAdvertiseHref(normalizedSlot)} className="shrink-0 text-xs font-semibold underline text-slate-700">
           {t('common.advertiseHere') || 'Advertise Here'}
         </a>
       </div>
@@ -487,22 +492,22 @@ function Right300x600Placeholder() {
   );
 }
 
-function FooterBanner728Placeholder() {
+function FooterBanner728Placeholder({ normalizedSlot }: { normalizedSlot: string }) {
   return (
     <div className="mx-auto w-full max-w-[728px] rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden h-[90px] flex items-center justify-between gap-4 px-4">
       <div className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-slate-500">ADVERTISEMENT</div>
-      <a href="/advertise" className="shrink-0 text-sm font-semibold underline text-slate-700">
+      <a href={getAdvertiseHref(normalizedSlot)} className="shrink-0 text-sm font-semibold underline text-slate-700">
         Advertise Here
       </a>
     </div>
   );
 }
 
-function ArticleCompactPlaceholder({ reserveHeightClass }: { reserveHeightClass: string }) {
+function ArticleCompactPlaceholder({ normalizedSlot, reserveHeightClass }: { normalizedSlot: string; reserveHeightClass: string }) {
   return (
     <div className={`mx-auto w-full max-w-[728px] rounded-2xl border border-slate-200 bg-white px-4 py-4 text-center ${reserveHeightClass}`}>
       <div className="text-[11px] font-extrabold uppercase tracking-[0.22em] text-slate-500">ADVERTISEMENT</div>
-      <a href="/advertise" className="mt-2 inline-block text-sm font-semibold underline text-slate-700">
+      <a href={getAdvertiseHref(normalizedSlot)} className="mt-2 inline-block text-sm font-semibold underline text-slate-700">
         Advertise Here
       </a>
     </div>
@@ -569,12 +574,12 @@ export default function AdSlot({ slot, variant, className = '', renderMode = 'de
     if (homepageUnitConfig) {
       return <AdPlaceholder normalizedSlot={normalizedSlot} config={homepageUnitConfig} />;
     }
-    if (effectiveVariant === 'homeBanner') return <HomeBannerPlaceholder />;
-    if (effectiveVariant === 'banner728x90') return <FooterBanner728Placeholder />;
+    if (effectiveVariant === 'homeBanner') return <HomeBannerPlaceholder normalizedSlot={normalizedSlot} />;
+    if (effectiveVariant === 'banner728x90') return <FooterBanner728Placeholder normalizedSlot={normalizedSlot} />;
     if (effectiveVariant === 'billboard970x250') return <Billboard970Placeholder />;
-    if (effectiveVariant === 'right300') return <Right300Placeholder />;
-    if (effectiveVariant === 'right300x600') return <Right300x600Placeholder />;
-    return <ArticleCompactPlaceholder reserveHeightClass={reserve} />;
+    if (effectiveVariant === 'right300') return <Right300Placeholder normalizedSlot={normalizedSlot} />;
+    if (effectiveVariant === 'right300x600') return <Right300x600Placeholder normalizedSlot={normalizedSlot} />;
+    return <ArticleCompactPlaceholder normalizedSlot={normalizedSlot} reserveHeightClass={reserve} />;
   };
 
   if (!ad || !imageUrl || imgError) {
@@ -583,7 +588,7 @@ export default function AdSlot({ slot, variant, className = '', renderMode = 'de
     }
 
     if (isArticleDisplayMode) {
-      return <div className={`${className} not-prose`}><BareArticleAdPlaceholder /></div>;
+      return <div className={`${className} not-prose`}><BareArticleAdPlaceholder normalizedSlot={normalizedSlot} /></div>;
     }
 
     if (effectiveVariant === 'articleInline' || effectiveVariant === 'articleEnd') {
@@ -591,7 +596,7 @@ export default function AdSlot({ slot, variant, className = '', renderMode = 'de
     }
 
     const placeholder = imgError && !homepageUnitConfig && (effectiveVariant === 'homeBanner' || effectiveVariant === 'banner728x90')
-      ? <BannerImageBlockedPlaceholder />
+      ? <BannerImageBlockedPlaceholder normalizedSlot={normalizedSlot} />
       : renderPlaceholder();
 
     return <div className={className}>{placeholder}</div>;
@@ -762,7 +767,7 @@ export default function AdSlot({ slot, variant, className = '', renderMode = 'de
               <AdBadge />
               <div className="font-extrabold text-slate-900">{t('brand.name') || 'News Pulse'}</div>
             </div>
-            <a href="/advertise" className="text-xs font-semibold underline text-slate-700">
+            <a href={getAdvertiseHref(normalizedSlot)} className="text-xs font-semibold underline text-slate-700">
               {t('common.advertiseHere') || 'Advertise Here'}
             </a>
           </div>
