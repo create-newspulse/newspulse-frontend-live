@@ -1,7 +1,7 @@
 import React from 'react';
 import { ExternalLink, Play } from 'lucide-react';
 
-import type { PublicViralVideo } from '../../lib/publicViralVideos';
+import { getPublicViralVideoPosterUrl, resolvePublicViralVideoPlayback, type PublicViralVideo } from '../../lib/publicViralVideos';
 
 type Props = {
   video: PublicViralVideo;
@@ -31,19 +31,21 @@ export default function PublicViralVideoCard({ video, compact = false }: Props) 
   const [playing, setPlaying] = React.useState(false);
   const [posterFailed, setPosterFailed] = React.useState(false);
   const [posterLoaded, setPosterLoaded] = React.useState(false);
-  const isPlayableEmbed = video.kind === 'youtube' && video.youtubeEmbedUrl;
-  const isHtml5Video = video.kind === 'video';
-  const isExternalSource = video.kind === 'external' || video.kind === 'unsupported';
+  const posterSrc = getPublicViralVideoPosterUrl(video);
+  const playback = React.useMemo(() => resolvePublicViralVideoPlayback(video), [video]);
+  const isPlayableEmbed = playback.mode === 'youtube' && playback.embedUrl;
+  const isHtml5Video = playback.mode === 'direct';
+  const sourcePreviewUrl = playback.mode === 'external' ? playback.externalUrl : '';
+  const canOpenSourcePreview = Boolean(sourcePreviewUrl);
   const dateLabel = formatDate(video.publishedAt);
-  const canLoadPoster = Boolean(video.thumbnailUrl) && !posterFailed;
+  const canLoadPoster = Boolean(posterSrc) && !posterFailed;
   const hasVisiblePoster = canLoadPoster && posterLoaded;
-  const openLabel = isExternalSource ? 'Open source preview' : 'Play video';
   const sourcePreviewButtonClass = 'absolute left-1/2 top-[66%] inline-flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full bg-white/92 px-4 py-2 text-sm font-bold text-slate-950 shadow-xl transition hover:bg-white';
 
   React.useEffect(() => {
     setPosterFailed(false);
     setPosterLoaded(false);
-  }, [video.id, video.thumbnailUrl]);
+  }, [video.id, posterSrc]);
 
   return (
     <article id={video.slug || video.id} className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -53,13 +55,13 @@ export default function PublicViralVideoCard({ video, compact = false }: Props) 
             className="h-full w-full object-cover"
             controls
             preload="metadata"
-            poster={video.thumbnailUrl || undefined}
-            src={video.videoUrl}
+            poster={posterSrc || undefined}
+            src={playback.directUrl}
           />
         ) : isPlayableEmbed && playing ? (
           <iframe
             title={video.title}
-            src={video.youtubeEmbedUrl}
+            src={playback.embedUrl}
             className="h-full w-full"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
@@ -69,13 +71,17 @@ export default function PublicViralVideoCard({ video, compact = false }: Props) 
             <DarkVideoFallback showIcon={!isPlayableEmbed} title={video.title} />
             {canLoadPoster ? (
               <img
-                src={video.thumbnailUrl}
+                src={posterSrc}
                 alt={video.title}
                 className={posterLoaded ? 'relative h-full w-full object-cover opacity-100 transition-opacity duration-200' : 'relative h-full w-full object-cover opacity-0'}
                 loading="lazy"
                 decoding="async"
                 onLoad={() => setPosterLoaded(true)}
                 onError={() => {
+                  if (process.env.NODE_ENV === 'development') {
+                    // eslint-disable-next-line no-console
+                    console.debug('[PublicViralVideoCard] poster failed to load:', posterSrc, video.id || video.slug || video.title);
+                  }
                   setPosterFailed(true);
                   setPosterLoaded(false);
                 }}
@@ -98,22 +104,24 @@ export default function PublicViralVideoCard({ video, compact = false }: Props) 
                     <Play className="ml-0.5 h-6 w-6 fill-current" />
                   </span>
                 ) : null}
-                <a
-                  href={video.videoUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={sourcePreviewButtonClass}
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  {openLabel}
-                </a>
+                {canOpenSourcePreview ? (
+                  <a
+                    href={sourcePreviewUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={sourcePreviewButtonClass}
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                    Open Source
+                  </a>
+                ) : null}
               </>
             )}
           </>
         )}
 
         <div className="absolute left-3 top-3 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-white ring-1 ring-white/20 backdrop-blur">
-          {video.kind === 'youtube' ? 'YouTube' : 'Video'}
+          {playback.mode === 'youtube' ? 'YouTube' : 'Video'}
         </div>
       </div>
 
@@ -131,14 +139,14 @@ export default function PublicViralVideoCard({ video, compact = false }: Props) 
             {video.summary}
           </p>
         ) : null}
-        {isExternalSource ? (
+        {canOpenSourcePreview ? (
           <a
-            href={video.videoUrl}
+            href={sourcePreviewUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="mt-3 inline-flex items-center gap-2 text-sm font-bold text-slate-800 underline decoration-slate-300 underline-offset-4 hover:text-slate-950"
           >
-            Open source preview
+            Open Source
             <ExternalLink className="h-4 w-4" />
           </a>
         ) : null}

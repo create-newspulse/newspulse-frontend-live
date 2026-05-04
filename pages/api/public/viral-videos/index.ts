@@ -37,7 +37,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const homepage = Array.isArray(req.query.homepage) ? req.query.homepage[0] : req.query.homepage;
   const limit = Array.isArray(req.query.limit) ? req.query.limit[0] : req.query.limit;
   const effectiveLang = String(language || lang || '').trim().toLowerCase();
-  if (effectiveLang) upstreamQuery.set('language', effectiveLang);
+  if (effectiveLang) {
+    upstreamQuery.set(lang ? 'lang' : 'language', effectiveLang);
+    upstreamQuery.set(lang ? 'language' : 'lang', effectiveLang);
+  }
+  if (limit) upstreamQuery.set('limit', String(limit));
 
   const candidates = [
     appendQuery(`${origin}/api/public/viral-videos`, upstreamQuery),

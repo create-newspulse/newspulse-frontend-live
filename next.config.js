@@ -232,7 +232,10 @@ const nextConfig = {
       "style-src 'self' 'unsafe-inline'",
 
       // Images (ads + analytics + your image sources)
-      `img-src 'self' data: blob: https://*.googleusercontent.com https://*.gstatic.com https://tpc.googlesyndication.com https://pagead2.googlesyndication.com https://images.unsplash.com https://media.licdn.com https://static.toiimg.com https://gnews.io https://cdn.gulte.com https://res.cloudinary.com https://newspulse-backend-real.onrender.com${backend ? ` ${backend}` : ''} https://fluidmechpumps.com https://www.fluidmechpumps.com https://s.adroll.com https://*.adroll.com https://forever.travel-assets.com https://www.googletagmanager.com https://www.google-analytics.com`,
+      `img-src 'self' data: blob: https://*.googleusercontent.com https://*.gstatic.com https://tpc.googlesyndication.com https://pagead2.googlesyndication.com https://images.unsplash.com https://media.licdn.com https://static.toiimg.com https://gnews.io https://cdn.gulte.com https://res.cloudinary.com https://*.cloudinary.com https://newspulse-backend-real.onrender.com${backend ? ` ${backend}` : ''} https://fluidmechpumps.com https://www.fluidmechpumps.com https://s.adroll.com https://*.adroll.com https://forever.travel-assets.com https://www.googletagmanager.com https://www.google-analytics.com`,
+
+      // Media: allow first-party media plus Cloudinary video delivery.
+      "media-src 'self' https://res.cloudinary.com https://*.cloudinary.com blob: data:",
 
       // Fonts
       "font-src 'self' data: https://*.gstatic.com",

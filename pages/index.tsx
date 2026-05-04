@@ -21,7 +21,6 @@ import { resolveArticleSlug } from "../lib/articleSlugs";
 import { buildNewsUrl } from "../lib/newsRoutes";
 import { resolveSponsoredContentMeta } from "../lib/sponsoredContent";
 import HomepageSponsoredFeatureCard from "../components/home/HomepageSponsoredFeatureCard";
-import PublicViralVideoCard from "../components/viral-videos/PublicViralVideoCard";
 import {
   fetchHomepageSponsoredFeature,
   normalizeHomepageSponsoredFeatureProps,
@@ -41,7 +40,7 @@ import { resolveInspirationHubDroneTvSettings, resolveInspirationHubSectionText 
 import { usePublicFounderToggles } from "../hooks/usePublicFounderToggles";
 import { DEFAULT_PUBLIC_FOUNDER_TOGGLES, type PublicFounderToggles } from "../lib/publicFounderToggles";
 import { subscribePublicDataRefresh } from "../lib/publicDataRefresh";
-import { normalizePublicViralVideosPayload, type PublicViralVideo } from "../lib/publicViralVideos";
+import { getPublicViralVideoPosterUrl, normalizePublicViralVideosPayload, resolvePublicViralVideoPlayback, type PublicViralVideo } from "../lib/publicViralVideos";
 import {
   ArrowRight,
   Bell,
@@ -3539,9 +3538,12 @@ function ViralVideosRightRailBlock({ theme, lang }: any) {
   const { t } = useI18n();
   const safeLang = lang === 'hi' || lang === 'gu' ? lang : 'en';
   const localizedHref = localizePath('/viral-videos', safeLang);
+  const debugEnabled = process.env.NODE_ENV === 'development';
   const [resolved, setResolved] = React.useState(false);
   const [frontendEnabled, setFrontendEnabled] = React.useState(false);
   const [items, setItems] = React.useState<PublicViralVideo[]>([]);
+  const [isFeaturedPlaying, setIsFeaturedPlaying] = React.useState(false);
+  const featuredVideoRef = React.useRef<HTMLVideoElement | null>(null);
 
   React.useEffect(() => {
     let mounted = true;
@@ -3558,34 +3560,78 @@ function ViralVideosRightRailBlock({ theme, lang }: any) {
       if (initial) setResolved(false);
 
       try {
-        const params = new URLSearchParams();
-        if (safeLang) params.set('language', safeLang);
-        params.set('homepage', '1');
-        params.set('limit', '3');
-        params.set('t', String(Date.now()));
+        const fetchViralVideos = async (apiUrl: string) => {
+          if (debugEnabled) {
+            // eslint-disable-next-line no-console
+            console.debug('[ShortVideoDesk] public viral videos API URL:', apiUrl);
+          }
 
-        const response = await fetch(`/api/public/viral-videos?${params.toString()}`, {
-          method: 'GET',
-          headers: { Accept: 'application/json' },
-          cache: 'no-store',
-          signal: controller.signal,
-        });
-        const payload = await response.json().catch(() => null);
+          const response = await fetch(apiUrl, {
+            method: 'GET',
+            headers: { Accept: 'application/json' },
+            cache: 'no-store',
+            signal: controller.signal,
+          });
+          const payload = await response.json().catch(() => null);
+          const normalized = normalizePublicViralVideosPayload(payload);
+          if (debugEnabled) {
+            // eslint-disable-next-line no-console
+            console.debug('[ShortVideoDesk] count returned:', normalized.items.length);
+          }
+
+          return { response, normalized };
+        };
+
+        const params = new URLSearchParams();
+        if (safeLang) params.set('lang', safeLang);
+        params.set('limit', '6');
+        const apiUrl = `/api/public/viral-videos?${params.toString()}`;
+        let { response, normalized } = await fetchViralVideos(apiUrl);
 
         if (!mounted || controller.signal.aborted) return;
-        const normalized = normalizePublicViralVideosPayload(payload);
         if (!response.ok || normalized.settings.frontendEnabled !== true) {
+          if (debugEnabled) {
+            // eslint-disable-next-line no-console
+            console.debug(
+              '[ShortVideoDesk] empty state reason:',
+              !response.ok ? `response not ok (${response.status})` : 'frontend disabled'
+            );
+          }
           setFrontendEnabled(false);
           setItems([]);
           setResolved(true);
           return;
         }
 
+        if (normalized.items.length === 0) {
+          const fallback = await fetchViralVideos('/api/public/viral-videos?limit=6');
+          if (!mounted || controller.signal.aborted) return;
+          if (fallback.response.ok && fallback.normalized.settings.frontendEnabled === true && fallback.normalized.items.length > 0) {
+            response = fallback.response;
+            normalized = fallback.normalized;
+          }
+        }
+
         setFrontendEnabled(true);
-        setItems(normalized.items.filter((video) => video.showOnHomepage).slice(0, 3));
+        const homepageItems = normalized.items.filter((video) => video.showOnHomepage).slice(0, 6);
+        if (debugEnabled) {
+          const selected = homepageItems[0] || null;
+          const playback = selected ? resolvePublicViralVideoPlayback(selected) : null;
+          // eslint-disable-next-line no-console
+          console.debug('[ShortVideoDesk] selected homepage video ID/title:', selected ? `${selected.id} / ${selected.title}` : 'none');
+          // eslint-disable-next-line no-console
+          console.debug('[ShortVideoDesk] selected player videoUrl:', selected?.videoUrl || '');
+          // eslint-disable-next-line no-console
+          console.debug('[ShortVideoDesk] resolved embed/direct URL:', playback?.embedUrl || playback?.directUrl || playback?.externalUrl || '');
+        }
+        setItems(homepageItems);
         setResolved(true);
-      } catch {
+      } catch (error) {
         if (mounted && !controller.signal.aborted) {
+          if (debugEnabled) {
+            // eslint-disable-next-line no-console
+            console.debug('[ShortVideoDesk] empty state reason:', error instanceof Error ? error.message : 'fetch failed');
+          }
           setFrontendEnabled(false);
           setItems([]);
           setResolved(true);
@@ -3607,10 +3653,59 @@ function ViralVideosRightRailBlock({ theme, lang }: any) {
     };
   }, [safeLang]);
 
-  if (!resolved || !frontendEnabled) return null;
   const hasHomepageVideos = items.length > 0;
+  const featuredVideo = items[0] || null;
   const videoLabel = safeLang === 'gu' ? 'વિડિયો' : safeLang === 'hi' ? 'वीडियो' : 'VIDEO';
   const viewMoreLabel = safeLang === 'gu' ? 'વધુ જુઓ' : safeLang === 'hi' ? 'और देखें' : 'View more';
+
+  React.useEffect(() => {
+    if (debugEnabled && resolved && frontendEnabled && !hasHomepageVideos) {
+      // eslint-disable-next-line no-console
+      console.debug('[ShortVideoDesk] empty state reason:', 'No homepage-featured public viral videos returned');
+    }
+  }, [debugEnabled, frontendEnabled, hasHomepageVideos, resolved]);
+
+  const featuredHref = featuredVideo
+    ? localizePath(`/viral-videos/${encodeURIComponent(featuredVideo.slug || featuredVideo.id)}`, safeLang)
+    : localizedHref;
+  const featuredImage = getPublicViralVideoPosterUrl(featuredVideo) || COVER_PLACEHOLDER_SRC;
+  const featuredPlayback = React.useMemo(() => resolvePublicViralVideoPlayback(featuredVideo), [featuredVideo]);
+  const playableVideoUrl = featuredPlayback.mode === 'direct' ? featuredPlayback.directUrl : '';
+
+  React.useEffect(() => {
+    setIsFeaturedPlaying(false);
+    featuredVideoRef.current?.load();
+  }, [featuredVideo?.id, playableVideoUrl]);
+
+  const handleFeaturedPlay = React.useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const video = featuredVideoRef.current;
+    if (!video || !playableVideoUrl) return;
+
+    const playRequest = video.play();
+    if (playRequest && typeof playRequest.catch === 'function') {
+      playRequest.catch((error) => {
+        setIsFeaturedPlaying(false);
+        if (debugEnabled) {
+          // eslint-disable-next-line no-console
+          console.debug('[ShortVideoDesk] video play failed:', error instanceof Error ? error.message : error);
+        }
+      });
+    }
+  }, [debugEnabled, playableVideoUrl]);
+
+  const handlePosterError = (event: React.SyntheticEvent<HTMLImageElement>) => {
+    if (debugEnabled) {
+      // eslint-disable-next-line no-console
+      console.debug('[ShortVideoDesk] poster failed to load:', event.currentTarget.src, featuredVideo?.id || featuredVideo?.slug || featuredVideo?.title || 'none');
+    }
+    if (event.currentTarget.src.endsWith(COVER_PLACEHOLDER_SRC)) return;
+    event.currentTarget.src = COVER_PLACEHOLDER_SRC;
+  };
+
+  if (!resolved || !frontendEnabled) return null;
 
   return (
     <section aria-label={t('categories.viralVideos')} className="relative w-full overflow-hidden rounded-[20px] border p-[14px] shadow-[0_22px_46px_-34px_rgba(15,23,42,0.28)]"
@@ -3630,20 +3725,81 @@ function ViralVideosRightRailBlock({ theme, lang }: any) {
             {t('categories.viralVideos')}
           </div>
         </div>
-        <Link
-          href={localizedHref}
-          className="shrink-0 whitespace-nowrap text-[11px] font-bold"
-          style={{ color: theme.accent2 }}
-        >
-          View all
-        </Link>
       </div>
 
       <div className="grid gap-3">
-        {hasHomepageVideos ? (
-          items.map((video) => (
-            <PublicViralVideoCard key={video.id} video={video} compact />
-          ))
+        {featuredVideo ? (
+          <div
+            className="group relative block w-full overflow-hidden rounded-lg border shadow-[0_24px_54px_-34px_rgba(15,23,42,0.55)]"
+            style={{
+              borderColor: 'rgba(255,255,255,0.16)',
+              background: '#0f172a',
+              boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.05), 0 24px 54px -34px rgba(15,23,42,0.55)',
+            }}
+          >
+            {!playableVideoUrl ? <Link href={featuredHref} aria-label={featuredVideo.title} className="absolute inset-0 z-10" /> : null}
+            <div className="relative w-full overflow-hidden aspect-[9/16] min-h-[420px] max-h-[560px]">
+              {playableVideoUrl ? (
+                <video
+                  ref={featuredVideoRef}
+                  className="h-full w-full object-cover"
+                  controls
+                  playsInline
+                  preload="metadata"
+                  poster={featuredImage || undefined}
+                  onClick={(event) => event.stopPropagation()}
+                  onPlay={() => setIsFeaturedPlaying(true)}
+                  onPlaying={() => setIsFeaturedPlaying(true)}
+                  onPause={() => setIsFeaturedPlaying(false)}
+                  onEnded={() => setIsFeaturedPlaying(false)}
+                >
+                  <source src={playableVideoUrl} type="video/mp4" />
+                </video>
+              ) : (
+                <img
+                  src={featuredImage}
+                  alt={featuredVideo.title}
+                  className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+                  loading="lazy"
+                  decoding="async"
+                  onError={handlePosterError}
+                />
+              )}
+              <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.36)_0%,rgba(2,6,23,0.08)_30%,rgba(2,6,23,0.08)_50%,rgba(2,6,23,0.78)_100%)]" />
+              <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10" />
+              <div className="absolute inset-x-0 top-0 z-40 flex items-center justify-between gap-2 p-3">
+                <span className="rounded-full bg-black/50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-sm ring-1 ring-white/18 backdrop-blur">
+                  {videoLabel}
+                </span>
+                <Link
+                  href={localizedHref}
+                  className="rounded-full bg-black/44 px-2.5 py-1 text-[10px] font-bold text-white ring-1 ring-white/20 backdrop-blur transition hover:bg-black/60"
+                >
+                  {viewMoreLabel}
+                </Link>
+              </div>
+              {playableVideoUrl && !isFeaturedPlaying ? (
+                <button
+                  type="button"
+                  onClick={handleFeaturedPlay}
+                  className="absolute left-1/2 top-1/2 z-40 grid h-16 w-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/18 text-white shadow-[0_18px_36px_-18px_rgba(0,0,0,0.85)] ring-1 ring-white/30 backdrop-blur-md transition hover:scale-105 hover:bg-white/22"
+                  aria-label={`Play ${featuredVideo.title}`}
+                >
+                  <Play className="ml-0.5 h-7 w-7 fill-current" />
+                </button>
+              ) : null}
+              {!playableVideoUrl ? (
+                <span className="pointer-events-none absolute left-1/2 top-1/2 z-20 grid h-16 w-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/18 text-white shadow-[0_18px_36px_-18px_rgba(0,0,0,0.85)] ring-1 ring-white/30 backdrop-blur-md transition group-hover:scale-105 group-hover:bg-white/22">
+                  <Play className="ml-0.5 h-7 w-7 fill-current" />
+                </span>
+              ) : null}
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 p-4">
+                <h3 className="line-clamp-3 text-[15px] font-black leading-tight text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.55)]">
+                  {featuredVideo.title}
+                </h3>
+              </div>
+            </div>
+          </div>
         ) : (
           <Link
             href={localizedHref}

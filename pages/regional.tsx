@@ -657,10 +657,7 @@ function RegionalGujaratPage() {
               <div className="mt-10">
                 <SectionTitle title={t('regionalHub.cityInMotionTitle')} subtitle={t('regionalHub.cityInMotionSubtitle')} />
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {[
-                    "https://www.youtube.com/embed/dQw4w9WgXcQ",
-                    "https://www.youtube.com/embed/oHg5SJYRHA0",
-                  ].map((src, i) => (
+                  {[].map((src, i) => (
                     <div key={i} className="aspect-video rounded-2xl overflow-hidden border">
                       <iframe
                         className="w-full h-full"

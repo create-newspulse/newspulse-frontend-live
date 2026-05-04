@@ -157,7 +157,7 @@ describe('publicSettings helpers', () => {
           enabled: false,
           droneTv: {
             enabled: true,
-            embedUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+            embedUrl: 'https://www.youtube.com/embed/AbCdEfGhIjK',
             showOnHomepage: true,
             showOnCategoryPage: true,
           },
@@ -189,7 +189,7 @@ describe('publicSettings helpers', () => {
           enabled: true,
           droneTv: {
             enabled: false,
-            embedUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+            embedUrl: 'https://www.youtube.com/embed/AbCdEfGhIjK',
             showOnHomepage: true,
           },
         },
@@ -207,7 +207,7 @@ describe('publicSettings helpers', () => {
           enabled: true,
           droneTv: {
             enabled: true,
-            embedUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+            embedUrl: 'https://www.youtube.com/embed/AbCdEfGhIjK',
             showOnHomepage: true,
             showOnCategoryPage: false,
           },
@@ -215,7 +215,7 @@ describe('publicSettings helpers', () => {
       },
     });
 
-    expect(resolveInspirationHubDroneTvSettings(settings, 'homepage')?.embedUrl).toBe('https://www.youtube.com/embed/dQw4w9WgXcQ');
+    expect(resolveInspirationHubDroneTvSettings(settings, 'homepage')?.embedUrl).toBe('https://www.youtube.com/embed/AbCdEfGhIjK');
     expect(resolveInspirationHubDroneTvSettings(settings, 'categoryPage')).toBeNull();
   });
 
@@ -229,7 +229,7 @@ describe('publicSettings helpers', () => {
           pageEnabled: true,
           videoTitle: 'DroneTV',
           videoSubtitle: 'Stories, views, and inspiration from above',
-          youtubeUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+          youtubeUrl: 'https://www.youtube.com/watch?v=AbCdEfGhIjK',
         },
       },
     });
@@ -255,7 +255,7 @@ describe('publicSettings helpers', () => {
           enabled: true,
           droneTvEnabled: true,
           showOnHomepage: true,
-          embedUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+          embedUrl: 'https://www.youtube.com/embed/AbCdEfGhIjK',
         },
       },
     });
@@ -268,12 +268,12 @@ describe('publicSettings helpers', () => {
           enabled: true,
           droneTvEnabled: true,
           showOnHomepage: true,
-          embedUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+          embedUrl: 'https://www.youtube.com/embed/AbCdEfGhIjK',
         },
       },
     });
     expect(shouldShowHomepageHub(explicitOff)).toBe(false);
-    expect(resolveInspirationHubDroneTvSettings(explicitOff, 'homepage')?.embedUrl).toBe('https://www.youtube.com/embed/dQw4w9WgXcQ');
+    expect(resolveInspirationHubDroneTvSettings(explicitOff, 'homepage')?.embedUrl).toBe('https://www.youtube.com/embed/AbCdEfGhIjK');
   });
 
   test('homepage DroneTV shows when required flat fields are on and URL exists', () => {
@@ -283,7 +283,7 @@ describe('publicSettings helpers', () => {
           isEnabled: true,
           enableDroneTVVideo: true,
           homepageEnabled: true,
-          droneTvYoutubeUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+          droneTvYoutubeUrl: 'https://www.youtube.com/watch?v=AbCdEfGhIjK',
         },
       },
     });
@@ -292,7 +292,7 @@ describe('publicSettings helpers', () => {
     expect(settings.inspirationHub?.enabled).toBe(true);
     expect(settings.inspirationHub?.droneTv.enabled).toBe(true);
     expect(settings.inspirationHub?.droneTv.homepageEnabled).toBe(true);
-    expect(homepage?.embedUrl).toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0&modestbranding=1&playsinline=1');
+    expect(homepage?.embedUrl).toBe('https://www.youtube-nocookie.com/embed/AbCdEfGhIjK?rel=0&modestbranding=1&playsinline=1');
     expect(homepage?.title).toBe('');
     expect(homepage?.subtitle).toBe('');
   });
@@ -304,7 +304,7 @@ describe('publicSettings helpers', () => {
           enableInspirationHub: false,
           enableDroneTVVideo: true,
           showOnHomepage: true,
-          embedUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+          embedUrl: 'https://www.youtube.com/embed/AbCdEfGhIjK',
         },
       },
     });
@@ -323,7 +323,7 @@ describe('publicSettings helpers', () => {
           enabled: false,
           droneTvEnabled: true,
           showOnHomepage: true,
-          embedUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+          embedUrl: 'https://www.youtube.com/embed/AbCdEfGhIjK',
         },
       },
     });
@@ -336,7 +336,7 @@ describe('publicSettings helpers', () => {
           enabled: true,
           droneTvEnabled: true,
           showOnHomepage: false,
-          embedUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+          embedUrl: 'https://www.youtube.com/embed/AbCdEfGhIjK',
         },
       },
     });
@@ -351,7 +351,7 @@ describe('publicSettings helpers', () => {
           showOnHomepage: true,
           videoTitle: 'DroneTV',
           videoSubtitle: 'Stories, views, and inspiration from above',
-          embedUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+          embedUrl: 'https://www.youtube.com/embed/AbCdEfGhIjK',
         },
       },
     });
@@ -364,7 +364,7 @@ describe('publicSettings helpers', () => {
           enabled: true,
           droneTvEnabled: false,
           showOnHomepage: true,
-          embedUrl: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+          embedUrl: 'https://www.youtube.com/embed/AbCdEfGhIjK',
         },
       },
     });
@@ -381,7 +381,7 @@ describe('publicSettings helpers', () => {
             enabled: true,
             videoTitle: 'DroneTV',
             videoSubtitle: 'Stories, views, and inspiration from above',
-            droneTvEmbedUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+            droneTvEmbedUrl: 'https://www.youtube.com/watch?v=AbCdEfGhIjK',
             showOnHomepage: true,
           },
         },
@@ -391,6 +391,6 @@ describe('publicSettings helpers', () => {
     const homepage = resolveInspirationHubDroneTvSettings(settings, 'homepage');
     expect(homepage?.title).toBe('DroneTV');
     expect(homepage?.subtitle).toBe('Stories, views, and inspiration from above');
-    expect(homepage?.embedUrl).toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0&modestbranding=1&playsinline=1');
+    expect(homepage?.embedUrl).toBe('https://www.youtube-nocookie.com/embed/AbCdEfGhIjK?rel=0&modestbranding=1&playsinline=1');
   });
 });
