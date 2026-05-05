@@ -28,6 +28,10 @@ function handlePosterError(event: React.SyntheticEvent<HTMLImageElement>) {
   event.currentTarget.src = COVER_PLACEHOLDER_SRC;
 }
 
+function getVideoBadgeLabel(locale: unknown): string {
+  return String(locale || '').toLowerCase() === 'gu' ? 'વીડિયો' : 'Video';
+}
+
 export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   const featureToggles = await fetchServerPublicFounderToggles();
 
@@ -63,6 +67,7 @@ export default function ViralVideosPage() {
   const [error, setError] = React.useState<string | null>(null);
   const debugEnabled = process.env.NODE_ENV === 'development';
   const title = t('categories.viralVideos') || 'Viral Videos';
+  const videoBadgeLabel = getVideoBadgeLabel(router.locale);
   const activeVideo = items[activeIndex] || null;
   const canGoPrevious = items.length > 1;
   const canGoNext = items.length > 1;
@@ -265,7 +270,7 @@ export default function ViralVideosPage() {
                         </span>
                         <span className="min-w-0">
                           <span className="line-clamp-2 text-sm font-bold leading-snug text-white">{video.title}</span>
-                          <span className="mt-1 block text-xs font-semibold uppercase tracking-[0.12em] text-white/42">Video</span>
+                          <span className="mt-1 block text-xs font-semibold uppercase tracking-[0.12em] text-white/42">{videoBadgeLabel}</span>
                         </span>
                       </Link>
                     ))}
@@ -313,7 +318,7 @@ export default function ViralVideosPage() {
                           )}
                         </>
                       )}
-                      <div className="absolute left-4 top-4 rounded-full bg-red-600 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-white shadow-lg">Video</div>
+                      <div className="absolute left-4 top-4 rounded-full bg-red-600 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-white shadow-lg">{videoBadgeLabel}</div>
                     </div>
                   </div>
 

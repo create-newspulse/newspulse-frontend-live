@@ -3688,7 +3688,7 @@ function ViralVideosRightRailBlock({ theme, lang }: any) {
 
   const hasHomepageVideos = items.length > 0;
   const featuredVideo = items[0] || null;
-  const videoLabel = safeLang === 'gu' ? 'વિડિયો' : safeLang === 'hi' ? 'वीडियो' : 'VIDEO';
+  const videoLabel = safeLang === 'gu' ? 'વીડિયો' : safeLang === 'hi' ? 'वीडियो' : 'VIDEO';
   const viewMoreLabel = safeLang === 'gu' ? 'વધુ જુઓ' : safeLang === 'hi' ? 'और देखें' : 'View more';
 
   React.useEffect(() => {
