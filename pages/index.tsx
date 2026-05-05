@@ -3534,6 +3534,39 @@ function QuickToolsCard({ theme, onToast, viralVideosFrontendEnabled = true }: a
   );
 }
 
+function getHomepageViralVideoText(video: PublicViralVideo | null): string {
+  if (!video) return '';
+
+  const raw = video.raw && typeof video.raw === 'object' && !Array.isArray(video.raw)
+    ? video.raw as Record<string, any>
+    : {};
+  const nestedVideo = raw.video && typeof raw.video === 'object' && !Array.isArray(raw.video)
+    ? raw.video as Record<string, any>
+    : {};
+
+  const candidates = [
+    video.title,
+    raw.title,
+    nestedVideo.title,
+    raw.headline,
+    nestedVideo.headline,
+    raw.shortTitle,
+    nestedVideo.shortTitle,
+    video.summary,
+    raw.summary,
+    nestedVideo.summary,
+    raw.shortSummary,
+    nestedVideo.shortSummary,
+  ];
+
+  for (const candidate of candidates) {
+    const text = String(candidate || '').trim();
+    if (text) return text;
+  }
+
+  return 'Short video';
+}
+
 function ViralVideosRightRailBlock({ theme, lang }: any) {
   const { t } = useI18n();
   const safeLang = lang === 'hi' || lang === 'gu' ? lang : 'en';
@@ -3669,6 +3702,7 @@ function ViralVideosRightRailBlock({ theme, lang }: any) {
     ? localizePath(`/viral-videos/${encodeURIComponent(featuredVideo.slug || featuredVideo.id)}`, safeLang)
     : localizedHref;
   const featuredImage = getPublicViralVideoPosterUrl(featuredVideo) || COVER_PLACEHOLDER_SRC;
+  const featuredText = getHomepageViralVideoText(featuredVideo);
   const featuredPlayback = React.useMemo(() => resolvePublicViralVideoPlayback(featuredVideo), [featuredVideo]);
   const playableVideoUrl = featuredPlayback.mode === 'direct' ? featuredPlayback.directUrl : '';
 
@@ -3677,10 +3711,7 @@ function ViralVideosRightRailBlock({ theme, lang }: any) {
     featuredVideoRef.current?.load();
   }, [featuredVideo?.id, playableVideoUrl]);
 
-  const handleFeaturedPlay = React.useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-
+  const playFeaturedVideo = React.useCallback(() => {
     const video = featuredVideoRef.current;
     if (!video || !playableVideoUrl) return;
 
@@ -3695,6 +3726,27 @@ function ViralVideosRightRailBlock({ theme, lang }: any) {
       });
     }
   }, [debugEnabled, playableVideoUrl]);
+
+  const handleFeaturedPlay = React.useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    playFeaturedVideo();
+  }, [playFeaturedVideo]);
+
+  const handleFeaturedVideoClick = React.useCallback((event: React.MouseEvent<HTMLVideoElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const video = featuredVideoRef.current;
+    if (!video || !playableVideoUrl) return;
+
+    if (video.paused || video.ended) {
+      playFeaturedVideo();
+      return;
+    }
+
+    video.pause();
+  }, [playFeaturedVideo, playableVideoUrl]);
 
   const handlePosterError = (event: React.SyntheticEvent<HTMLImageElement>) => {
     if (debugEnabled) {
@@ -3716,17 +3768,6 @@ function ViralVideosRightRailBlock({ theme, lang }: any) {
           : 'linear-gradient(180deg, rgba(255,255,255,0.96), rgba(248,250,252,0.94))',
       }}
     >
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-[11px] font-extrabold uppercase tracking-[0.18em]" style={{ color: theme.sub }}>
-            SHORT VIDEO DESK
-          </div>
-          <div className="mt-1 text-sm font-black tracking-tight" style={{ color: theme.text }}>
-            {t('categories.viralVideos')}
-          </div>
-        </div>
-      </div>
-
       <div className="grid gap-3">
         {featuredVideo ? (
           <div
@@ -3737,17 +3778,19 @@ function ViralVideosRightRailBlock({ theme, lang }: any) {
               boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.05), 0 24px 54px -34px rgba(15,23,42,0.55)',
             }}
           >
-            {!playableVideoUrl ? <Link href={featuredHref} aria-label={featuredVideo.title} className="absolute inset-0 z-10" /> : null}
+            {!playableVideoUrl ? <Link href={featuredHref} aria-label={featuredText} className="absolute inset-0 z-10" /> : null}
             <div className="relative w-full overflow-hidden aspect-[9/16] min-h-[420px] max-h-[560px]">
               {playableVideoUrl ? (
                 <video
                   ref={featuredVideoRef}
-                  className="h-full w-full object-cover"
-                  controls
+                  className="h-full w-full cursor-pointer object-cover"
+                  controls={false}
+                  controlsList="nodownload noplaybackrate noremoteplayback nofullscreen"
+                  disablePictureInPicture
                   playsInline
                   preload="metadata"
                   poster={featuredImage || undefined}
-                  onClick={(event) => event.stopPropagation()}
+                  onClick={handleFeaturedVideoClick}
                   onPlay={() => setIsFeaturedPlaying(true)}
                   onPlaying={() => setIsFeaturedPlaying(true)}
                   onPause={() => setIsFeaturedPlaying(false)}
@@ -3758,7 +3801,7 @@ function ViralVideosRightRailBlock({ theme, lang }: any) {
               ) : (
                 <img
                   src={featuredImage}
-                  alt={featuredVideo.title}
+                  alt={featuredText}
                   className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
                   loading="lazy"
                   decoding="async"
@@ -3783,7 +3826,7 @@ function ViralVideosRightRailBlock({ theme, lang }: any) {
                   type="button"
                   onClick={handleFeaturedPlay}
                   className="absolute left-1/2 top-1/2 z-40 grid h-16 w-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/18 text-white shadow-[0_18px_36px_-18px_rgba(0,0,0,0.85)] ring-1 ring-white/30 backdrop-blur-md transition hover:scale-105 hover:bg-white/22"
-                  aria-label={`Play ${featuredVideo.title}`}
+                  aria-label={`Play ${featuredText}`}
                 >
                   <Play className="ml-0.5 h-7 w-7 fill-current" />
                 </button>
@@ -3795,7 +3838,7 @@ function ViralVideosRightRailBlock({ theme, lang }: any) {
               ) : null}
               <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 p-4">
                 <h3 className="line-clamp-3 text-[15px] font-black leading-tight text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.55)]">
-                  {featuredVideo.title}
+                  {featuredText}
                 </h3>
               </div>
             </div>
