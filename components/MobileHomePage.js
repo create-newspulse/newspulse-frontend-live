@@ -10,10 +10,10 @@ import BottomNavigation from './BottomNavigation';
 
 export default function MobileHomePage() {
   return (
-    <View style={{ flex: 1, backgroundColor: '#ffffff' }}>
-      <View style={{ padding: 16, backgroundColor: '#E63946' }}>
-        <Text style={{ fontSize: 22, fontWeight: 'bold', color: 'white' }}>📰 News Pulse</Text>
-        <Text style={{ fontSize: 14, color: '#ffe' }}>Smart News. Real Voice.</Text>
+    <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+      <View style={{ padding: 16, backgroundColor: '#102A43' }}>
+        <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#FFFFFF' }}>📰 News Pulse</Text>
+        <Text style={{ fontSize: 14, color: '#FFFFFF' }}>Smart News. Real Voice.</Text>
       </View>
 
       <ScrollView>

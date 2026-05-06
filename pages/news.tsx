@@ -108,16 +108,16 @@ export default function News() {
         <title>Top News | News Pulse</title>
       </Head>
 
-      <main className="min-h-screen p-6 bg-gray-100">
-        <h1 className="text-3xl font-bold text-center text-blue-700 mb-6">🗞️ Top Headlines - India</h1>
+      <main className="min-h-screen p-6 bg-newsPulse-slate/10">
+        <h1 className="text-3xl font-bold text-center text-newsPulse-navy mb-6">🗞️ Top Headlines - India</h1>
 
         <div className="space-y-6">
           {articles.map((article, idx) => (
             <div
               key={idx}
-              className="bg-white p-4 rounded-xl shadow-md border-l-4 border-blue-600 transition hover:shadow-lg"
+              className="bg-newsPulse-white p-4 rounded-xl shadow-md border-l-4 border-newsPulse-blue transition hover:shadow-lg"
             >
-              <h2 className="text-xl font-semibold text-gray-800">
+              <h2 className="text-xl font-semibold text-newsPulse-navy">
                 {String(article.title || '').trim()}
               </h2>
               {lang === 'gu' && article.translationStatus ? (
@@ -128,7 +128,7 @@ export default function News() {
                 </div>
               ) : null}
               {article.provider || article.generatedAt ? (
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-newsPulse-slate">
                   {article.provider ? String(article.provider) : ''}
                   {article.provider && article.generatedAt ? ' – ' : ''}
                   {article.generatedAt ? String(article.generatedAt) : ''}

@@ -1,7 +1,7 @@
 /* styles/Index.css */
 .news-pulse-ticker {
-  background-color: #1a1a1a;
-  color: #ffffff;
+  background-color: var(--np-navy);
+  color: var(--np-white);
   padding: 12px;
   border-radius: 5px;
   margin-bottom: 20px;
@@ -59,7 +59,7 @@
 .category-filter label {
   font-size: 1.125rem;
   font-weight: 500;
-  color: #374151;
+  color: var(--np-navy);
   margin-right: 16px;
 }
 
@@ -67,8 +67,8 @@
   padding: 8px;
   border: 1px solid #d1d5db;
   border-radius: 6px;
-  background-color: white;
-  color: #374151;
+  background-color: var(--np-white);
+  color: var(--np-navy);
 }
 
 .featured-news {
@@ -78,7 +78,7 @@
 .featured-news h2 {
   font-size: 1.5rem;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--np-navy);
   margin-bottom: 16px;
 }
 
@@ -89,7 +89,7 @@
 }
 
 .news-card {
-  background-color: white;
+  background-color: var(--np-white);
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   padding: 16px;
@@ -103,13 +103,13 @@
 .news-card h3 {
   font-size: 1.125rem;
   font-weight: 500;
-  color: #1f2937;
+  color: var(--np-navy);
 }
 
 .news-card p {
   margin-top: 4px;
   font-size: 0.875rem;
-  color: #6b7280;
+  color: var(--np-slate);
 }
 
 .news-card .date {
@@ -125,8 +125,8 @@
 
 .load-more button {
   padding: 8px 24px;
-  background-color: #2563eb;
-  color: white;
+  background-color: var(--np-blue);
+  color: var(--np-white);
   border-radius: 6px;
   border: none;
   cursor: pointer;
@@ -134,7 +134,7 @@
 }
 
 .load-more button:hover {
-  background-color: #1d4ed8;
+  background-color: var(--np-navy);
 }
 
 .skeleton {

@@ -178,14 +178,14 @@ export default function BreakingTicker({
     <div
       className={classNames(
         'border-b text-white',
-        isBreaking ? 'border-red-700 bg-red-600' : 'border-slate-700 bg-slate-900',
+        isBreaking ? 'border-newsPulse-red bg-newsPulse-red' : 'border-newsPulse-navy bg-newsPulse-navy',
         'np-marqueeWrap',
         className
       )}
     >
       <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2">
         <div className="flex items-center gap-2">
-          <span className="inline-flex h-2 w-2 animate-pulse rounded-full bg-white" />
+          <span className="inline-flex h-2 w-2 animate-pulse rounded-full bg-newsPulse-red" />
           <span className="tickerLabel text-xs font-semibold tracking-widest" lang={tickerLang}>{label}</span>
         </div>
 

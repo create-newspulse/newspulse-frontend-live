@@ -82,9 +82,9 @@ export default function TopicPage() {
           <header className="flex flex-col gap-2">
             <h1 className="text-4xl font-extrabold tracking-tight text-slate-900">{title}</h1>
             <div className="text-sm text-slate-600">
-              <Link href="/search" className="text-blue-600 hover:underline">{t('common.search')}</Link>
+              <Link href="/search" className="text-newsPulse-blue hover:underline">{t('common.search')}</Link>
               <span> · </span>
-              <Link href="/" className="text-blue-600 hover:underline">{t('common.home')}</Link>
+              <Link href="/" className="text-newsPulse-blue hover:underline">{t('common.home')}</Link>
             </div>
           </header>
 

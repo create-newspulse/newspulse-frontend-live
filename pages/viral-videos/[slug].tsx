@@ -5,6 +5,7 @@ import { useRouter } from 'next/router';
 import React from 'react';
 import { ArrowLeft, ArrowRight, Copy, ExternalLink, Play, Share2 } from 'lucide-react';
 
+import NewsPulseVideoPlayer, { getViralVideoUiLabels } from '../../components/viral-videos/NewsPulseVideoPlayer';
 import { COVER_PLACEHOLDER_SRC } from '../../lib/coverImages';
 import { fetchServerPublicFounderToggles } from '../../lib/publicFounderToggles';
 import { getPublicViralVideoPosterUrl, getPublicViralVideoXEmbedUrl, normalizePublicViralVideosPayload, resolvePublicViralVideoPlayback, type PublicViralVideo } from '../../lib/publicViralVideos';
@@ -165,6 +166,8 @@ export default function ViralVideoDetailPage() {
   const [playing, setPlaying] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
   const title = t('categories.viralVideos') || 'Viral Videos';
+  const routeLocale = String(router.asPath || '').toLowerCase().startsWith('/gu') ? 'gu' : String(router.asPath || '').toLowerCase().startsWith('/hi') ? 'hi' : router.locale;
+  const reelLabels = getViralVideoUiLabels(routeLocale);
 
   React.useEffect(() => {
     const rawSlug = Array.isArray(router.query.slug) ? router.query.slug[0] : router.query.slug;
@@ -239,6 +242,7 @@ export default function ViralVideoDetailPage() {
     [video?.sourceUrl]
   );
   const sourceHref = xEmbedUrl || (sourcePlayback.mode === 'external' ? sourcePlayback.externalUrl : '');
+  const readNewsHref = sourceHref || (video ? detailHref(video) : '/viral-videos');
   const debugSlug = Array.isArray(router.query.slug) ? router.query.slug[0] : router.query.slug;
   const shareUrl = typeof window === 'undefined' ? '' : window.location.href;
   const facebookShareHref = shareUrl ? `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}` : '#';
@@ -285,7 +289,7 @@ export default function ViralVideoDetailPage() {
         <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-5 sm:px-6 lg:px-8">
           <header className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
             <Link href="/" className="inline-flex min-w-0 items-center gap-3">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-red-600 text-base font-black shadow-[0_18px_36px_-18px_rgba(220,38,38,0.9)]">NP</span>
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-newsPulse-navy text-base font-black shadow-[0_18px_36px_-18px_rgba(16,42,67,0.85)]">NP</span>
               <span className="min-w-0">
                 <span className="block truncate text-lg font-black tracking-tight">News Pulse</span>
                 <span className="block truncate text-xs font-semibold uppercase tracking-[0.18em] text-white/48">Short Video Desk</span>
@@ -312,8 +316,19 @@ export default function ViralVideoDetailPage() {
                 <div className="mx-auto w-full max-w-[420px]">
                   <div className="relative overflow-hidden rounded-[22px] border border-white/14 bg-black shadow-[0_40px_90px_-46px_rgba(0,0,0,0.95)]">
                     <div className="relative aspect-[9/16] w-full overflow-hidden bg-slate-950">
-                      {playback.mode === 'direct' && playing ? (
-                        <video className="h-full w-full object-cover" src={playback.directUrl} poster={posterSrc} controls autoPlay playsInline />
+                      {playback.mode === 'direct' ? (
+                        <NewsPulseVideoPlayer
+                          key={video.id}
+                          src={playback.directUrl}
+                          posterSrc={posterSrc}
+                          title={video.title}
+                          summary={video.summary}
+                          readNewsHref={readNewsHref}
+                          labels={reelLabels}
+                          autoPlay={playing}
+                          showBottomSummary
+                          minHeightClassName="min-h-full"
+                        />
                       ) : playback.mode === 'youtube' && playing ? (
                         <iframe
                           title={video.title}
@@ -338,7 +353,7 @@ export default function ViralVideoDetailPage() {
                                 rel="noopener noreferrer"
                                 className="absolute left-1/2 top-1/2 inline-flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-black text-slate-950 shadow-xl transition hover:bg-white/90"
                               >
-                                Open Source
+                                {reelLabels.readNews}
                                 <ExternalLink className="h-4 w-4" />
                               </a>
                             ) : null
@@ -354,7 +369,9 @@ export default function ViralVideoDetailPage() {
                           )}
                         </>
                       )}
-                      <div className="absolute left-4 top-4 rounded-full bg-red-600 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-white shadow-lg">News Pulse Video</div>
+                      {playback.mode === 'direct' ? null : (
+                        <div className="absolute left-4 top-4 rounded-full bg-newsPulse-blue px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-newsPulse-white shadow-lg">News Pulse {reelLabels.videoBadge}</div>
+                      )}
                     </div>
                   </div>
 
@@ -374,13 +391,13 @@ export default function ViralVideoDetailPage() {
                 </div>
 
                 <div className="mx-auto w-full max-w-xl lg:mx-0">
-                  <div className="text-xs font-black uppercase tracking-[0.22em] text-red-300">News Pulse Video</div>
+                  <div className="text-xs font-black uppercase tracking-[0.22em] text-red-300">News Pulse {reelLabels.videoBadge}</div>
                   <h1 className="mt-3 text-3xl font-black leading-tight tracking-tight text-white sm:text-4xl">{video.title}</h1>
                   {video.summary ? <p className="mt-4 text-base leading-7 text-white/68">{video.summary}</p> : null}
                   <div className="mt-6 flex flex-wrap gap-3">
                     {sourceHref ? (
                       <a href={sourceHref} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-white/90">
-                        {xEmbedUrl ? 'Open on X' : playback.mode === 'external' ? 'Open Source' : 'Read News'}
+                        {reelLabels.readNews}
                         <ExternalLink className="h-4 w-4" />
                       </a>
                     ) : null}
@@ -392,10 +409,17 @@ export default function ViralVideoDetailPage() {
               </div>
 
               <aside className="flex justify-center gap-3 lg:flex-col lg:items-center">
-                <a href={facebookShareHref} target="_blank" rel="noopener noreferrer" className="grid h-12 w-12 place-items-center rounded-full border border-white/12 bg-white/8 text-sm font-black text-white transition hover:bg-white/14" aria-label="Share on Facebook">f</a>
-                <a href={xShareHref} target="_blank" rel="noopener noreferrer" className="grid h-12 w-12 place-items-center rounded-full border border-white/12 bg-white/8 text-sm font-black text-white transition hover:bg-white/14" aria-label="Share on X or Twitter">X</a>
-                <button type="button" onClick={copyShareUrl} className="grid h-12 w-12 place-items-center rounded-full border border-white/12 bg-white/8 text-white transition hover:bg-white/14" aria-label="Copy Link">
+                <a href={facebookShareHref} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-white/12 bg-white/8 px-3 text-sm font-black text-white transition hover:bg-white/14 lg:w-32" aria-label={reelLabels.facebook}>
+                  <span>f</span>
+                  <span>{reelLabels.facebook}</span>
+                </a>
+                <a href={xShareHref} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-white/12 bg-white/8 px-3 text-sm font-black text-white transition hover:bg-white/14 lg:w-32" aria-label={reelLabels.x}>
+                  <span>X</span>
+                  <span>{reelLabels.x}</span>
+                </a>
+                <button type="button" onClick={copyShareUrl} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-white/12 bg-white/8 px-3 text-sm font-black text-white transition hover:bg-white/14 lg:w-32" aria-label={copied ? reelLabels.copied : reelLabels.copyLink}>
                   {copied ? <Share2 className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
+                  <span>{copied ? reelLabels.copied : reelLabels.copyLink}</span>
                 </button>
               </aside>
             </section>

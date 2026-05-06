@@ -33,6 +33,8 @@ import { formatEditorialDateTime, getStoryDateTimeValue, resolveStoryDateIso } f
 import StoryImage, { TopStoryImage } from "../src/components/story/StoryImage";
 import { getTickerMarqueeText, mergeTickerItemsWithAds, type TickerMarqueeItem } from "../lib/publicTickerAds";
 import InspirationHubHomepageSection from "../components/home/InspirationHubHomepageSection";
+import NewsPulseVideoPlayer, { getViralVideoUiLabels } from "../components/viral-videos/NewsPulseVideoPlayer";
+import HeaderLogo from "../src/components/layout/HeaderLogo";
 import type { GetStaticProps } from "next";
 import { AnimatePresence, motion } from "framer-motion";
 import { useI18n } from "../src/i18n/LanguageProvider";
@@ -227,12 +229,12 @@ const HOME_YOUTH_TRENDING_FALLBACK_ITEMS = [
 
 const CATEGORY_THEME: Record<string, { base: string; icon: string; hover: string; ring: string; active: string; dot: string }> = {
   breaking: {
-    base: "bg-red-50 border-red-200 text-red-700",
-    icon: "bg-red-100 border-red-200 text-red-700",
-    hover: "hover:bg-red-100",
-    ring: "focus-visible:ring-2 focus-visible:ring-red-300/50",
-    active: "bg-red-100 ring-2 ring-red-300/50",
-    dot: "bg-red-500/80",
+    base: "bg-newsPulse-red/10 border-newsPulse-red/25 text-newsPulse-red",
+    icon: "bg-newsPulse-red/10 border-newsPulse-red/25 text-newsPulse-red",
+    hover: "hover:bg-newsPulse-red/15",
+    ring: "focus-visible:ring-2 focus-visible:ring-newsPulse-red/30",
+    active: "bg-newsPulse-red/10 ring-2 ring-newsPulse-red/30",
+    dot: "bg-newsPulse-red/80",
   },
   regional: {
     base: "bg-emerald-50 border-emerald-200 text-emerald-700",
@@ -251,12 +253,12 @@ const CATEGORY_THEME: Record<string, { base: string; icon: string; hover: string
     dot: "bg-amber-500/80",
   },
   international: {
-    base: "bg-blue-50 border-blue-200 text-blue-700",
-    icon: "bg-blue-100 border-blue-200 text-blue-700",
-    hover: "hover:bg-blue-100",
-    ring: "focus-visible:ring-2 focus-visible:ring-blue-300/50",
-    active: "bg-blue-100 ring-2 ring-blue-300/50",
-    dot: "bg-blue-500/80",
+    base: "bg-newsPulse-blue/10 border-newsPulse-blue/25 text-newsPulse-blue",
+    icon: "bg-newsPulse-blue/10 border-newsPulse-blue/25 text-newsPulse-blue",
+    hover: "hover:bg-newsPulse-blue/15",
+    ring: "focus-visible:ring-2 focus-visible:ring-newsPulse-blue/30",
+    active: "bg-newsPulse-blue/10 ring-2 ring-newsPulse-blue/30",
+    dot: "bg-newsPulse-blue/80",
   },
   business: {
     base: "bg-indigo-50 border-indigo-200 text-indigo-700",
@@ -1779,12 +1781,12 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick, founderToggle
 
   const TONE: Record<string, ExploreTone> = {
     breaking: {
-      wrap: "bg-red-50 border-red-200 hover:bg-red-50/80",
-      iconWrap: "bg-red-100 border-red-200 text-red-700",
-      text: "text-red-800",
-      arrow: "text-red-500",
-      activeRing: "ring-red-200",
-      leftBar: "bg-red-500",
+      wrap: "bg-newsPulse-red/10 border-newsPulse-red/25 hover:bg-newsPulse-red/15",
+      iconWrap: "bg-newsPulse-red/10 border-newsPulse-red/25 text-newsPulse-red",
+      text: "text-newsPulse-red",
+      arrow: "text-newsPulse-red",
+      activeRing: "ring-newsPulse-red/30",
+      leftBar: "bg-newsPulse-red",
     },
     regional: {
       wrap: "bg-emerald-50 border-emerald-200 hover:bg-emerald-50/80",
@@ -1803,12 +1805,12 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick, founderToggle
       leftBar: "bg-amber-500",
     },
     international: {
-      wrap: "bg-blue-50 border-blue-200 hover:bg-blue-50/80",
-      iconWrap: "bg-blue-100 border-blue-200 text-blue-700",
-      text: "text-blue-800",
-      arrow: "text-blue-500",
-      activeRing: "ring-blue-200",
-      leftBar: "bg-blue-500",
+      wrap: "bg-newsPulse-blue/10 border-newsPulse-blue/25 hover:bg-newsPulse-blue/15",
+      iconWrap: "bg-newsPulse-blue/10 border-newsPulse-blue/25 text-newsPulse-blue",
+      text: "text-newsPulse-blue",
+      arrow: "text-newsPulse-blue",
+      activeRing: "ring-newsPulse-blue/30",
+      leftBar: "bg-newsPulse-blue",
     },
     business: {
       wrap: "bg-violet-50 border-violet-200 hover:bg-violet-50/80",
@@ -2768,7 +2770,7 @@ function FeedList({ theme, items, lang }: any) {
 
   const categoryBadgeClasses = (raw: unknown): string => {
     const key = normalizeCategoryKey(raw);
-    if (key === 'business') return 'bg-blue-50 text-blue-700 border-blue-100';
+    if (key === 'business') return 'bg-newsPulse-blue/10 text-newsPulse-blue border-newsPulse-blue/20';
     if (key === 'national') return 'bg-orange-50 text-orange-700 border-orange-100';
     if (key === 'international') return 'bg-purple-50 text-purple-700 border-purple-100';
     if (key === 'sports') return 'bg-green-50 text-green-700 border-green-100';
@@ -3575,8 +3577,6 @@ function ViralVideosRightRailBlock({ theme, lang }: any) {
   const [resolved, setResolved] = React.useState(false);
   const [frontendEnabled, setFrontendEnabled] = React.useState(false);
   const [items, setItems] = React.useState<PublicViralVideo[]>([]);
-  const [isFeaturedPlaying, setIsFeaturedPlaying] = React.useState(false);
-  const featuredVideoRef = React.useRef<HTMLVideoElement | null>(null);
 
   React.useEffect(() => {
     let mounted = true;
@@ -3688,8 +3688,8 @@ function ViralVideosRightRailBlock({ theme, lang }: any) {
 
   const hasHomepageVideos = items.length > 0;
   const featuredVideo = items[0] || null;
-  const videoLabel = safeLang === 'gu' ? 'વીડિયો' : safeLang === 'hi' ? 'वीडियो' : 'VIDEO';
-  const viewMoreLabel = safeLang === 'gu' ? 'વધુ જુઓ' : safeLang === 'hi' ? 'और देखें' : 'View more';
+  const reelLabels = getViralVideoUiLabels(safeLang);
+  const videoLabel = reelLabels.videoBadge;
 
   React.useEffect(() => {
     if (debugEnabled && resolved && frontendEnabled && !hasHomepageVideos) {
@@ -3705,48 +3705,6 @@ function ViralVideosRightRailBlock({ theme, lang }: any) {
   const featuredText = getHomepageViralVideoText(featuredVideo);
   const featuredPlayback = React.useMemo(() => resolvePublicViralVideoPlayback(featuredVideo), [featuredVideo]);
   const playableVideoUrl = featuredPlayback.mode === 'direct' ? featuredPlayback.directUrl : '';
-
-  React.useEffect(() => {
-    setIsFeaturedPlaying(false);
-    featuredVideoRef.current?.load();
-  }, [featuredVideo?.id, playableVideoUrl]);
-
-  const playFeaturedVideo = React.useCallback(() => {
-    const video = featuredVideoRef.current;
-    if (!video || !playableVideoUrl) return;
-
-    const playRequest = video.play();
-    if (playRequest && typeof playRequest.catch === 'function') {
-      playRequest.catch((error) => {
-        setIsFeaturedPlaying(false);
-        if (debugEnabled) {
-          // eslint-disable-next-line no-console
-          console.debug('[ShortVideoDesk] video play failed:', error instanceof Error ? error.message : error);
-        }
-      });
-    }
-  }, [debugEnabled, playableVideoUrl]);
-
-  const handleFeaturedPlay = React.useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    playFeaturedVideo();
-  }, [playFeaturedVideo]);
-
-  const handleFeaturedVideoClick = React.useCallback((event: React.MouseEvent<HTMLVideoElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-
-    const video = featuredVideoRef.current;
-    if (!video || !playableVideoUrl) return;
-
-    if (video.paused || video.ended) {
-      playFeaturedVideo();
-      return;
-    }
-
-    video.pause();
-  }, [playFeaturedVideo, playableVideoUrl]);
 
   const handlePosterError = (event: React.SyntheticEvent<HTMLImageElement>) => {
     if (debugEnabled) {
@@ -3781,23 +3739,16 @@ function ViralVideosRightRailBlock({ theme, lang }: any) {
             {!playableVideoUrl ? <Link href={featuredHref} aria-label={featuredText} className="absolute inset-0 z-10" /> : null}
             <div className="relative w-full overflow-hidden aspect-[9/16] min-h-[420px] max-h-[560px]">
               {playableVideoUrl ? (
-                <video
-                  ref={featuredVideoRef}
-                  className="h-full w-full cursor-pointer object-cover"
-                  controls={false}
-                  controlsList="nodownload noplaybackrate noremoteplayback nofullscreen"
-                  disablePictureInPicture
-                  playsInline
-                  preload="metadata"
-                  poster={featuredImage || undefined}
-                  onClick={handleFeaturedVideoClick}
-                  onPlay={() => setIsFeaturedPlaying(true)}
-                  onPlaying={() => setIsFeaturedPlaying(true)}
-                  onPause={() => setIsFeaturedPlaying(false)}
-                  onEnded={() => setIsFeaturedPlaying(false)}
-                >
-                  <source src={playableVideoUrl} type="video/mp4" />
-                </video>
+                <NewsPulseVideoPlayer
+                  key={featuredVideo?.id || playableVideoUrl}
+                  src={playableVideoUrl}
+                  posterSrc={featuredImage}
+                  title={featuredText}
+                  readNewsHref={featuredHref}
+                  viewMoreHref={localizedHref}
+                  labels={reelLabels}
+                  minHeightClassName="min-h-[420px]"
+                />
               ) : (
                 <img
                   src={featuredImage}
@@ -3808,39 +3759,31 @@ function ViralVideosRightRailBlock({ theme, lang }: any) {
                   onError={handlePosterError}
                 />
               )}
-              <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.36)_0%,rgba(2,6,23,0.08)_30%,rgba(2,6,23,0.08)_50%,rgba(2,6,23,0.78)_100%)]" />
-              <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10" />
-              <div className="absolute inset-x-0 top-0 z-40 flex items-center justify-between gap-2 p-3">
-                <span className="rounded-full bg-black/50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-sm ring-1 ring-white/18 backdrop-blur">
-                  {videoLabel}
-                </span>
-                <Link
-                  href={localizedHref}
-                  className="rounded-full bg-black/44 px-2.5 py-1 text-[10px] font-bold text-white ring-1 ring-white/20 backdrop-blur transition hover:bg-black/60"
-                >
-                  {viewMoreLabel}
-                </Link>
-              </div>
-              {playableVideoUrl && !isFeaturedPlaying ? (
-                <button
-                  type="button"
-                  onClick={handleFeaturedPlay}
-                  className="absolute left-1/2 top-1/2 z-40 grid h-16 w-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/18 text-white shadow-[0_18px_36px_-18px_rgba(0,0,0,0.85)] ring-1 ring-white/30 backdrop-blur-md transition hover:scale-105 hover:bg-white/22"
-                  aria-label={`Play ${featuredText}`}
-                >
-                  <Play className="ml-0.5 h-7 w-7 fill-current" />
-                </button>
-              ) : null}
               {!playableVideoUrl ? (
-                <span className="pointer-events-none absolute left-1/2 top-1/2 z-20 grid h-16 w-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/18 text-white shadow-[0_18px_36px_-18px_rgba(0,0,0,0.85)] ring-1 ring-white/30 backdrop-blur-md transition group-hover:scale-105 group-hover:bg-white/22">
-                  <Play className="ml-0.5 h-7 w-7 fill-current" />
-                </span>
+                <>
+                  <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.36)_0%,rgba(2,6,23,0.08)_30%,rgba(2,6,23,0.08)_50%,rgba(2,6,23,0.78)_100%)]" />
+                  <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10" />
+                  <div className="absolute inset-x-0 top-0 z-40 flex items-center justify-between gap-2 p-3">
+                    <span className="rounded-full bg-black/50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-sm ring-1 ring-white/18 backdrop-blur">
+                      {videoLabel}
+                    </span>
+                    <Link
+                      href={localizedHref}
+                      className="rounded-full bg-black/44 px-2.5 py-1 text-[10px] font-bold text-white ring-1 ring-white/20 backdrop-blur transition hover:bg-black/60"
+                    >
+                      {reelLabels.viewMore}
+                    </Link>
+                  </div>
+                  <span className="pointer-events-none absolute left-1/2 top-1/2 z-20 grid h-16 w-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/18 text-white shadow-[0_18px_36px_-18px_rgba(0,0,0,0.85)] ring-1 ring-white/30 backdrop-blur-md transition group-hover:scale-105 group-hover:bg-white/22">
+                    <Play className="ml-0.5 h-7 w-7 fill-current" />
+                  </span>
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 p-4">
+                    <h3 className="line-clamp-3 text-[15px] font-black leading-tight text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.55)]">
+                      {featuredText}
+                    </h3>
+                  </div>
+                </>
               ) : null}
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 p-4">
-                <h3 className="line-clamp-3 text-[15px] font-black leading-tight text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.55)]">
-                  {featuredText}
-                </h3>
-              </div>
             </div>
           </div>
         ) : (
@@ -3862,7 +3805,7 @@ function ViralVideosRightRailBlock({ theme, lang }: any) {
                   {videoLabel}
                 </span>
                 <span className="rounded-full bg-black/40 px-2.5 py-1 text-[10px] font-bold text-white ring-1 ring-white/20 backdrop-blur transition group-hover:bg-black/56">
-                  {viewMoreLabel}
+                  {reelLabels.viewMore}
                 </span>
               </div>
               <span className="absolute left-1/2 top-1/2 grid h-16 w-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/18 text-white shadow-[0_18px_36px_-18px_rgba(0,0,0,0.85)] ring-1 ring-white/30 backdrop-blur-md transition group-hover:scale-105 group-hover:bg-white/22">
@@ -5105,19 +5048,12 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
       <div className="mx-auto w-full max-w-[1440px] px-4 md:px-8 pt-4">
         <Surface theme={theme} className="p-3">
           <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 min-w-0">
+            <div className="flex items-center min-w-0" style={{ gap: 12 }}>
               <IconButton theme={theme} onClick={() => setMobileLeftOpen(true)} label={t('common.menu')}>
                 <Menu className="h-5 w-5" />
               </IconButton>
 
-              <div className="min-w-0">
-                <div className="text-base font-black tracking-tight" style={{ color: theme.text }}>
-                  News <span style={{ color: theme.accent }}>Pulse</span>
-                </div>
-                <div className="text-xs font-semibold" style={{ color: theme.sub }}>
-                  {t('brand.tagline')}
-                </div>
-              </div>
+              <HeaderLogo />
             </div>
 
             <div className="flex items-center gap-2">

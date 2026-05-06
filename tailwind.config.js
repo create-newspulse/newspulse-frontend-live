@@ -33,6 +33,13 @@ module.exports = {
         english: ['"Inter"', 'sans-serif'],
       },
       colors: {
+        newsPulse: {
+          navy: '#102A43',
+          blue: '#2563EB',
+          red: '#D62828',
+          slate: '#64748B',
+          white: '#FFFFFF',
+        },
         dark: {
           primary: '#0f172a',
           secondary: '#1e293b',

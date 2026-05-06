@@ -275,7 +275,7 @@ function ResultCard({ item, language }: { item: SearchItem; language: 'en' | 'hi
       <div className="mt-3 flex items-center gap-2">
         <Link
           href={href}
-          className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:opacity-90 transition"
+          className="rounded-xl bg-newsPulse-blue px-3 py-2 text-sm font-semibold text-newsPulse-white hover:opacity-90 transition"
         >
           {t('common.read')}
         </Link>

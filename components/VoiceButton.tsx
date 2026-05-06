@@ -39,8 +39,8 @@ export default function VoiceButton({ language, isVoiceEnabled, toggleVoice }: V
   return (
     <button
       onClick={handleVoiceCommand}
-      className={`px-5 py-2 rounded-full text-white transition duration-200 flex items-center space-x-2 ${
-        isListening ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'
+      className={`px-5 py-2 rounded-full text-newsPulse-white transition duration-200 flex items-center space-x-2 ${
+        isListening ? 'bg-newsPulse-red hover:bg-newsPulse-red/90' : 'bg-newsPulse-blue hover:bg-newsPulse-navy'
       }`}
     >
       <span className="material-icons">🎙️</span>

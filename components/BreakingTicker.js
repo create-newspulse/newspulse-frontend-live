@@ -121,7 +121,7 @@ export default function BreakingTicker({
 
   if (isLoading && headlines.length === 0) {
     return (
-      <div className={`bg-royal-blue text-white px-4 py-2 ${fontClass} ${className}`}>
+      <div className={`bg-newsPulse-navy text-newsPulse-white px-4 py-2 ${fontClass} ${className}`}>
         {language === 'gujarati' ? 'લોડ કરી રહ્યું છે...' : language === 'hindi' ? 'लोड हो रहा है...' : 'Loading headlines...'}
       </div>
     );
@@ -129,7 +129,7 @@ export default function BreakingTicker({
 
   if (error && headlines.length === 0) {
     return (
-      <div className={`bg-royal-blue text-red-500 px-4 py-2 ${fontClass} ${className}`}>
+      <div className={`bg-newsPulse-navy text-newsPulse-red px-4 py-2 ${fontClass} ${className}`}>
         {error}
       </div>
     );
@@ -144,13 +144,13 @@ export default function BreakingTicker({
   const durationSec = clampSeconds(Math.max(baseDurationSec, autoDurationSec, 24), 24);
 
   return (
-    <div className={`bg-royal-blue text-white py-2 np-marqueeWrap ${fontClass} ${className}`}>
+    <div className={`bg-newsPulse-navy text-newsPulse-white py-2 np-marqueeWrap ${fontClass} ${className}`}>
       <div className="flex items-center gap-3 px-3">
         <span
           className="tickerLabel inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-extrabold text-white border"
           style={{ borderColor: 'rgba(255,255,255,0.18)', background: 'rgba(255,255,255,0.10)' }}
         >
-          <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse" aria-hidden="true"></span>
+          <span className="h-2 w-2 rounded-full bg-newsPulse-red animate-pulse" aria-hidden="true"></span>
           {language === 'gujarati' ? 'લાઇવ' : language === 'hindi' ? 'लाइव' : 'Live'}
           {lastUpdated ? (
             <span className="opacity-90">

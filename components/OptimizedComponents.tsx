@@ -86,7 +86,7 @@ export const LazyImage: React.FC<LazyImageProps> = ({
       
       {!isLoaded && isInView && (
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-newsPulse-blue"></div>
         </div>
       )}
     </div>
@@ -115,7 +115,7 @@ export const OptimizedNewsCard: React.FC<OptimizedNewsCardProps> = ({
 }) => {
   return (
     <article 
-      className="group cursor-pointer bg-white dark:bg-dark-secondary rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden"
+      className="group cursor-pointer bg-newsPulse-white dark:bg-dark-secondary rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden"
       onClick={onClick}
     >
       <div className="relative">
@@ -129,22 +129,22 @@ export const OptimizedNewsCard: React.FC<OptimizedNewsCardProps> = ({
         />
         
         <div className="absolute top-3 left-3">
-          <span className="px-3 py-1 bg-blue-600 text-white text-xs font-semibold rounded-full">
+          <span className="px-3 py-1 bg-newsPulse-blue text-newsPulse-white text-xs font-semibold rounded-full">
             {article.category}
           </span>
         </div>
       </div>
       
       <div className="p-6">
-        <h3 className="font-bold text-lg text-gray-900 dark:text-dark-text mb-3 line-clamp-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+        <h3 className="font-bold text-lg text-newsPulse-navy dark:text-dark-text mb-3 line-clamp-2 group-hover:text-newsPulse-blue dark:group-hover:text-blue-400 transition-colors">
           {article.title}
         </h3>
         
-        <p className="text-gray-600 dark:text-dark-text-secondary text-sm mb-4 line-clamp-3">
+        <p className="text-newsPulse-slate dark:text-dark-text-secondary text-sm mb-4 line-clamp-3">
           {article.excerpt}
         </p>
         
-        <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+        <div className="flex items-center justify-between text-xs text-newsPulse-slate dark:text-gray-400">
           <span>{article.source}</span>
           <span>{new Date(article.publishedAt).toLocaleDateString()}</span>
         </div>

@@ -155,7 +155,7 @@ export default function NationalStatePage() {
                           href={String(link)}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-blue-600 hover:underline text-sm"
+                          className="text-newsPulse-blue hover:underline text-sm"
                         >
                           Read more
                         </a>

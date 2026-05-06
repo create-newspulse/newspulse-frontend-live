@@ -97,21 +97,22 @@ export default function CategoryHeader({
 
   const outerPad = variant === 'page' ? 'py-3' : 'py-2';
   const titleSize = variant === 'page' ? 'text-xl md:text-2xl' : 'text-lg md:text-xl';
+  const accentClass = categorySlug === 'breaking' ? 'bg-newsPulse-red' : 'bg-newsPulse-blue';
 
   return (
-    <div className="border-b border-slate-200 bg-white">
+    <div className="border-b border-newsPulse-slate/25 bg-newsPulse-white">
       <div className={`mx-auto max-w-7xl px-4 md:px-6 ${outerPad}`}
       >
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="h-9 w-1 rounded-full bg-red-600" />
+            <div className={`h-9 w-1 rounded-full ${accentClass}`} />
             <div className="min-w-0">
-              <div className={`font-extrabold leading-tight truncate ${titleSize}`}>{iconFor(categorySlug)} {title}</div>
-              {subtitle ? <div className="text-xs text-slate-600">{subtitle}</div> : null}
+              <div className={`font-extrabold leading-tight truncate text-newsPulse-navy ${titleSize}`}>{iconFor(categorySlug)} {title}</div>
+              {subtitle ? <div className="text-xs text-newsPulse-slate">{subtitle}</div> : null}
             </div>
 
             {showBrowseStates ? (
-              <Link href={browseStatesHref} className="ml-2 text-sm font-semibold text-blue-600 hover:underline whitespace-nowrap">
+              <Link href={browseStatesHref} className="ml-2 text-sm font-semibold text-newsPulse-blue hover:underline whitespace-nowrap">
                 {browseStatesLabel || 'Browse states →'}
               </Link>
             ) : null}
@@ -124,7 +125,7 @@ export default function CategoryHeader({
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
                   placeholder={searchPlaceholder || `Search ${title}…`}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10"
+                  className="w-full rounded-xl border border-newsPulse-slate/25 bg-newsPulse-white px-3 py-2 text-sm text-newsPulse-navy outline-none focus:ring-2 focus:ring-newsPulse-blue/20"
                 />
               </div>
             </form>

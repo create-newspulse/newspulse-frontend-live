@@ -5,6 +5,7 @@ import { useRouter } from 'next/router';
 import React from 'react';
 import { ArrowLeft, ArrowRight, Copy, ExternalLink, Play, Share2 } from 'lucide-react';
 
+import NewsPulseVideoPlayer, { getViralVideoUiLabels } from '../../components/viral-videos/NewsPulseVideoPlayer';
 import { COVER_PLACEHOLDER_SRC } from '../../lib/coverImages';
 import { fetchServerPublicFounderToggles } from '../../lib/publicFounderToggles';
 import { getPublicViralVideoPosterUrl, normalizePublicViralVideosPayload, resolvePublicViralVideoPlayback, type PublicViralVideo } from '../../lib/publicViralVideos';
@@ -26,10 +27,6 @@ function handlePosterError(event: React.SyntheticEvent<HTMLImageElement>) {
   }
   if (event.currentTarget.src.endsWith(COVER_PLACEHOLDER_SRC)) return;
   event.currentTarget.src = COVER_PLACEHOLDER_SRC;
-}
-
-function getVideoBadgeLabel(locale: unknown): string {
-  return String(locale || '').toLowerCase() === 'gu' ? 'વીડિયો' : 'Video';
 }
 
 export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
@@ -67,7 +64,9 @@ export default function ViralVideosPage() {
   const [error, setError] = React.useState<string | null>(null);
   const debugEnabled = process.env.NODE_ENV === 'development';
   const title = t('categories.viralVideos') || 'Viral Videos';
-  const videoBadgeLabel = getVideoBadgeLabel(router.locale);
+  const routeLocale = String(router.asPath || '').toLowerCase().startsWith('/gu') ? 'gu' : String(router.asPath || '').toLowerCase().startsWith('/hi') ? 'hi' : router.locale;
+  const reelLabels = getViralVideoUiLabels(routeLocale);
+  const videoBadgeLabel = reelLabels.videoBadge;
   const activeVideo = items[activeIndex] || null;
   const canGoPrevious = items.length > 1;
   const canGoNext = items.length > 1;
@@ -204,6 +203,7 @@ export default function ViralVideosPage() {
   const posterSrc = getPublicViralVideoPosterUrl(activeVideo) || COVER_PLACEHOLDER_SRC;
   const activePlayback = React.useMemo(() => resolvePublicViralVideoPlayback(activeVideo), [activeVideo]);
   const isPlayingActive = Boolean(activeVideo && playingId === activeVideo.id);
+  const activeReadNewsHref = activeVideo ? detailHref(activeVideo) : '/viral-videos';
 
   React.useEffect(() => {
     if (!debugEnabled || !activeVideo) return;
@@ -224,7 +224,7 @@ export default function ViralVideosPage() {
         <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-5 sm:px-6 lg:px-8">
           <header className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
             <Link href="/" className="group inline-flex min-w-0 items-center gap-3">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-red-600 text-base font-black shadow-[0_18px_36px_-18px_rgba(220,38,38,0.9)]">NP</span>
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-newsPulse-navy text-base font-black shadow-[0_18px_36px_-18px_rgba(16,42,67,0.85)]">NP</span>
               <span className="min-w-0">
                 <span className="block truncate text-lg font-black tracking-tight">News Pulse</span>
                 <span className="block truncate text-xs font-semibold uppercase tracking-[0.18em] text-white/48">Short Video Desk</span>
@@ -280,8 +280,19 @@ export default function ViralVideosPage() {
                 <div className="mx-auto w-full max-w-[420px]">
                   <div className="relative overflow-hidden rounded-[22px] border border-white/14 bg-black shadow-[0_40px_90px_-46px_rgba(0,0,0,0.95)]">
                     <div className="relative aspect-[9/16] w-full overflow-hidden bg-slate-950">
-                      {activePlayback.mode === 'direct' && isPlayingActive ? (
-                        <video className="h-full w-full object-cover" src={activePlayback.directUrl} poster={posterSrc} controls autoPlay playsInline />
+                      {activePlayback.mode === 'direct' ? (
+                        <NewsPulseVideoPlayer
+                          key={activeVideo.id}
+                          src={activePlayback.directUrl}
+                          posterSrc={posterSrc}
+                          title={activeVideo.title}
+                          summary={activeVideo.summary}
+                          readNewsHref={activeReadNewsHref}
+                          labels={reelLabels}
+                          autoPlay={isPlayingActive}
+                          showBottomSummary
+                          minHeightClassName="min-h-full"
+                        />
                       ) : activePlayback.mode === 'youtube' && isPlayingActive ? (
                         <iframe
                           title={activeVideo.title}
@@ -303,7 +314,7 @@ export default function ViralVideosPage() {
                               rel="noopener noreferrer"
                               className="absolute left-1/2 top-1/2 inline-flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-black text-slate-950 shadow-xl transition hover:bg-white/90"
                             >
-                              Open Source
+                              {reelLabels.readNews}
                               <ExternalLink className="h-4 w-4" />
                             </a>
                           ) : (
@@ -318,7 +329,9 @@ export default function ViralVideosPage() {
                           )}
                         </>
                       )}
-                      <div className="absolute left-4 top-4 rounded-full bg-red-600 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-white shadow-lg">{videoBadgeLabel}</div>
+                      {activePlayback.mode === 'direct' ? null : (
+                        <div className="absolute left-4 top-4 rounded-full bg-newsPulse-blue px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-newsPulse-white shadow-lg">{videoBadgeLabel}</div>
+                      )}
                     </div>
                   </div>
 
@@ -346,7 +359,7 @@ export default function ViralVideosPage() {
                 </div>
 
                 <div className="mx-auto w-full max-w-xl lg:mx-0">
-                  <div className="text-xs font-black uppercase tracking-[0.22em] text-red-300">News Pulse Video</div>
+                  <div className="text-xs font-black uppercase tracking-[0.22em] text-red-300">News Pulse {videoBadgeLabel}</div>
                   <h1 className="mt-3 text-3xl font-black leading-tight tracking-tight text-white sm:text-4xl">{activeVideo.title}</h1>
                   {activeVideo.summary ? <p className="mt-4 text-base leading-7 text-white/68">{activeVideo.summary}</p> : null}
                   <div className="mt-5 flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-white/44">
@@ -360,7 +373,7 @@ export default function ViralVideosPage() {
                       rel="noopener noreferrer"
                       className="mt-6 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-white/90"
                     >
-                      Open Source
+                      {reelLabels.readNews}
                       <ExternalLink className="h-4 w-4" />
                     </a>
                   ) : null}
@@ -372,27 +385,30 @@ export default function ViralVideosPage() {
                   href={facebookShareHref}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="grid h-12 w-12 place-items-center rounded-full border border-white/12 bg-white/8 text-sm font-black text-white transition hover:bg-white/14"
-                  aria-label="Share on Facebook"
+                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-white/12 bg-white/8 px-3 text-sm font-black text-white transition hover:bg-white/14 lg:w-32"
+                  aria-label={reelLabels.facebook}
                 >
-                  f
+                  <span>f</span>
+                  <span>{reelLabels.facebook}</span>
                 </a>
                 <a
                   href={xShareHref}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="grid h-12 w-12 place-items-center rounded-full border border-white/12 bg-white/8 text-sm font-black text-white transition hover:bg-white/14"
-                  aria-label="Share on X or Twitter"
+                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-white/12 bg-white/8 px-3 text-sm font-black text-white transition hover:bg-white/14 lg:w-32"
+                  aria-label={reelLabels.x}
                 >
-                  X
+                  <span>X</span>
+                  <span>{reelLabels.x}</span>
                 </a>
                 <button
                   type="button"
                   onClick={copyShareUrl}
-                  className="grid h-12 w-12 place-items-center rounded-full border border-white/12 bg-white/8 text-white transition hover:bg-white/14"
-                  aria-label="Copy Link"
+                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-white/12 bg-white/8 px-3 text-sm font-black text-white transition hover:bg-white/14 lg:w-32"
+                  aria-label={copied ? reelLabels.copied : reelLabels.copyLink}
                 >
                   {copied ? <Share2 className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
+                  <span>{copied ? reelLabels.copied : reelLabels.copyLink}</span>
                 </button>
               </aside>
             </section>

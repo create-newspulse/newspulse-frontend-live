@@ -9,8 +9,8 @@ export default function BottomNavigation() {
       right: 0,
       display: 'flex',
       justifyContent: 'space-around',
-      backgroundColor: '#E63946',
-      color: 'white',
+      backgroundColor: '#102A43',
+      color: '#FFFFFF',
       padding: '12px 0'
     }}>
       <div>🏠 Home</div>

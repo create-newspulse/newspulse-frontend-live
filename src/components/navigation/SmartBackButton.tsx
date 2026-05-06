@@ -94,12 +94,12 @@ export default function SmartBackButton() {
   };
 
   return (
-    <div className="w-full border-b border-slate-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+    <div className="w-full border-b border-newsPulse-slate/25 bg-newsPulse-white/95 backdrop-blur supports-[backdrop-filter]:bg-newsPulse-white/80">
       <div className="mx-auto w-full max-w-6xl px-4 py-2">
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+          className="inline-flex items-center gap-2 rounded-xl border border-newsPulse-slate/25 bg-newsPulse-white px-3 py-2 text-sm font-semibold text-newsPulse-navy hover:bg-newsPulse-slate/10"
           aria-label="Back"
         >
           <ArrowLeft className="h-4 w-4" />

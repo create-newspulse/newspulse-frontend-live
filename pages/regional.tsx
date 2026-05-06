@@ -262,7 +262,7 @@ function Chip({
   const toneMap: Record<string, string> = {
     default: "bg-slate-100 text-slate-700",
     success: "bg-emerald-100 text-emerald-700",
-    info: "bg-blue-100 text-blue-700",
+    info: "bg-newsPulse-blue/10 text-newsPulse-blue",
     warning: "bg-amber-100 text-amber-800",
   };
   return (
@@ -529,7 +529,7 @@ function RegionalGujaratPage() {
                       {item.summary && <p className="text-sm text-slate-600 mt-1">{item.summary}</p>}
                       <div className="mt-3 flex items-center justify-between text-sm">
                         <div className="text-slate-500">{item.district}</div>
-                        <a href={item.url || "#"} className="text-blue-600 hover:underline" target="_blank" rel="noreferrer">
+                        <a href={item.url || "#"} className="text-newsPulse-blue hover:underline" target="_blank" rel="noreferrer">
                           {t('regionalUI.readMore')}
                         </a>
                       </div>

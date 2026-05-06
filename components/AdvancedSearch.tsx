@@ -57,10 +57,10 @@ export const AdvancedSearchBar: React.FC<{
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => setIsOpen(true)}
           placeholder="Search news..."
-          className="w-full px-6 py-4 text-lg bg-white/90 backdrop-blur-sm border-2 border-gray-200 rounded-2xl focus:border-blue-500 focus:outline-none shadow-lg transition-all duration-300"
+          className="w-full px-6 py-4 text-lg bg-newsPulse-white/90 backdrop-blur-sm border-2 border-newsPulse-slate/25 rounded-2xl focus:border-newsPulse-blue focus:outline-none shadow-lg transition-all duration-300"
         />
 
-        <div className="mt-2 px-1 text-xs text-gray-500">Try: budget, cricket, Delhi</div>
+        <div className="mt-2 px-1 text-xs text-newsPulse-slate">Try: budget, cricket, Delhi</div>
         
         <div className="absolute right-4 top-1/2 transform -translate-y-1/2 flex items-center space-x-2">
           <select
@@ -80,7 +80,7 @@ export const AdvancedSearchBar: React.FC<{
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.9 }}
             onClick={() => handleSearch()}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="px-4 py-2 bg-newsPulse-blue text-newsPulse-white rounded-lg hover:bg-newsPulse-navy transition-colors"
           >
             🔍
           </motion.button>
@@ -92,10 +92,10 @@ export const AdvancedSearchBar: React.FC<{
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="absolute top-full mt-2 w-full bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden"
+          className="absolute top-full mt-2 w-full bg-newsPulse-white rounded-2xl shadow-2xl border border-newsPulse-slate/20 z-50 overflow-hidden"
         >
-          <div className="p-3 border-b border-gray-100">
-            <h4 className="text-sm font-semibold text-gray-700">Suggestions</h4>
+          <div className="p-3 border-b border-newsPulse-slate/20">
+            <h4 className="text-sm font-semibold text-newsPulse-navy">Suggestions</h4>
           </div>
           {suggestions.map((suggestion, index) => (
             <motion.button
@@ -104,10 +104,10 @@ export const AdvancedSearchBar: React.FC<{
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: index * 0.05 }}
               onClick={() => handleSearch(suggestion)}
-              className="w-full px-4 py-3 text-left hover:bg-blue-50 transition-colors flex items-center space-x-3"
+              className="w-full px-4 py-3 text-left hover:bg-newsPulse-blue/10 transition-colors flex items-center space-x-3"
             >
               <span className="text-gray-400">🔍</span>
-              <span className="text-gray-700">{suggestion}</span>
+              <span className="text-newsPulse-slate">{suggestion}</span>
             </motion.button>
           ))}
         </motion.div>

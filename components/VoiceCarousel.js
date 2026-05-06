@@ -31,12 +31,12 @@ export default function VoiceCarousel({ headlines, language }) {
   };
 
   return (
-    <div className={`bg-white rounded-lg shadow-md p-4 ${fontClass}`}>
-      <h2 className="text-xl font-semibold text-royal-blue mb-4">
+    <div className={`bg-newsPulse-white rounded-lg shadow-md p-4 ${fontClass}`}>
+      <h2 className="text-xl font-semibold text-newsPulse-navy mb-4">
         {language === 'hindi' ? 'सुनने के लिए स्वाइप करें' : language === 'gujarati' ? 'સાંભળવા માટે સ્વાઇપ કરો' : 'Swipe to Listen'}
       </h2>
       {headlines.length === 0 ? (
-        <p className="text-center text-gray-500">
+        <p className="text-center text-newsPulse-slate">
           {language === 'hindi' ? 'कोई समाचार उपलब्ध नहीं।' : language === 'gujarati' ? 'કોઈ સમાચાર ઉપલબ્ધ નથી.' : 'No headlines available.'}
         </p>
       ) : (
@@ -52,15 +52,15 @@ export default function VoiceCarousel({ headlines, language }) {
         >
           {headlines.map((headline, index) => (
             <SwiperSlide key={headline.id || index}>
-              <div className="flex flex-col items-center justify-center h-full bg-gray-50 rounded-lg p-4">
+              <div className="flex flex-col items-center justify-center h-full bg-newsPulse-slate/10 rounded-lg p-4">
                 <div className="flex items-center space-x-2 mb-2">
-                  <span className="text-xs text-royal-blue-light">
+                  <span className="text-xs text-newsPulse-blue">
                     {categoryIcons[headline.category] || '📰'} {headline.category.toUpperCase()}
                   </span>
                 </div>
-                <h3 className="text-lg font-medium text-dark-gray text-center">{headline.text || 'No title'}</h3>
-                <p className="text-sm text-gray-500 mt-1">{headline.source || 'Unknown'}</p>
-                <p className="text-xs text-gray-400 mt-1">
+                <h3 className="text-lg font-medium text-newsPulse-navy text-center">{headline.text || 'No title'}</h3>
+                <p className="text-sm text-newsPulse-slate mt-1">{headline.source || 'Unknown'}</p>
+                <p className="text-xs text-newsPulse-slate/80 mt-1">
                   {headline.publishedAt
                     ? new Date(headline.publishedAt).toLocaleDateString(
                         language === 'hindi' ? 'hi-IN' : language === 'gujarati' ? 'gu-IN' : 'en-US'

@@ -41,7 +41,7 @@ export default function LanguageToggle() {
       value={language || 'en'}
       onChange={handleChange}
       aria-label={t('common.language')}
-      className="border rounded-lg px-3 py-2 font-medium bg-white shadow text-gray-800"
+      className="border border-newsPulse-slate/35 rounded-lg px-3 py-2 font-medium bg-newsPulse-white shadow text-newsPulse-navy focus:border-newsPulse-blue focus:outline-none"
     >
       {options.map((code) => {
         if (code === 'gu') return <option key={code} value={code}>📰 ગુજરાતી</option>;

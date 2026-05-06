@@ -18,7 +18,7 @@ export default function WorldNews() {
       <ul className="space-y-3">
         {news.map((item, index) => (
           <li key={index}>
-            <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+            <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-newsPulse-blue hover:underline">
               {item.title}
             </a>
           </li>

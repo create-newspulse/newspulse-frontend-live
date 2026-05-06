@@ -13,9 +13,9 @@ export default function AIAnchor({ language, headlines }) {
   };
 
   return (
-    <div className="bg-white p-4 rounded-lg shadow-md mt-4">
-      <h3 className="text-lg font-medium text-royal-blue">AI News Anchor</h3>
-      <p className="text-dark-gray">{getSummary()}</p>
+    <div className="bg-newsPulse-white p-4 rounded-lg shadow-md mt-4">
+      <h3 className="text-lg font-medium text-newsPulse-navy">AI News Anchor</h3>
+      <p className="text-newsPulse-slate">{getSummary()}</p>
       {/* Future Enhancement: Add a "Play Audio" button to read the summary aloud */}
     </div>
   );

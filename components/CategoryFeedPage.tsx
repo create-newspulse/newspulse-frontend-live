@@ -150,19 +150,19 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
         <title>{`${localizedTitle} | ${t('brand.name')}`}</title>
       </Head>
 
-      <main className="min-h-screen bg-white">
+      <main className="min-h-screen bg-newsPulse-white">
         <div className="max-w-6xl mx-auto px-4 py-10">
           <header className="flex flex-col gap-2">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h1 className="text-4xl font-extrabold tracking-tight text-slate-900">{localizedTitle}</h1>
+              <h1 className="text-4xl font-extrabold tracking-tight text-newsPulse-navy">{localizedTitle}</h1>
             </div>
           </header>
 
           {error ? (
-            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5 text-slate-800">
+            <div className="mt-6 rounded-2xl border border-newsPulse-slate/25 bg-newsPulse-slate/10 p-5 text-newsPulse-navy">
               <div className="text-base font-bold">{t('categoryPage.unableToLoadTitle')}</div>
               <div className="mt-1 text-sm">{error}</div>
-              <div className="mt-3 text-sm text-slate-600">
+              <div className="mt-3 text-sm text-newsPulse-slate">
                 {isUnauthorized ? (
                   <>
                     {t('categoryPage.publicFeedProtected')}
@@ -175,8 +175,8 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
               </div>
             </div>
           ) : loaded && items.length === 0 ? (
-            <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6">
-              <div className="text-lg font-semibold text-slate-900">{t('categoryPage.noStoriesYet')}</div>
+            <div className="mt-8 rounded-2xl border border-newsPulse-slate/25 bg-newsPulse-white p-6">
+              <div className="text-lg font-semibold text-newsPulse-navy">{t('categoryPage.noStoriesYet')}</div>
             </div>
           ) : (
             <section className="mt-8">
@@ -196,24 +196,24 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
                   debugStoryCard('category-feed', a, image);
 
                   return (
-                    <li key={getStoryReactKey(a, href)} className="group rounded-2xl border border-slate-200 bg-white overflow-hidden">
+                    <li key={getStoryReactKey(a, href)} className="group rounded-2xl border border-newsPulse-slate/25 bg-newsPulse-white overflow-hidden">
                       <StoryImage
                         storyId={id}
                         src={image}
                         fitMode={fitMode}
                         alt={title || t('categoryPage.articleImageAlt')}
                         variant="card"
-                        className="border-b border-slate-200/70"
+                        className="border-b border-newsPulse-slate/20"
                       />
 
                       <div className="p-4">
-                        <Link href={href} className="block text-lg font-bold text-slate-900 hover:underline">
+                        <Link href={href} className="block text-lg font-bold text-newsPulse-navy hover:text-newsPulse-blue hover:underline">
                           <span>{title}</span>
                         </Link>
 
                         {summary ? (
                           <p
-                            className="mt-2 text-sm text-slate-700"
+                            className="mt-2 text-sm text-newsPulse-slate"
                             style={{
                               display: '-webkit-box',
                               WebkitLineClamp: 3,
@@ -225,7 +225,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
                           </p>
                         ) : null}
 
-                        {when ? <div className="mt-3 text-xs font-medium text-slate-500">{when}</div> : null}
+                        {when ? <div className="mt-3 text-xs font-medium text-newsPulse-slate">{when}</div> : null}
                       </div>
                     </li>
                   );

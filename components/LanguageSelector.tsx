@@ -50,7 +50,7 @@ export const LanguageSelector: React.FC<{ compact?: boolean }> = ({ compact = fa
         aria-label="Language"
         value={currentLocale}
         onChange={(e) => change(e.target.value)}
-        className="px-2 py-1 rounded-lg bg-gray-100 dark:bg-dark-accent text-sm"
+        className="px-2 py-1 rounded-lg border border-newsPulse-slate/25 bg-newsPulse-white text-sm text-newsPulse-navy dark:bg-dark-accent dark:text-dark-text"
       >
         {available.map(l => (
           <option key={l.code} value={l.code}>{l.flag} {l.label}</option>
@@ -61,12 +61,12 @@ export const LanguageSelector: React.FC<{ compact?: boolean }> = ({ compact = fa
 
   return (
     <div className="flex items-center space-x-2">
-      <span className="text-sm font-semibold text-gray-700 dark:text-dark-text">{t('common.language')}</span>
+      <span className="text-sm font-semibold text-newsPulse-slate dark:text-dark-text">{t('common.language')}</span>
       {available.map(l => (
         <button
           key={l.code}
           onClick={() => change(l.code)}
-          className={`px-3 py-1 rounded-full text-sm border ${currentLocale === l.code ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-dark-secondary border-gray-300 dark:border-gray-600 text-gray-700 dark:text-dark-text'}`}
+          className={`px-3 py-1 rounded-full text-sm border ${currentLocale === l.code ? 'bg-newsPulse-blue text-newsPulse-white border-newsPulse-blue' : 'bg-newsPulse-white dark:bg-dark-secondary border-newsPulse-slate/35 dark:border-gray-600 text-newsPulse-slate dark:text-dark-text'}`}
           title={l.label}
         >
           <span className="mr-1">{l.flag}</span>{l.label}

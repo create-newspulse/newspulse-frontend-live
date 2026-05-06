@@ -763,16 +763,16 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
       </Head>
 
       {/* Top bar */}
-      <div className="border-b border-slate-200 dark:border-gray-800">
+      <div className="border-b border-newsPulse-slate/25 dark:border-gray-800">
         <div className="mx-auto max-w-7xl px-4 py-3">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-3">
-              <div className="h-9 w-1 rounded-full bg-red-600" />
+              <div className="h-9 w-1 rounded-full bg-newsPulse-blue" />
               <div>
-                <h1 className="text-xl md:text-2xl font-extrabold leading-tight">🏛️ {tHeading(langKey, 'national')}</h1>
-                <div className="text-xs text-slate-600 dark:text-gray-400">{t('nationalPage.newsFeed')}</div>
+                <h1 className="text-xl md:text-2xl font-extrabold leading-tight text-newsPulse-navy dark:text-gray-100">🏛️ {tHeading(langKey, 'national')}</h1>
+                <div className="text-xs text-newsPulse-slate dark:text-gray-400">{t('nationalPage.newsFeed')}</div>
               </div>
-              <Link href="/national/states" className="ml-2 text-sm font-semibold text-blue-600 hover:underline">
+              <Link href="/national/states" className="ml-2 text-sm font-semibold text-newsPulse-blue hover:underline">
                 {t('nationalPage.browseStates')}
               </Link>
             </div>
@@ -783,7 +783,7 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder={t('nationalPage.searchPlaceholder')}
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-400 dark:focus:ring-white/10"
+                  className="w-full rounded-xl border border-newsPulse-slate/25 bg-newsPulse-white px-3 py-2 text-sm text-newsPulse-navy outline-none focus:ring-2 focus:ring-newsPulse-blue/20 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-400 dark:focus:ring-white/10"
                 />
               </div>
             </div>
@@ -792,7 +792,7 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
       </div>
 
       {/* LIVE ticker */}
-      <BreakingTicker items={breaking as any} variant="live" className="border-red-700 bg-red-600" />
+      <BreakingTicker items={breaking as any} variant="live" />
 
       {/* Sticky filters (mobile) */}
       <div className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur lg:static lg:bg-transparent lg:backdrop-blur-0 dark:border-gray-800 dark:bg-dark-primary/95">

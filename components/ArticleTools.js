@@ -40,7 +40,7 @@ export function ArticleTools({ article }) {
 
       {/* Quick Summary */}
       <TouchableOpacity onPress={() => setShowSummary(!showSummary)}>
-        <Text style={{ color: '#007aff', marginTop: 8 }}>📘 Quick Summary</Text>
+        <Text style={{ color: '#2563EB', marginTop: 8 }}>📘 Quick Summary</Text>
       </TouchableOpacity>
       {showSummary && (
         <Text style={{ marginTop: 10 }}>{getQuickSummary(article.body)}</Text>
@@ -48,7 +48,7 @@ export function ArticleTools({ article }) {
 
       {/* Ask a Question */}
       <TouchableOpacity onPress={() => setShowAsk(true)}>
-        <Text style={{ color: '#007aff', marginTop: 20 }}>💬 Ask About This</Text>
+        <Text style={{ color: '#2563EB', marginTop: 20 }}>💬 Ask About This</Text>
       </TouchableOpacity>
       {showAsk && (
         <>

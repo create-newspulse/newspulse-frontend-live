@@ -2,6 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --np-navy: #00193A;
+  --np-blue: #0656EC;
+  --np-red: #D62828;
+  --np-slate: #64748B;
+  --np-white: #FFFFFF;
+}
+
+.newsPulseLogo {
+  opacity: 1 !important;
+  filter: none !important;
+}
+
+.brandName .brandNews,
+.brandNews {
+  color: var(--np-navy) !important;
+}
+
+.brandName .brandPulse,
+.brandPulse {
+  color: var(--np-blue) !important;
+}
+
+.brandTagline {
+  color: var(--np-slate) !important;
+}
+
 html,
 body {
   -webkit-font-smoothing: antialiased;

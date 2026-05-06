@@ -1,5 +1,5 @@
-import Link from 'next/link';
 import React from 'react';
+import HeaderLogo from './HeaderLogo';
 
 export type BrandTopHeaderProps = {
   showMenuButton?: boolean;
@@ -8,26 +8,20 @@ export type BrandTopHeaderProps = {
 
 export default function BrandTopHeader({ showMenuButton = false, onMenuClick }: BrandTopHeaderProps) {
   return (
-    <div className="w-full border-b border-slate-200 bg-white">
-      <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3">
+    <div className="w-full border-b border-newsPulse-slate/25 bg-newsPulse-white">
+      <div className="mx-auto flex w-full max-w-6xl items-center px-4 py-3" style={{ gap: 12 }}>
         {showMenuButton ? (
           <button
             type="button"
             onClick={onMenuClick}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-800 hover:bg-slate-50"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-newsPulse-slate/25 text-newsPulse-navy hover:bg-newsPulse-slate/10"
             aria-label="Menu"
           >
             <span aria-hidden>☰</span>
           </button>
         ) : null}
 
-        <div className="min-w-0">
-          <Link href="/" className="block text-lg font-extrabold tracking-tight text-slate-900">
-            <span>News </span>
-            <span className="text-blue-600">Pulse</span>
-          </Link>
-          <div className="text-xs font-semibold text-slate-600">Your pulse on the world’s latest news</div>
-        </div>
+        <HeaderLogo />
       </div>
     </div>
   );
