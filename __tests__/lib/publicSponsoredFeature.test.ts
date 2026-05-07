@@ -12,7 +12,7 @@ describe('publicSponsoredFeature', () => {
         headline: 'Acme launches a new clean-energy initiative',
         shortSummary: 'A short premium summary for the homepage sponsored-content module.',
         ctaLabel: 'Read more',
-        imageSrc: 'https://cdn.example.com/acme-feature.jpg',
+        imageSrc: 'https://res.cloudinary.com/demo/image/upload/acme-feature.jpg',
         destinationUrl: 'https://brand.example.com/landing',
         linkedArticle: {
           _id: 'article-123',
@@ -43,7 +43,7 @@ describe('publicSponsoredFeature', () => {
         headline: 'Acme launches a new clean-energy initiative',
         shortSummary: 'A short premium summary for the homepage sponsored-content module.',
         ctaLabel: 'Visit sponsor',
-        imageSrc: 'https://cdn.example.com/acme-feature.jpg',
+        imageSrc: 'https://res.cloudinary.com/demo/image/upload/acme-feature.jpg',
         destinationUrl: 'https://brand.example.com/landing',
       },
       'en'
@@ -66,7 +66,7 @@ describe('publicSponsoredFeature', () => {
       shortSummary: 'A short premium summary for the homepage sponsored-content module.',
       ctaLabel: 'Visit sponsor',
       ctaText: null,
-      imageSrc: 'https://cdn.example.com/acme-feature.jpg',
+      imageSrc: 'https://res.cloudinary.com/demo/image/upload/acme-feature.jpg',
       coverImage: null,
       href: 'https://brand.example.com/landing',
       destinationUrl: null,
@@ -84,8 +84,8 @@ describe('publicSponsoredFeature', () => {
       shortSummary: 'A short premium summary for the homepage sponsored-content module.',
       ctaLabel: 'Visit sponsor',
       ctaText: 'Visit sponsor',
-      imageSrc: 'https://cdn.example.com/acme-feature.jpg',
-      coverImage: 'https://cdn.example.com/acme-feature.jpg',
+      imageSrc: 'https://res.cloudinary.com/demo/image/upload/acme-feature.jpg',
+      coverImage: 'https://res.cloudinary.com/demo/image/upload/acme-feature.jpg',
       href: 'https://brand.example.com/landing',
       destinationUrl: null,
       destinationIsExternal: true,
@@ -106,7 +106,7 @@ describe('publicSponsoredFeature', () => {
           headline: 'Inactive campaign',
           shortSummary: 'Should not render.',
           ctaLabel: 'Read more',
-          imageSrc: 'https://cdn.example.com/acme-feature.jpg',
+          imageSrc: 'https://res.cloudinary.com/demo/image/upload/acme-feature.jpg',
           destinationUrl: 'https://brand.example.com/landing',
         },
         'en'
@@ -128,7 +128,7 @@ describe('publicSponsoredFeature', () => {
     ).toBeNull();
   });
 
-  test('falls back to the safe placeholder when the sponsored image host is unsupported', () => {
+  test('returns null when the sponsored image host is unsupported', () => {
     const feature = normalizeHomepageSponsoredFeature(
       {
         active: true,
@@ -142,9 +142,29 @@ describe('publicSponsoredFeature', () => {
       'en'
     );
 
-    expect(feature).not.toBeNull();
-    expect(feature?.imageSrc).toBe('/fallback.svg');
-    expect(feature?.coverImage).toBe('/fallback.svg');
+    expect(feature).toBeNull();
+  });
+
+  test('returns null when normalized sponsored feature props are incomplete', () => {
+    expect(
+      normalizeHomepageSponsoredFeatureProps({
+        sponsorName: 'Acme Brand',
+        headline: 'Acme launches a new clean-energy initiative',
+        shortSummary: 'A short premium summary for the homepage sponsored-content module.',
+        ctaLabel: 'Visit sponsor',
+        ctaText: 'Visit sponsor',
+        imageSrc: '',
+        coverImage: null,
+        href: 'https://brand.example.com/landing',
+        destinationUrl: null,
+        destinationIsExternal: true,
+        sponsorDisclosure: 'Paid for by Acme Brand.',
+        linkedArticleId: null,
+        linkedSponsoredArticleId: null,
+        linkedArticleSlug: null,
+        linkedArticleUrl: null,
+      })
+    ).toBeNull();
   });
 
   test('keeps fluidmechpumps uploads images as valid sponsored feature images', () => {

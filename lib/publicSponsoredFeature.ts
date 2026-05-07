@@ -1,4 +1,4 @@
-import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from './coverImages';
+import { resolveCoverImageUrl } from './coverImages';
 import { buildNewsUrl } from './newsRoutes';
 import { resolveArticleSlug } from './articleSlugs';
 import { resolveSponsoredContentMeta } from './sponsoredContent';
@@ -92,7 +92,7 @@ function resolveHomepageSponsoredFeatureImageSrc(candidate: any): string {
     ]) || resolveCoverImageUrl(candidate)
   );
 
-  return isSupportedHomepageSponsoredFeatureImageSrc(imageSrc) ? imageSrc : COVER_PLACEHOLDER_SRC;
+  return isSupportedHomepageSponsoredFeatureImageSrc(imageSrc) ? imageSrc : '';
 }
 
 function pickFirstText(source: any, paths: string[][]): string {
@@ -339,7 +339,7 @@ export function normalizeHomepageSponsoredFeatureProps(
 ): HomepageSponsoredFeature | null {
   if (!feature) return null;
 
-  return {
+  const normalized = {
     sponsorName: cleanText(feature.sponsorName),
     headline: cleanText(feature.headline),
     shortSummary: cleanText(feature.shortSummary),
@@ -356,6 +356,12 @@ export function normalizeHomepageSponsoredFeatureProps(
     linkedArticleSlug: cleanText(feature.linkedArticleSlug) || null,
     linkedArticleUrl: cleanText(feature.linkedArticleUrl) || null,
   };
+
+  if (!normalized.sponsorName || !normalized.headline || !normalized.shortSummary || !normalized.ctaLabel || !normalized.imageSrc || !normalized.href) {
+    return null;
+  }
+
+  return normalized;
 }
 
 export async function fetchHomepageSponsoredFeature(options: {
@@ -383,5 +389,7 @@ export async function fetchHomepageSponsoredFeature(options: {
 
   const json = await response.json().catch(() => null);
   const feature = json && typeof json === 'object' ? (json as any).feature : null;
-  return feature && typeof feature === 'object' ? (feature as HomepageSponsoredFeature) : null;
+  return feature && typeof feature === 'object'
+    ? normalizeHomepageSponsoredFeatureProps(feature as HomepageSponsoredFeature)
+    : null;
 }

@@ -1,6 +1,3 @@
-import path from 'path';
-import { promises as fs } from 'fs';
-
 import { getPublicApiBaseUrl } from './publicApiBase';
 import {
   normalizeHomepageSponsoredFeature,
@@ -23,29 +20,13 @@ export type ResolvePublicHomepageSponsoredFeatureResult = {
   message: string;
 };
 
-const LOCAL_FALLBACK_PATH = path.join(process.cwd(), 'data', 'public-sponsored-feature.json');
-
 function normalizeOrigin(base: string): string {
   return String(base || '').trim().replace(/\/+$/, '').replace(/\/api\/?$/, '');
-}
-
-function isLocalOrigin(origin: string): boolean {
-  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(String(origin || '').trim());
 }
 
 export function normalizeSponsoredFeatureLang(value: unknown): SupportedSponsoredFeatureLang {
   const lang = String(value || '').trim().toLowerCase();
   return lang === 'hi' ? 'hi' : lang === 'gu' ? 'gu' : 'en';
-}
-
-async function readLocalFallbackFeature(lang: SupportedSponsoredFeatureLang): Promise<HomepageSponsoredFeature | null> {
-  try {
-    const raw = await fs.readFile(LOCAL_FALLBACK_PATH, 'utf8');
-    const json = JSON.parse(raw);
-    return normalizeHomepageSponsoredFeature(json, lang);
-  } catch {
-    return null;
-  }
 }
 
 export async function resolvePublicHomepageSponsoredFeature(
@@ -57,11 +38,10 @@ export async function resolvePublicHomepageSponsoredFeature(
   const origin = normalizeOrigin(base);
 
   if (!origin) {
-    const feature = await readLocalFallbackFeature(lang);
     return {
-      ok: Boolean(feature),
-      feature,
-      message: feature ? 'LOCAL_DEV_FALLBACK' : 'BACKEND_NOT_CONFIGURED',
+      ok: false,
+      feature: null,
+      message: 'BACKEND_NOT_CONFIGURED',
     };
   }
 
@@ -96,24 +76,16 @@ export async function resolvePublicHomepageSponsoredFeature(
       : null;
 
     const feature = normalizeHomepageSponsoredFeature(json, lang);
-    if (feature) {
+    if (upstream.ok && feature) {
       return { ok: upstream.ok, feature, message: 'OK' };
-    }
-
-    if (isLocalOrigin(origin)) {
-      const localFeature = await readLocalFallbackFeature(lang);
-      if (localFeature) {
-        return { ok: true, feature: localFeature, message: 'LOCAL_DEV_FALLBACK' };
-      }
     }
 
     return { ok: upstream.ok, feature: null, message: 'NO_ACTIVE_SPONSORED_FEATURE' };
   } catch {
-    const feature = isLocalOrigin(origin) ? await readLocalFallbackFeature(lang) : null;
     return {
-      ok: Boolean(feature),
-      feature,
-      message: feature ? 'LOCAL_DEV_FALLBACK' : 'UPSTREAM_ERROR',
+      ok: false,
+      feature: null,
+      message: 'UPSTREAM_ERROR',
     };
   }
 }
