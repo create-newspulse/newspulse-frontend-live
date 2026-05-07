@@ -2170,6 +2170,8 @@ function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
   const topStoryDotColor = safeTitle(item?.featureDotColor) || theme.live;
   const isSponsoredFeatureCard = Boolean(sponsored.isFeatureActive);
   const primaryHref = vm?.destinationHref || vm?.href || '';
+  const topStoryTitleParts = splitStoryTitleHook(vm?.title || '');
+  const topStoryTitleHookColor = getStoryTitleHookColor(vm?.category);
 
   const openArticle = React.useCallback(() => {
     if (!primaryHref) return;
@@ -2315,7 +2317,8 @@ function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
 
           <div className="mt-4 flex items-start gap-2">
             <h1 className="min-w-0 text-[1.82rem] font-extrabold leading-[1.18] tracking-[-0.015em] sm:text-[2.15rem] sm:leading-[1.15] md:text-[2.35rem]" style={{ color: theme.text, ...lineClamp4 }}>
-              {vm.title}
+              {topStoryTitleParts.highlightedHook ? <span style={{ color: topStoryTitleHookColor }}>{topStoryTitleParts.highlightedHook}</span> : null}
+              {topStoryTitleParts.remainingTitle ? <span>{` ${topStoryTitleParts.remainingTitle}`}</span> : null}
             </h1>
             {vm.titleIsOriginal ? <OriginalTag /> : null}
           </div>
