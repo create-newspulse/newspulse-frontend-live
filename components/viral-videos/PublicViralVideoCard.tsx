@@ -1,6 +1,7 @@
 import React from 'react';
 import { ExternalLink, Play } from 'lucide-react';
 
+import NewsPulseVideoPlayer, { getViralVideoUiLabels } from './NewsPulseVideoPlayer';
 import { getPublicViralVideoPosterUrl, resolvePublicViralVideoPlayback, type PublicViralVideo } from '../../lib/publicViralVideos';
 
 type Props = {
@@ -33,6 +34,7 @@ export default function PublicViralVideoCard({ video, compact = false }: Props) 
   const [posterLoaded, setPosterLoaded] = React.useState(false);
   const posterSrc = getPublicViralVideoPosterUrl(video);
   const playback = React.useMemo(() => resolvePublicViralVideoPlayback(video), [video]);
+  const labels = React.useMemo(() => getViralVideoUiLabels(video.language), [video.language]);
   const isPlayableEmbed = playback.mode === 'youtube' && playback.embedUrl;
   const isHtml5Video = playback.mode === 'direct';
   const sourcePreviewUrl = playback.mode === 'external' ? playback.externalUrl : '';
@@ -51,12 +53,16 @@ export default function PublicViralVideoCard({ video, compact = false }: Props) 
     <article id={video.slug || video.id} className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <div className={compact ? 'relative aspect-[9/16] overflow-hidden bg-slate-950' : 'relative aspect-video overflow-hidden bg-slate-950'}>
         {isHtml5Video ? (
-          <video
-            className="h-full w-full object-cover"
-            controls
-            preload="metadata"
-            poster={posterSrc || undefined}
+          <NewsPulseVideoPlayer
             src={playback.directUrl}
+            posterSrc={posterSrc || ''}
+            title={video.title}
+            summary={video.summary}
+            readNewsHref=""
+            labels={labels}
+            showBottomTitle={false}
+            compactReelControls
+            minHeightClassName="min-h-full"
           />
         ) : isPlayableEmbed && playing ? (
           <iframe

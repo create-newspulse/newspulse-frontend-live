@@ -11,6 +11,8 @@ export type PublicViralVideo = {
   videoFileUrl: string;
   videoUrl: string;
   sourceUrl: string;
+  relatedNewsUrl: string;
+  globalFrontend: boolean;
   videoType: string;
   playbackMode: string;
   category: string;
@@ -182,6 +184,20 @@ function normalizeStatus(item: Record<string, any>): string {
   return 'published';
 }
 
+function normalizeFrontendEnabled(item: Record<string, any>): boolean {
+  return pickFirstBoolean(
+    item.globalFrontend,
+    item.globalFrontendEnabled,
+    item.showOnGlobalFrontend,
+    item.frontendEnabled,
+    item.showOnFrontend,
+    item.publicEnabled,
+    item.isPublic,
+    item.visibleOnFrontend,
+    item.enabled
+  ) !== false;
+}
+
 export function getYouTubeEmbedUrl(rawUrl: string): string {
   const url = String(rawUrl || '').trim();
   if (!url) return '';
@@ -293,12 +309,6 @@ export function resolvePublicViralVideoPlayback(input: string | PublicViralVideo
     if (embedUrl) return { mode: 'youtube', embedUrl, directUrl: '', externalUrl: '', reason: '' };
   }
 
-  if (mode === 'external') {
-    const externalUrl = getAbsoluteHttpUrl(playbackInput.sourceUrl || playbackInput.videoUrl);
-    if (externalUrl) return { mode: 'external', embedUrl: '', directUrl: '', externalUrl, reason: '' };
-    return { mode: 'unavailable', embedUrl: '', directUrl: '', externalUrl: '', reason: 'Video source unavailable' };
-  }
-
   const directCandidate = resolvePublicViralVideoMediaUrl(playbackInput.videoFileUrl || '');
   if (directCandidate && isDirectHtml5VideoUrl(directCandidate)) {
     return { mode: 'direct', embedUrl: '', directUrl: directCandidate, externalUrl: '', reason: '' };
@@ -316,6 +326,10 @@ export function resolvePublicViralVideoPlayback(input: string | PublicViralVideo
 
   if (isDirectHtml5VideoUrl(url)) {
     return { mode: 'direct', embedUrl: '', directUrl: url, externalUrl: '', reason: '' };
+  }
+
+  if (mode === 'external') {
+    return { mode: 'external', embedUrl: '', directUrl: '', externalUrl: url, reason: '' };
   }
 
   return { mode: 'external', embedUrl: '', directUrl: '', externalUrl: url, reason: '' };
@@ -377,7 +391,43 @@ export function normalizePublicViralVideo(raw: unknown): PublicViralVideo | null
     media?.mediaUrl,
     media?.cloudinaryUrl
   ));
-  const sourceUrl = pickFirstString(raw.sourceUrl, raw.source, raw.newsUrl, raw.articleUrl, video?.sourceUrl, video?.source, media?.sourceUrl, media?.source);
+  const relatedNews = isRecord(raw.relatedNews) ? raw.relatedNews : null;
+  const article = isRecord(raw.article) ? raw.article : null;
+  const news = isRecord(raw.news) ? raw.news : null;
+  const relatedNewsUrl = pickFirstString(
+    raw.relatedNewsUrl,
+    raw.relatedNewsLink,
+    raw.relatedArticleUrl,
+    raw.readNewsUrl,
+    raw.newsUrl,
+    raw.articleUrl,
+    relatedNews?.url,
+    relatedNews?.href,
+    relatedNews?.slug ? `/news/${relatedNews.slug}` : '',
+    article?.url,
+    article?.href,
+    article?.slug ? `/news/${article.slug}` : '',
+    news?.url,
+    news?.href,
+    news?.slug ? `/news/${news.slug}` : '',
+    video?.relatedNewsUrl,
+    video?.newsUrl,
+    video?.articleUrl
+  );
+  const sourceUrl = pickFirstString(
+    raw.sourceUrl,
+    raw.source,
+    raw.externalUrl,
+    raw.externalSourceUrl,
+    raw.originalUrl,
+    raw.originalSourceUrl,
+    video?.sourceUrl,
+    video?.source,
+    video?.externalUrl,
+    media?.sourceUrl,
+    media?.source,
+    media?.externalUrl
+  );
   const videoUrl = pickFirstString(
     raw.videoUrl,
     raw.url,
@@ -396,12 +446,13 @@ export function normalizePublicViralVideo(raw: unknown): PublicViralVideo | null
     media?.assetUrl,
     media?.mediaUrl,
     media?.cloudinaryUrl,
-    sourceUrl,
-    videoFileUrl
+    videoFileUrl,
+    sourceUrl
   );
   if (!id || !title || !(videoFileUrl || videoUrl || sourceUrl)) return null;
 
   const status = normalizeStatus(raw);
+  const globalFrontend = normalizeFrontendEnabled(raw);
   const showOnHomepage = pickFirstBoolean(raw.showOnHomepage, raw.homepageFeature, raw.homepageFeatured, raw.isHomepageFeatured, raw.featured, raw.showHome, raw.homepage) === true;
   const categoryValue = raw.category;
   const category = pickFirstString(
@@ -427,6 +478,8 @@ export function normalizePublicViralVideo(raw: unknown): PublicViralVideo | null
     videoFileUrl,
     videoUrl,
     sourceUrl,
+    relatedNewsUrl,
+    globalFrontend,
     videoType,
     playbackMode,
     category,
@@ -455,6 +508,7 @@ export function normalizePublicViralVideosPayload(raw: unknown): PublicViralVide
     .map(normalizePublicViralVideo)
     .filter((item): item is PublicViralVideo => Boolean(item))
     .filter((item) => item.status === 'published')
+    .filter((item) => item.globalFrontend !== false)
     .sort((a, b) => String(b.publishedAt || '').localeCompare(String(a.publishedAt || '')));
 
   return {

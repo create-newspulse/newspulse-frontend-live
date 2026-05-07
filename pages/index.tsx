@@ -42,7 +42,7 @@ import { resolveInspirationHubDroneTvSettings, resolveInspirationHubSectionText 
 import { usePublicFounderToggles } from "../hooks/usePublicFounderToggles";
 import { DEFAULT_PUBLIC_FOUNDER_TOGGLES, type PublicFounderToggles } from "../lib/publicFounderToggles";
 import { subscribePublicDataRefresh } from "../lib/publicDataRefresh";
-import { getPublicViralVideoPosterUrl, normalizePublicViralVideosPayload, resolvePublicViralVideoPlayback, type PublicViralVideo } from "../lib/publicViralVideos";
+import { getPublicViralVideoPosterUrl, normalizePublicViralVideosPayload, resolvePublicViralVideoMediaUrl, type PublicViralVideo } from "../lib/publicViralVideos";
 import {
   ArrowRight,
   Bell,
@@ -3577,6 +3577,7 @@ function ViralVideosRightRailBlock({ theme, lang }: any) {
   const [resolved, setResolved] = React.useState(false);
   const [frontendEnabled, setFrontendEnabled] = React.useState(false);
   const [items, setItems] = React.useState<PublicViralVideo[]>([]);
+  const [inlinePlayingId, setInlinePlayingId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     let mounted = true;
@@ -3646,16 +3647,11 @@ function ViralVideosRightRailBlock({ theme, lang }: any) {
         }
 
         setFrontendEnabled(true);
-        const homepageItems = normalized.items.filter((video) => video.showOnHomepage).slice(0, 6);
+        const homepageItems = normalized.items.filter((video) => video.showOnHomepage && video.globalFrontend !== false).slice(0, 6);
         if (debugEnabled) {
           const selected = homepageItems[0] || null;
-          const playback = selected ? resolvePublicViralVideoPlayback(selected) : null;
           // eslint-disable-next-line no-console
           console.debug('[ShortVideoDesk] selected homepage video ID/title:', selected ? `${selected.id} / ${selected.title}` : 'none');
-          // eslint-disable-next-line no-console
-          console.debug('[ShortVideoDesk] selected player videoUrl:', selected?.videoUrl || '');
-          // eslint-disable-next-line no-console
-          console.debug('[ShortVideoDesk] resolved embed/direct URL:', playback?.embedUrl || playback?.directUrl || playback?.externalUrl || '');
         }
         setItems(homepageItems);
         setResolved(true);
@@ -3698,13 +3694,18 @@ function ViralVideosRightRailBlock({ theme, lang }: any) {
     }
   }, [debugEnabled, frontendEnabled, hasHomepageVideos, resolved]);
 
-  const featuredHref = featuredVideo
+  const featuredDetailHref = featuredVideo
     ? localizePath(`/viral-videos/${encodeURIComponent(featuredVideo.slug || featuredVideo.id)}`, safeLang)
     : localizedHref;
-  const featuredImage = getPublicViralVideoPosterUrl(featuredVideo) || COVER_PLACEHOLDER_SRC;
+  const featuredPoster = getPublicViralVideoPosterUrl(featuredVideo);
+  const featuredImage = featuredPoster || COVER_PLACEHOLDER_SRC;
   const featuredText = getHomepageViralVideoText(featuredVideo);
-  const featuredPlayback = React.useMemo(() => resolvePublicViralVideoPlayback(featuredVideo), [featuredVideo]);
-  const playableVideoUrl = featuredPlayback.mode === 'direct' ? featuredPlayback.directUrl : '';
+  const featuredVideoSrc = resolvePublicViralVideoMediaUrl(featuredVideo?.videoFileUrl || '');
+  const inlinePlaying = Boolean(featuredVideo && featuredVideoSrc && inlinePlayingId === featuredVideo.id);
+
+  React.useEffect(() => {
+    setInlinePlayingId(null);
+  }, [featuredVideo?.id]);
 
   const handlePosterError = (event: React.SyntheticEvent<HTMLImageElement>) => {
     if (debugEnabled) {
@@ -3715,113 +3716,82 @@ function ViralVideosRightRailBlock({ theme, lang }: any) {
     event.currentTarget.src = COVER_PLACEHOLDER_SRC;
   };
 
-  if (!resolved || !frontendEnabled) return null;
+  if (!resolved || !frontendEnabled || !featuredVideo) return null;
 
   return (
-    <section aria-label={t('categories.viralVideos')} className="relative w-full overflow-hidden rounded-[20px] border p-[14px] shadow-[0_22px_46px_-34px_rgba(15,23,42,0.28)]"
+    <section aria-label={t('categories.viralVideos')} className="relative w-full overflow-hidden rounded-[18px] border p-2 shadow-[0_12px_28px_-26px_rgba(15,23,42,0.22)]"
       style={{
-        borderColor: theme.mode === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(15,23,42,0.08)',
-        background: theme.mode === 'dark'
-          ? 'linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03))'
-          : 'linear-gradient(180deg, rgba(255,255,255,0.96), rgba(248,250,252,0.94))',
+        borderColor: 'rgba(226,232,240,0.9)',
+        background: '#ffffff',
       }}
     >
       <div className="grid gap-3">
-        {featuredVideo ? (
-          <div
-            className="group relative block w-full overflow-hidden rounded-lg border shadow-[0_24px_54px_-34px_rgba(15,23,42,0.55)]"
+        <div
+            className="group relative block w-full overflow-hidden rounded-[13px] shadow-[0_14px_30px_-28px_rgba(15,23,42,0.45)]"
             style={{
-              borderColor: 'rgba(255,255,255,0.16)',
               background: '#0f172a',
-              boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.05), 0 24px 54px -34px rgba(15,23,42,0.55)',
+              boxShadow: '0 14px 30px -28px rgba(15,23,42,0.45)',
             }}
           >
-            {!playableVideoUrl ? <Link href={featuredHref} aria-label={featuredText} className="absolute inset-0 z-10" /> : null}
             <div className="relative w-full overflow-hidden aspect-[9/16] min-h-[420px] max-h-[560px]">
-              {playableVideoUrl ? (
+              {inlinePlaying ? (
                 <NewsPulseVideoPlayer
-                  key={featuredVideo?.id || playableVideoUrl}
-                  src={playableVideoUrl}
+                  key={featuredVideo.id}
+                  src={featuredVideoSrc}
                   posterSrc={featuredImage}
                   title={featuredText}
-                  readNewsHref={featuredHref}
-                  viewMoreHref={localizedHref}
+                  readNewsHref=""
                   labels={reelLabels}
-                  minHeightClassName="min-h-[420px]"
+                  autoPlay
+                  showBottomTitle={false}
+                  compactReelControls
+                  hideTopBranding
+                  minHeightClassName="min-h-full"
                 />
               ) : (
-                <img
-                  src={featuredImage}
-                  alt={featuredText}
-                  className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
-                  loading="lazy"
-                  decoding="async"
-                  onError={handlePosterError}
-                />
-              )}
-              {!playableVideoUrl ? (
                 <>
-                  <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.36)_0%,rgba(2,6,23,0.08)_30%,rgba(2,6,23,0.08)_50%,rgba(2,6,23,0.78)_100%)]" />
+                  <Link href={featuredDetailHref} aria-label={featuredText} className="absolute inset-0 z-10" />
+                  <img
+                    src={featuredImage}
+                    alt={featuredText}
+                    className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+                    loading="lazy"
+                    decoding="async"
+                    onError={handlePosterError}
+                  />
+                  <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.34)_0%,rgba(2,6,23,0.08)_30%,rgba(2,6,23,0.08)_50%,rgba(2,6,23,0.82)_100%)]" />
                   <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10" />
-                  <div className="absolute inset-x-0 top-0 z-40 flex items-center justify-between gap-2 p-3">
-                    <span className="rounded-full bg-black/50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-sm ring-1 ring-white/18 backdrop-blur">
-                      {videoLabel}
-                    </span>
-                    <Link
-                      href={localizedHref}
-                      className="rounded-full bg-black/44 px-2.5 py-1 text-[10px] font-bold text-white ring-1 ring-white/20 backdrop-blur transition hover:bg-black/60"
-                    >
-                      {reelLabels.viewMore}
-                    </Link>
-                  </div>
-                  <span className="pointer-events-none absolute left-1/2 top-1/2 z-20 grid h-16 w-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/18 text-white shadow-[0_18px_36px_-18px_rgba(0,0,0,0.85)] ring-1 ring-white/30 backdrop-blur-md transition group-hover:scale-105 group-hover:bg-white/22">
-                    <Play className="ml-0.5 h-7 w-7 fill-current" />
-                  </span>
-                  <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 p-4">
-                    <h3 className="line-clamp-3 text-[15px] font-black leading-tight text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.55)]">
-                      {featuredText}
-                    </h3>
-                  </div>
                 </>
-              ) : null}
-            </div>
-          </div>
-        ) : (
-          <Link
-            href={localizedHref}
-            className="group relative block w-full overflow-hidden rounded-lg border shadow-[0_24px_54px_-34px_rgba(15,23,42,0.55)]"
-            style={{
-              borderColor: 'rgba(255,255,255,0.16)',
-              background: 'linear-gradient(180deg, #0f172a 0%, #020617 100%)',
-              boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.05), 0 24px 54px -34px rgba(15,23,42,0.55)',
-            }}
-          >
-            <div className="relative w-full overflow-hidden aspect-[9/16] min-h-[420px] max-h-[560px]">
-              <div className="h-full w-full bg-[radial-gradient(circle_at_top,rgba(125,211,252,0.16),transparent_22%),radial-gradient(circle_at_bottom,rgba(59,130,246,0.18),transparent_28%),linear-gradient(180deg,#172033_0%,#060b16_100%)]" />
-              <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.62)_0%,rgba(2,6,23,0.16)_24%,rgba(2,6,23,0.06)_50%,rgba(2,6,23,0.74)_100%)]" />
-              <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10" />
-              <div className="absolute inset-x-0 top-0 flex items-center justify-between gap-2 p-3">
-                <span className="rounded-full bg-black/44 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-white shadow-sm ring-1 ring-white/18 backdrop-blur">
+              )}
+              <div className="absolute inset-x-0 top-0 z-30 flex items-center justify-between gap-2 p-3">
+                <span className="rounded-full bg-newsPulse-blue px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-newsPulse-white shadow-sm ring-1 ring-white/18 backdrop-blur">
                   {videoLabel}
                 </span>
-                <span className="rounded-full bg-black/40 px-2.5 py-1 text-[10px] font-bold text-white ring-1 ring-white/20 backdrop-blur transition group-hover:bg-black/56">
+                <Link
+                  href={localizedHref}
+                  onClick={(event) => event.stopPropagation()}
+                  className="relative z-40 rounded-full bg-black/48 px-2.5 py-1 text-[10px] font-bold text-white ring-1 ring-white/20 backdrop-blur transition hover:bg-black/62"
+                >
                   {reelLabels.viewMore}
-                </span>
+                </Link>
               </div>
-              <span className="absolute left-1/2 top-1/2 grid h-16 w-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/18 text-white shadow-[0_18px_36px_-18px_rgba(0,0,0,0.85)] ring-1 ring-white/30 backdrop-blur-md transition group-hover:scale-105 group-hover:bg-white/22">
-                <Play className="ml-0.5 h-7 w-7 fill-current" />
-              </span>
-              <div className="absolute inset-x-0 bottom-0 p-4">
-                <h3 className="text-[15px] font-black leading-tight text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.55)]">
-                  No viral videos yet
-                </h3>
-                <div className="mt-1 text-[11px] font-medium leading-5 text-white/72 drop-shadow-[0_2px_10px_rgba(0,0,0,0.4)]">
-                  New short videos will appear here.
+              {!inlinePlaying && featuredVideoSrc ? (
+                <button type="button" onClick={() => setInlinePlayingId(featuredVideo.id)} aria-label={`Play ${featuredText}`} className="absolute left-1/2 top-1/2 z-30 grid h-16 w-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/20 text-white shadow-[0_18px_36px_-18px_rgba(0,0,0,0.85)] ring-1 ring-white/34 backdrop-blur-md transition hover:scale-105 hover:bg-white/26 group-hover:scale-105 group-hover:bg-white/26">
+                  <Play className="ml-0.5 h-7 w-7 fill-current" />
+                </button>
+              ) : null}
+              {!featuredVideoSrc ? (
+                <div className="absolute inset-x-5 top-1/2 z-30 -translate-y-1/2 rounded-lg bg-black/58 p-3 text-center text-sm font-bold text-white shadow-xl ring-1 ring-white/15 backdrop-blur">
+                  Video source unavailable
                 </div>
-              </div>
+              ) : null}
+              {!inlinePlaying ? <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 p-4">
+                <h3 className="line-clamp-3 text-[15px] font-black leading-tight text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.55)]">
+                  {featuredText}
+                </h3>
+              </div> : null}
             </div>
-          </Link>
-        )}
+        </div>
       </div>
     </section>
   );

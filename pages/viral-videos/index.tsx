@@ -3,12 +3,12 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import React from 'react';
-import { ArrowLeft, ArrowRight, Copy, ExternalLink, Play, Share2 } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Copy, Play, Share2 } from 'lucide-react';
 
 import NewsPulseVideoPlayer, { getViralVideoUiLabels } from '../../components/viral-videos/NewsPulseVideoPlayer';
 import { COVER_PLACEHOLDER_SRC } from '../../lib/coverImages';
 import { fetchServerPublicFounderToggles } from '../../lib/publicFounderToggles';
-import { getPublicViralVideoPosterUrl, normalizePublicViralVideosPayload, resolvePublicViralVideoPlayback, type PublicViralVideo } from '../../lib/publicViralVideos';
+import { getPublicViralVideoPosterUrl, getPublicViralVideoXEmbedUrl, normalizePublicViralVideosPayload, resolvePublicViralVideoPlayback, type PublicViralVideo } from '../../lib/publicViralVideos';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 
 type Props = {
@@ -27,6 +27,123 @@ function handlePosterError(event: React.SyntheticEvent<HTMLImageElement>) {
   }
   if (event.currentTarget.src.endsWith(COVER_PLACEHOLDER_SRC)) return;
   event.currentTarget.src = COVER_PLACEHOLDER_SRC;
+}
+
+function PlayerTopOverlay() {
+  return (
+    <div className="pointer-events-none absolute inset-x-[18px] top-4 z-30 flex items-center justify-between gap-3">
+      <span className="text-sm font-extrabold leading-none text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.55)]">Viral</span>
+      <span className="ml-auto truncate text-sm font-extrabold leading-none text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.55)]">News Pulse</span>
+    </div>
+  );
+}
+
+function pickViralVideoNewsLine(video: PublicViralVideo | null | undefined): string {
+  const raw = video?.raw || {};
+  const candidates = [
+    raw.newsLine,
+    raw.caption,
+    raw.shortCaption,
+    raw.video?.newsLine,
+    raw.video?.caption,
+    video?.summary,
+    video?.title,
+  ];
+
+  for (const candidate of candidates) {
+    const text = String(candidate || '').replace(/\s+/g, ' ').trim();
+    if (text) return text;
+  }
+  return '';
+}
+
+function splitViralVideoNewsLine(value: string): { accent: string; rest: string } {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text) return { accent: '', rest: '' };
+
+  const separatorMatch = text.match(/^(.{8,90}?)([-:.,]|\s(?:has|have|is|are|was|were|in)\s)/i);
+  if (separatorMatch?.index === 0 && separatorMatch[1]) {
+    const accent = separatorMatch[1].trim();
+    const rest = text.slice(accent.length).replace(/^\s*[-:.,]?\s*/, '').trim();
+    return { accent, rest };
+  }
+
+  const words = text.split(' ').filter(Boolean);
+  const accentCount = Math.min(4, Math.max(1, Math.ceil(words.length / 3)));
+  return {
+    accent: words.slice(0, accentCount).join(' '),
+    rest: words.slice(accentCount).join(' '),
+  };
+}
+
+function XEmbedPlayer({ tweetUrl, posterSrc, title }: { tweetUrl: string; posterSrc: string; title: string }) {
+  const containerRef = React.useRef<HTMLDivElement | null>(null);
+  const [embedFailed, setEmbedFailed] = React.useState(false);
+
+  React.useEffect(() => {
+    setEmbedFailed(false);
+    if (!tweetUrl || typeof window === 'undefined') return;
+    let cancelled = false;
+    let timerId: number | undefined;
+    const scriptId = 'news-pulse-x-widgets';
+    const markFailed = () => {
+      if (!cancelled) setEmbedFailed(true);
+    };
+    const loadTweet = () => {
+      if (timerId) window.clearTimeout(timerId);
+      const twttr = (window as any).twttr;
+      if (!containerRef.current || !twttr?.widgets?.load) {
+        markFailed();
+        return;
+      }
+      try {
+        Promise.resolve(twttr.widgets.load(containerRef.current)).catch(markFailed);
+        timerId = window.setTimeout(() => {
+          if (!cancelled && containerRef.current && !containerRef.current.querySelector('iframe')) markFailed();
+        }, 7000);
+      } catch {
+        markFailed();
+      }
+    };
+
+    const existingScript = document.getElementById(scriptId) as HTMLScriptElement | null;
+    if (existingScript) {
+      if ((window as any).twttr?.widgets?.load) loadTweet();
+      else existingScript.addEventListener('load', loadTweet, { once: true });
+    } else {
+      const script = document.createElement('script');
+      script.id = scriptId;
+      script.src = 'https://platform.twitter.com/widgets.js';
+      script.async = true;
+      script.charset = 'utf-8';
+      script.addEventListener('load', loadTweet, { once: true });
+      script.addEventListener('error', markFailed, { once: true });
+      document.body.appendChild(script);
+    }
+    timerId = window.setTimeout(() => {
+      if (!(window as any).twttr?.widgets?.load) markFailed();
+    }, 7000);
+
+    return () => {
+      cancelled = true;
+      if (timerId) window.clearTimeout(timerId);
+      const script = document.getElementById(scriptId);
+      script?.removeEventListener('load', loadTweet);
+      script?.removeEventListener('error', markFailed);
+    };
+  }, [tweetUrl]);
+
+  if (embedFailed) {
+    return <img src={posterSrc} alt={title} className="h-full w-full object-cover" loading="eager" decoding="async" onError={handlePosterError} />;
+  }
+
+  return (
+    <div ref={containerRef} className="flex min-h-[520px] w-full items-center justify-center overflow-y-auto bg-black px-3 py-6 text-white">
+      <blockquote className="twitter-tweet mx-auto min-h-[360px] w-full max-w-[360px]" data-theme="dark" data-dnt="true" data-conversation="none">
+        <a href={tweetUrl}></a>
+      </blockquote>
+    </div>
+  );
 }
 
 export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
@@ -66,7 +183,6 @@ export default function ViralVideosPage() {
   const title = t('categories.viralVideos') || 'Viral Videos';
   const routeLocale = String(router.asPath || '').toLowerCase().startsWith('/gu') ? 'gu' : String(router.asPath || '').toLowerCase().startsWith('/hi') ? 'hi' : router.locale;
   const reelLabels = getViralVideoUiLabels(routeLocale);
-  const videoBadgeLabel = reelLabels.videoBadge;
   const activeVideo = items[activeIndex] || null;
   const canGoPrevious = items.length > 1;
   const canGoNext = items.length > 1;
@@ -202,9 +318,13 @@ export default function ViralVideosPage() {
 
   const posterSrc = getPublicViralVideoPosterUrl(activeVideo) || COVER_PLACEHOLDER_SRC;
   const activePlayback = React.useMemo(() => resolvePublicViralVideoPlayback(activeVideo), [activeVideo]);
+  const activeXEmbedUrl = React.useMemo(() => getPublicViralVideoXEmbedUrl(activeVideo), [activeVideo]);
+  const relatedNewsHref = activeVideo?.relatedNewsUrl || '';
+  const externalSourceHref = !activeXEmbedUrl && activePlayback.mode === 'external' ? activePlayback.externalUrl : '';
+  const newsLine = React.useMemo(() => pickViralVideoNewsLine(activeVideo), [activeVideo]);
+  const styledNewsLine = React.useMemo(() => splitViralVideoNewsLine(newsLine), [newsLine]);
+  const showNewsLine = Boolean(newsLine && newsLine.toLowerCase() !== String(activeVideo?.title || '').trim().toLowerCase());
   const isPlayingActive = Boolean(activeVideo && playingId === activeVideo.id);
-  const activeReadNewsHref = activeVideo ? detailHref(activeVideo) : '/viral-videos';
-
   React.useEffect(() => {
     if (!debugEnabled || !activeVideo) return;
     // eslint-disable-next-line no-console
@@ -219,25 +339,9 @@ export default function ViralVideosPage() {
         <title>{`${title} | ${t('brand.name')}`}</title>
       </Head>
 
-      <main className="min-h-screen overflow-hidden bg-[#07090f] text-white">
-        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_top_left,rgba(220,38,38,0.18),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(14,165,233,0.16),transparent_32%)]" />
-        <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-5 sm:px-6 lg:px-8">
-          <header className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
-            <Link href="/" className="group inline-flex min-w-0 items-center gap-3">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-newsPulse-navy text-base font-black shadow-[0_18px_36px_-18px_rgba(16,42,67,0.85)]">NP</span>
-              <span className="min-w-0">
-                <span className="block truncate text-lg font-black tracking-tight">News Pulse</span>
-                <span className="block truncate text-xs font-semibold uppercase tracking-[0.18em] text-white/48">Short Video Desk</span>
-              </span>
-            </Link>
-            <Link
-              href="/"
-              className="inline-flex shrink-0 items-center gap-2 rounded-full border border-white/12 bg-white/8 px-4 py-2 text-sm font-bold text-white shadow-lg transition hover:bg-white/14"
-            >
-              View News
-              <ExternalLink className="h-4 w-4" />
-            </Link>
-          </header>
+      <main className="relative min-h-screen overflow-hidden bg-[#111214] text-white">
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.035)_0%,rgba(255,255,255,0)_22%,rgba(0,0,0,0.28)_100%)]" />
+        <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 pb-8 pt-4 sm:px-6 sm:pt-5 lg:px-8">
 
           {error ? (
             <div className="mx-auto mt-10 w-full max-w-2xl rounded-lg border border-white/12 bg-white/8 p-5 text-white">
@@ -252,34 +356,11 @@ export default function ViralVideosPage() {
           ) : !loaded ? (
             <div className="grid flex-1 place-items-center py-16 text-sm font-semibold text-white/60">Loading short videos...</div>
           ) : activeVideo ? (
-            <section className="grid flex-1 items-center gap-6 py-6 lg:grid-cols-[minmax(0,1fr)_88px]">
-              <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(180px,260px)_minmax(280px,420px)_minmax(180px,1fr)] lg:items-center">
-                <aside className="hidden max-h-[74vh] overflow-y-auto pr-2 lg:block">
-                  <div className="grid gap-3">
-                    {items.map((video, index) => (
-                      <Link
-                        key={video.id}
-                        href={detailHref(video)}
-                        className={`group flex items-center gap-3 rounded-lg border p-2 text-left transition ${index === activeIndex ? 'border-red-400/70 bg-red-500/14' : 'border-white/10 bg-white/6 hover:bg-white/10'}`}
-                      >
-                        <span className="relative h-20 w-14 shrink-0 overflow-hidden rounded-md bg-slate-900">
-                          <img src={getPublicViralVideoPosterUrl(video) || COVER_PLACEHOLDER_SRC} alt="" className="h-full w-full object-cover" loading="lazy" decoding="async" onError={handlePosterError} />
-                          <span className="absolute inset-0 grid place-items-center bg-black/20 text-white">
-                            <Play className="h-4 w-4 fill-current" />
-                          </span>
-                        </span>
-                        <span className="min-w-0">
-                          <span className="line-clamp-2 text-sm font-bold leading-snug text-white">{video.title}</span>
-                          <span className="mt-1 block text-xs font-semibold uppercase tracking-[0.12em] text-white/42">{videoBadgeLabel}</span>
-                        </span>
-                      </Link>
-                    ))}
-                  </div>
-                </aside>
-
-                <div className="mx-auto w-full max-w-[420px]">
-                  <div className="relative overflow-hidden rounded-[22px] border border-white/14 bg-black shadow-[0_40px_90px_-46px_rgba(0,0,0,0.95)]">
-                    <div className="relative aspect-[9/16] w-full overflow-hidden bg-slate-950">
+            <section className="relative flex flex-1 flex-col items-center justify-start pt-0 sm:pt-2">
+              <div className="relative flex w-full justify-center lg:min-h-[calc(100vh-5.5rem)]">
+                <div className="mx-auto min-w-0" style={{ width: 'min(100%, clamp(360px, calc(82vh * 9 / 16), 460px))' }}>
+                  <div className="relative overflow-hidden rounded-[22px] border border-white/14 bg-black shadow-[0_42px_96px_-48px_rgba(0,0,0,0.98)]">
+                    <div className="relative aspect-[9/16] w-full overflow-hidden bg-slate-950" style={{ aspectRatio: '9 / 16' }}>
                       {activePlayback.mode === 'direct' ? (
                         <NewsPulseVideoPlayer
                           key={activeVideo.id}
@@ -287,130 +368,120 @@ export default function ViralVideosPage() {
                           posterSrc={posterSrc}
                           title={activeVideo.title}
                           summary={activeVideo.summary}
-                          readNewsHref={activeReadNewsHref}
+                          readNewsHref={relatedNewsHref}
                           labels={reelLabels}
                           autoPlay={isPlayingActive}
-                          showBottomSummary
+                          showBottomTitle={false}
+                          compactReelControls
                           minHeightClassName="min-h-full"
                         />
-                      ) : activePlayback.mode === 'youtube' && isPlayingActive ? (
-                        <iframe
-                          title={activeVideo.title}
-                          src={activePlayback.embedUrl}
-                          className="h-full w-full"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                          allowFullScreen
-                        />
+                      ) : activePlayback.mode === 'youtube' ? (
+                        <>
+                          <iframe
+                            title={activeVideo.title}
+                            src={activePlayback.embedUrl}
+                            className="h-full w-full"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                            allowFullScreen
+                          />
+                          <PlayerTopOverlay />
+                        </>
+                      ) : activeXEmbedUrl ? (
+                        <>
+                          <XEmbedPlayer key={activeXEmbedUrl} tweetUrl={activeXEmbedUrl} posterSrc={posterSrc} title={activeVideo.title} />
+                          <PlayerTopOverlay />
+                        </>
                       ) : (
                         <>
                           <img src={posterSrc} alt={activeVideo.title} className="h-full w-full object-cover" loading="eager" decoding="async" onError={handlePosterError} />
-                          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.28)_0%,rgba(2,6,23,0.04)_42%,rgba(2,6,23,0.76)_100%)]" />
+                          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.46)_0%,rgba(2,6,23,0.05)_42%,rgba(2,6,23,0.78)_100%)]" />
+                          <PlayerTopOverlay />
                           {activePlayback.mode === 'unavailable' ? (
                             <div className="absolute inset-x-5 top-1/2 -translate-y-1/2 rounded-lg bg-black/54 p-4 text-center text-sm font-bold text-white shadow-xl ring-1 ring-white/15 backdrop-blur">Video source unavailable</div>
                           ) : activePlayback.mode === 'external' ? (
-                            <a
-                              href={activePlayback.externalUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="absolute left-1/2 top-1/2 inline-flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-black text-slate-950 shadow-xl transition hover:bg-white/90"
-                            >
-                              {reelLabels.readNews}
-                              <ExternalLink className="h-4 w-4" />
-                            </a>
+                            externalSourceHref ? (
+                              <a href={externalSourceHref} target="_blank" rel="noopener noreferrer" className="absolute inset-x-6 bottom-6 z-30 inline-flex justify-center rounded-full border border-white/14 bg-white/10 px-4 py-2 text-sm font-bold text-white backdrop-blur transition hover:bg-white/16">
+                                Open Source
+                              </a>
+                            ) : null
                           ) : (
                             <button
                               type="button"
                               onClick={playActiveVideo}
-                              className="absolute left-1/2 top-1/2 grid h-20 w-20 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/18 text-white shadow-[0_22px_42px_-20px_rgba(0,0,0,0.9)] ring-1 ring-white/35 backdrop-blur-md transition hover:scale-105 hover:bg-white/24"
+                              className="absolute left-1/2 top-1/2 grid h-16 w-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/18 text-white shadow-[0_22px_42px_-20px_rgba(0,0,0,0.9)] ring-1 ring-white/35 backdrop-blur-md transition hover:scale-105 hover:bg-white/24"
                               aria-label={`Play ${activeVideo.title}`}
                             >
-                              <Play className="ml-1 h-9 w-9 fill-current" />
+                              <Play className="ml-0.5 h-7 w-7 fill-current" />
                             </button>
                           )}
                         </>
                       )}
-                      {activePlayback.mode === 'direct' ? null : (
-                        <div className="absolute left-4 top-4 rounded-full bg-newsPulse-blue px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-newsPulse-white shadow-lg">{videoBadgeLabel}</div>
-                      )}
                     </div>
                   </div>
 
-                  <div className="mt-4 flex items-center justify-between gap-3">
+                  <div className="mt-4 flex items-center justify-between gap-3 rounded-full border border-white/10 bg-white/6 px-2 py-2 text-white shadow-[0_18px_38px_-30px_rgba(0,0,0,0.9)] backdrop-blur md:hidden">
                     <button
                       type="button"
                       onClick={goPrevious}
                       disabled={!canGoPrevious}
-                      className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/12 bg-white/8 text-white transition hover:bg-white/14 disabled:opacity-35"
+                      className="inline-flex min-h-10 items-center gap-2 rounded-full px-3 text-sm font-bold transition hover:bg-white/10 disabled:opacity-35"
                       aria-label="Previous video"
                     >
-                      <ArrowLeft className="h-5 w-5" />
+                      <ArrowLeft className="h-4 w-4" />
+                      Previous
                     </button>
-                    <div className="text-xs font-bold uppercase tracking-[0.18em] text-white/44">{activeIndex + 1} / {items.length}</div>
+                    <div className="text-xs font-black uppercase tracking-[0.18em] text-white/58">{activeIndex + 1} / {items.length}</div>
                     <button
                       type="button"
                       onClick={goNext}
                       disabled={!canGoNext}
-                      className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/12 bg-white/8 text-white transition hover:bg-white/14 disabled:opacity-35"
+                      className="inline-flex min-h-10 items-center gap-2 rounded-full px-3 text-sm font-bold transition hover:bg-white/10 disabled:opacity-35"
                       aria-label="Next video"
                     >
-                      <ArrowRight className="h-5 w-5" />
+                      Next
+                      <ArrowRight className="h-4 w-4" />
                     </button>
                   </div>
+
+                  <div className="mt-5 text-center">
+                    <h1 className="text-balance text-2xl font-black leading-tight tracking-tight text-white sm:text-3xl">
+                      {activeVideo.title}
+                    </h1>
+                    {showNewsLine ? (
+                      <p className="mx-auto mt-3 line-clamp-2 max-w-[760px] text-balance text-[18px] font-extrabold leading-[1.4] text-white drop-shadow-[0_2px_14px_rgba(0,0,0,0.72)] sm:text-[21px]">
+                        {styledNewsLine.accent ? <span className="text-orange-400">{styledNewsLine.accent}</span> : null}
+                        {styledNewsLine.rest ? <span> {styledNewsLine.rest}</span> : null}
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
 
-                <div className="mx-auto w-full max-w-xl lg:mx-0">
-                  <div className="text-xs font-black uppercase tracking-[0.22em] text-red-300">News Pulse {videoBadgeLabel}</div>
-                  <h1 className="mt-3 text-3xl font-black leading-tight tracking-tight text-white sm:text-4xl">{activeVideo.title}</h1>
-                  {activeVideo.summary ? <p className="mt-4 text-base leading-7 text-white/68">{activeVideo.summary}</p> : null}
-                  <div className="mt-5 flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-white/44">
-                    {activeVideo.category ? <span>{activeVideo.category}</span> : null}
-                    {activeVideo.language ? <span>{activeVideo.language}</span> : null}
-                  </div>
-                  {activePlayback.mode === 'external' && activePlayback.externalUrl ? (
-                    <a
-                      href={activePlayback.externalUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-6 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-white/90"
-                    >
-                      {reelLabels.readNews}
-                      <ExternalLink className="h-4 w-4" />
-                    </a>
-                  ) : null}
+                <aside className="mt-5 flex justify-center gap-4 md:absolute md:left-[calc(50%+270px)] md:top-1/2 md:mt-0 md:-translate-y-1/2 md:flex-col md:items-center md:gap-4">
+                  <a href={facebookShareHref} target="_blank" rel="noopener noreferrer" className="group flex w-16 flex-col items-center gap-1.5 text-center text-[10px] font-bold text-white/78 transition hover:text-white" aria-label={reelLabels.facebook}>
+                    <span className="grid h-12 w-12 place-items-center rounded-full bg-black text-sm font-black text-white shadow-[0_16px_30px_-20px_rgba(0,0,0,0.95)] transition group-hover:bg-neutral-900">f</span>
+                    <span>{reelLabels.facebook}</span>
+                  </a>
+                  <a href={xShareHref} target="_blank" rel="noopener noreferrer" className="group flex w-16 flex-col items-center gap-1.5 text-center text-[10px] font-bold text-white/78 transition hover:text-white" aria-label={reelLabels.x}>
+                    <span className="grid h-12 w-12 place-items-center rounded-full bg-black text-sm font-black text-white shadow-[0_16px_30px_-20px_rgba(0,0,0,0.95)] transition group-hover:bg-neutral-900">X</span>
+                    <span>{reelLabels.x}</span>
+                  </a>
+                  <button type="button" onClick={copyShareUrl} className="group flex w-16 flex-col items-center gap-1.5 text-center text-[10px] font-bold text-white/78 transition hover:text-white" aria-label={copied ? reelLabels.copied : reelLabels.copyLink}>
+                    <span className="grid h-12 w-12 place-items-center rounded-full bg-black text-white shadow-[0_16px_30px_-20px_rgba(0,0,0,0.95)] transition group-hover:bg-neutral-900">
+                      {copied ? <Share2 className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
+                    </span>
+                    <span>{copied ? reelLabels.copied : reelLabels.copyLink}</span>
+                  </button>
+                </aside>
+
+                <div className="fixed right-5 top-1/2 z-40 hidden -translate-y-1/2 flex-col gap-3 md:flex">
+                  <button type="button" onClick={goPrevious} disabled={!canGoPrevious} className="grid h-12 w-12 place-items-center rounded-full border border-white/12 bg-white/8 text-white shadow-xl backdrop-blur transition hover:bg-white/14 disabled:border-white/8 disabled:bg-white/4 disabled:text-white/28" aria-label="Previous video">
+                    <ArrowUp className="h-5 w-5" />
+                  </button>
+                  <button type="button" onClick={goNext} disabled={!canGoNext} className="grid h-12 w-12 place-items-center rounded-full border border-white/12 bg-white/8 text-white shadow-xl backdrop-blur transition hover:bg-white/14 disabled:border-white/8 disabled:bg-white/4 disabled:text-white/28" aria-label="Next video">
+                    <ArrowDown className="h-5 w-5" />
+                  </button>
                 </div>
               </div>
-
-              <aside className="flex justify-center gap-3 lg:flex-col lg:items-center">
-                <a
-                  href={facebookShareHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-white/12 bg-white/8 px-3 text-sm font-black text-white transition hover:bg-white/14 lg:w-32"
-                  aria-label={reelLabels.facebook}
-                >
-                  <span>f</span>
-                  <span>{reelLabels.facebook}</span>
-                </a>
-                <a
-                  href={xShareHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-white/12 bg-white/8 px-3 text-sm font-black text-white transition hover:bg-white/14 lg:w-32"
-                  aria-label={reelLabels.x}
-                >
-                  <span>X</span>
-                  <span>{reelLabels.x}</span>
-                </a>
-                <button
-                  type="button"
-                  onClick={copyShareUrl}
-                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-white/12 bg-white/8 px-3 text-sm font-black text-white transition hover:bg-white/14 lg:w-32"
-                  aria-label={copied ? reelLabels.copied : reelLabels.copyLink}
-                >
-                  {copied ? <Share2 className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
-                  <span>{copied ? reelLabels.copied : reelLabels.copyLink}</span>
-                </button>
-              </aside>
             </section>
           ) : (
             <div className="grid flex-1 place-items-center py-16 text-sm font-semibold text-white/60">Loading short videos...</div>

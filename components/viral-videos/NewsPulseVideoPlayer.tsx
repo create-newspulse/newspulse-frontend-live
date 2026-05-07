@@ -33,6 +33,9 @@ type NewsPulseVideoPlayerProps = {
   minHeightClassName?: string;
   autoPlay?: boolean;
   showBottomSummary?: boolean;
+  showBottomTitle?: boolean;
+  compactReelControls?: boolean;
+  hideTopBranding?: boolean;
   onPosterError?: React.ReactEventHandler<HTMLVideoElement>;
 };
 
@@ -122,6 +125,9 @@ export default function NewsPulseVideoPlayer({
   minHeightClassName = 'min-h-[420px]',
   autoPlay = false,
   showBottomSummary = false,
+  showBottomTitle = true,
+  compactReelControls = false,
+  hideTopBranding = false,
   onPosterError,
 }: NewsPulseVideoPlayerProps) {
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
@@ -204,6 +210,7 @@ export default function NewsPulseVideoPlayer({
         poster={posterSrc || undefined}
         src={src}
         onClick={togglePlay}
+        onContextMenu={(event) => event.preventDefault()}
         onLoadedMetadata={(event) => setDuration(event.currentTarget.duration || 0)}
         onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime || 0)}
         onPlay={() => setPlaying(true)}
@@ -216,37 +223,38 @@ export default function NewsPulseVideoPlayer({
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.58)_0%,rgba(2,6,23,0.10)_28%,rgba(2,6,23,0.05)_52%,rgba(2,6,23,0.88)_100%)]" />
       <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10" />
 
-      <div className="absolute inset-x-0 top-0 z-30 flex items-start justify-between gap-3 p-3">
-        <div className="min-w-0">
-          <div className="inline-flex max-w-full items-center gap-2 rounded-full bg-black/46 px-2.5 py-1 text-white shadow-sm ring-1 ring-white/16 backdrop-blur">
-            <span className="grid h-5 w-5 shrink-0 place-items-center rounded bg-newsPulse-navy text-[10px] font-black leading-none">NP</span>
-            <span className="truncate text-[11px] font-black leading-none">News Pulse</span>
-          </div>
-          <div className="mt-2 inline-flex rounded-full bg-newsPulse-blue px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-newsPulse-white shadow-lg">
-            {labels.videoBadge}
-          </div>
-        </div>
-
-        {hasReadNewsHref ? (
-          readNewsIsExternal ? (
-            <a
-              href={readNewsHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="shrink-0 rounded-full bg-white px-3 py-1.5 text-[11px] font-black text-slate-950 shadow-lg transition hover:bg-white/90"
-            >
-              {labels.readNews}
-            </a>
+      {!hideTopBranding || hasReadNewsHref ? (
+        <div className="absolute inset-x-[18px] top-4 z-30 flex items-center justify-between gap-3">
+          {!hideTopBranding ? (
+            <>
+              <span className="text-sm font-extrabold leading-none text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.55)]">Viral</span>
+              <span className="ml-auto truncate text-sm font-extrabold leading-none text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.55)]">News Pulse</span>
+            </>
           ) : (
-            <Link
-              href={readNewsHref}
-              className="shrink-0 rounded-full bg-white px-3 py-1.5 text-[11px] font-black text-slate-950 shadow-lg transition hover:bg-white/90"
-            >
-              {labels.readNews}
-            </Link>
-          )
-        ) : null}
-      </div>
+            <span className="min-w-0" />
+          )}
+
+          {hideTopBranding && hasReadNewsHref ? (
+            readNewsIsExternal ? (
+              <a
+                href={readNewsHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 rounded-full bg-white px-3 py-1.5 text-[11px] font-black text-slate-950 shadow-lg transition hover:bg-white/90"
+              >
+                {labels.readNews}
+              </a>
+            ) : (
+              <Link
+                href={readNewsHref}
+                className="shrink-0 rounded-full bg-white px-3 py-1.5 text-[11px] font-black text-slate-950 shadow-lg transition hover:bg-white/90"
+              >
+                {labels.readNews}
+              </Link>
+            )
+          ) : null}
+        </div>
+      ) : null}
 
       <button
         type="button"
@@ -266,16 +274,20 @@ export default function NewsPulseVideoPlayer({
           </div>
         ) : null}
 
-        <div className="mb-3">
-          <h3 className="line-clamp-2 text-[15px] font-black leading-tight text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.65)] sm:text-base">
-            {title}
-          </h3>
-          {showBottomSummary && summary ? (
-            <p className="mt-1 line-clamp-2 text-xs font-medium leading-5 text-white/72 drop-shadow-[0_2px_10px_rgba(0,0,0,0.55)]">
-              {summary}
-            </p>
-          ) : null}
-        </div>
+        {showBottomTitle || (showBottomSummary && summary) ? (
+          <div className="mb-3">
+            {showBottomTitle ? (
+              <h3 className="line-clamp-2 text-[15px] font-black leading-tight text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.65)] sm:text-base">
+                {title}
+              </h3>
+            ) : null}
+            {showBottomSummary && summary ? (
+              <p className="mt-1 line-clamp-2 text-xs font-medium leading-5 text-white/72 drop-shadow-[0_2px_10px_rgba(0,0,0,0.55)]">
+                {summary}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         <input
           type="range"
@@ -288,27 +300,52 @@ export default function NewsPulseVideoPlayer({
             if (!video || duration <= 0) return;
             video.currentTime = (Number(event.currentTarget.value) / 100) * duration;
           }}
-          className="h-1 w-full cursor-pointer accent-newsPulse-blue"
+          className="h-1 w-full cursor-pointer accent-white"
+          style={{ accentColor: '#FFFFFF' }}
           aria-label="Video progress"
         />
 
-        <div className="mt-2 flex items-center justify-between gap-2 text-[11px] font-bold text-white/86">
-          <span className="tabular-nums">{formatTime(currentTime)} / {formatTime(duration)}</span>
-          <div className="flex items-center gap-1.5">
-            <button type="button" onClick={() => seekBy(-5)} className="grid h-8 w-8 place-items-center rounded-full bg-white/12 text-white ring-1 ring-white/12 transition hover:bg-white/18" aria-label={labels.rewind}>
-              <RotateCcw className="h-4 w-4" />
-            </button>
-            <button type="button" onClick={() => seekBy(5)} className="grid h-8 w-8 place-items-center rounded-full bg-white/12 text-white ring-1 ring-white/12 transition hover:bg-white/18" aria-label={labels.forward}>
-              <RotateCw className="h-4 w-4" />
-            </button>
-            <button type="button" onClick={toggleMute} className="grid h-8 w-8 place-items-center rounded-full bg-white/12 text-white ring-1 ring-white/12 transition hover:bg-white/18" aria-label={muted ? labels.unmute : labels.mute}>
-              {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-            </button>
-            <button type="button" onClick={cycleSpeed} className="h-8 rounded-full bg-white/12 px-2.5 text-[11px] font-black text-white ring-1 ring-white/12 transition hover:bg-white/18" aria-label={labels.speed}>
-              {playbackRate}x
-            </button>
+        {compactReelControls ? (
+          <div className="mt-2 grid grid-cols-[42px_minmax(0,1fr)_42px] items-center gap-2 text-[11px] font-bold text-white/86">
+            <span className="tabular-nums text-white opacity-100" style={{ color: '#FFFFFF', opacity: 1 }}>{formatTime(currentTime)}</span>
+            <div className="flex min-w-0 items-center justify-center gap-1.5">
+              <button type="button" onClick={cycleSpeed} className="h-8 rounded-full bg-white/10 px-2 text-[11px] font-black text-white ring-1 ring-white/10 transition hover:bg-white/16" aria-label={labels.speed}>
+                {playbackRate}x
+              </button>
+              <button type="button" onClick={() => seekBy(-5)} className="grid h-8 w-8 place-items-center rounded-full bg-white/10 text-white ring-1 ring-white/10 transition hover:bg-white/16" aria-label={labels.rewind}>
+                <RotateCcw className="h-4 w-4" />
+              </button>
+              <button type="button" onClick={togglePlay} className="grid h-9 w-9 place-items-center rounded-full bg-white/14 text-white ring-1 ring-white/14 shadow-lg transition hover:bg-white/20" aria-label={playing ? labels.pause : labels.play}>
+                {playing ? <Pause className="h-4 w-4 fill-current" /> : <Play className="ml-0.5 h-4 w-4 fill-current" />}
+              </button>
+              <button type="button" onClick={() => seekBy(5)} className="grid h-8 w-8 place-items-center rounded-full bg-white/10 text-white ring-1 ring-white/10 transition hover:bg-white/16" aria-label={labels.forward}>
+                <RotateCw className="h-4 w-4" />
+              </button>
+              <button type="button" onClick={toggleMute} className="grid h-8 w-8 place-items-center rounded-full bg-white/10 text-white ring-1 ring-white/10 transition hover:bg-white/16" aria-label={muted ? labels.unmute : labels.mute}>
+                {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+              </button>
+            </div>
+            <span className="text-right tabular-nums text-white opacity-100" style={{ color: '#FFFFFF', opacity: 1 }}>{formatTime(duration)}</span>
           </div>
-        </div>
+        ) : (
+          <div className="mt-2 flex items-center justify-between gap-2 text-[11px] font-bold text-white/86">
+            <span className="tabular-nums text-white opacity-100" style={{ color: '#FFFFFF', opacity: 1 }}>{formatTime(currentTime)} / {formatTime(duration)}</span>
+            <div className="flex items-center gap-1.5">
+              <button type="button" onClick={() => seekBy(-5)} className="grid h-8 w-8 place-items-center rounded-full bg-white/10 text-white ring-1 ring-white/10 transition hover:bg-white/16" aria-label={labels.rewind}>
+                <RotateCcw className="h-4 w-4" />
+              </button>
+              <button type="button" onClick={() => seekBy(5)} className="grid h-8 w-8 place-items-center rounded-full bg-white/10 text-white ring-1 ring-white/10 transition hover:bg-white/16" aria-label={labels.forward}>
+                <RotateCw className="h-4 w-4" />
+              </button>
+              <button type="button" onClick={toggleMute} className="grid h-8 w-8 place-items-center rounded-full bg-white/10 text-white ring-1 ring-white/10 transition hover:bg-white/16" aria-label={muted ? labels.unmute : labels.mute}>
+                {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+              </button>
+              <button type="button" onClick={cycleSpeed} className="h-8 rounded-full bg-white/10 px-2.5 text-[11px] font-black text-white ring-1 ring-white/10 transition hover:bg-white/16" aria-label={labels.speed}>
+                {playbackRate}x
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

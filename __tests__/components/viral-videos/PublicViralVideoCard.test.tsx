@@ -14,6 +14,8 @@ function makeVideo(overrides: Partial<PublicViralVideo> = {}): PublicViralVideo 
     videoFileUrl: '',
     videoUrl: 'https://x.com/i/status/2049868222804222122',
     sourceUrl: 'https://x.com/i/status/2049868222804222122',
+    relatedNewsUrl: '',
+    globalFrontend: true,
     videoType: 'external',
     playbackMode: 'external',
     category: 'Viral Videos',

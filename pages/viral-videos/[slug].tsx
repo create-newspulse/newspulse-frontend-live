@@ -3,7 +3,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import React from 'react';
-import { ArrowLeft, ArrowRight, Copy, ExternalLink, Play, Share2 } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Copy, Play, Share2 } from 'lucide-react';
 
 import NewsPulseVideoPlayer, { getViralVideoUiLabels } from '../../components/viral-videos/NewsPulseVideoPlayer';
 import { COVER_PLACEHOLDER_SRC } from '../../lib/coverImages';
@@ -27,6 +27,53 @@ function handlePosterError(event: React.SyntheticEvent<HTMLImageElement>) {
   }
   if (event.currentTarget.src.endsWith(COVER_PLACEHOLDER_SRC)) return;
   event.currentTarget.src = COVER_PLACEHOLDER_SRC;
+}
+
+function PlayerTopOverlay() {
+  return (
+    <div className="pointer-events-none absolute inset-x-[18px] top-4 z-30 flex items-center justify-between gap-3">
+      <span className="text-sm font-extrabold leading-none text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.55)]">Viral</span>
+      <span className="ml-auto truncate text-sm font-extrabold leading-none text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.55)]">News Pulse</span>
+    </div>
+  );
+}
+
+function pickViralVideoNewsLine(video: PublicViralVideo | null | undefined): string {
+  const raw = video?.raw || {};
+  const candidates = [
+    raw.newsLine,
+    raw.caption,
+    raw.shortCaption,
+    raw.video?.newsLine,
+    raw.video?.caption,
+    video?.summary,
+    video?.title,
+  ];
+
+  for (const candidate of candidates) {
+    const text = String(candidate || '').replace(/\s+/g, ' ').trim();
+    if (text) return text;
+  }
+  return '';
+}
+
+function splitViralVideoNewsLine(value: string): { accent: string; rest: string } {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text) return { accent: '', rest: '' };
+
+  const separatorMatch = text.match(/^(.{8,90}?)([-:.,]|\s(?:has|have|is|are|was|were|in)\s)/i);
+  if (separatorMatch?.index === 0 && separatorMatch[1]) {
+    const accent = separatorMatch[1].trim();
+    const rest = text.slice(accent.length).replace(/^\s*[-:.,]?\s*/, '').trim();
+    return { accent, rest };
+  }
+
+  const words = text.split(' ').filter(Boolean);
+  const accentCount = Math.min(4, Math.max(1, Math.ceil(words.length / 3)));
+  return {
+    accent: words.slice(0, accentCount).join(' '),
+    rest: words.slice(accentCount).join(' '),
+  };
 }
 
 function XEmbedPlayer({ tweetUrl, posterSrc, title, slug }: { tweetUrl: string; posterSrc: string; title: string; slug: string }) {
@@ -237,12 +284,10 @@ export default function ViralVideoDetailPage() {
   const posterSrc = getPublicViralVideoPosterUrl(video) || COVER_PLACEHOLDER_SRC;
   const playback = React.useMemo(() => resolvePublicViralVideoPlayback(video), [video]);
   const xEmbedUrl = React.useMemo(() => getPublicViralVideoXEmbedUrl(video), [video]);
-  const sourcePlayback = React.useMemo(
-    () => resolvePublicViralVideoPlayback(video?.sourceUrl ? { playbackMode: 'external', sourceUrl: video.sourceUrl } : null),
-    [video?.sourceUrl]
-  );
-  const sourceHref = xEmbedUrl || (sourcePlayback.mode === 'external' ? sourcePlayback.externalUrl : '');
-  const readNewsHref = sourceHref || (video ? detailHref(video) : '/viral-videos');
+  const relatedNewsHref = video?.relatedNewsUrl || '';
+  const newsLine = React.useMemo(() => pickViralVideoNewsLine(video), [video]);
+  const styledNewsLine = React.useMemo(() => splitViralVideoNewsLine(newsLine), [newsLine]);
+  const showNewsLine = Boolean(newsLine && newsLine.toLowerCase() !== String(video?.title || '').trim().toLowerCase());
   const debugSlug = Array.isArray(router.query.slug) ? router.query.slug[0] : router.query.slug;
   const shareUrl = typeof window === 'undefined' ? '' : window.location.href;
   const facebookShareHref = shareUrl ? `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}` : '#';
@@ -284,24 +329,9 @@ export default function ViralVideoDetailPage() {
         <title>{`${video?.title || title} | ${t('brand.name')}`}</title>
       </Head>
 
-      <main className="min-h-screen overflow-hidden bg-[#07090f] text-white">
-        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_top_left,rgba(220,38,38,0.18),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(14,165,233,0.16),transparent_32%)]" />
-        <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-5 sm:px-6 lg:px-8">
-          <header className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
-            <Link href="/" className="inline-flex min-w-0 items-center gap-3">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-newsPulse-navy text-base font-black shadow-[0_18px_36px_-18px_rgba(16,42,67,0.85)]">NP</span>
-              <span className="min-w-0">
-                <span className="block truncate text-lg font-black tracking-tight">News Pulse</span>
-                <span className="block truncate text-xs font-semibold uppercase tracking-[0.18em] text-white/48">Short Video Desk</span>
-              </span>
-            </Link>
-            <Link
-              href="/viral-videos"
-              className="inline-flex shrink-0 items-center gap-2 rounded-full border border-white/12 bg-white/8 px-4 py-2 text-sm font-bold text-white shadow-lg transition hover:bg-white/14"
-            >
-              Back to Viral Videos
-            </Link>
-          </header>
+      <main className="relative min-h-screen overflow-hidden bg-[#111214] text-white">
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.035)_0%,rgba(255,255,255,0)_22%,rgba(0,0,0,0.28)_100%)]" />
+        <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 pb-8 pt-4 sm:px-6 sm:pt-5 lg:px-8">
 
           {!loaded ? (
             <div className="grid flex-1 place-items-center py-16 text-sm font-semibold text-white/60">Loading video...</div>
@@ -311,11 +341,11 @@ export default function ViralVideoDetailPage() {
               <Link href="/viral-videos" className="mt-5 inline-flex rounded-full bg-white px-4 py-2 text-sm font-black text-slate-950">Back to Viral Videos</Link>
             </div>
           ) : (
-            <section className="grid flex-1 items-center gap-6 py-6 lg:grid-cols-[minmax(0,1fr)_88px]">
-              <div className="mx-auto grid w-full max-w-5xl gap-6 lg:grid-cols-[minmax(280px,420px)_minmax(220px,1fr)] lg:items-center">
-                <div className="mx-auto w-full max-w-[420px]">
-                  <div className="relative overflow-hidden rounded-[22px] border border-white/14 bg-black shadow-[0_40px_90px_-46px_rgba(0,0,0,0.95)]">
-                    <div className="relative aspect-[9/16] w-full overflow-hidden bg-slate-950">
+            <section className="relative flex flex-1 flex-col items-center justify-start pt-0 sm:pt-2">
+              <div className="relative flex w-full justify-center lg:min-h-[calc(100vh-5.5rem)]">
+                <div className="mx-auto min-w-0" style={{ width: 'min(100%, clamp(360px, calc(82vh * 9 / 16), 460px))' }}>
+                  <div className="relative overflow-hidden rounded-[22px] border border-white/14 bg-black shadow-[0_42px_96px_-48px_rgba(0,0,0,0.98)]">
+                    <div className="relative aspect-[9/16] w-full overflow-hidden bg-slate-950" style={{ aspectRatio: '9 / 16' }}>
                       {playback.mode === 'direct' ? (
                         <NewsPulseVideoPlayer
                           key={video.id}
@@ -323,105 +353,118 @@ export default function ViralVideoDetailPage() {
                           posterSrc={posterSrc}
                           title={video.title}
                           summary={video.summary}
-                          readNewsHref={readNewsHref}
+                          readNewsHref={relatedNewsHref}
                           labels={reelLabels}
                           autoPlay={playing}
-                          showBottomSummary
+                          showBottomTitle={false}
+                          compactReelControls
                           minHeightClassName="min-h-full"
                         />
-                      ) : playback.mode === 'youtube' && playing ? (
-                        <iframe
-                          title={video.title}
-                          src={playback.embedUrl}
-                          className="h-full w-full"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                          allowFullScreen
-                        />
+                      ) : playback.mode === 'youtube' ? (
+                        <>
+                          <iframe
+                            title={video.title}
+                            src={playback.embedUrl}
+                            className="h-full w-full"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                            allowFullScreen
+                          />
+                          <PlayerTopOverlay />
+                        </>
                       ) : xEmbedUrl ? (
-                        <XEmbedPlayer key={xEmbedUrl} tweetUrl={xEmbedUrl} posterSrc={posterSrc} title={video.title} slug={String(debugSlug || video.slug || video.id || '')} />
+                        <>
+                          <XEmbedPlayer key={xEmbedUrl} tweetUrl={xEmbedUrl} posterSrc={posterSrc} title={video.title} slug={String(debugSlug || video.slug || video.id || '')} />
+                          <PlayerTopOverlay />
+                        </>
                       ) : (
                         <>
                           <img src={posterSrc} alt={video.title} className="h-full w-full object-cover" loading="eager" decoding="async" onError={handlePosterError} />
-                          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.28)_0%,rgba(2,6,23,0.04)_42%,rgba(2,6,23,0.76)_100%)]" />
+                          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.46)_0%,rgba(2,6,23,0.05)_42%,rgba(2,6,23,0.78)_100%)]" />
+                          <PlayerTopOverlay />
                           {playback.mode === 'unavailable' ? (
                             <div className="absolute inset-x-5 top-1/2 -translate-y-1/2 rounded-lg bg-black/54 p-4 text-center text-sm font-bold text-white shadow-xl ring-1 ring-white/15 backdrop-blur">Video source unavailable</div>
-                          ) : playback.mode === 'external' ? (
-                            sourceHref ? (
-                              <a
-                                href={sourceHref}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="absolute left-1/2 top-1/2 inline-flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-black text-slate-950 shadow-xl transition hover:bg-white/90"
-                              >
-                                {reelLabels.readNews}
-                                <ExternalLink className="h-4 w-4" />
-                              </a>
-                            ) : null
-                          ) : (
+                          ) : playback.mode === 'external' ? null : (
                             <button
                               type="button"
                               onClick={playVideo}
-                              className="absolute left-1/2 top-1/2 grid h-20 w-20 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/18 text-white shadow-[0_22px_42px_-20px_rgba(0,0,0,0.9)] ring-1 ring-white/35 backdrop-blur-md transition hover:scale-105 hover:bg-white/24"
+                              className="absolute left-1/2 top-1/2 grid h-16 w-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/18 text-white shadow-[0_22px_42px_-20px_rgba(0,0,0,0.9)] ring-1 ring-white/35 backdrop-blur-md transition hover:scale-105 hover:bg-white/24"
                               aria-label={`Play ${video.title}`}
                             >
-                              <Play className="ml-1 h-9 w-9 fill-current" />
+                              <Play className="ml-0.5 h-7 w-7 fill-current" />
                             </button>
                           )}
                         </>
                       )}
-                      {playback.mode === 'direct' ? null : (
-                        <div className="absolute left-4 top-4 rounded-full bg-newsPulse-blue px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-newsPulse-white shadow-lg">News Pulse {reelLabels.videoBadge}</div>
-                      )}
                     </div>
                   </div>
 
-                  <div className="mt-4 flex items-center justify-between gap-3">
+                  <div className="mt-4 flex items-center justify-between gap-3 rounded-full border border-white/10 bg-white/6 px-2 py-2 text-white shadow-[0_18px_38px_-30px_rgba(0,0,0,0.9)] backdrop-blur md:hidden">
                     {previousVideo ? (
-                      <Link href={detailHref(previousVideo)} className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/12 bg-white/8 text-white transition hover:bg-white/14" aria-label="Previous video">
-                        <ArrowLeft className="h-5 w-5" />
+                      <Link href={detailHref(previousVideo)} className="inline-flex min-h-10 items-center gap-2 rounded-full px-3 text-sm font-bold transition hover:bg-white/10" aria-label="Previous video">
+                        <ArrowLeft className="h-4 w-4" />
+                        Previous
                       </Link>
-                    ) : <span className="h-11 w-11" />}
-                    <div className="text-xs font-bold uppercase tracking-[0.18em] text-white/44">{currentIndex >= 0 ? currentIndex + 1 : 1} / {Math.max(related.length, 1)}</div>
+                    ) : <span className="min-h-10 px-3" />}
+                    <div className="text-xs font-black uppercase tracking-[0.18em] text-white/58">{currentIndex >= 0 ? currentIndex + 1 : 1} / {Math.max(related.length, 1)}</div>
                     {nextVideo ? (
-                      <Link href={detailHref(nextVideo)} className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/12 bg-white/8 text-white transition hover:bg-white/14" aria-label="Next video">
-                        <ArrowRight className="h-5 w-5" />
+                      <Link href={detailHref(nextVideo)} className="inline-flex min-h-10 items-center gap-2 rounded-full px-3 text-sm font-bold transition hover:bg-white/10" aria-label="Next video">
+                        Next
+                        <ArrowRight className="h-4 w-4" />
                       </Link>
-                    ) : <span className="h-11 w-11" />}
+                    ) : <span className="min-h-10 px-3" />}
+                  </div>
+
+                  <div className="mt-5 text-center">
+                    <h1 className="text-balance text-2xl font-black leading-tight tracking-tight text-white sm:text-3xl">
+                      {video.title}
+                    </h1>
+                    {showNewsLine ? (
+                      <p className="mx-auto mt-3 line-clamp-2 max-w-[760px] text-balance text-[18px] font-extrabold leading-[1.4] text-white drop-shadow-[0_2px_14px_rgba(0,0,0,0.72)] sm:text-[21px]">
+                        {styledNewsLine.accent ? <span className="text-orange-400">{styledNewsLine.accent}</span> : null}
+                        {styledNewsLine.rest ? <span> {styledNewsLine.rest}</span> : null}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
 
-                <div className="mx-auto w-full max-w-xl lg:mx-0">
-                  <div className="text-xs font-black uppercase tracking-[0.22em] text-red-300">News Pulse {reelLabels.videoBadge}</div>
-                  <h1 className="mt-3 text-3xl font-black leading-tight tracking-tight text-white sm:text-4xl">{video.title}</h1>
-                  {video.summary ? <p className="mt-4 text-base leading-7 text-white/68">{video.summary}</p> : null}
-                  <div className="mt-6 flex flex-wrap gap-3">
-                    {sourceHref ? (
-                      <a href={sourceHref} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-white/90">
-                        {reelLabels.readNews}
-                        <ExternalLink className="h-4 w-4" />
-                      </a>
-                    ) : null}
-                    <Link href="/viral-videos" className="inline-flex rounded-full border border-white/14 bg-white/8 px-4 py-2 text-sm font-bold text-white transition hover:bg-white/14">
-                      Back to Viral Videos
+                <aside className="mt-5 flex justify-center gap-4 md:absolute md:left-[calc(50%+270px)] md:top-1/2 md:mt-0 md:-translate-y-1/2 md:flex-col md:items-center md:gap-4">
+                  <a href={facebookShareHref} target="_blank" rel="noopener noreferrer" className="group flex w-16 flex-col items-center gap-1.5 text-center text-[10px] font-bold text-white/78 transition hover:text-white" aria-label={reelLabels.facebook}>
+                    <span className="grid h-12 w-12 place-items-center rounded-full bg-black text-sm font-black text-white shadow-[0_16px_30px_-20px_rgba(0,0,0,0.95)] transition group-hover:bg-neutral-900">f</span>
+                    <span>{reelLabels.facebook}</span>
+                  </a>
+                  <a href={xShareHref} target="_blank" rel="noopener noreferrer" className="group flex w-16 flex-col items-center gap-1.5 text-center text-[10px] font-bold text-white/78 transition hover:text-white" aria-label={reelLabels.x}>
+                    <span className="grid h-12 w-12 place-items-center rounded-full bg-black text-sm font-black text-white shadow-[0_16px_30px_-20px_rgba(0,0,0,0.95)] transition group-hover:bg-neutral-900">X</span>
+                    <span>{reelLabels.x}</span>
+                  </a>
+                  <button type="button" onClick={copyShareUrl} className="group flex w-16 flex-col items-center gap-1.5 text-center text-[10px] font-bold text-white/78 transition hover:text-white" aria-label={copied ? reelLabels.copied : reelLabels.copyLink}>
+                    <span className="grid h-12 w-12 place-items-center rounded-full bg-black text-white shadow-[0_16px_30px_-20px_rgba(0,0,0,0.95)] transition group-hover:bg-neutral-900">
+                      {copied ? <Share2 className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
+                    </span>
+                    <span>{copied ? reelLabels.copied : reelLabels.copyLink}</span>
+                  </button>
+                </aside>
+
+                <div className="fixed right-5 top-1/2 z-40 hidden -translate-y-1/2 flex-col gap-3 md:flex">
+                  {previousVideo ? (
+                    <Link href={detailHref(previousVideo)} className="grid h-12 w-12 place-items-center rounded-full border border-white/12 bg-white/8 text-white shadow-xl backdrop-blur transition hover:bg-white/14" aria-label="Previous video">
+                      <ArrowUp className="h-5 w-5" />
                     </Link>
-                  </div>
+                  ) : (
+                    <button type="button" disabled className="grid h-12 w-12 place-items-center rounded-full border border-white/8 bg-white/4 text-white/28" aria-label="Previous video">
+                      <ArrowUp className="h-5 w-5" />
+                    </button>
+                  )}
+                  {nextVideo ? (
+                    <Link href={detailHref(nextVideo)} className="grid h-12 w-12 place-items-center rounded-full border border-white/12 bg-white/8 text-white shadow-xl backdrop-blur transition hover:bg-white/14" aria-label="Next video">
+                      <ArrowDown className="h-5 w-5" />
+                    </Link>
+                  ) : (
+                    <button type="button" disabled className="grid h-12 w-12 place-items-center rounded-full border border-white/8 bg-white/4 text-white/28" aria-label="Next video">
+                      <ArrowDown className="h-5 w-5" />
+                    </button>
+                  )}
                 </div>
               </div>
-
-              <aside className="flex justify-center gap-3 lg:flex-col lg:items-center">
-                <a href={facebookShareHref} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-white/12 bg-white/8 px-3 text-sm font-black text-white transition hover:bg-white/14 lg:w-32" aria-label={reelLabels.facebook}>
-                  <span>f</span>
-                  <span>{reelLabels.facebook}</span>
-                </a>
-                <a href={xShareHref} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-white/12 bg-white/8 px-3 text-sm font-black text-white transition hover:bg-white/14 lg:w-32" aria-label={reelLabels.x}>
-                  <span>X</span>
-                  <span>{reelLabels.x}</span>
-                </a>
-                <button type="button" onClick={copyShareUrl} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-white/12 bg-white/8 px-3 text-sm font-black text-white transition hover:bg-white/14 lg:w-32" aria-label={copied ? reelLabels.copied : reelLabels.copyLink}>
-                  {copied ? <Share2 className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
-                  <span>{copied ? reelLabels.copied : reelLabels.copyLink}</span>
-                </button>
-              </aside>
             </section>
           )}
         </div>

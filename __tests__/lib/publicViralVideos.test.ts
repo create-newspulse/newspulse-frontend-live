@@ -268,6 +268,59 @@ describe('publicViralVideos helpers', () => {
     expect(payload.items[0]).toEqual(expect.objectContaining({ status: 'published', showOnHomepage: false }));
   });
 
+  test('keeps related news separate from external video source URLs', () => {
+    const payload = normalizePublicViralVideosPayload({
+      ok: true,
+      settings: { frontendEnabled: true },
+      items: [
+        {
+          id: 'external-source-video',
+          title: 'External source with related news',
+          posterImageUrl: 'https://cdn.example.com/poster.jpg',
+          sourceUrl: 'https://www.instagram.com/reel/source/',
+          relatedNewsUrl: '/news/context-story',
+          status: 'published',
+          globalFrontend: true,
+          showOnHomepage: true,
+        },
+      ],
+    });
+
+    expect(payload.items[0]).toEqual(expect.objectContaining({
+      sourceUrl: 'https://www.instagram.com/reel/source/',
+      relatedNewsUrl: '/news/context-story',
+      globalFrontend: true,
+      kind: 'external',
+    }));
+  });
+
+  test('filters globally frontend-disabled videos', () => {
+    const payload = normalizePublicViralVideosPayload({
+      ok: true,
+      settings: { frontendEnabled: true },
+      items: [
+        {
+          id: 'hidden-video',
+          title: 'Hidden video',
+          thumbnailUrl: 'https://cdn.example.com/thumb.jpg',
+          videoUrl: 'https://cdn.example.com/hidden.mp4',
+          status: 'published',
+          globalFrontend: false,
+        },
+        {
+          id: 'visible-video',
+          title: 'Visible video',
+          thumbnailUrl: 'https://cdn.example.com/thumb.jpg',
+          videoUrl: 'https://cdn.example.com/visible.mp4',
+          status: 'published',
+          globalFrontend: true,
+        },
+      ],
+    });
+
+    expect(payload.items.map((item) => item.id)).toEqual(['visible-video']);
+  });
+
   test('keeps frontend-disabled payloads empty', () => {
     const payload = normalizePublicViralVideosPayload({
       ok: true,

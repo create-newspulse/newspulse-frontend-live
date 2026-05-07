@@ -55,6 +55,14 @@ function isCategoryRoute(asPath: string): boolean {
   return CATEGORY_ROUTE_SEGMENTS.has(first);
 }
 
+function isViralVideosRoute(asPath: string): boolean {
+  const raw = String(asPath || '/');
+  const pathOnly = (raw.split('?')[0] || '/').split('#')[0] || '/';
+  const normalized = stripLocalePrefix(pathOnly).toLowerCase().replace(/\/+$/, '') || '/';
+  const parts = normalized.split('/').filter(Boolean);
+  return parts[0] === 'viral-videos';
+}
+
 const inter = Inter({
   subsets: ['latin'],
   weight: ['400', '500', '600', '700'],
@@ -203,7 +211,7 @@ function I18nBridge({ Component, pageProps }: { Component: any; pageProps: any }
   const { lang } = useI18n();
   const messages = getMessagesForLang(lang);
   const langClass = lang === 'hi' ? 'np-lang-hi' : lang === 'gu' ? 'np-lang-gu' : 'np-lang-en';
-  const showSimpleHeader = React.useMemo(() => isCategoryRoute(router.asPath), [router.asPath]);
+  const showSimpleHeader = React.useMemo(() => isCategoryRoute(router.asPath) && !isViralVideosRoute(router.asPath), [router.asPath]);
   return (
     <SafeIntlProvider key={lang} messages={messages} locale={lang} onError={() => {}}>
       <SeoAlternates />
