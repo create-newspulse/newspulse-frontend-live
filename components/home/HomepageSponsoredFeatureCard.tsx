@@ -3,7 +3,10 @@ import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 
 import type { HomepageSponsoredFeature } from '../../lib/publicSponsoredFeature';
+import { splitStoryTitleHook } from '../../lib/storyTitleHook';
 import StoryImage from '../../src/components/story/StoryImage';
+
+const SPONSORED_TITLE_HOOK_COLOR = '#C75A00';
 
 type HomepageSponsoredFeatureCardProps = {
   theme: {
@@ -18,6 +21,8 @@ type HomepageSponsoredFeatureCardProps = {
 };
 
 export default function HomepageSponsoredFeatureCard({ theme, feature }: HomepageSponsoredFeatureCardProps) {
+  const headlineParts = splitStoryTitleHook(feature.headline || '');
+
   const lineClamp2 = {
     display: '-webkit-box',
     WebkitLineClamp: 2,
@@ -52,7 +57,8 @@ export default function HomepageSponsoredFeatureCard({ theme, feature }: Homepag
       <div className="grid gap-4 p-4 sm:grid-cols-[minmax(0,1.55fr)_220px] sm:items-center sm:p-5">
         <div className="order-2 sm:order-1 min-w-0">
           <h2 className="text-[1.2rem] font-extrabold leading-[1.22] tracking-[-0.015em] sm:text-[1.42rem]" style={{ color: theme.text, ...lineClamp2 }}>
-            {feature.headline}
+            {headlineParts.highlightedHook ? <span style={{ color: SPONSORED_TITLE_HOOK_COLOR }}>{headlineParts.highlightedHook}</span> : null}
+            {headlineParts.remainingTitle ? <span>{` ${headlineParts.remainingTitle}`}</span> : null}
           </h2>
 
           <p className="mt-3 text-[14px] leading-6" style={{ color: theme.sub, ...lineClamp3 }}>

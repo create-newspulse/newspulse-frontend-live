@@ -2905,6 +2905,9 @@ function FeedList({ theme, items, lang }: any) {
             const category = String(f?.category || '').trim();
             const metaText = time;
             const storyKey = getStoryReactKey(f, href);
+            const titleText = String(f?.title || '').trim();
+            const titleParts = splitStoryTitleHook(titleText);
+            const titleHookColor = getStoryTitleHookColor(category);
 
             debugStoryCard('home-feed-list', f, f?.imageSrc);
 
@@ -2930,7 +2933,8 @@ function FeedList({ theme, items, lang }: any) {
 
                 <div className="mt-1 flex items-start gap-2">
                   <span className="line-clamp-2 font-semibold text-sm leading-snug" style={{ color: theme.text }}>
-                    {String(f?.title || '').trim()}
+                    {titleParts.highlightedHook ? <span style={{ color: titleHookColor }}>{titleParts.highlightedHook}</span> : null}
+                    {titleParts.remainingTitle ? <span>{` ${titleParts.remainingTitle}`}</span> : null}
                   </span>
                   {f?.titleIsOriginal ? <OriginalTag /> : null}
                 </div>
@@ -3309,6 +3313,9 @@ function HomeSpotlightCarousel({ theme, title, href, items, lang, Icon }: any) {
 
   if (!vm) return null;
 
+  const spotlightTitleParts = splitStoryTitleHook(vm.title);
+  const spotlightTitleHookColor = getStoryTitleHookColor(vm.categoryLabel);
+
   return (
     <Surface theme={theme} className="overflow-hidden">
       <div
@@ -3427,7 +3434,8 @@ function HomeSpotlightCarousel({ theme, title, href, items, lang, Icon }: any) {
 
                 <div className="mt-4 flex items-start gap-2">
                   <h3 className="min-w-0 text-[1.62rem] font-black leading-[1.14] tracking-[-0.015em] sm:text-[1.92rem]" style={{ color: theme.text, ...lineClamp2 }}>
-                    {vm.title}
+                    {spotlightTitleParts.highlightedHook ? <span style={{ color: spotlightTitleHookColor }}>{spotlightTitleParts.highlightedHook}</span> : null}
+                    {spotlightTitleParts.remainingTitle ? <span>{` ${spotlightTitleParts.remainingTitle}`}</span> : null}
                   </h3>
                   {vm.titleIsOriginal ? <OriginalTag /> : null}
                 </div>
