@@ -6,6 +6,7 @@ import React from 'react';
 import { usePublicAdSlot } from '../hooks/usePublicAdSlot';
 import { usePublicTicker } from '../hooks/usePublicTicker';
 import { useI18n } from '../src/i18n/LanguageProvider';
+import { resolveArticleSlug } from '../lib/articleSlugs';
 import { buildNewsUrl } from '../lib/newsRoutes';
 
 const BREAKING_ACCENT = '#DC2626';
@@ -18,6 +19,90 @@ function resolveBroadcastSource(raw: any): string {
     if (text) return text;
   }
   return '';
+}
+
+function resolveBroadcastArticleHref(raw: any, lang: 'en' | 'hi' | 'gu'): string | null {
+  const articleCandidate = raw?.linkedArticle || raw?.article || raw?.news || raw?.targetArticle || raw?.destinationArticle || null;
+
+  const idCandidates = [
+    articleCandidate?._id,
+    articleCandidate?.id,
+    raw?.linkedArticleId,
+    raw?.articleId,
+    raw?.newsId,
+    raw?.targetArticleId,
+    raw?.destinationArticleId,
+  ];
+
+  const slugCandidates = [
+    articleCandidate?.slug,
+    articleCandidate ? resolveArticleSlug(articleCandidate, lang) : '',
+    raw?.linkedArticleSlug,
+    raw?.articleSlug,
+    raw?.newsSlug,
+    raw?.targetArticleSlug,
+    raw?.destinationArticleSlug,
+  ];
+
+  const articleId = idCandidates.map((value) => String(value || '').trim()).find(Boolean) || '';
+  const articleSlug = slugCandidates.map((value) => String(value || '').trim()).find(Boolean) || '';
+
+  if (!articleId && !articleSlug) return null;
+  return buildNewsUrl({ id: articleId || articleSlug, slug: articleSlug || articleId, lang });
+}
+
+function parseBroadcastTimestamp(raw: unknown): number | null {
+  const text = String(raw || '').trim();
+  if (!text) return null;
+  const ms = Date.parse(text);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function resolveTimelineTimestampMs(item: { ts?: number | null; raw?: any }): number | null {
+  const raw = item?.raw;
+  const dateText = String(raw?.date || '').trim();
+  const timeText = String(raw?.time || '').trim();
+  const candidates: Array<number | null> = [
+    parseBroadcastTimestamp(raw?.publishedAt),
+    parseBroadcastTimestamp(raw?.createdAt),
+    parseBroadcastTimestamp(raw?.updatedAt),
+    dateText && timeText ? parseBroadcastTimestamp(`${dateText} ${timeText}`) : null,
+    parseBroadcastTimestamp(timeText),
+    parseBroadcastTimestamp(dateText),
+    typeof item?.ts === 'number' && Number.isFinite(item.ts) ? item.ts : null,
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate !== null) return candidate;
+  }
+
+  return null;
+}
+
+function resolveTimelineTimeLabel(item: { timeText?: string; raw?: any }): string {
+  if (String(item?.timeText || '').trim()) return String(item?.timeText || '').trim();
+
+  const raw = item?.raw;
+  const dateText = String(raw?.date || '').trim();
+  const timeText = String(raw?.time || '').trim();
+
+  if (dateText && timeText) return `${dateText} ${timeText}`;
+  if (timeText) return timeText;
+  if (dateText) return dateText;
+
+  return '';
+}
+
+function sortTimelineItems<T extends { ts?: number | null; raw?: any }>(items: T[]): T[] {
+  return [...items]
+    .map((item, index) => ({ item, index, ts: resolveTimelineTimestampMs(item) }))
+    .sort((a, b) => {
+      if (a.ts !== null && b.ts !== null && a.ts !== b.ts) return b.ts - a.ts;
+      if (a.ts !== null && b.ts === null) return -1;
+      if (a.ts === null && b.ts !== null) return 1;
+      return a.index - b.index;
+    })
+    .map((entry) => entry.item);
 }
 
 function normalizeTab(value: unknown): 'breaking' | 'live' | null {
@@ -105,6 +190,9 @@ export default function BreakingPage() {
     todayOnly: true,
   });
 
+  const breakingDisplayItems = React.useMemo(() => sortTimelineItems(breaking.items), [breaking.items]);
+  const liveDisplayItems = React.useMemo(() => sortTimelineItems(live.items), [live.items]);
+
   const didScrollRef = React.useRef<string>('');
   React.useEffect(() => {
     if (!router.isReady) return;
@@ -170,14 +258,45 @@ export default function BreakingPage() {
                   <div className="rounded-2xl border border-red-200/80 bg-white/80 px-4 py-3 text-sm text-red-900">Loading…</div>
                 ) : breaking.error ? (
                   <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{breaking.error}</div>
-                ) : breaking.items.length === 0 ? (
+                ) : breakingDisplayItems.length === 0 ? (
                   <div className="rounded-2xl border border-red-100 bg-white/80 px-4 py-3 text-sm text-red-900/85">{t('home.noBreaking')}</div>
                 ) : (
                   <div className="overflow-hidden rounded-2xl border border-red-200/80 bg-white/85 divide-y divide-red-100/80">
-                    {breaking.items.map((it) => {
-                      const rawId = String((it.raw as any)?._id || (it.raw as any)?.id || it.id || '').trim();
-                      const href = rawId ? buildNewsUrl({ id: rawId, lang: tickerLang }) : '#';
+                    {breakingDisplayItems.map((it) => {
+                      const href = resolveBroadcastArticleHref(it.raw, tickerLang);
                       const sourceLabel = resolveBroadcastSource(it.raw);
+                      const displayTimeLabel = resolveTimelineTimeLabel(it);
+                      const content = (
+                        <div className="flex items-start gap-3">
+                          <div className="shrink-0 pt-0.5">
+                            <span className="inline-flex rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.14em] text-red-700">
+                              BREAKING
+                            </span>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-red-700/85">
+                              {displayTimeLabel ? <span>{displayTimeLabel}</span> : null}
+                              {displayTimeLabel && sourceLabel ? <span aria-hidden="true">•</span> : null}
+                              {sourceLabel ? <span className="truncate">{sourceLabel}</span> : null}
+                            </div>
+                            <div className="mt-1 text-sm font-semibold leading-6 text-slate-900" lang={tickerLang}>{it.text}</div>
+                          </div>
+                          {href ? <div className="shrink-0 self-center text-[11px] font-bold uppercase tracking-[0.14em] text-red-700/80">Open</div> : null}
+                        </div>
+                      );
+
+                      if (!href) {
+                        return (
+                          <div
+                            key={it.id}
+                            className="border-l-4 bg-white/70 px-3 py-3 sm:px-4"
+                            style={{ borderLeftColor: BREAKING_ACCENT }}
+                          >
+                            {content}
+                          </div>
+                        );
+                      }
+
                       return (
                         <Link
                           key={it.id}
@@ -185,22 +304,7 @@ export default function BreakingPage() {
                           className="block border-l-4 bg-white/70 px-3 py-3 transition-colors hover:bg-white sm:px-4"
                           style={{ borderLeftColor: BREAKING_ACCENT }}
                         >
-                          <div className="flex items-start gap-3">
-                            <div className="shrink-0 pt-0.5">
-                              <span className="inline-flex rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.14em] text-red-700">
-                                BREAKING
-                              </span>
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-red-700/85">
-                                {it.timeText ? <span>{it.timeText}</span> : null}
-                                {it.timeText && sourceLabel ? <span aria-hidden="true">•</span> : null}
-                                {sourceLabel ? <span className="truncate">{sourceLabel}</span> : null}
-                              </div>
-                              <div className="mt-1 text-sm font-semibold leading-6 text-slate-900" lang={tickerLang}>{it.text}</div>
-                            </div>
-                            <div className="shrink-0 self-center text-[11px] font-bold uppercase tracking-[0.14em] text-red-700/80">Open</div>
-                          </div>
+                          {content}
                         </Link>
                       );
                     })}
@@ -240,12 +344,13 @@ export default function BreakingPage() {
                   <div className="rounded-2xl border border-blue-200/80 bg-white/80 px-4 py-3 text-sm text-blue-900">Loading…</div>
                 ) : live.error ? (
                   <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">{live.error}</div>
-                ) : live.items.length === 0 ? (
+                ) : liveDisplayItems.length === 0 ? (
                   <div className="rounded-2xl border border-blue-100 bg-white/80 px-4 py-3 text-sm text-blue-900/85">{t('home.noLiveUpdates')}</div>
                 ) : (
                   <div className="overflow-hidden rounded-2xl border border-blue-200/80 bg-white/85 divide-y divide-blue-100/80">
-                    {live.items.map((it) => {
+                    {liveDisplayItems.map((it) => {
                       const sourceLabel = resolveBroadcastSource(it.raw);
+                      const displayTimeLabel = resolveTimelineTimeLabel(it);
                       return (
                         <div key={it.id} className="border-l-4 bg-white/70 px-3 py-3 sm:px-4" style={{ borderLeftColor: LIVE_ACCENT }}>
                           <div className="flex items-start gap-3">
@@ -256,8 +361,8 @@ export default function BreakingPage() {
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-blue-700/85">
-                                {it.timeText ? <span>{it.timeText}</span> : null}
-                                {it.timeText && sourceLabel ? <span aria-hidden="true">•</span> : null}
+                                {displayTimeLabel ? <span>{displayTimeLabel}</span> : null}
+                                {displayTimeLabel && sourceLabel ? <span aria-hidden="true">•</span> : null}
                                 {sourceLabel ? <span className="truncate">{sourceLabel}</span> : null}
                               </div>
                               <div className="mt-1 text-sm font-semibold leading-6 text-slate-900" lang={tickerLang}>{it.text}</div>

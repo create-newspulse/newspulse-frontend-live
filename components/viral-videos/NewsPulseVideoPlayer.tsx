@@ -140,7 +140,6 @@ export default function NewsPulseVideoPlayer({
   const [currentTime, setCurrentTime] = React.useState(0);
   const [duration, setDuration] = React.useState(0);
   const [playbackRate, setPlaybackRate] = React.useState(1);
-  const [nextCountdown, setNextCountdown] = React.useState<number | null>(null);
 
   React.useEffect(() => {
     const video = videoRef.current;
@@ -148,7 +147,6 @@ export default function NewsPulseVideoPlayer({
     setCurrentTime(0);
     setDuration(0);
     setPlaybackRate(1);
-    setNextCountdown(null);
     if (!video) return;
     video.playbackRate = 1;
     video.load();
@@ -160,25 +158,9 @@ export default function NewsPulseVideoPlayer({
     }
   }, [autoPlay, src]);
 
-  React.useEffect(() => {
-    if (nextCountdown === null) return;
-    if (nextCountdown <= 0) {
-      setNextCountdown(null);
-      onAdvanceToNext?.();
-      return;
-    }
-
-    const timerId = window.setTimeout(() => {
-      setNextCountdown((value) => (value === null ? null : value - 1));
-    }, 1000);
-
-    return () => window.clearTimeout(timerId);
-  }, [nextCountdown, onAdvanceToNext]);
-
   const togglePlay = React.useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
-    if (nextCountdown !== null) setNextCountdown(null);
 
     if (video.paused || video.ended) {
       if (video.ended) video.currentTime = 0;
@@ -190,7 +172,7 @@ export default function NewsPulseVideoPlayer({
     }
 
     video.pause();
-  }, [nextCountdown]);
+  }, []);
 
   const seekBy = React.useCallback((amount: number) => {
     const video = videoRef.current;
@@ -265,8 +247,12 @@ export default function NewsPulseVideoPlayer({
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onEnded={() => {
+          if (hasNextVideo && onAdvanceToNext) {
+            onAdvanceToNext();
+            return;
+          }
+
           setPlaying(false);
-          if (hasNextVideo && onAdvanceToNext) setNextCountdown(3);
         }}
         onVolumeChange={(event) => setMuted(event.currentTarget.muted)}
         onError={onPosterError}
@@ -289,14 +275,6 @@ export default function NewsPulseVideoPlayer({
           )}
 
           <div className="pointer-events-auto ml-2 shrink-0">{renderReadNewsAction()}</div>
-        </div>
-      ) : null}
-
-      {nextCountdown !== null ? (
-        <div className="pointer-events-none absolute inset-x-6 bottom-28 z-40 flex justify-center">
-          <div className="rounded-full bg-black/72 px-4 py-2 text-sm font-black text-white shadow-xl ring-1 ring-white/14 backdrop-blur-md">
-            Next video in {nextCountdown}...
-          </div>
         </div>
       ) : null}
 
