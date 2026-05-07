@@ -3719,7 +3719,7 @@ function ViralVideosRightRailBlock({ theme, lang }: any) {
   if (!resolved || !frontendEnabled || !featuredVideo) return null;
 
   return (
-    <section aria-label={t('categories.viralVideos')} className="relative w-full overflow-hidden rounded-[18px] border p-2 shadow-[0_12px_28px_-26px_rgba(15,23,42,0.22)]"
+    <section aria-label={t('categories.viralVideos')} className="relative w-full overflow-hidden rounded-[18px] border p-[5px] shadow-[0_10px_22px_-26px_rgba(15,23,42,0.16)]"
       style={{
         borderColor: 'rgba(226,232,240,0.9)',
         background: '#ffffff',
