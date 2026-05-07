@@ -18,6 +18,24 @@ function appendQuery(url: string, query: URLSearchParams): string {
   return qs ? `${url}?${qs}` : url;
 }
 
+function readPositiveInt(value: unknown, fallback: number): number {
+  const parsed = Math.floor(Number(value));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function readCursor(value: unknown): string {
+  return String(Array.isArray(value) ? value[0] : value || '').trim();
+}
+
+function sliceByCursor<T extends { id: string; slug: string }>(items: T[], limit: number, cursor: string) {
+  const startIndex = cursor ? items.findIndex((item) => item.slug === cursor || item.id === cursor) + 1 : 0;
+  const safeStart = startIndex > 0 ? startIndex : 0;
+  const pageItems = items.slice(safeStart, safeStart + limit);
+  const hasMore = safeStart + pageItems.length < items.length;
+  const nextCursor = hasMore ? String(pageItems[pageItems.length - 1]?.slug || pageItems[pageItems.length - 1]?.id || '') : '';
+  return { pageItems, nextCursor, hasMore };
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   noStore(res);
 
@@ -36,12 +54,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const lang = Array.isArray(req.query.lang) ? req.query.lang[0] : req.query.lang;
   const homepage = Array.isArray(req.query.homepage) ? req.query.homepage[0] : req.query.homepage;
   const limit = Array.isArray(req.query.limit) ? req.query.limit[0] : req.query.limit;
+  const cursor = readCursor(req.query.cursor);
+  const requestedLimit = readPositiveInt(limit, 10);
+  const upstreamLimit = Math.max(requestedLimit * 5, 250);
   const effectiveLang = String(language || lang || '').trim().toLowerCase();
   if (effectiveLang) {
     upstreamQuery.set(lang ? 'lang' : 'language', effectiveLang);
     upstreamQuery.set(lang ? 'language' : 'lang', effectiveLang);
   }
-  if (limit) upstreamQuery.set('limit', String(limit));
+  upstreamQuery.set('limit', String(upstreamLimit));
 
   const candidates = [
     appendQuery(`${origin}/api/public/viral-videos`, upstreamQuery),
@@ -65,9 +86,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const normalized = normalizePublicViralVideosPayload(json);
       if (upstream.ok && normalized.ok) {
         const homepageOnly = String(homepage || '').trim() === '1' || String(homepage || '').toLowerCase() === 'true';
-        const max = Math.max(0, Math.floor(Number(limit || 0)) || 0);
-        const items = (homepageOnly ? normalized.items.filter((item) => item.showOnHomepage) : normalized.items).slice(0, max || undefined);
-        return res.status(200).json({ ...normalized, items });
+        const filteredItems = homepageOnly ? normalized.items.filter((item) => item.showOnHomepage) : normalized.items;
+        const { pageItems, nextCursor, hasMore } = sliceByCursor(filteredItems, requestedLimit, cursor);
+        return res.status(200).json({
+          ...normalized,
+          items: pageItems,
+          meta: {
+            nextCursor,
+            hasMore,
+          },
+        });
       }
     } catch {
       // Try the next known public Viral Videos contract.

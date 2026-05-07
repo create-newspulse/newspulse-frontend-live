@@ -6,6 +6,7 @@ export type PublicViralVideo = {
   id: string;
   title: string;
   summary: string;
+  highlightColor: string;
   posterImageUrl: string;
   thumbnailUrl: string;
   videoFileUrl: string;
@@ -30,6 +31,10 @@ export type PublicViralVideosPayload = {
   ok: boolean;
   settings: { frontendEnabled: boolean };
   items: PublicViralVideo[];
+  meta?: {
+    nextCursor: string;
+    hasMore: boolean;
+  };
 };
 
 export type PublicViralVideoPlayback = {
@@ -101,6 +106,48 @@ function pickFirstBoolean(...values: unknown[]): boolean | undefined {
     if (['false', '0', 'no', 'off', 'draft', 'disabled'].includes(text)) return false;
   }
   return undefined;
+}
+
+function normalizeHighlightColor(value: unknown): string {
+  const color = String(value || '').trim().toLowerCase();
+  if (!color) return '';
+  const normalized = color.replace(/[_\s-]+/g, '-');
+  const aliases: Record<string, string> = {
+    amber: 'gold',
+    yellow: 'gold',
+    violet: 'purple',
+    magenta: 'pink',
+  };
+  return aliases[normalized] || normalized;
+}
+
+function pickNextCursor(raw: Record<string, any> | null): string {
+  if (!raw) return '';
+  return pickFirstString(
+    raw.nextCursor,
+    raw.cursor,
+    raw.nextPageCursor,
+    isRecord(raw.meta) ? raw.meta.nextCursor : '',
+    isRecord(raw.meta) ? raw.meta.cursor : '',
+    isRecord(raw.pagination) ? raw.pagination.nextCursor : '',
+    isRecord(raw.data) && isRecord(raw.data.meta) ? raw.data.meta.nextCursor : '',
+    isRecord(raw.data) && isRecord(raw.data.pagination) ? raw.data.pagination.nextCursor : ''
+  );
+}
+
+function pickHasMore(raw: Record<string, any> | null): boolean | undefined {
+  if (!raw) return undefined;
+  return pickFirstBoolean(
+    raw.hasMore,
+    raw.more,
+    raw.hasNextPage,
+    isRecord(raw.meta) ? raw.meta.hasMore : undefined,
+    isRecord(raw.meta) ? raw.meta.hasNextPage : undefined,
+    isRecord(raw.pagination) ? raw.pagination.hasMore : undefined,
+    isRecord(raw.pagination) ? raw.pagination.hasNextPage : undefined,
+    isRecord(raw.data) && isRecord(raw.data.meta) ? raw.data.meta.hasMore : undefined,
+    isRecord(raw.data) && isRecord(raw.data.pagination) ? raw.data.pagination.hasMore : undefined
+  );
 }
 
 function normalizeBase(raw: string): string {
@@ -473,6 +520,7 @@ export function normalizePublicViralVideo(raw: unknown): PublicViralVideo | null
     id,
     title,
     summary: pickFirstString(raw.summary, raw.caption, raw.shortCaption, raw.description, raw.excerpt, raw.shortSummary),
+    highlightColor: normalizeHighlightColor(pickFirstString(raw.highlightColor, raw.captionHighlightColor, raw.captionColor, video?.highlightColor, video?.captionHighlightColor)),
     posterImageUrl,
     thumbnailUrl,
     videoFileUrl,
@@ -511,9 +559,16 @@ export function normalizePublicViralVideosPayload(raw: unknown): PublicViralVide
     .filter((item) => item.globalFrontend !== false)
     .sort((a, b) => String(b.publishedAt || '').localeCompare(String(a.publishedAt || '')));
 
+  const nextCursor = pickNextCursor(root);
+  const hasMore = pickHasMore(root);
+
   return {
     ok,
     settings: { frontendEnabled },
     items: frontendEnabled ? items : [],
+    meta: {
+      nextCursor,
+      hasMore: Boolean(hasMore || nextCursor),
+    },
   };
 }

@@ -36,6 +36,8 @@ type NewsPulseVideoPlayerProps = {
   showBottomTitle?: boolean;
   compactReelControls?: boolean;
   hideTopBranding?: boolean;
+  hasNextVideo?: boolean;
+  onAdvanceToNext?: () => void;
   onPosterError?: React.ReactEventHandler<HTMLVideoElement>;
 };
 
@@ -128,6 +130,8 @@ export default function NewsPulseVideoPlayer({
   showBottomTitle = true,
   compactReelControls = false,
   hideTopBranding = false,
+  hasNextVideo = false,
+  onAdvanceToNext,
   onPosterError,
 }: NewsPulseVideoPlayerProps) {
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
@@ -136,6 +140,7 @@ export default function NewsPulseVideoPlayer({
   const [currentTime, setCurrentTime] = React.useState(0);
   const [duration, setDuration] = React.useState(0);
   const [playbackRate, setPlaybackRate] = React.useState(1);
+  const [nextCountdown, setNextCountdown] = React.useState<number | null>(null);
 
   React.useEffect(() => {
     const video = videoRef.current;
@@ -143,6 +148,7 @@ export default function NewsPulseVideoPlayer({
     setCurrentTime(0);
     setDuration(0);
     setPlaybackRate(1);
+    setNextCountdown(null);
     if (!video) return;
     video.playbackRate = 1;
     video.load();
@@ -154,11 +160,28 @@ export default function NewsPulseVideoPlayer({
     }
   }, [autoPlay, src]);
 
+  React.useEffect(() => {
+    if (nextCountdown === null) return;
+    if (nextCountdown <= 0) {
+      setNextCountdown(null);
+      onAdvanceToNext?.();
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      setNextCountdown((value) => (value === null ? null : value - 1));
+    }, 1000);
+
+    return () => window.clearTimeout(timerId);
+  }, [nextCountdown, onAdvanceToNext]);
+
   const togglePlay = React.useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
+    if (nextCountdown !== null) setNextCountdown(null);
 
     if (video.paused || video.ended) {
+      if (video.ended) video.currentTime = 0;
       const playRequest = video.play();
       if (playRequest && typeof playRequest.catch === 'function') {
         playRequest.catch(() => setPlaying(false));
@@ -167,7 +190,7 @@ export default function NewsPulseVideoPlayer({
     }
 
     video.pause();
-  }, []);
+  }, [nextCountdown]);
 
   const seekBy = React.useCallback((amount: number) => {
     const video = videoRef.current;
@@ -197,6 +220,32 @@ export default function NewsPulseVideoPlayer({
   const hasViewMoreHref = Boolean(viewMoreHref);
   const readNewsIsExternal = /^https?:\/\//i.test(readNewsHref);
 
+  const renderReadNewsAction = () => {
+    if (!hasReadNewsHref) return null;
+
+    if (readNewsIsExternal) {
+      return (
+        <a
+          href={readNewsHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 rounded-full bg-white/96 px-3 py-1.5 text-[10px] font-black text-slate-950 shadow-lg transition hover:bg-white"
+        >
+          {labels.readNews}
+        </a>
+      );
+    }
+
+    return (
+      <Link
+        href={readNewsHref}
+        className="shrink-0 rounded-full bg-white/96 px-3 py-1.5 text-[10px] font-black text-slate-950 shadow-lg transition hover:bg-white"
+      >
+        {labels.readNews}
+      </Link>
+    );
+  };
+
   return (
     <div className={`relative h-full w-full overflow-hidden bg-slate-950 ${minHeightClassName} ${className}`}>
       <video
@@ -215,7 +264,10 @@ export default function NewsPulseVideoPlayer({
         onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime || 0)}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
-        onEnded={() => setPlaying(false)}
+        onEnded={() => {
+          setPlaying(false);
+          if (hasNextVideo && onAdvanceToNext) setNextCountdown(3);
+        }}
         onVolumeChange={(event) => setMuted(event.currentTarget.muted)}
         onError={onPosterError}
       />
@@ -224,35 +276,27 @@ export default function NewsPulseVideoPlayer({
       <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10" />
 
       {!hideTopBranding || hasReadNewsHref ? (
-        <div className="absolute inset-x-[18px] top-4 z-30 flex items-center justify-between gap-3">
+        <div className="absolute inset-x-[18px] top-4 z-30 flex items-start justify-between gap-3">
           {!hideTopBranding ? (
             <>
-              <span className="text-sm font-extrabold leading-none text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.55)]">Viral</span>
-              <span className="ml-auto truncate text-sm font-extrabold leading-none text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.55)]">News Pulse</span>
+              <span className="rounded-full bg-[#2563EB] px-3 py-1 text-xs font-black uppercase tracking-[0.18em] leading-none text-white shadow-[0_10px_24px_rgba(37,99,235,0.35)]">Viral</span>
+              <span className="ml-auto truncate pt-1 text-xs font-black uppercase tracking-[0.18em] leading-none text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.55)]">
+                News Pulse
+              </span>
             </>
           ) : (
             <span className="min-w-0" />
           )}
 
-          {hideTopBranding && hasReadNewsHref ? (
-            readNewsIsExternal ? (
-              <a
-                href={readNewsHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="shrink-0 rounded-full bg-white px-3 py-1.5 text-[11px] font-black text-slate-950 shadow-lg transition hover:bg-white/90"
-              >
-                {labels.readNews}
-              </a>
-            ) : (
-              <Link
-                href={readNewsHref}
-                className="shrink-0 rounded-full bg-white px-3 py-1.5 text-[11px] font-black text-slate-950 shadow-lg transition hover:bg-white/90"
-              >
-                {labels.readNews}
-              </Link>
-            )
-          ) : null}
+          <div className="pointer-events-auto ml-2 shrink-0">{renderReadNewsAction()}</div>
+        </div>
+      ) : null}
+
+      {nextCountdown !== null ? (
+        <div className="pointer-events-none absolute inset-x-6 bottom-28 z-40 flex justify-center">
+          <div className="rounded-full bg-black/72 px-4 py-2 text-sm font-black text-white shadow-xl ring-1 ring-white/14 backdrop-blur-md">
+            Next video in {nextCountdown}...
+          </div>
         </div>
       ) : null}
 

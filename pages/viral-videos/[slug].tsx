@@ -8,12 +8,13 @@ import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Copy, Play, Share2 } from 'l
 import NewsPulseVideoPlayer, { getViralVideoUiLabels } from '../../components/viral-videos/NewsPulseVideoPlayer';
 import { COVER_PLACEHOLDER_SRC } from '../../lib/coverImages';
 import { fetchServerPublicFounderToggles } from '../../lib/publicFounderToggles';
-import { getPublicViralVideoPosterUrl, getPublicViralVideoXEmbedUrl, normalizePublicViralVideosPayload, resolvePublicViralVideoPlayback, type PublicViralVideo } from '../../lib/publicViralVideos';
+import { getPublicViralVideoPosterUrl, getPublicViralVideoXEmbedUrl, normalizePublicViralVideo, normalizePublicViralVideosPayload, resolvePublicViralVideoPlayback, type PublicViralVideo } from '../../lib/publicViralVideos';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 
 type Props = {
   messages: any;
   locale: string;
+  initialVideo: PublicViralVideo | null;
 };
 
 function detailHref(video: PublicViralVideo): string {
@@ -31,45 +32,72 @@ function handlePosterError(event: React.SyntheticEvent<HTMLImageElement>) {
 
 function PlayerTopOverlay() {
   return (
-    <div className="pointer-events-none absolute inset-x-[18px] top-4 z-30 flex items-center justify-between gap-3">
-      <span className="text-sm font-extrabold leading-none text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.55)]">Viral</span>
-      <span className="ml-auto truncate text-sm font-extrabold leading-none text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.55)]">News Pulse</span>
+    <div className="pointer-events-none flex min-w-0 flex-1 items-start justify-between gap-3">
+      <span className="rounded-full bg-[#2563EB] px-3 py-1 text-xs font-black uppercase tracking-[0.18em] leading-none text-white shadow-[0_10px_24px_rgba(37,99,235,0.35)]">Viral</span>
+      <span className="ml-auto truncate pt-1 text-xs font-black uppercase tracking-[0.18em] leading-none text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.55)]">
+        News Pulse
+      </span>
     </div>
+  );
+}
+
+function ReadNewsAction({ href, label }: { href: string; label: string }) {
+  if (!href) return null;
+  if (/^https?:\/\//i.test(href)) {
+    return <a href={href} target="_blank" rel="noopener noreferrer" className="rounded-full bg-white/96 px-3 py-1.5 text-[10px] font-black text-slate-950 shadow-lg transition hover:bg-white">{label}</a>;
+  }
+  return <Link href={href} className="rounded-full bg-white/96 px-3 py-1.5 text-[10px] font-black text-slate-950 shadow-lg transition hover:bg-white">{label}</Link>;
+}
+
+function NativeShareButton({ label, onShare }: { label: string; onShare: () => void }) {
+  return (
+    <button type="button" onClick={onShare} className="group flex w-16 flex-col items-center gap-1.5 text-center text-[10px] font-bold text-white/78 transition hover:text-white md:hidden" aria-label={label}>
+      <span className="grid h-12 w-12 place-items-center rounded-full bg-black text-white shadow-[0_16px_30px_-20px_rgba(0,0,0,0.95)] transition group-hover:bg-neutral-900">
+        <Share2 className="h-5 w-5" />
+      </span>
+      <span>{label}</span>
+    </button>
   );
 }
 
 function pickViralVideoNewsLine(video: PublicViralVideo | null | undefined): string {
   const raw = video?.raw || {};
-  const candidates = [
-    raw.newsLine,
-    raw.caption,
-    raw.shortCaption,
-    raw.video?.newsLine,
-    raw.video?.caption,
-    video?.summary,
-    video?.title,
-  ];
+  const compactValue = [raw.newsLine, raw.caption, raw.video?.newsLine, raw.video?.caption]
+    .map((value) => String(value || '').replace(/\s+/g, ' ').trim())
+    .find(Boolean);
 
-  for (const candidate of candidates) {
-    const text = String(candidate || '').replace(/\s+/g, ' ').trim();
-    if (text) return text;
-  }
-  return '';
+  if (compactValue) return compactValue;
+
+  const summaryValue = [video?.summary, raw.summary, raw.video?.summary]
+    .map((value) => String(value || '').replace(/\s+/g, ' ').trim())
+    .find(Boolean);
+  const titleValue = String(video?.title || '').replace(/\s+/g, ' ').trim();
+  const selected = summaryValue || titleValue;
+
+  if (!selected) return '';
+  if (!summaryValue || selected.length <= 160) return selected;
+
+  const cutoff = selected.slice(0, 160);
+  const punctuationIndex = Math.max(cutoff.lastIndexOf('. '), cutoff.lastIndexOf('; '), cutoff.lastIndexOf(', '), cutoff.lastIndexOf(': '));
+  if (punctuationIndex >= 90) return cutoff.slice(0, punctuationIndex + 1).trim();
+
+  const lastSpace = cutoff.lastIndexOf(' ');
+  return `${(lastSpace >= 120 ? cutoff.slice(0, lastSpace) : cutoff).trimEnd()}...`;
 }
 
 function splitViralVideoNewsLine(value: string): { accent: string; rest: string } {
   const text = String(value || '').replace(/\s+/g, ' ').trim();
   if (!text) return { accent: '', rest: '' };
 
-  const separatorMatch = text.match(/^(.{8,90}?)([-:.,]|\s(?:has|have|is|are|was|were|in)\s)/i);
-  if (separatorMatch?.index === 0 && separatorMatch[1]) {
-    const accent = separatorMatch[1].trim();
-    const rest = text.slice(accent.length).replace(/^\s*[-:.,]?\s*/, '').trim();
+  const colonIndex = text.indexOf(':');
+  if (colonIndex > 0 && colonIndex <= 80) {
+    const accent = text.slice(0, colonIndex + 1).trim();
+    const rest = text.slice(colonIndex + 1).trim();
     return { accent, rest };
   }
 
   const words = text.split(' ').filter(Boolean);
-  const accentCount = Math.min(4, Math.max(1, Math.ceil(words.length / 3)));
+  const accentCount = Math.min(7, Math.max(5, Math.min(7, words.length - 1)));
   return {
     accent: words.slice(0, accentCount).join(' '),
     rest: words.slice(accentCount).join(' '),
@@ -179,6 +207,38 @@ function XEmbedPlayer({ tweetUrl, posterSrc, title, slug }: { tweetUrl: string; 
   );
 }
 
+function isRecord(value: unknown): value is Record<string, any> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeSinglePayload(raw: unknown): PublicViralVideo | null {
+  if (isRecord(raw)) {
+    const candidate = raw.item || raw.video || (isRecord(raw.data) ? raw.data.item || raw.data.video : null);
+    const video = normalizePublicViralVideo(candidate || raw);
+    if (video) return video;
+  }
+  return normalizePublicViralVideo(raw);
+}
+
+async function fetchServerViralVideoBySlug(slug: string, requestOrigin: string): Promise<PublicViralVideo | null> {
+  if (!slug || !requestOrigin) return null;
+
+  try {
+    const upstream = await fetch(`${requestOrigin}/api/public/viral-videos/${encodeURIComponent(slug)}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json', 'Cache-Control': 'no-store', Pragma: 'no-cache' },
+      cache: 'no-store',
+    });
+    const json = await upstream.json().catch(() => null);
+    const item = normalizeSinglePayload(json);
+    if (upstream.ok && item) return item;
+  } catch {
+    // Fall back to client-side hydration if the local API cannot be reached during SSR.
+  }
+
+  return null;
+}
+
 export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   const featureToggles = await fetchServerPublicFounderToggles();
 
@@ -194,24 +254,32 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   const locale = (ctx.locale || 'en') as string;
   const { getMessages } = await import('../../lib/getMessages');
   const messages = await getMessages(locale);
+  const rawSlug = Array.isArray(ctx.params?.slug) ? ctx.params?.slug[0] : ctx.params?.slug;
+  const forwardedProto = String(ctx.req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  const protocol = forwardedProto || (ctx.req.socket && 'encrypted' in ctx.req.socket && (ctx.req.socket as any).encrypted ? 'https' : 'http');
+  const host = String(ctx.req.headers.host || '').trim();
+  const requestOrigin = host ? `${protocol}://${host}` : '';
+  const initialVideo = await fetchServerViralVideoBySlug(String(rawSlug || '').trim(), requestOrigin);
 
   return {
     props: {
       messages,
       locale,
+      initialVideo,
     },
   };
 };
 
-export default function ViralVideoDetailPage() {
+export default function ViralVideoDetailPage({ initialVideo }: Props) {
   const router = useRouter();
   const { t } = useI18n();
-  const [video, setVideo] = React.useState<PublicViralVideo | null>(null);
+  const [video, setVideo] = React.useState<PublicViralVideo | null>(initialVideo);
   const [related, setRelated] = React.useState<PublicViralVideo[]>([]);
-  const [loaded, setLoaded] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  const [loaded, setLoaded] = React.useState(Boolean(initialVideo));
+  const [error, setError] = React.useState<string | null>(initialVideo ? null : null);
   const [playing, setPlaying] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
+  const [canNativeShare, setCanNativeShare] = React.useState(false);
   const title = t('categories.viralVideos') || 'Viral Videos';
   const routeLocale = String(router.asPath || '').toLowerCase().startsWith('/gu') ? 'gu' : String(router.asPath || '').toLowerCase().startsWith('/hi') ? 'hi' : router.locale;
   const reelLabels = getViralVideoUiLabels(routeLocale);
@@ -274,6 +342,19 @@ export default function ViralVideoDetailPage() {
     return () => controller.abort();
   }, [router.isReady, router.query.slug, t]);
 
+  React.useEffect(() => {
+    if (!copied) return;
+    const timerId = window.setTimeout(() => setCopied(false), 1800);
+    return () => window.clearTimeout(timerId);
+  }, [copied]);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined' || typeof navigator === 'undefined') return;
+    const coarsePointer = window.matchMedia?.('(pointer: coarse)')?.matches;
+    const mobileUa = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
+    setCanNativeShare(typeof navigator.share === 'function' && Boolean(coarsePointer || mobileUa));
+  }, []);
+
   const currentIndex = React.useMemo(() => {
     if (!video) return -1;
     return related.findIndex((item) => item.id === video.id || item.slug === video.slug);
@@ -287,11 +368,21 @@ export default function ViralVideoDetailPage() {
   const relatedNewsHref = video?.relatedNewsUrl || '';
   const newsLine = React.useMemo(() => pickViralVideoNewsLine(video), [video]);
   const styledNewsLine = React.useMemo(() => splitViralVideoNewsLine(newsLine), [newsLine]);
-  const showNewsLine = Boolean(newsLine && newsLine.toLowerCase() !== String(video?.title || '').trim().toLowerCase());
+  const showNewsLine = Boolean(newsLine);
   const debugSlug = Array.isArray(router.query.slug) ? router.query.slug[0] : router.query.slug;
   const shareUrl = typeof window === 'undefined' ? '' : window.location.href;
   const facebookShareHref = shareUrl ? `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}` : '#';
   const xShareHref = shareUrl && video ? `https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(video.title)}` : '#';
+  const metaDescription = String(video?.summary || newsLine || video?.title || title || '').trim();
+  const siteUrl = String(process.env.NEXT_PUBLIC_SITE_URL || '').trim().replace(/\/+$/, '');
+  const canonicalPath = String((router.asPath || '').split('?')[0] || '');
+  const canonicalUrl = siteUrl && canonicalPath ? `${siteUrl}${canonicalPath}` : '';
+  const ogImage = React.useMemo(() => {
+    const value = getPublicViralVideoPosterUrl(video) || '';
+    if (!value) return '';
+    if (/^https?:\/\//i.test(value)) return value;
+    return siteUrl ? `${siteUrl}${value.startsWith('/') ? value : `/${value}`}` : value;
+  }, [siteUrl, video]);
 
   const copyShareUrl = React.useCallback(async () => {
     if (!shareUrl) return;
@@ -302,6 +393,19 @@ export default function ViralVideoDetailPage() {
       setCopied(false);
     }
   }, [shareUrl]);
+
+  const nativeShare = React.useCallback(async () => {
+    if (!shareUrl || !video || !canNativeShare || typeof navigator === 'undefined' || typeof navigator.share !== 'function') return;
+    try {
+      await navigator.share({
+        title: video.title,
+        text: video.title,
+        url: shareUrl,
+      });
+    } catch {
+      // Ignore dismissed native share sheets.
+    }
+  }, [canNativeShare, shareUrl, video]);
 
   const playVideo = React.useCallback(() => {
     if (!video) return;
@@ -327,6 +431,12 @@ export default function ViralVideoDetailPage() {
     <>
       <Head>
         <title>{`${video?.title || title} | ${t('brand.name')}`}</title>
+        {metaDescription ? <meta name="description" content={metaDescription} /> : null}
+        <meta property="og:type" content="video.other" />
+        <meta property="og:title" content={`${video?.title || title} | ${t('brand.name')}`} />
+        {metaDescription ? <meta property="og:description" content={metaDescription} /> : null}
+        {ogImage ? <meta property="og:image" content={ogImage} /> : null}
+        {canonicalUrl ? <link rel="canonical" href={canonicalUrl} /> : null}
       </Head>
 
       <main className="relative min-h-screen overflow-hidden bg-[#111214] text-white">
@@ -358,6 +468,8 @@ export default function ViralVideoDetailPage() {
                           autoPlay={playing}
                           showBottomTitle={false}
                           compactReelControls
+                          hasNextVideo={Boolean(nextVideo)}
+                          onAdvanceToNext={nextVideo ? () => { router.push(detailHref(nextVideo)); } : undefined}
                           minHeightClassName="min-h-full"
                         />
                       ) : playback.mode === 'youtube' ? (
@@ -369,18 +481,27 @@ export default function ViralVideoDetailPage() {
                             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                             allowFullScreen
                           />
-                          <PlayerTopOverlay />
+                          <div className="absolute inset-x-[18px] top-4 z-30 flex items-start justify-between gap-3">
+                            <PlayerTopOverlay />
+                            {relatedNewsHref ? <div className="pointer-events-auto ml-2 shrink-0"><ReadNewsAction href={relatedNewsHref} label={reelLabels.readNews} /></div> : null}
+                          </div>
                         </>
                       ) : xEmbedUrl ? (
                         <>
                           <XEmbedPlayer key={xEmbedUrl} tweetUrl={xEmbedUrl} posterSrc={posterSrc} title={video.title} slug={String(debugSlug || video.slug || video.id || '')} />
-                          <PlayerTopOverlay />
+                          <div className="absolute inset-x-[18px] top-4 z-30 flex items-start justify-between gap-3">
+                            <PlayerTopOverlay />
+                            {relatedNewsHref ? <div className="pointer-events-auto ml-2 shrink-0"><ReadNewsAction href={relatedNewsHref} label={reelLabels.readNews} /></div> : null}
+                          </div>
                         </>
                       ) : (
                         <>
                           <img src={posterSrc} alt={video.title} className="h-full w-full object-cover" loading="eager" decoding="async" onError={handlePosterError} />
                           <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.46)_0%,rgba(2,6,23,0.05)_42%,rgba(2,6,23,0.78)_100%)]" />
-                          <PlayerTopOverlay />
+                          <div className="absolute inset-x-[18px] top-4 z-30 flex items-start justify-between gap-3">
+                            <PlayerTopOverlay />
+                            {relatedNewsHref ? <div className="pointer-events-auto ml-2 shrink-0"><ReadNewsAction href={relatedNewsHref} label={reelLabels.readNews} /></div> : null}
+                          </div>
                           {playback.mode === 'unavailable' ? (
                             <div className="absolute inset-x-5 top-1/2 -translate-y-1/2 rounded-lg bg-black/54 p-4 text-center text-sm font-bold text-white shadow-xl ring-1 ring-white/15 backdrop-blur">Video source unavailable</div>
                           ) : playback.mode === 'external' ? null : (
@@ -414,20 +535,10 @@ export default function ViralVideoDetailPage() {
                     ) : <span className="min-h-10 px-3" />}
                   </div>
 
-                  <div className="mt-5 text-center">
-                    <h1 className="text-balance text-2xl font-black leading-tight tracking-tight text-white sm:text-3xl">
-                      {video.title}
-                    </h1>
-                    {showNewsLine ? (
-                      <p className="mx-auto mt-3 line-clamp-2 max-w-[760px] text-balance text-[18px] font-extrabold leading-[1.4] text-white drop-shadow-[0_2px_14px_rgba(0,0,0,0.72)] sm:text-[21px]">
-                        {styledNewsLine.accent ? <span className="text-orange-400">{styledNewsLine.accent}</span> : null}
-                        {styledNewsLine.rest ? <span> {styledNewsLine.rest}</span> : null}
-                      </p>
-                    ) : null}
-                  </div>
                 </div>
 
                 <aside className="mt-5 flex justify-center gap-4 md:absolute md:left-[calc(50%+270px)] md:top-1/2 md:mt-0 md:-translate-y-1/2 md:flex-col md:items-center md:gap-4">
+                  {canNativeShare ? <NativeShareButton label="Share" onShare={nativeShare} /> : null}
                   <a href={facebookShareHref} target="_blank" rel="noopener noreferrer" className="group flex w-16 flex-col items-center gap-1.5 text-center text-[10px] font-bold text-white/78 transition hover:text-white" aria-label={reelLabels.facebook}>
                     <span className="grid h-12 w-12 place-items-center rounded-full bg-black text-sm font-black text-white shadow-[0_16px_30px_-20px_rgba(0,0,0,0.95)] transition group-hover:bg-neutral-900">f</span>
                     <span>{reelLabels.facebook}</span>
@@ -443,6 +554,12 @@ export default function ViralVideoDetailPage() {
                     <span>{copied ? reelLabels.copied : reelLabels.copyLink}</span>
                   </button>
                 </aside>
+
+                {copied ? (
+                  <div className="pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-full bg-black/84 px-4 py-2 text-sm font-black text-white shadow-2xl ring-1 ring-white/12 backdrop-blur-md">
+                    Link copied
+                  </div>
+                ) : null}
 
                 <div className="fixed right-5 top-1/2 z-40 hidden -translate-y-1/2 flex-col gap-3 md:flex">
                   {previousVideo ? (
@@ -465,6 +582,16 @@ export default function ViralVideoDetailPage() {
                   )}
                 </div>
               </div>
+
+              {showNewsLine ? (
+                <div className="mt-4 w-full overflow-hidden text-center">
+                  <p className="mx-auto w-[min(92vw,980px)] max-w-[980px] overflow-hidden text-center text-[clamp(16px,1.25vw,19px)] font-extrabold leading-[1.38] text-white [overflow-wrap:normal] [word-break:normal] line-clamp-2">
+                    {styledNewsLine.accent && styledNewsLine.rest ? <span className="text-orange-500">{styledNewsLine.accent}</span> : null}
+                    {!styledNewsLine.rest && styledNewsLine.accent ? <span className="text-white">{styledNewsLine.accent}</span> : null}
+                    {styledNewsLine.rest ? <span> {styledNewsLine.rest}</span> : null}
+                  </p>
+                </div>
+              ) : null}
             </section>
           )}
         </div>
