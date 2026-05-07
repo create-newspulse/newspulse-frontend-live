@@ -507,26 +507,28 @@ function FooterBanner728Placeholder({ normalizedSlot }: { normalizedSlot: string
     .join(' • ');
 
   return (
-    <div
-      className="mx-auto w-full max-w-[728px] overflow-hidden rounded-2xl border border-slate-200/80 bg-white/80 px-3 py-2 shadow-sm backdrop-blur sm:px-4"
-      style={{ aspectRatio: '728 / 90', minHeight: 90 }}
-      data-ad-slot={normalizedSlot}
-    >
-      <div className="flex h-full min-h-[74px] w-full items-center justify-between gap-3 sm:gap-4">
-        <div className="min-w-0 flex items-center gap-3">
-          <AdBadge />
+    <div className="mx-auto w-full" data-ad-slot={normalizedSlot}>
+      <div className="mb-1 px-1 text-left">
+        <span className="text-[11px] uppercase tracking-wide text-slate-500">Advertisement</span>
+      </div>
 
-          <div className="min-w-0">
-            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-              <div className="font-extrabold text-slate-900">{t('brand.name') || 'News Pulse'}</div>
-              <div className="truncate text-xs text-slate-500">{t('brand.tagline') || "Your pulse on the world's latest news"}</div>
+      <div className="w-full rounded-2xl border border-slate-200/80 bg-white/70 backdrop-blur px-4 py-3 shadow-sm">
+        <div className="min-h-[56px] md:min-h-[72px] flex items-center justify-between gap-4">
+          <div className="min-w-0 flex items-center gap-3">
+            <AdBadge />
+
+            <div className="min-w-0">
+              <div className="flex items-baseline gap-2 min-w-0">
+                <div className="font-extrabold text-slate-900 truncate">{t('brand.name') || 'News Pulse'}</div>
+                <div className="text-xs text-slate-500 truncate">{t('brand.tagline') || "Your pulse on the world's latest news"}</div>
+              </div>
+
+              {categories ? <div className="text-[12px] text-slate-600 truncate">{categories}</div> : null}
             </div>
-
-            {categories ? <div className="mt-0.5 truncate text-[12px] text-slate-600">{categories}</div> : null}
           </div>
-        </div>
 
-        <AdvertiseLink normalizedSlot={normalizedSlot}>{t('common.advertiseHere') || 'Advertise Here'}</AdvertiseLink>
+          <AdvertiseLink normalizedSlot={normalizedSlot}>{t('common.advertiseHere') || 'Advertise Here'}</AdvertiseLink>
+        </div>
       </div>
     </div>
   );

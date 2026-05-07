@@ -300,14 +300,16 @@ export default function NewsPulseVideoPlayer({
         </div>
       ) : null}
 
-      <button
-        type="button"
-        onClick={togglePlay}
-        className="absolute left-1/2 top-1/2 z-30 grid h-16 w-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/18 text-white shadow-[0_22px_42px_-20px_rgba(0,0,0,0.95)] ring-1 ring-white/35 backdrop-blur-md transition hover:scale-105 hover:bg-white/24"
-        aria-label={playing ? labels.pause : labels.play}
-      >
-        {playing ? <Pause className="h-7 w-7 fill-current" /> : <Play className="ml-0.5 h-7 w-7 fill-current" />}
-      </button>
+      {!playing ? (
+        <button
+          type="button"
+          onClick={togglePlay}
+          className="absolute left-1/2 top-1/2 z-30 grid h-16 w-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/18 text-white shadow-[0_22px_42px_-20px_rgba(0,0,0,0.95)] ring-1 ring-white/35 backdrop-blur-md transition hover:scale-105 hover:bg-white/24"
+          aria-label={labels.play}
+        >
+          <Play className="ml-0.5 h-7 w-7 fill-current" />
+        </button>
+      ) : null}
 
       <div className="absolute inset-x-0 bottom-0 z-30 p-3 sm:p-4">
         {hasViewMoreHref ? (
