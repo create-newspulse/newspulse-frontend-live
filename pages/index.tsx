@@ -4599,6 +4599,58 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
 
   const localizedYouthPulseHref = localizePath('/youth-pulse', apiLang);
   const viralVideosFrontendEnabled = founderToggles.viralVideosFrontendEnabled !== false;
+  const mobileMenuCurrentPath = React.useMemo(() => {
+    const normalized = getUnprefixedPath(router.asPath || '/');
+    return (normalized.split(/[?#]/)[0] || '/').trim() || '/';
+  }, [getUnprefixedPath, router.asPath]);
+  const mobileMenuTopActions = React.useMemo(
+    () => [
+      {
+        key: 'home',
+        label: t('common.home'),
+        href: localizePath('/', apiLang),
+        Icon: Home,
+        themeKey: 'home' as const,
+        active: mobileMenuCurrentPath === '/',
+      },
+      {
+        key: 'videos',
+        label: t('common.videos'),
+        href: localizePath('/viral-videos', apiLang),
+        Icon: Video,
+        themeKey: 'videos' as const,
+        active: mobileMenuCurrentPath.startsWith('/viral-videos'),
+        hidden: !viralVideosFrontendEnabled,
+      },
+      {
+        key: 'search',
+        label: t('common.search'),
+        href: localizePath('/search', apiLang),
+        Icon: Search,
+        themeKey: 'search' as const,
+        active: mobileMenuCurrentPath.startsWith('/search'),
+      },
+    ].filter((item) => !item.hidden),
+    [apiLang, mobileMenuCurrentPath, t, viralVideosFrontendEnabled]
+  );
+  const mobileMenuQuickAccess = React.useMemo(
+    () => [
+      { key: 'latest', label: `${t('common.latest')} News`, href: localizePath('/latest', apiLang), Icon: Bell },
+      { key: 'breaking', label: 'Breaking News', href: getLocalizedBreakingHref('breaking'), Icon: Flame },
+      { key: 'live', label: 'Live Updates', href: getLocalizedBreakingHref('live'), Icon: Radio },
+      { key: 'top-stories', label: 'Top Stories', href: `${localizePath('/', apiLang)}#top-story`, Icon: Flag },
+      { key: 'advertise', label: t('footer.advertiseWithUs'), href: localizePath('/advertise-with-us', apiLang), Icon: Briefcase },
+    ],
+    [apiLang, getLocalizedBreakingHref, t]
+  );
+  const mobileMenuLanguages = React.useMemo(
+    () => [
+      { key: 'en', label: 'English' },
+      { key: 'hi', label: 'Hindi' },
+      { key: 'gu', label: 'Gujarati' },
+    ] as const,
+    []
+  );
 
   const rightRailYouthTrendingItems = React.useMemo(() => {
     const items = Array.isArray(youth.trending) ? youth.trending.slice(0, HOME_YOUTH_TRENDING_VISIBLE_LIMIT) : [];
@@ -5128,17 +5180,19 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
 
               <main className={`col-span-12 order-1 lg:order-2 ${heroCenterColClass}`}>
                 <div className="grid gap-4">
-                  <FeaturedCard
-                    theme={theme}
-                    item={{
-                      article: topStory,
-                      requestedLang: apiLang,
-                      featureLabel: 'Top Story',
-                      featureDotColor: undefined,
-                    }}
-                    onToast={onToast}
-                    isLoading={latestFromBackend == null}
-                  />
+                  <div id="top-story">
+                    <FeaturedCard
+                      theme={theme}
+                      item={{
+                        article: topStory,
+                        requestedLang: apiLang,
+                        featureLabel: 'Top Story',
+                        featureDotColor: undefined,
+                      }}
+                      onToast={onToast}
+                      isLoading={latestFromBackend == null}
+                    />
+                  </div>
                   <CenterStoryFeed theme={theme} items={centerFeedItems} lang={apiLang} />
                 </div>
               </main>
@@ -5244,53 +5298,63 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
       ) : null}
 
       <Drawer open={mobileLeftOpen} onClose={() => setMobileLeftOpen(false)} theme={theme} title={t('common.menu')} side="left">
-        <div className="grid gap-3">
-          <Link
-            href="/"
-            onClick={() => setMobileLeftOpen(false)}
-            className={cx(
-              "w-full justify-start inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold border transition-all duration-200 focus-visible:outline-none",
-              MENU_QUICK_THEME.home.base,
-              MENU_QUICK_THEME.home.hover,
-              MENU_QUICK_THEME.home.ring
-            )}
-          >
-            <Home className="h-4 w-4" /> {t('common.home')}
-          </Link>
-          {viralVideosFrontendEnabled ? (
-            <Link
-              href="/viral-videos"
-              onClick={() => setMobileLeftOpen(false)}
-              className={cx(
-                "w-full justify-start inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold border transition-all duration-200 focus-visible:outline-none",
-                MENU_QUICK_THEME.videos.base,
-                MENU_QUICK_THEME.videos.hover,
-                MENU_QUICK_THEME.videos.ring
-              )}
-            >
-              <Video className="h-4 w-4" /> {t('common.videos')}
-            </Link>
-          ) : null}
-          <Link
-            href="/search"
-            onClick={() => setMobileLeftOpen(false)}
-            className={cx(
-              "w-full justify-start inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold border transition-all duration-200 focus-visible:outline-none",
-              MENU_QUICK_THEME.search.base,
-              MENU_QUICK_THEME.search.hover,
-              MENU_QUICK_THEME.search.ring
-            )}
-          >
-            <Search className="h-4 w-4" /> {t('common.search')}
-          </Link>
+        <div className="grid gap-5">
+          <div className="grid gap-3">
+            <div className="grid grid-cols-3 gap-2">
+              {mobileMenuTopActions.map((item) => {
+                const quickTheme = MENU_QUICK_THEME[item.themeKey];
 
-          <div className="h-px" style={{ background: theme.border }} />
+                return (
+                  <Link
+                    key={item.key}
+                    href={item.href}
+                    onClick={() => setMobileLeftOpen(false)}
+                    className={cx(
+                      "inline-flex min-h-[72px] flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-center text-xs font-bold transition-all duration-200 focus-visible:outline-none",
+                      quickTheme.base,
+                      quickTheme.hover,
+                      quickTheme.ring,
+                      item.active && "ring-2 ring-offset-0"
+                    )}
+                  >
+                    <item.Icon className="h-4 w-4" />
+                    <span className="leading-tight">{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
 
-          <div className="text-xs font-extrabold" style={{ color: theme.sub }}>
-            {t('common.categories')}
+            <div className="rounded-[26px] border p-3" style={{ borderColor: theme.border, background: theme.surface2 }}>
+              <div className="mb-3 text-[11px] font-black uppercase tracking-[0.18em]" style={{ color: theme.sub }}>
+                Quick Access
+              </div>
+              <div className="grid gap-2">
+                {mobileMenuQuickAccess.map((item) => (
+                  <Link
+                    key={item.key}
+                    href={item.href}
+                    onClick={() => setMobileLeftOpen(false)}
+                    className="inline-flex items-center gap-3 rounded-2xl border px-3 py-2.5 text-sm font-semibold transition-colors duration-200 hover:bg-white/60"
+                    style={{ borderColor: theme.border, color: theme.text, background: theme.surface }}
+                  >
+                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border" style={{ borderColor: theme.border, background: theme.surface2 }}>
+                      <item.Icon className="h-4 w-4" />
+                    </span>
+                    <span className="truncate">{item.label}</span>
+                    <ChevronRight className="ml-auto h-4 w-4" style={{ color: theme.sub }} />
+                  </Link>
+                ))}
+              </div>
+            </div>
           </div>
 
-          <div className="grid gap-1">
+          <div className="rounded-[26px] border p-3" style={{ borderColor: theme.border, background: theme.surface2 }}>
+            <div className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em]" style={{ color: theme.sub }}>
+              <Globe className="h-4 w-4" />
+              {t('common.categories')}
+            </div>
+
+            <div className="grid gap-2">
             {getVisibleCats(founderToggles).map((c: any) => {
               const tone = CATEGORY_THEME[c.key] || CATEGORY_THEME.__default;
               const active = activeCatKey === c.key;
@@ -5300,17 +5364,27 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
               const content = (
                 <div
                   className={cx(
-                    "flex items-center gap-3 rounded-2xl px-3 py-2 text-sm font-semibold border transition-all duration-200 focus-visible:outline-none",
-                    tone.base,
-                    tone.hover,
+                    "flex items-center gap-3 rounded-2xl border px-3 py-2.5 text-sm font-semibold transition-all duration-200 focus-visible:outline-none",
+                    "bg-white/70 hover:bg-white/95",
                     tone.ring,
-                    active && tone.active
+                    active && "shadow-[0_10px_24px_-20px_rgba(15,23,42,0.35)]"
                   )}
+                  style={{
+                    borderColor: active ? theme.text : theme.border,
+                    color: theme.text,
+                  }}
                 >
                   <span className={cx("inline-flex h-9 w-9 items-center justify-center rounded-2xl border", tone.icon)}>
                     <c.Icon className="h-4 w-4" />
                   </span>
                   <span className="truncate">{label}</span>
+                  {(c as any).badge ? (
+                    <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em]"
+                      style={{ borderColor: theme.border, color: theme.sub, background: theme.surface2 }}>
+                      {(c as any).badge}
+                    </span>
+                  ) : null}
+                  <ChevronRight className="ml-auto h-4 w-4" style={{ color: theme.sub }} />
                 </div>
               );
 
@@ -5345,6 +5419,36 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
                 </button>
               );
             })}
+            </div>
+          </div>
+
+          <div className="rounded-[26px] border p-3" style={{ borderColor: theme.border, background: theme.surface2 }}>
+            <div className="mb-3 text-[11px] font-black uppercase tracking-[0.18em]" style={{ color: theme.sub }}>
+              Language
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {mobileMenuLanguages.map((item) => {
+                const active = apiLang === item.key;
+                return (
+                  <Link
+                    key={item.key}
+                    href={localizePath('/', item.key)}
+                    onClick={() => {
+                      setLang(item.key);
+                      setMobileLeftOpen(false);
+                    }}
+                    className="inline-flex items-center justify-center rounded-2xl border px-3 py-2 text-xs font-bold transition-colors duration-200"
+                    style={{
+                      borderColor: active ? theme.text : theme.border,
+                      color: active ? theme.text : theme.sub,
+                      background: active ? theme.surface : theme.surface2,
+                    }}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
           </div>
         </div>
       </Drawer>
