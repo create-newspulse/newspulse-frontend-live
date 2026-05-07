@@ -17,6 +17,7 @@ import { buildNewsUrl } from '../../lib/newsRoutes';
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
 import { resolveSponsoredContentMeta } from '../../lib/sponsoredContent';
 import { debugStoryCard, getStoryId, getStoryReactKey } from '../../lib/storyIdentity';
+import { getStoryTitleHookColor, splitStoryTitleHook } from '../../lib/storyTitleHook';
 import StoryImage, { ArticleHeroImage } from '../../src/components/story/StoryImage';
 import { useArticleAnalytics } from '../../hooks/useArticleAnalytics';
 
@@ -450,6 +451,12 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
       .map(([k]) => k);
   }, [resolvedArticle, relatedStories, topStories]);
 
+  const articleTitleParts = React.useMemo(() => splitStoryTitleHook(displayTitle), [displayTitle]);
+  const articleTitleHookColor = React.useMemo(
+    () => getStoryTitleHookColor(categoryLabel || (resolvedArticle as any)?.category || (resolvedArticle as any)?.section),
+    [categoryLabel, resolvedArticle]
+  );
+
   return (
     <>
       <Head>
@@ -512,7 +519,8 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                     ) : null}
 
                     <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 leading-tight">
-                      {displayTitle}
+                      {articleTitleParts.highlightedHook ? <span style={{ color: articleTitleHookColor }}>{articleTitleParts.highlightedHook}</span> : null}
+                      {articleTitleParts.remainingTitle ? <span>{` ${articleTitleParts.remainingTitle}`}</span> : null}
                     </h1>
 
                     {pendingError ? <div className="text-sm text-red-600">{pendingError}</div> : null}

@@ -10,6 +10,7 @@ import { resolveArticleSlug } from '../../../../lib/articleSlugs';
 import { resolveCoverFitMode, resolveCoverImageUrl } from '../../../../lib/coverImages';
 import { getStoryId } from '../../../../lib/storyIdentity';
 import { formatEditorialDateTime, resolveStoryDateIso } from '../../../../lib/storyDateTime';
+import { getStoryTitleHookColor, splitStoryTitleHook } from '../../../../lib/storyTitleHook';
 import { getActiveRouteLang } from '../../../../utils/routeLang';
 import { unwrapRegionalFeedItems } from '../../../../lib/unwrapRegionalFeed';
 import { buildRegionalFeedSearchParams } from '../../../../lib/regionalFeedQuery';
@@ -124,15 +125,20 @@ export default function GujaratCityPage() {
                   const fitMode = resolveCoverFitMode(article, { src: coverUrl, altText: article?.title });
                   const title = String(article?.title || '').trim();
                   const summary = typeof article?.summary === 'string' ? article.summary.trim() : '';
+                  const titleParts = splitStoryTitleHook(title);
+                  const titleHookColor = getStoryTitleHookColor(article?.category || article?.section || article?.topic);
                   return (
                   <a key={id || href} href={href} className="group block rounded-2xl border bg-white p-6 shadow-sm transition hover:shadow-md dark:bg-gray-800">
                     <div className="mb-3 flex items-start gap-3">
-                      <StoryImage storyId={id} src={coverUrl} fitMode={fitMode} alt={title || ''} variant="mini" className="rounded-xl" />
+                      <StoryImage storyId={id} src={coverUrl} fitMode={fitMode} alt={title || ''} variant="mini" className="order-2 rounded-xl" />
 
-                      <div className="min-w-0 flex-1">
+                      <div className="order-1 min-w-0 flex-1">
                         <div className="text-xs text-gray-500 mb-2">{formatEditorialDateTime(resolveStoryDateIso(article))}</div>
                         {!!title ? (
-                          <h3 className="font-bold text-lg mb-2">{title}</h3>
+                          <h3 className="font-bold text-lg mb-2">
+                            {titleParts.highlightedHook ? <span style={{ color: titleHookColor }}>{titleParts.highlightedHook}</span> : null}
+                            {titleParts.remainingTitle ? <span>{` ${titleParts.remainingTitle}`}</span> : null}
+                          </h3>
                         ) : null}
                         {!!summary ? (
                           <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3">{summary}</p>

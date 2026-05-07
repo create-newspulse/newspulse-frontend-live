@@ -14,6 +14,7 @@ import { resolveArticleSlug } from '../../lib/articleSlugs';
 import { COVER_PLACEHOLDER_SRC, resolveCoverFitMode, resolveCoverImageUrl } from '../../lib/coverImages';
 import { getStoryId } from '../../lib/storyIdentity';
 import { formatEditorialDateTime, resolveStoryDateIso } from '../../lib/storyDateTime';
+import { getStoryTitleHookColor, splitStoryTitleHook } from '../../lib/storyTitleHook';
 import StoryImage from '../../src/components/story/StoryImage';
 
 const API_BASE =
@@ -83,6 +84,13 @@ export default function RegionPage(props: { lang: 'en' | 'hi' | 'gu'; data?: any
                     const href = id ? buildNewsUrl({ id, slug, lang: effectiveLang }) : '#';
                     const coverUrl = resolveCoverImageUrl(article);
                     const fitMode = resolveCoverFitMode(article, { src: coverUrl, altText: article?.title });
+                    const titleRes = resolveArticleTitle(article, uiLang);
+                    const summaryRes = resolveArticleSummaryOrExcerpt(article, uiLang);
+                    const { title } = localizeArticle(article, effectiveLang);
+                    const desc = summaryRes.text || (article.excerpt || (article.content ? String(article.content).slice(0, 160) + '...' : ''));
+                    const safeTitle = title || titleRes.text || article.title || t('common.untitled');
+                    const titleParts = splitStoryTitleHook(safeTitle);
+                    const titleHookColor = getStoryTitleHookColor(article?.category || article?.section || article?.topic);
                     return (
                     <a key={id || href} href={href} className="group block p-6 rounded-2xl border shadow-sm hover:shadow-md bg-white dark:bg-gray-800 transition">
                       <div className="mb-3 flex items-start gap-3">
@@ -92,29 +100,21 @@ export default function RegionPage(props: { lang: 'en' | 'hi' | 'gu'; data?: any
                           fitMode={fitMode}
                           alt={String(article?.title || '').trim()}
                           variant="mini"
-                          className="border border-gray-200 dark:border-gray-700"
+                          className="order-2 border border-gray-200 dark:border-gray-700"
                         />
-                        <div className="min-w-0 flex-1">
+                        <div className="order-1 min-w-0 flex-1">
                       <div className="text-xs text-gray-500 mb-2">{formatEditorialDateTime(resolveStoryDateIso(article))}</div>
-                      {(() => {
-                        const titleRes = resolveArticleTitle(article, uiLang);
-                        const summaryRes = resolveArticleSummaryOrExcerpt(article, uiLang);
-                        const { title, content } = localizeArticle(article, effectiveLang);
-                        const desc = summaryRes.text || (article.excerpt || (article.content ? String(article.content).slice(0, 160) + '...' : ''));
-                        const safeTitle = title || titleRes.text || article.title || t('common.untitled');
-                        return (
-                          <>
-                            <h3 className="font-bold text-lg mb-2">
-                              {safeTitle}{' '}
-                              {titleRes.isOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
-                            </h3>
-                            <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3">
-                              {desc}
-                              {summaryRes.isOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
-                            </p>
-                          </>
-                        );
-                      })()}
+                      <>
+                        <h3 className="font-bold text-lg mb-2">
+                          {titleParts.highlightedHook ? <span style={{ color: titleHookColor }}>{titleParts.highlightedHook}</span> : null}
+                          {titleParts.remainingTitle ? <span>{` ${titleParts.remainingTitle}`}</span> : null}{' '}
+                          {titleRes.isOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
+                        </h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3">
+                          {desc}
+                          {summaryRes.isOriginal ? <span className="ml-2 align-middle"><OriginalTag /></span> : null}
+                        </p>
+                      </>
                       <div className="mt-3 text-xs text-gray-400">{t('common.source')}: {article.source || t('brand.name')}</div>
                         </div>
                       </div>

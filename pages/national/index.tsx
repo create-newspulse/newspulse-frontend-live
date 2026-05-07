@@ -16,6 +16,7 @@ import { buildNewsUrl } from '../../lib/newsRoutes';
 import { localizeArticle } from '../../lib/localizeArticle';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
+import { getStoryTitleHookColor, splitStoryTitleHook } from '../../lib/storyTitleHook';
 import StoryImage, { TopStoryImage } from '../../src/components/story/StoryImage';
 
 type AnyStory = any;
@@ -335,13 +336,15 @@ function CompactFeedRow({ story, lang }: { story: AnyStory; lang: 'en' | 'hi' | 
   const tags = tagList(story?.tags);
   const tag = tags[0] || String(story?.topic || story?.section || '').trim();
   const translationStatus = String((story as any)?.translationStatus || '').trim();
+  const titleParts = splitStoryTitleHook(safeTitle);
+  const titleHookColor = getStoryTitleHookColor(tag || story?.category || story?.section);
 
   return (
     <a
       href={href}
       className="group flex gap-3 border-b border-slate-200 py-3 hover:bg-slate-50 dark:border-gray-800 dark:hover:bg-gray-900/60"
     >
-      <div className="shrink-0">
+      <div className="order-2 shrink-0">
         <StoryImage
           src={img}
           alt={safeTitle}
@@ -350,11 +353,12 @@ function CompactFeedRow({ story, lang }: { story: AnyStory; lang: 'en' | 'hi' | 
         />
       </div>
 
-      <div className="min-w-0 flex-1">
+      <div className="order-1 min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <div className="line-clamp-2 text-sm font-semibold leading-snug text-slate-900 group-hover:underline dark:text-gray-100">
-              {safeTitle}
+              {titleParts.highlightedHook ? <span style={{ color: titleHookColor }}>{titleParts.highlightedHook}</span> : null}
+              {titleParts.remainingTitle ? <span>{` ${titleParts.remainingTitle}`}</span> : null}
             </div>
           </div>
           <div className="shrink-0">

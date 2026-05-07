@@ -9,6 +9,7 @@ import { useI18n } from '../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../lib/newsRoutes';
 import { COVER_PLACEHOLDER_SRC, resolveCoverFitMode, resolveCoverImageUrl } from '../lib/coverImages';
 import { formatEditorialDateTime, resolveStoryDateIso } from '../lib/storyDateTime';
+import { getStoryTitleHookColor, splitStoryTitleHook } from '../lib/storyTitleHook';
 import StoryImage from '../src/components/story/StoryImage';
 
 // Preview-only component you can paste into:
@@ -236,28 +237,35 @@ function ResultCard({ item, language }: { item: SearchItem; language: 'en' | 'hi
   const { t } = useI18n();
   const href = buildNewsUrl({ id: item.id, slug: item.id, lang: language });
   const fitMode = resolveCoverFitMode(item, { src: item.coverImageUrl, altText: item.title });
+  const titleParts = splitStoryTitleHook(item.title);
+  const titleHookColor = getStoryTitleHookColor(item.category);
   return (
     <div className="group rounded-2xl border border-black/10 bg-white p-4 shadow-sm hover:shadow-md transition">
       <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 gap-3">
-          <StoryImage
-            storyId={item.id}
-            src={item.coverImageUrl || COVER_PLACEHOLDER_SRC}
-            fitMode={fitMode}
-            alt={item.title || ''}
-            variant="mini"
-            className="border border-black/10"
-          />
-
-          <div className="min-w-0">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <div className="min-w-0 order-1 flex-1">
           <div className="flex flex-wrap items-center gap-2 text-base font-semibold leading-snug">
-            <span>{item.title}</span>
+            <span>
+              {titleParts.highlightedHook ? <span style={{ color: titleHookColor }}>{titleParts.highlightedHook}</span> : null}
+              {titleParts.remainingTitle ? <span>{` ${titleParts.remainingTitle}`}</span> : null}
+            </span>
           </div>
           {item.summary && (
             <div className="mt-1 text-sm text-black/70">
               <span>{item.summary}</span>
             </div>
           )}
+          </div>
+
+          <div className="order-2 shrink-0">
+            <StoryImage
+              storyId={item.id}
+              src={item.coverImageUrl || COVER_PLACEHOLDER_SRC}
+              fitMode={fitMode}
+              alt={item.title || ''}
+              variant="mini"
+              className="border border-black/10"
+            />
           </div>
         </div>
         <div className="flex flex-col items-end gap-2">

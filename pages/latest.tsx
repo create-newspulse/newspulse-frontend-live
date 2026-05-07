@@ -8,6 +8,7 @@ import { buildNewsUrl } from '../lib/newsRoutes';
 import { getLocalizedArticleFields } from '../lib/localizedArticleFields';
 import { debugStoryCard, getStoryId, getStoryReactKey } from '../lib/storyIdentity';
 import { formatEditorialDateTime, resolveStoryDateIso } from '../lib/storyDateTime';
+import { getStoryTitleHookColor, splitStoryTitleHook } from '../lib/storyTitleHook';
 import { useI18n } from '../src/i18n/LanguageProvider';
 import { useLanguage } from '../utils/LanguageContext';
 import OriginalTag from '../components/OriginalTag';
@@ -181,6 +182,8 @@ export default function LatestPage() {
                       const category = String(localized.categoryLabel || (a as any)?.category || '').trim();
                       const coverSrc = resolveCoverImageUrl(a as any);
                       const fitMode = resolveCoverFitMode(a as any, { src: coverSrc, altText: title });
+                      const titleParts = splitStoryTitleHook(title);
+                      const titleHookColor = getStoryTitleHookColor(category);
 
                       debugStoryCard('latest-page', a, coverSrc);
 
@@ -192,28 +195,8 @@ export default function LatestPage() {
                           >
                             <div className={`absolute left-0 top-0 h-full w-1.5 ${categoryAccentClasses(category)}`} />
 
-                            <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch sm:gap-4">
-                              <div className="relative w-full overflow-hidden rounded-xl bg-slate-50 shrink-0 sm:w-[160px]">
-                                {coverSrc ? (
-                                  <StoryImage
-                                    storyId={id}
-                                    src={coverSrc}
-                                    fitMode={fitMode}
-                                    alt={title}
-                                    variant="list"
-                                    className="w-full rounded-xl border border-slate-200/70 sm:w-[160px]"
-                                  />
-                                ) : (
-                                  <div className="relative aspect-[16/10] w-full bg-gradient-to-br from-slate-50 via-sky-50 to-indigo-50 sm:w-[160px]">
-                                    <div className="absolute inset-0 opacity-70 bg-gradient-to-tr from-emerald-100/40 via-transparent to-rose-100/35" />
-                                    <div className="absolute bottom-2 right-2 rounded-md border border-white/60 bg-white/50 px-2 py-1 text-[10px] font-semibold tracking-wide text-slate-700">
-                                      NewsPulse
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-
-                              <div className="min-w-0 flex-1">
+                            <div className="flex items-stretch gap-3 sm:gap-4">
+                              <div className="order-1 min-w-0 flex-1">
                                 <div className="flex items-center gap-2 min-w-0">
                                   {when ? (
                                     <span className="inline-flex shrink-0 items-center rounded-full border border-slate-200/70 bg-white/80 px-2 py-1 text-[11px] font-semibold text-slate-700">
@@ -246,10 +229,31 @@ export default function LatestPage() {
                                       overflow: 'hidden',
                                     }}
                                   >
-                                    {title}
+                                    {titleParts.highlightedHook ? <span style={{ color: titleHookColor }}>{titleParts.highlightedHook}</span> : null}
+                                    {titleParts.remainingTitle ? <span>{` ${titleParts.remainingTitle}`}</span> : null}
                                   </span>
                                   {localized.isFallback ? <OriginalTag /> : null}
                                 </div>
+                              </div>
+
+                              <div className="relative order-2 w-[112px] overflow-hidden rounded-xl bg-slate-50 shrink-0 sm:w-[160px]">
+                                {coverSrc ? (
+                                  <StoryImage
+                                    storyId={id}
+                                    src={coverSrc}
+                                    fitMode={fitMode}
+                                    alt={title}
+                                    variant="list"
+                                    className="w-[112px] rounded-xl border border-slate-200/70 sm:w-[160px]"
+                                  />
+                                ) : (
+                                  <div className="relative aspect-[16/10] w-[112px] bg-gradient-to-br from-slate-50 via-sky-50 to-indigo-50 sm:w-[160px]">
+                                    <div className="absolute inset-0 opacity-70 bg-gradient-to-tr from-emerald-100/40 via-transparent to-rose-100/35" />
+                                    <div className="absolute bottom-2 right-2 rounded-md border border-white/60 bg-white/50 px-2 py-1 text-[10px] font-semibold tracking-wide text-slate-700">
+                                      NewsPulse
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </Link>

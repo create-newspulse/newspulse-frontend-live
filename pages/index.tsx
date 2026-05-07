@@ -30,6 +30,7 @@ import { COVER_PLACEHOLDER_SRC, resolveCoverFitMode, resolveCoverImageUrl } from
 import { fetchCurrentWeather } from "../lib/fetchWeather";
 import { debugStoryCard, getStoryId, getStoryReactKey, getStorySlug, getStoryTranslationGroupId } from "../lib/storyIdentity";
 import { formatEditorialDateTime, getStoryDateTimeValue, resolveStoryDateIso } from "../lib/storyDateTime";
+import { getStoryTitleHookColor, splitStoryTitleHook } from "../lib/storyTitleHook";
 import StoryImage, { TopStoryImage } from "../src/components/story/StoryImage";
 import { getTickerMarqueeText, mergeTickerItemsWithAds, type TickerMarqueeItem } from "../lib/publicTickerAds";
 import InspirationHubHomepageSection from "../components/home/InspirationHubHomepageSection";
@@ -54,8 +55,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Cpu,
-  Flame,
   Flag,
+  Flame,
   Globe,
   GraduationCap,
   Home,
@@ -2491,6 +2492,9 @@ function CenterStoryFeed({ theme, items, lang }: any) {
               const readMinutes = estimateReadMinutes(`${String(item?.title || '').trim()} ${summary}`);
               const showSummary = index < HOME_FRESH_SUMMARY_STORY_LIMIT && summary;
               const storyKey = getStoryReactKey(item, href);
+              const titleText = String(item?.title || '').trim();
+              const titleParts = splitStoryTitleHook(titleText);
+              const titleHookColor = getStoryTitleHookColor(categoryLabel || item?.category);
 
               debugStoryCard('home-fresh-updates', item, imageSrc);
 
@@ -2501,7 +2505,7 @@ function CenterStoryFeed({ theme, items, lang }: any) {
                   className="group block rounded-[28px] border p-3 shadow-[0_18px_38px_-32px_rgba(15,23,42,0.32)] transition hover:-translate-y-[1px] hover:shadow-[0_24px_46px_-30px_rgba(15,23,42,0.34)] sm:p-4"
                   style={{ borderColor: theme.border, background: theme.surface }}
                 >
-                  <article className={cx('grid gap-4', showSummary ? 'md:grid-cols-[148px_1fr]' : 'md:grid-cols-[116px_1fr]')}>
+                  <article className={cx('grid grid-cols-[1fr_96px] items-start gap-4', showSummary ? 'md:grid-cols-[1fr_148px]' : 'md:grid-cols-[1fr_116px]')}>
                     {imageSrc ? (
                       <StoryImage
                         storyId={storyId}
@@ -2511,14 +2515,14 @@ function CenterStoryFeed({ theme, items, lang }: any) {
                         variant="mini"
                         fallbackSrc={COVER_PLACEHOLDER_SRC}
                         className={cx(
-                          'w-full border border-black/10',
+                          'order-2 w-full border border-black/10',
                           showSummary ? 'md:w-[148px]' : 'md:w-[116px]'
                         )}
                       />
                     ) : (
                       <div
                         className={cx(
-                          'relative aspect-[4/3] overflow-hidden rounded-2xl border border-black/10 bg-[linear-gradient(135deg,rgba(248,250,252,0.95),rgba(226,232,240,0.9))] w-full',
+                          'order-2 relative aspect-[4/3] overflow-hidden rounded-2xl border border-black/10 bg-[linear-gradient(135deg,rgba(248,250,252,0.95),rgba(226,232,240,0.9))] w-full',
                           showSummary ? 'md:w-[148px]' : 'md:w-[116px]'
                         )}
                       >
@@ -2528,7 +2532,7 @@ function CenterStoryFeed({ theme, items, lang }: any) {
                       </div>
                     )}
 
-                    <div className="min-w-0">
+                    <div className="order-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: theme.sub }}>
                         {categoryLabel ? (
                           <span className="rounded-full border px-2.5 py-1" style={{ borderColor: theme.border, background: theme.surface2, color: theme.text }}>
@@ -2544,7 +2548,8 @@ function CenterStoryFeed({ theme, items, lang }: any) {
                           className={cx('min-w-0 font-black tracking-tight', showSummary ? 'text-lg leading-snug sm:text-[1.1rem]' : 'text-base leading-snug')}
                           style={{ color: theme.text, ...lineClamp2 }}
                         >
-                          {String(item?.title || '').trim()}
+                          {titleParts.highlightedHook ? <span style={{ color: titleHookColor }}>{titleParts.highlightedHook}</span> : null}
+                          {titleParts.remainingTitle ? <span>{` ${titleParts.remainingTitle}`}</span> : null}
                         </h3>
                         {item?.titleIsOriginal ? <OriginalTag /> : null}
                       </div>
@@ -3138,6 +3143,9 @@ function HomeEditorialSection({ theme, title, href, items, lang, Icon }: any) {
             const rawSlug = getStorySlug(item);
             const href = buildNewsUrl({ id: storyId || rawSlug, slug: rawSlug, lang: safeLang });
             const storyKey = getStoryReactKey(item, href);
+            const titleText = String(item?.title || '').trim();
+            const titleParts = splitStoryTitleHook(titleText);
+            const titleHookColor = getStoryTitleHookColor(resolveCategoryLabel(item?.category) || item?.category);
 
             debugStoryCard('home-editorial-secondary', item, item?.imageSrc);
 
@@ -3148,7 +3156,7 @@ function HomeEditorialSection({ theme, title, href, items, lang, Icon }: any) {
                 className="group block rounded-[24px] border p-3 shadow-[0_14px_32px_-28px_rgba(15,23,42,0.28)] transition hover:-translate-y-[1px] hover:shadow-[0_20px_40px_-28px_rgba(15,23,42,0.30)] sm:p-4"
                 style={{ borderColor: theme.border, background: theme.surface }}
               >
-                <article className="grid grid-cols-[96px_1fr] gap-4 sm:grid-cols-[116px_1fr]">
+                <article className="grid grid-cols-[1fr_96px] items-start gap-4 sm:grid-cols-[1fr_116px]">
                   {item?.imageSrc ? (
                     <StoryImage
                       storyId={storyId}
@@ -3157,15 +3165,15 @@ function HomeEditorialSection({ theme, title, href, items, lang, Icon }: any) {
                       alt={String(item?.title || '').trim()}
                       variant="mini"
                       fallbackSrc={COVER_PLACEHOLDER_SRC}
-                      className="border border-black/10"
+                      className="order-2 border border-black/10"
                     />
                   ) : (
-                    <div className="relative w-[96px] aspect-[4/3] overflow-hidden rounded-2xl border border-black/10 bg-[linear-gradient(135deg,rgba(248,250,252,0.95),rgba(226,232,240,0.9))] sm:w-[116px]">
+                    <div className="order-2 relative w-[96px] aspect-[4/3] overflow-hidden rounded-2xl border border-black/10 bg-[linear-gradient(135deg,rgba(248,250,252,0.95),rgba(226,232,240,0.9))] sm:w-[116px]">
                       <div className="absolute inset-0 grid place-items-center text-[10px] font-extrabold tracking-[0.16em] text-slate-600/90">NP</div>
                     </div>
                   )}
 
-                  <div className="min-w-0">
+                  <div className="order-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: theme.sub }}>
                       {item?.category ? <span>{resolveCategoryLabel(item.category)}</span> : null}
                       {item?.category && item?.time ? <span>•</span> : null}
@@ -3173,7 +3181,8 @@ function HomeEditorialSection({ theme, title, href, items, lang, Icon }: any) {
                     </div>
                     <div className="mt-2 flex items-start gap-2">
                       <h3 className="min-w-0 text-base font-bold leading-snug tracking-tight" style={{ color: theme.text, ...lineClamp2 }}>
-                        {String(item?.title || '').trim()}
+                        {titleParts.highlightedHook ? <span style={{ color: titleHookColor }}>{titleParts.highlightedHook}</span> : null}
+                        {titleParts.remainingTitle ? <span>{` ${titleParts.remainingTitle}`}</span> : null}
                       </h3>
                       {item?.titleIsOriginal ? <OriginalTag /> : null}
                     </div>
