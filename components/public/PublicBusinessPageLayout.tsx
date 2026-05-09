@@ -7,6 +7,12 @@ type PublicBusinessPageLayoutProps = {
   title: string;
   description: string;
   contactEmail: string;
+  contactHref?: string;
+  contactOnClick?: React.MouseEventHandler<HTMLAnchorElement>;
+  contactAriaLabel?: string;
+  contactTitle?: string;
+  contactTarget?: string;
+  contactRel?: string;
   tone?: 'sky' | 'amber' | 'slate';
   children: React.ReactNode;
 };
@@ -29,8 +35,21 @@ const toneClasses = {
   },
 } as const;
 
-export default function PublicBusinessPageLayout({ title, description, contactEmail, tone = 'sky', children }: PublicBusinessPageLayoutProps) {
+export default function PublicBusinessPageLayout({
+  title,
+  description,
+  contactEmail,
+  contactHref,
+  contactOnClick,
+  contactAriaLabel,
+  contactTitle,
+  contactTarget,
+  contactRel,
+  tone = 'sky',
+  children,
+}: PublicBusinessPageLayoutProps) {
   const palette = toneClasses[tone];
+  const resolvedContactHref = contactHref ?? `mailto:${contactEmail}`;
 
   return (
     <>
@@ -55,7 +74,12 @@ export default function PublicBusinessPageLayout({ title, description, contactEm
               </Link>
 
               <a
-                href={`mailto:${contactEmail}`}
+                href={resolvedContactHref}
+                onClick={contactOnClick}
+                aria-label={contactAriaLabel}
+                title={contactTitle}
+                target={contactTarget}
+                rel={contactRel}
                 className="inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-white/85 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm backdrop-blur transition hover:bg-white"
               >
                 <Mail className="h-4 w-4" />
@@ -100,10 +124,33 @@ export function SectionHeading({ title, description, kicker }: { title: string; 
   );
 }
 
-export function ContactPill({ email, label = 'Contact the ads desk' }: { email: string; label?: string }) {
+export function ContactPill({
+  email,
+  label = 'Contact the ads desk',
+  href,
+  onClick,
+  ariaLabel,
+  title,
+  target,
+  rel,
+}: {
+  email: string;
+  label?: string;
+  href?: string;
+  onClick?: React.MouseEventHandler<HTMLAnchorElement>;
+  ariaLabel?: string;
+  title?: string;
+  target?: string;
+  rel?: string;
+}) {
   return (
     <a
-      href={`mailto:${email}`}
+      href={href ?? `mailto:${email}`}
+      onClick={onClick}
+      aria-label={ariaLabel}
+      title={title}
+      target={target}
+      rel={rel}
       className="inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
     >
       <Mail className="h-4 w-4" />

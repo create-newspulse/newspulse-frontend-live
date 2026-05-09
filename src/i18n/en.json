@@ -270,6 +270,7 @@
     "editorialPolicy": "Editorial Policy",
     "privacyPolicy": "Privacy Policy",
     "termsOfService": "Terms of Service",
+    "copyrightPolicy": "Copyright Policy",
     "careers": "Careers",
     "journalistDesk": "Journalist Desk",
     "advertiseWithUs": "Advertise With Us",
@@ -278,7 +279,7 @@
     "rssFeeds": "RSS Feeds",
     "apiAccess": "API Access",
     "licensing": "Licensing",
-    "copyright": "© 2025 News Pulse. All rights reserved. | Powered by Innovation"
+    "copyright": "© 2025–2026 News Pulse Media. All Rights Reserved. | Powered by Innovation"
   },
   "categoryPage": {
     "unableToLoadTitle": "Unable to load articles",

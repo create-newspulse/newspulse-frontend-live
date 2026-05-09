@@ -4072,6 +4072,19 @@ function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
     { label: t('footer.licensing') },
   ];
 
+  const quickLinks = [
+    { label: t('footer.aboutUs') },
+    { label: t('footer.editorialPolicy') },
+    { label: t('footer.privacyPolicy') },
+    { label: t('footer.termsOfService') },
+    { label: t('footer.copyrightPolicy'), href: localizePath('/copyright-policy', lang) },
+    { label: 'Grievance Redressal', href: localizePath('/grievance-redressal', lang) },
+    { label: t('common.contact') },
+    { label: t('footer.careers') },
+    { label: t('common.communityReporter') },
+    { label: t('footer.journalistDesk') },
+  ];
+
   return (
     <div className="mt-6" style={{ background: footerBg }}>
       <div className="mx-auto w-full max-w-[1440px] px-4 md:px-8 py-10">
@@ -4111,10 +4124,16 @@ function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
               {t('footer.quickLinksTitle')}
             </div>
             <div className="mt-4 grid gap-3 text-sm text-white/85">
-              {[t('footer.aboutUs'), t('footer.editorialPolicy'), t('footer.privacyPolicy'), t('footer.termsOfService'), t('common.contact'), t('footer.careers'), t('common.communityReporter'), t('footer.journalistDesk')].map((label) => (
-                <button key={label} type="button" onClick={() => onToast(`${label} (planned)`) } className="text-left hover:underline">
-                  {label}
-                </button>
+              {quickLinks.map((item) => (
+                item.href ? (
+                  <Link key={item.label} href={item.href} className="text-left hover:underline">
+                    {item.label}
+                  </Link>
+                ) : (
+                  <button key={item.label} type="button" onClick={() => onToast(`${item.label} (planned)`) } className="text-left hover:underline">
+                    {item.label}
+                  </button>
+                )
               ))}
             </div>
           </div>
