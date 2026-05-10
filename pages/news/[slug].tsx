@@ -1,5 +1,6 @@
 import type { GetServerSideProps } from 'next';
 import Head from 'next/head';
+import Link from 'next/link';
 import React from 'react';
 import { useRouter } from 'next/router';
 
@@ -8,12 +9,15 @@ import CategoryHeader from '../../src/components/category/CategoryHeader';
 import { getCategoryQueryKey, getCategoryRouteKey } from '../../lib/categoryKeys';
 import { getLocalizedArticleFields, type RouteLocale } from '../../lib/localizedArticleFields';
 import { formatArticleBodyHtml, splitArticleBodyBlocks, stripDuplicateOpeningParagraph } from '../../lib/articleBody';
-import { fetchPublicNewsGroup, unwrapArticle, type Article } from '../../lib/publicNewsApi';
+import { fetchPublicNews, fetchPublicNewsGroup, unwrapArticle, type Article } from '../../lib/publicNewsApi';
+import type { PublicViralVideo } from '../../lib/publicViralVideos';
+import { normalizePublicViralVideosPayload } from '../../lib/publicViralVideos';
 import { subscribePublicDataRefresh } from '../../lib/publicDataRefresh';
 import { pickFreshestArticleForLocale, shouldReplaceArticleWithFreshCandidate } from '../../lib/translationGroupSync';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { tHeading, toLanguageKey } from '../../utils/localizedNames';
 import { buildNewsUrl } from '../../lib/newsRoutes';
+import PublicViralVideoCard from '../../components/viral-videos/PublicViralVideoCard';
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
 import { resolveSponsoredContentMeta } from '../../lib/sponsoredContent';
 import { debugStoryCard, getStoryId, getStoryReactKey } from '../../lib/storyIdentity';
@@ -76,6 +80,90 @@ function stripQueryHash(path: string): string {
 
 function localePrefix(lang: 'en' | 'hi' | 'gu'): '' | '/hi' | '/gu' {
   return lang === 'en' ? '' : (lang === 'hi' ? '/hi' : '/gu');
+}
+
+function ArticleLatestSidebarWidget({
+  lang,
+  items,
+  loading,
+}: {
+  lang: 'en' | 'hi' | 'gu';
+  items: Article[];
+  loading: boolean;
+}) {
+  const { t } = useI18n();
+  const prefix = localePrefix(lang);
+
+  if (!loading && items.length === 0) return null;
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="px-4 py-3 border-b border-slate-200 flex items-start justify-between gap-3">
+        <div>
+          <div className="text-[11px] font-black uppercase tracking-[0.16em] text-newsPulse-blue/80">Latest</div>
+          <div className="mt-1 text-sm font-extrabold text-slate-900">News Pulse</div>
+        </div>
+        <Link href={`${prefix}/latest`.replace(/\/\//g, '/')} className="text-xs font-semibold text-slate-700 hover:underline">
+          {t('common.viewAll') || 'View all'}
+        </Link>
+      </div>
+      <div className="p-2">
+        {loading ? (
+          Array.from({ length: 4 }).map((_, index) => (
+            <div key={`article-latest-sk-${index}`} className="rounded-xl px-2 py-2">
+              <div className="h-3 w-16 animate-pulse rounded bg-slate-100" />
+              <div className="mt-2 h-4 w-full animate-pulse rounded bg-slate-100" />
+            </div>
+          ))
+        ) : (
+          items.slice(0, 6).map((story, index) => {
+            const id = getStoryId(story);
+            const localizedStory = getLocalizedArticleFields(story || {}, lang);
+            if (!localizedStory.isVisible) return null;
+            const href = id ? buildNewsUrl({ id, slug: id, lang }) : '#';
+            const titleText = cleanText(localizedStory.title || (story as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
+            const category = String((story as any)?.category || '').trim();
+            return (
+              <a
+                key={getStoryReactKey(story, href) || `article-latest-${index}`}
+                href={href}
+                className="block rounded-xl px-2 py-2 hover:bg-slate-50"
+              >
+                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  {category ? <span className="truncate">{category}</span> : null}
+                </div>
+                <div className="mt-1 line-clamp-2 text-sm font-semibold text-slate-900">{titleText}</div>
+              </a>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ArticleVideoFeatureSidebar({ lang, video }: { lang: 'en' | 'hi' | 'gu'; video: PublicViralVideo | null }) {
+  const { t } = useI18n();
+  const prefix = localePrefix(lang);
+
+  if (!video) return null;
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-slate-200 flex items-start justify-between gap-3">
+        <div>
+          <div className="text-[11px] font-black uppercase tracking-[0.16em] text-newsPulse-blue/80">Video</div>
+          <div className="mt-1 text-sm font-extrabold text-slate-900">Feature Card</div>
+        </div>
+        <Link href={`${prefix}/viral-videos`.replace(/\/\//g, '/')} className="text-xs font-semibold text-slate-700 hover:underline">
+          {t('common.viewAll') || 'View all'}
+        </Link>
+      </div>
+      <div className="p-3">
+        <PublicViralVideoCard video={video} compact />
+      </div>
+    </div>
+  );
 }
 
 function tagList(tags: any): string[] {
@@ -158,6 +246,9 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
   const [pendingTranslate, setPendingTranslate] = React.useState<boolean>(Boolean(pending));
   const [pendingError, setPendingError] = React.useState<string | null>(error || null);
   const [pendingExhausted, setPendingExhausted] = React.useState<boolean>(false);
+  const [sidebarLatestItems, setSidebarLatestItems] = React.useState<Article[]>([]);
+  const [sidebarLatestLoading, setSidebarLatestLoading] = React.useState<boolean>(true);
+  const [sidebarVideoFeature, setSidebarVideoFeature] = React.useState<PublicViralVideo | null>(null);
   const pendingTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingAttemptsRef = React.useRef<number>(0);
 
@@ -300,6 +391,41 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
       void refreshFromTranslationGroup();
     });
   }, [refreshFromTranslationGroup, resolvedArticle?._id]);
+
+  React.useEffect(() => {
+    const controller = new AbortController();
+    setSidebarLatestLoading(true);
+
+    (async () => {
+      const videoParams = new URLSearchParams({ limit: '6', lang, language: lang });
+      const [latestResp, viralResp] = await Promise.all([
+        fetchPublicNews({ language: lang, limit: 6, signal: controller.signal }),
+        fetch(`/api/public/viral-videos?${videoParams.toString()}`, {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          signal: controller.signal,
+        })
+          .then(async (response) => ({ ok: response.ok, json: await response.json().catch(() => null) }))
+          .catch(() => ({ ok: false, json: null })),
+      ]);
+
+      if (controller.signal.aborted) return;
+
+      setSidebarLatestItems(Array.isArray(latestResp.items) ? latestResp.items.slice(0, 6) : []);
+      setSidebarLatestLoading(false);
+
+      const normalizedVideos = normalizePublicViralVideosPayload(viralResp.json);
+      const featuredVideo = normalizedVideos.items.find((item) => item.showOnHomepage) || normalizedVideos.items[0] || null;
+      setSidebarVideoFeature(viralResp.ok ? featuredVideo : null);
+    })().catch(() => {
+      if (controller.signal.aborted) return;
+      setSidebarLatestItems([]);
+      setSidebarLatestLoading(false);
+      setSidebarVideoFeature(null);
+    });
+
+    return () => controller.abort();
+  }, [lang]);
 
   const articleBodyHtml = React.useMemo(
     () => stripDuplicateOpeningParagraph(resolvedSafeHtml, displaySummary),
@@ -704,6 +830,31 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
             {/* Sidebar */}
             <aside className="lg:col-span-4">
               <div className="lg:sticky lg:top-4 space-y-4">
+                {/* Trending Topics */}
+                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <div className="px-4 py-3 border-b border-slate-200">
+                    <div className="text-sm font-extrabold text-slate-900">{tx('common.trending', 'Trending Topics')}</div>
+                  </div>
+                  <div className="p-4 flex flex-wrap gap-2">
+                    {trendingTopics.length ? (
+                      trendingTopics.map((topic) => (
+                        <a
+                          key={topic}
+                          href={`${prefix}/topic/${encodeURIComponent(slugifyTopic(topic))}?q=${encodeURIComponent(topic)}`.replace(/\/\//g, '/')}
+                          className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+                        >
+                          #{topic}
+                        </a>
+                      ))
+                    ) : (
+                      <div className="text-sm text-slate-600">{tx('common.noResults', 'No topics yet.')}</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Ad */}
+                <AdSlot slot="HOME_RIGHT_300x250" variant="right300" />
+
                 {/* Top Stories */}
                 <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
                   <div className="px-4 py-3 border-b border-slate-200">
@@ -736,73 +887,12 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                   </div>
                 </div>
 
-                {/* Trending Topics */}
-                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                  <div className="px-4 py-3 border-b border-slate-200">
-                    <div className="text-sm font-extrabold text-slate-900">{tx('common.trending', 'Trending Topics')}</div>
-                  </div>
-                  <div className="p-4 flex flex-wrap gap-2">
-                    {trendingTopics.length ? (
-                      trendingTopics.map((topic) => (
-                        <a
-                          key={topic}
-                          href={`${prefix}/topic/${encodeURIComponent(slugifyTopic(topic))}?q=${encodeURIComponent(topic)}`.replace(/\/\//g, '/')}
-                          className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200"
-                        >
-                          #{topic}
-                        </a>
-                      ))
-                    ) : (
-                      <div className="text-sm text-slate-600">{tx('common.noResults', 'No topics yet.')}</div>
-                    )}
-                  </div>
-                </div>
+                <ArticleLatestSidebarWidget lang={lang} items={sidebarLatestItems} loading={sidebarLatestLoading} />
 
-                {/* Live Updates (mini) */}
-                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                  <div className="px-4 py-3 border-b border-slate-200">
-                    <div className="text-sm font-extrabold text-slate-900">{tx('common.liveUpdates', 'Live Updates')}</div>
-                  </div>
-                  <div className="p-4 space-y-2 text-sm">
-                    <a href={`${prefix}/breaking`.replace(/\/\//g, '/')} className="block text-slate-800 hover:underline">{tx('common.breaking', 'Breaking')}</a>
-                    <a href={`${prefix}/live-updates`.replace(/\/\//g, '/')} className="block text-slate-800 hover:underline">{tx('common.liveUpdates', 'Live Updates')}</a>
-                    {categoryKey ? (
-                      <a href={`${prefix}/${categoryKey}`.replace(/\/\//g, '/')} className="block text-slate-800 hover:underline">{categoryLabel}</a>
-                    ) : null}
-                  </div>
-                </div>
+                <AdSlot slot="HOME_RIGHT_300x600" variant="right300x600" className="mx-auto" />
 
-                {/* Ad */}
-                <AdSlot slot="HOME_RIGHT_300x250" variant="right300" />
+                <ArticleVideoFeatureSidebar lang={lang} video={sidebarVideoFeature} />
 
-                {/* Related list */}
-                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                  <div className="px-4 py-3 border-b border-slate-200">
-                    <div className="text-sm font-extrabold text-slate-900">{tx('common.relatedStories', 'Related Stories')}</div>
-                  </div>
-                  <div className="p-2">
-                    {relatedStories && relatedStories.length ? (
-                      relatedStories.slice(0, 6).map((s, i) => {
-                        const id = getStoryId(s);
-                        const localizedStory = getLocalizedArticleFields(s || {}, lang);
-                        if (!localizedStory.isVisible) return null;
-                        const href = id ? buildNewsUrl({ id, slug: id, lang }) : '#';
-                        const titleText = cleanText(localizedStory.title || (s as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
-                        return (
-                          <a
-                            key={getStoryReactKey(s, href)}
-                            href={href}
-                            className="block rounded-xl px-2 py-2 hover:bg-slate-50"
-                          >
-                            <div className="line-clamp-2 text-sm font-semibold text-slate-900">{titleText}</div>
-                          </a>
-                        );
-                      })
-                    ) : (
-                      <div className="p-3 text-sm text-slate-600">{tx('common.noResults', 'No related stories yet.')}</div>
-                    )}
-                  </div>
-                </div>
               </div>
             </aside>
           </div>

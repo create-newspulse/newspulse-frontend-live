@@ -16,7 +16,11 @@ import { buildNewsUrl } from '../../lib/newsRoutes';
 import { localizeArticle } from '../../lib/localizeArticle';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
+import AdSlot from '../../src/components/ads/AdSlot';
 import { getStoryTitleHookColor, splitStoryTitleHook } from '../../lib/storyTitleHook';
+import type { PublicViralVideo } from '../../lib/publicViralVideos';
+import { normalizePublicViralVideosPayload } from '../../lib/publicViralVideos';
+import PublicViralVideoCard from '../../components/viral-videos/PublicViralVideoCard';
 import StoryImage, { TopStoryImage } from '../../src/components/story/StoryImage';
 
 type AnyStory = any;
@@ -196,6 +200,11 @@ function storyHref(story: AnyStory, lang: unknown): string {
   return buildNewsUrl({ id, slug, lang });
 }
 
+function withLangPrefix(path: string, lang: 'en' | 'hi' | 'gu'): string {
+  if (lang === 'en') return path;
+  return `/${lang}${path}`;
+}
+
 function storyImage(story: AnyStory): string {
   return resolveCoverImageUrl(story) || COVER_PLACEHOLDER_SRC;
 }
@@ -336,15 +345,10 @@ function CompactFeedRow({ story, lang }: { story: AnyStory; lang: 'en' | 'hi' | 
   const tags = tagList(story?.tags);
   const tag = tags[0] || String(story?.topic || story?.section || '').trim();
   const status = String((story as any)?.status || (story as any)?.state || '').trim();
+  const footerLocation = where && status && where.toLowerCase() === status.toLowerCase() ? '' : where;
   const translationStatus = String((story as any)?.translationStatus || '').trim();
   const titleParts = splitStoryTitleHook(safeTitle);
   const titleHookColor = getStoryTitleHookColor(tag || story?.category || story?.section);
-  const publishedDate = (() => {
-    if (!when) return '';
-    const date = new Date(when);
-    if (Number.isNaN(date.getTime())) return '';
-    return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-  })();
   const summary = (() => {
     const localizedSummary = String(content || '')
       .replace(/<[^>]+>/g, ' ')
@@ -397,12 +401,154 @@ function CompactFeedRow({ story, lang }: { story: AnyStory; lang: 'en' | 'hi' | 
         </div>
 
         <div className="mt-3.5 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-500 dark:text-gray-400">
-          <span className="truncate">📍 {where}</span>
-          {publishedDate ? <span className="hidden sm:inline text-slate-300 dark:text-gray-600">•</span> : null}
-          {publishedDate ? <span>{publishedDate}</span> : null}
+          {footerLocation ? <span className="truncate">📍 {footerLocation}</span> : null}
+          {footerLocation && status ? <span className="hidden sm:inline text-slate-300 dark:text-gray-600">•</span> : null}
+          {status ? <span className="capitalize">{status}</span> : null}
         </div>
       </div>
     </a>
+  );
+}
+
+function NationalSidebarLatestWidget({
+  lang,
+  items,
+  loading,
+}: {
+  lang: 'en' | 'hi' | 'gu';
+  items: AnyStory[];
+  loading: boolean;
+}) {
+  const { t } = useI18n();
+
+  if (!loading && items.length === 0) return null;
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+      <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-4 dark:border-gray-800">
+        <div>
+          <div className="text-[11px] font-black uppercase tracking-[0.18em] text-newsPulse-blue/80">Latest</div>
+          <div className="mt-1 text-sm font-extrabold text-slate-900 dark:text-gray-100">News Pulse</div>
+        </div>
+        <Link href={withLangPrefix('/latest', lang)} className="text-xs font-semibold text-newsPulse-blue hover:underline">
+          {t('common.viewAll')}
+        </Link>
+      </div>
+
+      <div className="p-2">
+        {loading ? (
+          Array.from({ length: 4 }).map((_, index) => (
+            <div key={`latest-skeleton-${index}`} className="rounded-xl px-3 py-3">
+              <div className="h-3 w-16 animate-pulse rounded bg-slate-100 dark:bg-gray-800" />
+              <div className="mt-2 h-4 w-full animate-pulse rounded bg-slate-100 dark:bg-gray-800" />
+            </div>
+          ))
+        ) : (
+          items.slice(0, 6).map((item, index) => {
+            const href = storyHref(item, lang);
+            const { title } = localizeArticle(item, lang);
+            const itemTitle = String(title || item?.title || t('common.untitled')).trim();
+            const category = String(item?.category || '').trim();
+
+            return (
+              <a
+                key={String(item?._id || item?.id || item?.slug || index)}
+                href={href}
+                className="block rounded-xl px-3 py-3 transition hover:bg-slate-50 dark:hover:bg-gray-800/70"
+              >
+                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-gray-400">
+                  {category ? <span className="truncate">{category}</span> : null}
+                  {storyDateIso(item) ? <span className="h-1 w-1 rounded-full bg-slate-300 dark:bg-gray-600" /> : null}
+                  {storyDateIso(item) ? <ClientTime iso={storyDateIso(item)} /> : null}
+                </div>
+                <div className="mt-2 line-clamp-2 text-sm font-semibold leading-snug text-slate-900 dark:text-gray-100">
+                  {itemTitle}
+                </div>
+              </a>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+function NationalSidebarVideoFeature({ lang, video }: { lang: 'en' | 'hi' | 'gu'; video: PublicViralVideo | null }) {
+  const { t } = useI18n();
+
+  if (!video) return null;
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+      <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-4 dark:border-gray-800">
+        <div>
+          <div className="text-[11px] font-black uppercase tracking-[0.18em] text-newsPulse-blue/80">Video</div>
+          <div className="mt-1 text-sm font-extrabold text-slate-900 dark:text-gray-100">Feature Card</div>
+        </div>
+        <Link href={withLangPrefix('/viral-videos', lang)} className="text-xs font-semibold text-newsPulse-blue hover:underline">
+          {t('common.viewAll')}
+        </Link>
+      </div>
+      <div className="p-3">
+        <PublicViralVideoCard video={video} compact />
+      </div>
+    </div>
+  );
+}
+
+function NationalSidebarYouthDeskWidget({
+  lang,
+  items,
+  loading,
+}: {
+  lang: 'en' | 'hi' | 'gu';
+  items: AnyStory[];
+  loading: boolean;
+}) {
+  const { t } = useI18n();
+
+  if (!loading && items.length === 0) return null;
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+      <div className="flex items-start justify-between gap-3 border-b border-slate-200 bg-[linear-gradient(135deg,rgba(79,70,229,0.10),rgba(37,99,235,0.05)_70%,rgba(255,255,255,0.72)_100%)] px-4 py-4 dark:border-gray-800 dark:bg-none">
+        <div>
+          <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-gray-400">Youth Desk</div>
+          <div className="mt-1 text-sm font-extrabold text-slate-900 dark:text-gray-100">Trending</div>
+        </div>
+        <Link href={withLangPrefix('/youth-pulse', lang)} className="text-xs font-semibold text-newsPulse-blue hover:underline">
+          {t('common.viewAll')}
+        </Link>
+      </div>
+
+      <div className="grid gap-2.5 p-4">
+        {loading ? (
+          Array.from({ length: 4 }).map((_, index) => (
+            <div key={`youth-skeleton-${index}`} className="h-12 animate-pulse rounded-[20px] border border-slate-200 bg-slate-50 dark:border-gray-800 dark:bg-gray-800/70" />
+          ))
+        ) : (
+          items.slice(0, 4).map((item, index) => {
+            const href = storyHref(item, lang);
+            const { title } = localizeArticle(item, lang);
+            const itemTitle = String(title || item?.title || t('common.untitled')).trim();
+
+            return (
+              <a
+                key={String(item?._id || item?.id || item?.slug || index)}
+                href={href}
+                className="group flex items-center gap-3 rounded-[20px] border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-900 shadow-[0_14px_30px_-28px_rgba(15,23,42,0.32)] transition duration-200 hover:-translate-y-0.5 hover:bg-slate-50 hover:shadow-[0_18px_34px_-28px_rgba(15,23,42,0.36)] dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800/80"
+              >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-indigo-200 bg-indigo-50 text-[10px] font-black uppercase tracking-[0.12em] text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">
+                  YD
+                </span>
+                <span className="min-w-0 flex-1 line-clamp-2 font-semibold leading-snug">{itemTitle}</span>
+                <span className="shrink-0 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-slate-600 dark:text-gray-500 dark:group-hover:text-gray-300">→</span>
+              </a>
+            );
+          })
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -440,6 +586,11 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
   const [loadingMore, setLoadingMore] = React.useState(false);
   const [hasMore, setHasMore] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [sidebarLatestItems, setSidebarLatestItems] = React.useState<AnyStory[]>([]);
+  const [sidebarLatestLoading, setSidebarLatestLoading] = React.useState(true);
+  const [sidebarYouthItems, setSidebarYouthItems] = React.useState<AnyStory[]>([]);
+  const [sidebarYouthLoading, setSidebarYouthLoading] = React.useState(true);
+  const [sidebarVideoFeature, setSidebarVideoFeature] = React.useState<PublicViralVideo | null>(null);
 
   const sentinelRef = React.useRef<HTMLDivElement | null>(null);
   const didInitRef = React.useRef(false);
@@ -780,6 +931,49 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
     }
   };
 
+  React.useEffect(() => {
+    const controller = new AbortController();
+    setSidebarLatestLoading(true);
+    setSidebarYouthLoading(true);
+
+    (async () => {
+      const videoParams = new URLSearchParams({ limit: '6', lang: effectiveLang, language: effectiveLang });
+
+      const [latestResp, youthResp, videoResp] = await Promise.all([
+        fetchPublicNews({ language: effectiveLang, limit: 6, signal: controller.signal }),
+        fetchPublicNews({ category: 'youth-pulse', language: effectiveLang, limit: 4, signal: controller.signal }),
+        fetch(`/api/public/viral-videos?${videoParams.toString()}`, {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          signal: controller.signal,
+        })
+          .then(async (response) => ({ ok: response.ok, json: await response.json().catch(() => null) }))
+          .catch(() => ({ ok: false, json: null })),
+      ]);
+
+      if (controller.signal.aborted) return;
+
+      setSidebarLatestItems(Array.isArray(latestResp.items) ? latestResp.items.slice(0, 6) : []);
+      setSidebarLatestLoading(false);
+
+      setSidebarYouthItems(Array.isArray(youthResp.items) ? youthResp.items.slice(0, 4) : []);
+      setSidebarYouthLoading(false);
+
+      const normalizedVideos = normalizePublicViralVideosPayload(videoResp.json);
+      const featuredVideo = normalizedVideos.items.find((item) => item.showOnHomepage) || normalizedVideos.items[0] || null;
+      setSidebarVideoFeature(videoResp.ok ? featuredVideo : null);
+    })().catch(() => {
+      if (controller.signal.aborted) return;
+      setSidebarLatestItems([]);
+      setSidebarLatestLoading(false);
+      setSidebarYouthItems([]);
+      setSidebarYouthLoading(false);
+      setSidebarVideoFeature(null);
+    });
+
+    return () => controller.abort();
+  }, [effectiveLang]);
+
   return (
     <div className="min-h-screen bg-white text-slate-900 dark:bg-dark-primary dark:text-dark-text">
       <Head>
@@ -880,7 +1074,7 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
           </div>
         ) : null}
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-10">
+        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-10">
           {/* Left 70% */}
           <main className="lg:col-span-7">
             {/* Hero */}
@@ -987,7 +1181,11 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
                               lang={effectiveLang}
                               topStories={topStories}
                               trendingTopics={trendingTopics}
-                              videoStory={videoStory}
+                              latestItems={sidebarLatestItems}
+                              latestLoading={sidebarLatestLoading}
+                              youthItems={sidebarYouthItems}
+                              youthLoading={sidebarYouthLoading}
+                              videoFeature={sidebarVideoFeature}
                             />
                           </div>
                         </div>
@@ -1006,14 +1204,18 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
           </main>
 
           {/* Right 30% */}
-          <aside className="hidden lg:block lg:col-span-3">
-            <div className="sticky top-4">
+          <aside className="hidden self-start lg:col-span-3 lg:block">
+            <div className="sticky top-4 self-start">
               <NationalSidebar
                 language={effectiveLang}
                 lang={effectiveLang}
                 topStories={topStories}
                 trendingTopics={trendingTopics}
-                videoStory={videoStory}
+                latestItems={sidebarLatestItems}
+                latestLoading={sidebarLatestLoading}
+                youthItems={sidebarYouthItems}
+                youthLoading={sidebarYouthLoading}
+                videoFeature={sidebarVideoFeature}
               />
             </div>
           </aside>
@@ -1028,13 +1230,21 @@ function NationalSidebar({
   lang,
   topStories,
   trendingTopics,
-  videoStory,
+  latestItems,
+  latestLoading,
+  youthItems,
+  youthLoading,
+  videoFeature,
 }: {
   language: any;
   lang: 'en' | 'hi' | 'gu';
   topStories: AnyStory[];
   trendingTopics: string[];
-  videoStory: AnyStory | null;
+  latestItems: AnyStory[];
+  latestLoading: boolean;
+  youthItems: AnyStory[];
+  youthLoading: boolean;
+  videoFeature: PublicViralVideo | null;
 }) {
   const { t } = useI18n();
   const slugify = (value: string) =>
@@ -1046,7 +1256,26 @@ function NationalSidebar({
       .replace(/-+/g, '-');
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 self-start">
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+        <div className="px-4 py-3 border-b border-slate-200">
+          <div className="text-sm font-extrabold">{t('nationalPage.trendingTopicsTitle')}</div>
+        </div>
+        <div className="p-4 flex flex-wrap gap-2">
+          {trendingTopics.slice(0, 10).map((t) => (
+            <Link
+              key={t}
+              href={`/topic/${encodeURIComponent(slugify(t))}?q=${encodeURIComponent(t)}`}
+              className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 cursor-pointer hover:bg-slate-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+            >
+              #{t}
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      <AdSlot slot="HOME_RIGHT_300x250" variant="right300" />
+
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
         <div className="px-4 py-3 border-b border-slate-200">
           <div className="text-sm font-extrabold">{t('nationalPage.topStoriesTitle')}</div>
@@ -1077,54 +1306,13 @@ function NationalSidebar({
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-        <div className="px-4 py-3 border-b border-slate-200">
-          <div className="text-sm font-extrabold">{t('nationalPage.trendingTopicsTitle')}</div>
-        </div>
-        <div className="p-4 flex flex-wrap gap-2">
-          {trendingTopics.slice(0, 10).map((t) => (
-            <Link
-              key={t}
-              href={`/topic/${encodeURIComponent(slugify(t))}?q=${encodeURIComponent(t)}`}
-              className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 cursor-pointer hover:bg-slate-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-            >
-              #{t}
-            </Link>
-          ))}
-        </div>
-      </div>
+      <NationalSidebarLatestWidget lang={lang} items={latestItems} loading={latestLoading} />
 
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-        <div className="px-4 py-3 border-b border-slate-200">
-          <div className="text-sm font-extrabold">{t('nationalPage.videoNewsTitle')}</div>
-        </div>
-        <div className="p-4">
-          {videoStory ? (
-            <a href={storyHref(videoStory, language)} className="block group">
-              <div className="relative">
-                <StoryImage
-                  src={storyImage(videoStory)}
-                  alt={String(videoStory?.title || '').trim()}
-                  variant="top"
-                  className="border border-slate-200 bg-slate-100 dark:border-gray-800 dark:bg-gray-800"
-                />
-                <div className="absolute left-2 top-2 rounded-full bg-white/90 px-2 py-1 text-xs font-bold text-slate-900">
-                  ▶ {t('common.video')}
-                </div>
-              </div>
-              <div className="mt-2 line-clamp-2 text-sm font-semibold text-slate-900 group-hover:underline dark:text-gray-100">
-                {(() => {
-                  const { title, content } = localizeArticle(videoStory, lang);
-                  return String(title || videoStory?.title || t('nationalPage.watchFallback'));
-                })()}
-              </div>
-              <div className="mt-1 text-xs text-slate-500 dark:text-gray-400">📍 {storyLocation(videoStory)}</div>
-            </a>
-          ) : (
-            <div className="text-sm text-slate-600 dark:text-gray-300">{t('nationalPage.noVideoStoriesRightNow')}</div>
-          )}
-        </div>
-      </div>
+      <AdSlot slot="HOME_RIGHT_300x600" variant="right300x600" className="mx-auto" />
+
+      <NationalSidebarVideoFeature lang={lang} video={videoFeature} />
+
+      <NationalSidebarYouthDeskWidget lang={lang} items={youthItems} loading={youthLoading} />
     </div>
   );
 }
