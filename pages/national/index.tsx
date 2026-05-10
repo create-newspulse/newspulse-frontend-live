@@ -335,50 +335,71 @@ function CompactFeedRow({ story, lang }: { story: AnyStory; lang: 'en' | 'hi' | 
   const where = storyLocation(story);
   const tags = tagList(story?.tags);
   const tag = tags[0] || String(story?.topic || story?.section || '').trim();
+  const status = String((story as any)?.status || (story as any)?.state || '').trim();
   const translationStatus = String((story as any)?.translationStatus || '').trim();
   const titleParts = splitStoryTitleHook(safeTitle);
   const titleHookColor = getStoryTitleHookColor(tag || story?.category || story?.section);
+  const publishedDate = (() => {
+    if (!when) return '';
+    const date = new Date(when);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  })();
+  const summary = (() => {
+    const localizedSummary = String(content || '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const fallbackSummary = storyExcerpt(story);
+    const text = localizedSummary || fallbackSummary;
+    if (!text) return '';
+    return text.length > 180 ? `${text.slice(0, 180).trim()}…` : text;
+  })();
 
   return (
     <a
       href={href}
-      className="group flex gap-3 border-b border-slate-200 py-3 hover:bg-slate-50 dark:border-gray-800 dark:hover:bg-gray-900/60"
+      className="group mx-3 my-3 flex flex-col overflow-hidden rounded-[24px] border border-slate-200/90 bg-white p-0 shadow-[0_18px_38px_-30px_rgba(15,23,42,0.28)] transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_24px_48px_-28px_rgba(15,23,42,0.2)] sm:grid sm:grid-cols-[300px_minmax(0,1fr)] sm:items-center sm:gap-6 sm:p-5 md:grid-cols-[310px_minmax(0,1fr)] md:gap-6 md:p-5 lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-7 lg:p-5 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700"
     >
-      <div className="order-2 shrink-0">
+      <div className="h-[210px] w-full shrink-0 overflow-hidden rounded-t-[24px] bg-slate-50 sm:h-[190px] sm:w-[300px] sm:self-center sm:rounded-[18px] md:h-[198px] md:w-[310px] lg:h-[206px] lg:w-[320px] dark:bg-gray-950">
         <StoryImage
           src={img}
           alt={safeTitle}
-          variant="mini"
-          className="border border-slate-200 bg-slate-100 dark:border-gray-800 dark:bg-gray-900"
+          variant="card"
+          fitMode="cover"
+          className="block h-full w-full rounded-none rounded-t-[24px] border-0 border-b border-slate-200 bg-slate-50 sm:rounded-[18px] sm:border dark:border-gray-800 dark:bg-gray-950"
         />
       </div>
 
-      <div className="order-1 min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <div className="line-clamp-2 text-sm font-semibold leading-snug text-slate-900 group-hover:underline dark:text-gray-100">
+      <div className="min-w-0 flex-1 px-4 pb-4 pt-4 sm:px-0 sm:py-0">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-gray-400">
+          {tag ? <span className="rounded-full bg-newsPulse-blue/10 px-2.5 py-1 text-newsPulse-blue">{tag}</span> : null}
+          {status ? <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600 dark:bg-gray-800 dark:text-gray-300">{status}</span> : null}
+          {lang === 'gu' && translationStatus ? (
+            <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-slate-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300">
+              {translationStatus}
+            </span>
+          ) : null}
+          {when ? (
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium normal-case tracking-normal text-slate-500 dark:text-gray-400">
+              <span className="h-1 w-1 rounded-full bg-slate-300 dark:bg-gray-600" />
+              <ClientTime iso={when} />
+            </span>
+          ) : null}
+        </div>
+
+        <div className="mt-3 min-w-0">
+          <div className="line-clamp-3 text-base font-extrabold leading-snug text-slate-900 transition-colors group-hover:text-slate-700 sm:text-[1.04rem] dark:text-gray-100 dark:group-hover:text-white">
               {titleParts.highlightedHook ? <span style={{ color: titleHookColor }}>{titleParts.highlightedHook}</span> : null}
               {titleParts.remainingTitle ? <span>{` ${titleParts.remainingTitle}`}</span> : null}
             </div>
-          </div>
-          <div className="shrink-0">
-            <ClientTime iso={when} />
-          </div>
+          {summary ? <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-600 dark:text-gray-300">{summary}</p> : null}
         </div>
-        <div className="mt-1 flex items-center justify-between gap-2">
-          <div className="min-w-0 flex items-center gap-2 text-xs">
-            {tag ? (
-              <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-slate-700 dark:bg-gray-900 dark:text-gray-200">
-                {tag}
-              </span>
-            ) : null}
-            {lang === 'gu' && translationStatus ? (
-              <span className="shrink-0 rounded-full border border-slate-200 bg-white px-2 py-0.5 text-slate-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200">
-                {translationStatus}
-              </span>
-            ) : null}
-            <span className="truncate text-slate-500 dark:text-gray-400">📍 {where}</span>
-          </div>
+
+        <div className="mt-3.5 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-500 dark:text-gray-400">
+          <span className="truncate">📍 {where}</span>
+          {publishedDate ? <span className="hidden sm:inline text-slate-300 dark:text-gray-600">•</span> : null}
+          {publishedDate ? <span>{publishedDate}</span> : null}
         </div>
       </div>
     </a>
@@ -935,9 +956,12 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
 
             {/* Feed list */}
             <div className="mt-3 rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-              <div className="px-4 py-3 border-b border-slate-200">
+              <div className="border-b border-slate-200 px-4 py-4 dark:border-gray-800">
                 <div className="flex items-center justify-between">
-                  <div className="text-sm font-bold">{t('nationalPage.latestHeading')}</div>
+                  <div>
+                    <div className="text-[11px] font-black uppercase tracking-[0.22em] text-newsPulse-blue/80">National Desk</div>
+                    <div className="mt-1 text-lg font-extrabold tracking-tight text-slate-900 dark:text-gray-100">Latest National News</div>
+                  </div>
                   <div className="text-xs text-slate-500 dark:text-gray-400">
                     {sortedStories.length} {t('common.results')}
                   </div>
