@@ -490,7 +490,7 @@ function NationalSidebarVideoFeature({ lang, video }: { lang: 'en' | 'hi' | 'gu'
         </Link>
       </div>
       <div className="p-3">
-        <PublicViralVideoCard video={video} compact />
+        <PublicViralVideoCard video={video} compact lightTopChrome />
       </div>
     </div>
   );

@@ -16,7 +16,7 @@ export default function HeaderLogo({ className = '' }: HeaderLogoProps) {
     <Link
       href="/"
       className={`inline-flex min-w-0 items-center ${className}`}
-      style={{ gap: 10 }}
+      style={{ gap: 8 }}
       aria-label="News Pulse home"
     >
       <img
@@ -24,9 +24,9 @@ export default function HeaderLogo({ className = '' }: HeaderLogoProps) {
         alt=""
         aria-hidden="true"
         className="newsPulseLogo block h-auto shrink-0 object-contain"
-        style={{ width: 'clamp(48px, 5.5vw, 84px)', height: 'auto', objectFit: 'contain', flexShrink: 0, opacity: 1, filter: 'none' }}
+        style={{ width: 'clamp(48px, 5.5vw, 84px)', height: 'auto', marginLeft: -2, objectFit: 'contain', flexShrink: 0, opacity: 1, filter: 'none' }}
       />
-      <span className="flex shrink-0 flex-col justify-center" style={{ rowGap: 2 }}>
+      <span className="flex shrink-0 flex-col justify-center" style={{ rowGap: 2, marginLeft: -2 }}>
         <span
           className="brandName block whitespace-nowrap font-bold"
           style={{ fontSize: 'clamp(15px, 1.25vw, 18px)', lineHeight: 1.05 }}

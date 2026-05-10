@@ -36,6 +36,7 @@ type NewsPulseVideoPlayerProps = {
   showBottomTitle?: boolean;
   compactReelControls?: boolean;
   hideTopBranding?: boolean;
+  lightTopChrome?: boolean;
   hasNextVideo?: boolean;
   onAdvanceToNext?: () => void;
   onPosterError?: React.ReactEventHandler<HTMLVideoElement>;
@@ -130,6 +131,7 @@ export default function NewsPulseVideoPlayer({
   showBottomTitle = true,
   compactReelControls = false,
   hideTopBranding = false,
+  lightTopChrome = false,
   hasNextVideo = false,
   onAdvanceToNext,
   onPosterError,
@@ -258,7 +260,9 @@ export default function NewsPulseVideoPlayer({
         onError={onPosterError}
       />
 
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.58)_0%,rgba(2,6,23,0.10)_28%,rgba(2,6,23,0.05)_52%,rgba(2,6,23,0.88)_100%)]" />
+      <div className={lightTopChrome
+        ? 'pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.10)_0%,rgba(2,6,23,0.04)_24%,rgba(2,6,23,0.05)_48%,rgba(2,6,23,0.82)_100%)]'
+        : 'pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.58)_0%,rgba(2,6,23,0.10)_28%,rgba(2,6,23,0.05)_52%,rgba(2,6,23,0.88)_100%)]'} />
       <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10" />
 
       {!hideTopBranding || hasReadNewsHref ? (

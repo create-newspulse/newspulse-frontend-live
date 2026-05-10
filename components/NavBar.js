@@ -31,7 +31,7 @@ export default function NavBar() {
 
   return (
     <nav className="sticky top-0 z-50 bg-newsPulse-white shadow-md">
-      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 md:px-6">
         <HeaderLogo />
 
         {/* Hamburger Icon */}

@@ -5,6 +5,7 @@ import OriginalTag from '../OriginalTag';
 import { buildNewsUrl } from '../../lib/newsRoutes';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
+import { getStoryTitleHookColor, splitStoryTitleHook } from '../../lib/storyTitleHook';
 import StoryImage from '../../src/components/story/StoryImage';
 import { normalizeRouteLocale } from '../../lib/localizedArticleFields';
 
@@ -249,51 +250,77 @@ function StoryCard({
   const isOriginal = !!storyLocale && storyLocale !== requestedLang;
 
   const coverUrl = resolveCoverImageUrl(story);
+  const status = String(story?.status || story?.state || '').trim();
+  const footerLocation = locationLabels[0] && status && normalizeBadgeKey(locationLabels[0]) === normalizeBadgeKey(status) ? '' : (locationLabels[0] || '');
+  const titleParts = splitStoryTitleHook(title);
+  const titleHookColor = getStoryTitleHookColor(categoryLabel || badgeLabels[0] || fallbackCategoryLabel);
+  const topMetaLabels = badgeLabels.slice(0, 3);
 
   return (
     <a
       href={href}
-      className="group block rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:bg-slate-50"
+      className="group flex flex-col overflow-hidden rounded-[24px] border border-slate-200/90 bg-white p-0 shadow-[0_18px_38px_-30px_rgba(15,23,42,0.28)] transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_24px_48px_-28px_rgba(15,23,42,0.2)] sm:grid sm:grid-cols-[300px_minmax(0,1fr)] sm:items-center sm:gap-6 sm:p-5 md:grid-cols-[310px_minmax(0,1fr)] md:gap-6 md:p-5 lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-7 lg:p-5"
     >
-      <div className="mb-3 flex items-start gap-3">
+      <div className="h-[210px] w-full shrink-0 overflow-hidden rounded-t-[24px] bg-slate-50 sm:h-[190px] sm:w-[300px] sm:self-center sm:rounded-[18px] md:h-[198px] md:w-[310px] lg:h-[206px] lg:w-[320px]">
         <StoryImage
+          storyId={id}
           src={coverUrl || COVER_PLACEHOLDER_SRC}
           alt={title || ''}
-          variant="mini"
-          className="border border-slate-200"
+          variant="card"
+          fitMode="cover"
+          className="block h-full w-full rounded-none rounded-t-[24px] border-0 border-b border-slate-200 bg-slate-50 sm:rounded-[18px] sm:border"
         />
+      </div>
 
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              {badgeLabels.map((label) => (
-                <span
-                  key={normalizeBadgeKey(label)}
-                  className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700"
-                >
-                  {label}
-                </span>
-              ))}
+      <div className="min-w-0 flex-1 px-4 pb-4 pt-4 sm:px-0 sm:py-0">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+          {topMetaLabels.map((label) => (
+            <span
+              key={normalizeBadgeKey(label)}
+              className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600"
+            >
+              {label}
+            </span>
+          ))}
+          {status && !topMetaLabels.some((label) => normalizeBadgeKey(label) === normalizeBadgeKey(status)) ? (
+            <span className="rounded-full bg-newsPulse-blue/10 px-2.5 py-1 text-newsPulse-blue">{status}</span>
+          ) : null}
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium normal-case tracking-normal text-slate-500">
+            <span className="h-1 w-1 rounded-full bg-slate-300" />
+            <span>{dateText}</span>
+          </span>
+        </div>
+
+        <div className="mt-3 min-w-0">
+          {!!title ? (
+            <div className="line-clamp-3 text-base font-extrabold leading-snug text-slate-900 transition-colors group-hover:text-slate-700 sm:text-[1.04rem]">
+              {titleParts.highlightedHook ? <span style={{ color: titleHookColor }}>{titleParts.highlightedHook}</span> : null}
+              {titleParts.remainingTitle ? <span>{` ${titleParts.remainingTitle}`}</span> : null}
+              {!titleParts.highlightedHook && !titleParts.remainingTitle ? <span>{title}</span> : null}
             </div>
-            <span className="shrink-0 text-xs text-slate-400">{dateText}</span>
-          </div>
-
-          {!!title ? <div className="mt-2 text-base font-semibold leading-snug">{title}</div> : null}
+          ) : null}
 
           {isOriginal ? (
-            <div className="mt-1">
+            <div className="mt-2">
               <OriginalTag />
             </div>
           ) : null}
 
-          {!!summary ? <div className="mt-2 text-sm text-slate-600 line-clamp-3">{summary}</div> : null}
+          {!!summary ? <div className="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">{summary}</div> : null}
         </div>
+
+        <div className="mt-3.5 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-500">
+          {footerLocation ? <span className="truncate">📍 {footerLocation}</span> : null}
+          {footerLocation && status ? <span className="hidden sm:inline text-slate-300">•</span> : null}
+          {status ? <span className="capitalize">{status}</span> : null}
+        </div>
+
+        {!!story?.videoUrl ? (
+          <div className="mt-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-slate-500">
+            {videoPreviewHiddenLabel}
+          </div>
+        ) : null}
       </div>
-      {!!story?.videoUrl && (
-        <div className="mt-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-slate-500">
-          {videoPreviewHiddenLabel}
-        </div>
-      )}
     </a>
   );
 }
@@ -354,7 +381,7 @@ export default function RegionalFeedCards({
   }
 
   return (
-    <div className={classNames('grid gap-4 md:grid-cols-2', className)}>
+    <div className={classNames('grid gap-4', className)}>
       {dedupedStories.map((story) => {
         const card = (
           <StoryCard

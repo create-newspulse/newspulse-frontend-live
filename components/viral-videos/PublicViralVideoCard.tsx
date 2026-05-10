@@ -7,6 +7,7 @@ import { getPublicViralVideoPosterUrl, resolvePublicViralVideoPlayback, type Pub
 type Props = {
   video: PublicViralVideo;
   compact?: boolean;
+  lightTopChrome?: boolean;
 };
 
 function formatDate(value: string): string {
@@ -28,7 +29,7 @@ function DarkVideoFallback({ showIcon = true, title }: { showIcon?: boolean; tit
   );
 }
 
-export default function PublicViralVideoCard({ video, compact = false }: Props) {
+export default function PublicViralVideoCard({ video, compact = false, lightTopChrome = false }: Props) {
   const [playing, setPlaying] = React.useState(false);
   const [posterFailed, setPosterFailed] = React.useState(false);
   const [posterLoaded, setPosterLoaded] = React.useState(false);
@@ -63,6 +64,7 @@ export default function PublicViralVideoCard({ video, compact = false }: Props) 
             showBottomTitle={false}
             compactReelControls
             minHeightClassName="min-h-full"
+            lightTopChrome={lightTopChrome}
           />
         ) : isPlayableEmbed && playing ? (
           <iframe
@@ -93,7 +95,9 @@ export default function PublicViralVideoCard({ video, compact = false }: Props) 
                 }}
               />
             ) : null}
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/76 via-slate-950/10 to-slate-950/20" />
+            <div className={lightTopChrome
+              ? 'absolute inset-0 bg-gradient-to-t from-slate-950/76 via-slate-950/08 to-transparent'
+              : 'absolute inset-0 bg-gradient-to-t from-slate-950/76 via-slate-950/10 to-slate-950/20'} />
             {isPlayableEmbed ? (
               <button
                 type="button"
@@ -126,9 +130,11 @@ export default function PublicViralVideoCard({ video, compact = false }: Props) 
           </>
         )}
 
-        <div className="absolute left-3 top-3 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-white ring-1 ring-white/20 backdrop-blur">
-          {playback.mode === 'youtube' ? 'YouTube' : 'Video'}
-        </div>
+        {!lightTopChrome ? (
+          <div className="absolute left-3 top-3 rounded-full bg-black/55 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-white ring-1 ring-white/20 backdrop-blur">
+            {playback.mode === 'youtube' ? 'YouTube' : 'Video'}
+          </div>
+        ) : null}
       </div>
 
       <div className={compact ? 'p-3' : 'p-4'}>

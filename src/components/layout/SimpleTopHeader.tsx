@@ -9,7 +9,7 @@ export type SimpleTopHeaderProps = {
 export default function SimpleTopHeader({ showMenuButton = false, onMenuClick }: SimpleTopHeaderProps) {
   return (
     <div className="w-full border-b border-newsPulse-slate/25 bg-newsPulse-white">
-      <div className="mx-auto flex w-full max-w-6xl items-center px-4 py-3" style={{ gap: 12 }}>
+      <div className="mx-auto flex w-full max-w-7xl items-center px-4 py-3 md:px-6" style={{ gap: 12 }}>
         {showMenuButton ? (
           <button
             type="button"

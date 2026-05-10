@@ -160,7 +160,7 @@ function ArticleVideoFeatureSidebar({ lang, video }: { lang: 'en' | 'hi' | 'gu';
         </Link>
       </div>
       <div className="p-3">
-        <PublicViralVideoCard video={video} compact />
+        <PublicViralVideoCard video={video} compact lightTopChrome />
       </div>
     </div>
   );
@@ -802,9 +802,9 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                         <a
                           key={getStoryReactKey(s, href)}
                           href={href}
-                          className="group rounded-2xl border border-slate-200 bg-white shadow-sm hover:bg-slate-50 overflow-hidden"
+                          className="group h-full rounded-2xl border border-slate-200 bg-white shadow-sm hover:bg-slate-50 overflow-hidden"
                         >
-                          <div className="flex gap-3 p-3">
+                          <div className="flex h-full gap-3 p-3">
                             <StoryImage
                               storyId={id}
                               src={img}
@@ -812,9 +812,9 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                               variant="list"
                               className="border border-slate-200 bg-slate-100"
                             />
-                            <div className="min-w-0">
-                              <div className="line-clamp-2 text-sm font-bold text-slate-900 group-hover:underline">{titleText}</div>
-                              {excerpt ? <div className="mt-1 line-clamp-2 text-xs text-slate-600">{excerpt}</div> : null}
+                            <div className="flex min-w-0 flex-1 flex-col justify-center">
+                              <div className="min-h-[2.8rem] line-clamp-2 text-sm font-bold leading-5 text-slate-900 group-hover:underline">{titleText}</div>
+                              {excerpt ? <div className="mt-1 min-h-[2.5rem] line-clamp-2 text-xs leading-5 text-slate-600">{excerpt}</div> : <div className="mt-1 min-h-[2.5rem]" />}
                             </div>
                           </div>
                         </a>
