@@ -1,13 +1,16 @@
 import React from 'react';
 import { Clock3, Globe, Mail, ShieldCheck, UserRound } from 'lucide-react';
 import PublicBusinessPageLayout, { ContactPill, PageEyebrow, SectionHeading, SurfacePanel } from '../components/public/PublicBusinessPageLayout';
+import {
+  DEFAULT_PUBLIC_COMPLIANCE_SETTINGS,
+  normalizePublicComplianceSettings,
+  type PublicComplianceSettings,
+} from '../lib/publicComplianceSettings';
 
-const grievanceOfficer = 'Kiran Parmar';
-const grievanceEmail = 'grievance@newspulse.co.in';
 const grievanceFormAnchor = '#grievance-form';
-const websiteUrl = 'https://www.newspulse.co.in';
+const grievanceOfficerFallback = 'To be appointed / Details will be updated shortly';
+const chiefEditorFallback = 'Details will be updated shortly';
 const submitSuccessMessage = 'Your grievance has been submitted successfully. Our team will review it as per the applicable timeline.';
-const submitErrorMessage = 'We could not submit your grievance right now. Please email grievance@newspulse.co.in directly.';
 const declarationText = 'I hereby declare that the information furnished above is true, correct, and complete to the best of my knowledge and belief.';
 
 type GrievanceFormState = {
@@ -39,6 +42,7 @@ function isValidEmail(value: string): boolean {
 }
 
 export default function GrievanceRedressalPage() {
+  const [complianceSettings, setComplianceSettings] = React.useState<PublicComplianceSettings>(DEFAULT_PUBLIC_COMPLIANCE_SETTINGS);
   const [showForm, setShowForm] = React.useState(false);
   const [form, setForm] = React.useState<GrievanceFormState>(initialFormState);
   const [error, setError] = React.useState<string | null>(null);
@@ -46,6 +50,51 @@ export default function GrievanceRedressalPage() {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const grievanceFormRef = React.useRef<HTMLFormElement | null>(null);
   const fullNameInputRef = React.useRef<HTMLInputElement | null>(null);
+  const founderName = complianceSettings.founderName;
+  const grievanceOfficer = complianceSettings.grievanceOfficerName || grievanceOfficerFallback;
+  const grievanceEmail = complianceSettings.grievanceEmail;
+  const grievanceLocation = complianceSettings.grievanceOfficerLocation;
+  const chiefEditor = complianceSettings.chiefEditorName || chiefEditorFallback;
+  const entityName = complianceSettings.publisherEntity;
+  const websiteUrl = complianceSettings.websiteUrl;
+  const submitErrorMessage = `We could not submit your grievance right now. Please email ${grievanceEmail} directly.`;
+  const infoCards = [
+    complianceSettings.showPublisherEntity
+      ? { icon: ShieldCheck, title: 'Publisher / Entity', body: entityName }
+      : null,
+    complianceSettings.showFounderPublisher
+      ? { icon: UserRound, title: 'Founder / Publisher', body: founderName }
+      : null,
+    complianceSettings.showChiefEditor
+      ? { icon: UserRound, title: 'Chief Editor', body: chiefEditor }
+      : null,
+    {
+      icon: UserRound,
+      title: 'Grievance Officer',
+      body: grievanceOfficer,
+    },
+    { icon: Mail, title: 'Official Grievance Email', body: grievanceEmail },
+    { icon: Globe, title: 'Location', body: grievanceLocation },
+  ].filter(Boolean) as Array<{ icon: typeof UserRound; title: string; body: string }>;
+
+  const fetchComplianceSettings = React.useCallback(async () => {
+    try {
+      const response = await fetch(`/api/public/compliance-settings?t=${Date.now()}`, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+        },
+        cache: 'no-store',
+      });
+
+      const responseData = await response.json().catch(() => null);
+      const settings = responseData?.item || responseData?.data?.item || responseData?.data || responseData;
+
+      setComplianceSettings(normalizePublicComplianceSettings(settings));
+    } catch {
+      // Keep the current public settings visible on fetch failure.
+    }
+  }, []);
 
   function updateField<K extends keyof GrievanceFormState>(field: K, value: GrievanceFormState[K]) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -78,6 +127,15 @@ export default function GrievanceRedressalPage() {
 
     return () => window.cancelAnimationFrame(frameId);
   }, [showForm, scrollToForm]);
+
+  React.useEffect(() => {
+    void fetchComplianceSettings();
+    const interval = window.setInterval(() => {
+      void fetchComplianceSettings();
+    }, 5000);
+
+    return () => window.clearInterval(interval);
+  }, [fetchComplianceSettings]);
 
   const openForm = React.useCallback((event: React.MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
@@ -161,11 +219,11 @@ export default function GrievanceRedressalPage() {
           <div className="mt-6 flex flex-col gap-3">
             <ContactPill
               email={grievanceEmail}
-              label="grievance@newspulse.co.in"
+              label={grievanceEmail}
               href={grievanceFormAnchor}
               onClick={openForm}
-              ariaLabel="grievance@newspulse.co.in"
-              title="grievance@newspulse.co.in"
+              ariaLabel={grievanceEmail}
+              title={grievanceEmail}
             />
           </div>
           <div className="mt-6 rounded-[24px] border border-slate-200/80 bg-slate-50/85 p-5 shadow-[0_16px_36px_-30px_rgba(15,23,42,0.24)]">
@@ -190,22 +248,17 @@ export default function GrievanceRedressalPage() {
           <div className="mt-6 space-y-3 text-sm leading-7 text-white/74">
             <div className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-4">Submit the grievance form below for direct review by the News Pulse team.</div>
             <div className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-4">Provide precise publication references and a detailed description of the alleged violation.</div>
-            <div className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-4">If submission fails, email grievance@newspulse.co.in directly using the CTA on this page.</div>
+            <div className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-4">If submission fails, email {grievanceEmail} directly using the CTA on this page.</div>
           </div>
         </SurfacePanel>
       </section>
 
-      <section className="mt-8 grid gap-4 md:grid-cols-4">
-        {[
-          { icon: UserRound, title: 'Grievance Officer', body: grievanceOfficer },
-          { icon: Mail, title: 'Email', body: grievanceEmail },
-          { icon: ShieldCheck, title: 'Publisher / Brand', body: 'News Pulse Media' },
-          { icon: Globe, title: 'Website', body: 'www.newspulse.co.in' },
-        ].map((item) => (
+      <section className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {infoCards.map((item) => (
           <SurfacePanel key={item.title} className="p-5">
             <item.icon className="h-6 w-6 text-slate-700" />
             <div className="mt-4 text-lg font-black tracking-tight text-slate-950">{item.title}</div>
-            <p className="mt-2 text-sm leading-7 text-slate-600">{item.body}</p>
+            <div className="mt-2 text-sm leading-7 text-slate-600">{item.body}</div>
           </SurfacePanel>
         ))}
       </section>
@@ -413,7 +466,14 @@ export default function GrievanceRedressalPage() {
                   <p className="mt-3 text-sm leading-7 text-slate-600">
                     For direct communication, use:
                   </p>
-                  <div className="mt-3 text-sm font-semibold text-slate-800">grievance@newspulse.co.in</div>
+                  <div className="mt-3 space-y-1 text-sm font-semibold text-slate-800">
+                    <div>{entityName}</div>
+                    <div>{founderName}</div>
+                    <div>{grievanceOfficer}</div>
+                    <div>{grievanceLocation}</div>
+                    <div>{grievanceEmail}</div>
+                    <div>{websiteUrl}</div>
+                  </div>
                 </div>
               </div>
             </SurfacePanel>

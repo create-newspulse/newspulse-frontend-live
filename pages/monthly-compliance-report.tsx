@@ -7,13 +7,14 @@ import {
   monthlyComplianceReports,
   resolveMonthlyComplianceReports,
 } from '../data/monthlyComplianceReports';
+import { usePublicComplianceSettings } from '../hooks/usePublicComplianceSettings';
 
-const contactEmail = 'grievance@newspulse.co.in';
-const websiteUrl = 'https://www.newspulse.co.in';
-const websiteLabel = 'newspulse.co.in';
 const contactHref = '/grievance-redressal';
 const contactAriaLabel = 'Visit Grievance Redressal page';
 const contactTitle = 'Visit Grievance Redressal page';
+const publicGrievanceEmail = 'grievance@newspulse.co.in';
+const publicWebsiteUrl = 'https://www.newspulse.co.in';
+const publicWebsiteLabel = 'www.newspulse.co.in';
 
 function getReportingMonth(report: { month: string; year: number; label: string }): string {
   if (report.month && report.year > 0) return `${report.month} ${report.year}`;
@@ -22,6 +23,7 @@ function getReportingMonth(report: { month: string; year: number; label: string 
 
 export default function MonthlyComplianceReportPage() {
   const [reports, setReports] = useState(() => getPublishedMonthlyComplianceReports(monthlyComplianceReports));
+  const { settings: complianceSettings } = usePublicComplianceSettings();
 
   useEffect(() => {
     let isActive = true;
@@ -55,6 +57,10 @@ export default function MonthlyComplianceReportPage() {
   }, []);
 
   const publishedReports = reports;
+  const contactEmail = publicGrievanceEmail;
+  const websiteUrl = publicWebsiteUrl;
+  const websiteLabel = publicWebsiteLabel;
+  const entityName = complianceSettings.publisherEntity;
 
   const latestReport = publishedReports[0] ?? monthlyComplianceReports[0];
 
@@ -143,7 +149,7 @@ export default function MonthlyComplianceReportPage() {
           <div className="mt-6 grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(220px,1.2fr)_minmax(0,1fr)]">
             <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/85 px-5 py-4 shadow-[0_16px_36px_-30px_rgba(15,23,42,0.24)]">
               <div className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Portal Name</div>
-              <div className="mt-2 text-base font-black tracking-tight text-slate-950">News Pulse Media</div>
+              <div className="mt-2 text-base font-black tracking-tight text-slate-950">{entityName}</div>
             </div>
             <div className="rounded-[24px] border border-slate-200/80 bg-slate-50/85 px-5 py-4 shadow-[0_16px_36px_-30px_rgba(15,23,42,0.24)]">
               <div className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Website</div>
@@ -176,7 +182,7 @@ export default function MonthlyComplianceReportPage() {
           </p>
           <div className="mt-6 space-y-3 text-sm leading-7 text-white/80">
             <div className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-4">No complainant personal data is disclosed on this page.</div>
-            <div className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-4">Sensitive identifiers such as Aadhaar, PAN, or mobile numbers are not published.</div>
+            <div className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-4">No complainant personal data, contact details, or private complaint information is published on this page.</div>
             <div className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-4">All figures shown below relate only to the reporting month of {reportingMonth}.</div>
           </div>
         </SurfacePanel>
@@ -238,7 +244,7 @@ export default function MonthlyComplianceReportPage() {
               This page displays the latest published monthly compliance report. Previous report copies are maintained in internal compliance records.
             </div>
             <div className="rounded-[24px] border border-slate-700/80 bg-slate-950 px-5 py-5 text-sm font-medium leading-7 text-white shadow-[0_22px_44px_-34px_rgba(15,23,42,0.46)]">
-              Do not publish personal data of complainants. Do not publish Aadhaar, PAN, or mobile number.
+              Do not publish personal data of complainants or private complaint details on the public website.
             </div>
           </div>
         </SurfacePanel>
