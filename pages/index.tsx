@@ -4079,6 +4079,7 @@ function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
     { label: t('footer.termsOfService') },
     { label: t('footer.copyrightPolicy'), href: localizePath('/copyright-policy', lang) },
     { label: 'Grievance Redressal', href: localizePath('/grievance-redressal', lang) },
+    { label: 'Monthly Compliance', href: localizePath('/monthly-compliance-report', lang) },
     { label: t('common.contact') },
     { label: t('footer.careers') },
     { label: t('common.communityReporter') },
