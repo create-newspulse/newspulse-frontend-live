@@ -4067,7 +4067,7 @@ function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
   const businessLinks = [
     { label: t('footer.advertiseWithUs'), href: localizePath('/advertise-with-us', lang) },
     { label: t('footer.mediaKit'), href: localizePath('/media-kit', lang) },
-    { label: 'Advertising Policy', href: localizePath('/advertising-policy', lang) },
+    { label: t('footer.advertisingPolicy'), href: localizePath('/advertising-policy', lang) },
     { label: t('footer.partnerships') },
     { label: t('footer.licensing') },
   ];
@@ -4075,11 +4075,12 @@ function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
   const quickLinks = [
     { label: t('footer.aboutUs') },
     { label: t('footer.editorialPolicy') },
+    { label: t('footer.digitalCodeOfEthics'), href: localizePath('/digital-code-of-ethics', lang) },
     { label: t('footer.privacyPolicy') },
     { label: t('footer.termsOfService') },
     { label: t('footer.copyrightPolicy'), href: localizePath('/copyright-policy', lang) },
-    { label: 'Grievance Redressal', href: localizePath('/grievance-redressal', lang) },
-    { label: 'Monthly Compliance', href: localizePath('/monthly-compliance-report', lang) },
+    { label: t('footer.grievanceRedressal'), href: localizePath('/grievance-redressal', lang) },
+    { label: t('footer.monthlyCompliance'), href: localizePath('/monthly-compliance-report', lang) },
     { label: t('common.contact') },
     { label: t('footer.careers') },
     { label: t('common.communityReporter') },
