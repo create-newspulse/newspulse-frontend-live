@@ -1,12 +1,12 @@
 import React from 'react';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import GrievanceRedressalPage from '../../pages/grievance-redressal';
 
 describe('pages/grievance-redressal', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     (global as any).fetch = jest.fn().mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input).startsWith('/api/public/compliance-settings')) {
+      if (String(input) === '/api/public/compliance-settings') {
         return {
           ok: true,
           json: async () => ({
@@ -19,9 +19,6 @@ describe('pages/grievance-redressal', () => {
               chiefEditorName: 'Shailesh Rathod',
               publisherEntity: 'News Pulse Media',
               websiteUrl: 'https://www.newspulse.co.in',
-              showPublisherEntity: true,
-              showFounderPublisher: true,
-              showChiefEditor: true,
             },
           }),
         };
@@ -48,10 +45,6 @@ describe('pages/grievance-redressal', () => {
       configurable: true,
       value: jest.fn(),
     });
-  });
-
-  afterEach(() => {
-    jest.useRealTimers();
   });
 
   it('shows the official grievance details and CTA while keeping the form hidden on initial load', async () => {
@@ -139,7 +132,7 @@ describe('pages/grievance-redressal', () => {
 
   it('submits the grievance form and shows the success state', async () => {
     (global as any).fetch = jest.fn().mockImplementation(async (input: RequestInfo | URL) => {
-      if (String(input).startsWith('/api/public/compliance-settings')) {
+      if (String(input) === '/api/public/compliance-settings') {
         return {
           ok: true,
           json: async () => ({
@@ -152,8 +145,6 @@ describe('pages/grievance-redressal', () => {
               chiefEditorName: '',
               publisherEntity: 'News Pulse Media',
               websiteUrl: 'https://www.newspulse.co.in',
-              showPublisherEntity: true,
-              showChiefEditor: true,
             },
           }),
         };
@@ -200,145 +191,5 @@ describe('pages/grievance-redressal', () => {
     });
 
     expect(await screen.findByText('Your grievance has been submitted successfully. Our team will review it as per the applicable timeline.')).toBeTruthy();
-  });
-
-  it('hides optional cards based on public visibility settings and keeps required cards visible', async () => {
-    (global as any).fetch = jest.fn().mockImplementation(async (input: RequestInfo | URL) => {
-      if (String(input).startsWith('/api/public/compliance-settings')) {
-        return {
-          ok: true,
-          json: async () => ({
-            settings: {
-              founderName: 'Kiran Parmar',
-              grievanceOfficerName: 'Asha Singh',
-              grievanceEmail: 'grievance@newspulse.co.in',
-              grievanceOfficerLocation: 'India',
-              chiefEditorName: 'Shailesh Rathod',
-              publisherEntity: 'News Pulse Media',
-              showPublisherEntity: false,
-              showFounderPublisher: false,
-              showChiefEditor: false,
-            },
-          }),
-        };
-      }
-
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({ ok: true }),
-      };
-    });
-
-    render(<GrievanceRedressalPage />);
-    expect(await screen.findByText('Asha Singh')).toBeTruthy();
-
-    expect(screen.queryByText('Publisher / Entity')).toBeNull();
-    expect(screen.queryByText('Founder / Publisher')).toBeNull();
-    expect(screen.queryByText('Chief Editor')).toBeNull();
-    expect(screen.getByText('Grievance Officer')).toBeTruthy();
-    expect(screen.getByText('Official Grievance Email')).toBeTruthy();
-    expect(screen.getByText('Location')).toBeTruthy();
-  });
-
-  it('uses fallback visibility defaults when public visibility settings are missing', async () => {
-    (global as any).fetch = jest.fn().mockImplementation(async (input: RequestInfo | URL) => {
-      if (String(input).startsWith('/api/public/compliance-settings')) {
-        return {
-          ok: true,
-          json: async () => ({
-            settings: {
-              founderName: 'Kiran Parmar',
-              grievanceOfficerName: 'Asha Singh',
-              grievanceEmail: 'grievance@newspulse.co.in',
-              grievanceOfficerLocation: 'India',
-              chiefEditorName: 'Shailesh Rathod',
-              publisherEntity: 'News Pulse Media',
-            },
-          }),
-        };
-      }
-
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({ ok: true }),
-      };
-    });
-
-    render(<GrievanceRedressalPage />);
-    expect(await screen.findByText('Asha Singh')).toBeTruthy();
-
-    expect(screen.getByText('Publisher / Entity')).toBeTruthy();
-    expect(screen.queryByText('Founder / Publisher')).toBeNull();
-    expect(screen.getByText('Chief Editor')).toBeTruthy();
-  });
-
-  it('polls public compliance settings every 5 seconds and updates the displayed cards without reloading', async () => {
-    jest.useFakeTimers();
-
-    let complianceFetchCount = 0;
-    (global as any).fetch = jest.fn().mockImplementation(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.startsWith('/api/public/compliance-settings')) {
-        complianceFetchCount += 1;
-
-        if (complianceFetchCount === 1) {
-          return {
-            ok: true,
-            json: async () => ({
-              settings: {
-                grievanceOfficerName: 'Asha Singh',
-                grievanceEmail: 'grievance@newspulse.co.in',
-                grievanceOfficerLocation: 'India',
-                publisherEntity: 'News Pulse Media',
-                chiefEditorName: 'Shailesh Rathod',
-                showPublisherEntity: false,
-                showFounderPublisher: false,
-                showChiefEditor: false,
-              },
-            }),
-          };
-        }
-
-        return {
-          ok: true,
-          json: async () => ({
-            settings: {
-              grievanceOfficerName: 'Asha Singh',
-              grievanceEmail: 'updated-grievance@newspulse.co.in',
-              grievanceOfficerLocation: 'India',
-              publisherEntity: 'Updated News Pulse Media',
-              chiefEditorName: 'Updated Editor',
-              showPublisherEntity: true,
-              showFounderPublisher: false,
-              showChiefEditor: true,
-            },
-          }),
-        };
-      }
-
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({ ok: true }),
-      };
-    });
-
-    render(<GrievanceRedressalPage />);
-
-    expect(await screen.findByText('Asha Singh')).toBeTruthy();
-    expect(screen.queryByText('Publisher / Entity')).toBeNull();
-    expect(screen.queryByText('Chief Editor')).toBeNull();
-
-    await act(async () => {
-      jest.advanceTimersByTime(5_000);
-      await Promise.resolve();
-    });
-
-    expect(await screen.findByText('Updated News Pulse Media')).toBeTruthy();
-    expect(screen.getByText('Chief Editor')).toBeTruthy();
-    expect(screen.getByText('Updated Editor')).toBeTruthy();
-    expect(screen.getAllByText('updated-grievance@newspulse.co.in').length).toBeGreaterThan(0);
   });
 });

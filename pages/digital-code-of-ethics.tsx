@@ -11,15 +11,15 @@ export default function DigitalCodeOfEthicsPage() {
       contactEmail={grievanceEmail}
       tone="slate"
     >
-      <section className="grid gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(300px,0.95fr)]">
-        <SurfacePanel className="sm:p-6">
+      <section className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(300px,0.95fr)]">
+        <SurfacePanel className="min-w-0 sm:p-6">
           <PageEyebrow tone="slate">NEWS PULSE</PageEyebrow>
 
-          <h1 className="mt-5 max-w-3xl text-4xl font-black tracking-tight text-slate-950 sm:text-[3.1rem] sm:leading-[1.05]">
+          <h1 className="mt-5 max-w-3xl break-words text-4xl font-black tracking-tight text-slate-950 sm:text-[3.1rem] sm:leading-[1.05]">
             Digital Code of Ethics
           </h1>
 
-          <div className="mt-4 text-sm text-slate-700">
+          <div className="mt-4 break-words text-sm text-slate-700">
             <div>For News Pulse</div>
             <div className="mt-1">Last Updated: 14 May 2026</div>
             <div className="mt-1">Website: www.newspulse.co.in</div>
@@ -29,7 +29,7 @@ export default function DigitalCodeOfEthicsPage() {
           <div className="mt-2 text-sm text-slate-600">Prepared for public display and internal editorial reference.</div>
           <div className="mt-3 text-xs text-slate-400">www.newspulse.co.in Page 1 of 6</div>
 
-          <p className="mt-6 text-sm leading-7 text-slate-600">
+          <p className="mt-6 break-words text-sm leading-7 text-slate-600">
             News Pulse is committed to responsible, fair, accurate, and ethical digital journalism. This Digital Code of Ethics explains the editorial principles,
             publishing standards, correction practices, grievance redressal process, and user-safety safeguards followed by News Pulse. News Pulse respects
             freedom of speech and expression while also recognising its responsibility to publish news and information in a lawful, fair, sensitive, and
@@ -37,9 +37,9 @@ export default function DigitalCodeOfEthicsPage() {
           </p>
         </SurfacePanel>
 
-        <SurfacePanel>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_220px] items-start">
-            <div>
+        <SurfacePanel className="min-w-0">
+          <div className="grid min-w-0 grid-cols-1 items-start gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,220px)]">
+            <div className="min-w-0">
               <div className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">PUBLISHER</div>
               <div className="mt-2 text-lg font-black tracking-tight text-slate-950">News Pulse</div>
               <p className="mt-3 text-sm leading-7 text-slate-600">This public Code is part of our commitment to transparency, accuracy, fairness, and responsible journalism online.</p>
@@ -53,23 +53,23 @@ export default function DigitalCodeOfEthicsPage() {
               </div>
             </div>
 
-            <div className="space-y-3">
-              <div className="rounded-[12px] border border-slate-200/70 bg-slate-50 p-3 text-sm">
+            <div className="min-w-0 space-y-3">
+              <div className="min-w-0 rounded-[12px] border border-slate-200/70 bg-slate-50 p-3 text-sm">
                 <div className="text-[11px] font-semibold text-slate-500">Website</div>
-                <a href="https://www.newspulse.co.in" className="mt-1 block text-sky-700 underline">www.newspulse.co.in</a>
+                <a href="https://www.newspulse.co.in" className="mt-1 block break-all text-sky-700 underline">www.newspulse.co.in</a>
               </div>
 
-              <div className="rounded-[12px] border border-slate-200/70 bg-slate-50 p-3 text-sm">
+              <div className="min-w-0 rounded-[12px] border border-slate-200/70 bg-slate-50 p-3 text-sm">
                 <div className="text-[11px] font-semibold text-slate-500">Last Updated</div>
                 <div className="mt-1">14 May 2026</div>
               </div>
 
-              <div className="rounded-[12px] border border-slate-200/70 bg-slate-50 p-3 text-sm">
+              <div className="min-w-0 rounded-[12px] border border-slate-200/70 bg-slate-50 p-3 text-sm">
                 <div className="text-[11px] font-semibold text-slate-500">Grievance Email</div>
-                <a href={`mailto:${grievanceEmail}`} className="mt-1 block text-sky-700 underline">{grievanceEmail}</a>
+                <a href={`mailto:${grievanceEmail}`} className="mt-1 block break-all text-sky-700 underline">{grievanceEmail}</a>
               </div>
 
-              <div className="rounded-[12px] border border-slate-200/70 bg-slate-50 p-3 text-sm">
+              <div className="min-w-0 rounded-[12px] border border-slate-200/70 bg-slate-50 p-3 text-sm">
                 <div className="text-[11px] font-semibold text-slate-500">Public Document</div>
                 <div className="mt-1">Digital Code of Ethics</div>
               </div>
@@ -78,7 +78,13 @@ export default function DigitalCodeOfEthicsPage() {
         </SurfacePanel>
       </section>
 
-      <section className="mt-8 space-y-6">
+      <section className="mt-8 space-y-6 [&_li]:break-words [&_p]:break-words">
+        <SurfacePanel className="min-w-0">
+          <p className="text-sm leading-7 text-slate-600">
+            This Code reflects News Pulse&apos;s commitment to responsible, fair, accurate, and accountable digital journalism.
+          </p>
+        </SurfacePanel>
+
         <SurfacePanel>
           <SectionHeading title="1. Purpose of this Code" description="" />
           <p className="mt-4 text-sm leading-7 text-slate-600">This Digital Code of Ethics has been created to ensure that News Pulse maintains high standards in digital news publishing. It is intended to guide our editorial decisions, newsroom practices, content review, correction handling, and public grievance redressal.</p>
@@ -276,7 +282,7 @@ export default function DigitalCodeOfEthicsPage() {
 
       <div className="mt-8">
         <div className="rounded-sm border-t border-slate-200/70 pt-4">
-          <div className="border-l-2 border-slate-200/70 pl-4 text-sm text-slate-600">
+          <div className="border-l-2 border-slate-200/70 pl-4 text-sm text-slate-600 break-words">
             This Digital Code of Ethics is an internal editorial and compliance policy of News Pulse. It does not claim membership, approval, certification, or registration with any association, regulatory body, or government authority unless separately stated on the website
           </div>
         </div>

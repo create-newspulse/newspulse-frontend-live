@@ -1,11 +1,7 @@
 import React from 'react';
 import { Clock3, Globe, Mail, ShieldCheck, UserRound } from 'lucide-react';
 import PublicBusinessPageLayout, { ContactPill, PageEyebrow, SectionHeading, SurfacePanel } from '../components/public/PublicBusinessPageLayout';
-import {
-  DEFAULT_PUBLIC_COMPLIANCE_SETTINGS,
-  normalizePublicComplianceSettings,
-  type PublicComplianceSettings,
-} from '../lib/publicComplianceSettings';
+import { usePublicComplianceSettings } from '../hooks/usePublicComplianceSettings';
 
 const grievanceFormAnchor = '#grievance-form';
 const grievanceOfficerFallback = 'To be appointed / Details will be updated shortly';
@@ -42,7 +38,7 @@ function isValidEmail(value: string): boolean {
 }
 
 export default function GrievanceRedressalPage() {
-  const [complianceSettings, setComplianceSettings] = React.useState<PublicComplianceSettings>(DEFAULT_PUBLIC_COMPLIANCE_SETTINGS);
+  const { settings: complianceSettings } = usePublicComplianceSettings();
   const [showForm, setShowForm] = React.useState(false);
   const [form, setForm] = React.useState<GrievanceFormState>(initialFormState);
   const [error, setError] = React.useState<string | null>(null);
@@ -58,43 +54,6 @@ export default function GrievanceRedressalPage() {
   const entityName = complianceSettings.publisherEntity;
   const websiteUrl = complianceSettings.websiteUrl;
   const submitErrorMessage = `We could not submit your grievance right now. Please email ${grievanceEmail} directly.`;
-  const infoCards = [
-    complianceSettings.showPublisherEntity
-      ? { icon: ShieldCheck, title: 'Publisher / Entity', body: entityName }
-      : null,
-    complianceSettings.showFounderPublisher
-      ? { icon: UserRound, title: 'Founder / Publisher', body: founderName }
-      : null,
-    complianceSettings.showChiefEditor
-      ? { icon: UserRound, title: 'Chief Editor', body: chiefEditor }
-      : null,
-    {
-      icon: UserRound,
-      title: 'Grievance Officer',
-      body: grievanceOfficer,
-    },
-    { icon: Mail, title: 'Official Grievance Email', body: grievanceEmail },
-    { icon: Globe, title: 'Location', body: grievanceLocation },
-  ].filter(Boolean) as Array<{ icon: typeof UserRound; title: string; body: string }>;
-
-  const fetchComplianceSettings = React.useCallback(async () => {
-    try {
-      const response = await fetch(`/api/public/compliance-settings?t=${Date.now()}`, {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json',
-        },
-        cache: 'no-store',
-      });
-
-      const responseData = await response.json().catch(() => null);
-      const settings = responseData?.item || responseData?.data?.item || responseData?.data || responseData;
-
-      setComplianceSettings(normalizePublicComplianceSettings(settings));
-    } catch {
-      // Keep the current public settings visible on fetch failure.
-    }
-  }, []);
 
   function updateField<K extends keyof GrievanceFormState>(field: K, value: GrievanceFormState[K]) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -127,15 +86,6 @@ export default function GrievanceRedressalPage() {
 
     return () => window.cancelAnimationFrame(frameId);
   }, [showForm, scrollToForm]);
-
-  React.useEffect(() => {
-    void fetchComplianceSettings();
-    const interval = window.setInterval(() => {
-      void fetchComplianceSettings();
-    }, 5000);
-
-    return () => window.clearInterval(interval);
-  }, [fetchComplianceSettings]);
 
   const openForm = React.useCallback((event: React.MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
@@ -254,7 +204,18 @@ export default function GrievanceRedressalPage() {
       </section>
 
       <section className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {infoCards.map((item) => (
+        {[
+          { icon: ShieldCheck, title: 'Publisher / Entity', body: entityName },
+          { icon: UserRound, title: 'Founder / Publisher', body: founderName },
+          { icon: UserRound, title: 'Chief Editor', body: chiefEditor },
+          {
+            icon: UserRound,
+            title: 'Grievance Officer',
+            body: grievanceOfficer,
+          },
+          { icon: Mail, title: 'Official Grievance Email', body: grievanceEmail },
+          { icon: Globe, title: 'Location', body: grievanceLocation },
+        ].map((item) => (
           <SurfacePanel key={item.title} className="p-5">
             <item.icon className="h-6 w-6 text-slate-700" />
             <div className="mt-4 text-lg font-black tracking-tight text-slate-950">{item.title}</div>
