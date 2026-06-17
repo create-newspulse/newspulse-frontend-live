@@ -5,6 +5,8 @@ import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
 import { filterVisibleArticlesForLocale, normalizeRouteLocale, STRICT_LOCALE_POLICY } from '../../../lib/localizedArticleFields';
 import { pickFreshestArticlesForLocale } from '../../../lib/translationGroupSync';
 
+const DEV_PUBLIC_NEWS_FALLBACK_BASE = 'https://www.newspulse.co.in';
+
 function asSingleQueryValue(value: string | string[] | undefined): string {
   return String(Array.isArray(value) ? value[0] : value || '').trim();
 }
@@ -51,6 +53,35 @@ function buildUpstreamUrl(base: string, params: URLSearchParams): string {
   return `${base}/api/public/news${query ? `?${query}` : ''}`;
 }
 
+function isDevRuntime(): boolean {
+  return String(process.env.NODE_ENV || '').toLowerCase() !== 'production';
+}
+
+function isLoopbackBase(base: string): boolean {
+  try {
+    const { hostname } = new URL(base);
+    const normalized = String(hostname || '').trim().toLowerCase();
+    return normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '0.0.0.0';
+  } catch {
+    return false;
+  }
+}
+
+function getCandidateBases(base: string): string[] {
+  const candidates = new Set<string>();
+  if (base) candidates.add(base);
+  if (isDevRuntime() && (!base || isLoopbackBase(base))) {
+    candidates.add(DEV_PUBLIC_NEWS_FALLBACK_BASE);
+  }
+  return Array.from(candidates);
+}
+
+function logDevNewsProxy(event: string, payload: Record<string, unknown>) {
+  if (!isDevRuntime()) return;
+  // eslint-disable-next-line no-console
+  console.error('[api/public/news]', event, payload);
+}
+
 async function fetchUpstreamJson(url: string, req: NextApiRequest): Promise<{ ok: boolean; status: number; json: any }> {
   const upstream = await fetch(url, {
     method: 'GET',
@@ -78,11 +109,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const base = getApiBase();
-  if (!base) {
-    // Keep UI alive even if env not configured.
-    res.setHeader('Cache-Control', 'no-store');
-    return res.status(200).json({ items: [], total: 0, page: 1, totalPages: 1, limit: 0 });
-  }
+  const candidateBases = getCandidateBases(base);
 
   const requestedLocale = normalizeRouteLocale(
     asSingleQueryValue(req.query.language as any) || asSingleQueryValue(req.query.lang as any)
@@ -98,10 +125,62 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (normalizedCategory) localizedParams.set('category', normalizedCategory);
 
   const shouldWidenCategoryFetch = Boolean(normalizedCategory) && strictLocale;
-  const targetUrl = buildUpstreamUrl(base, localizedParams);
+
+  if (!candidateBases.length) {
+    logDevNewsProxy('missing_upstream_base', {
+      requestedLocale,
+      category: normalizedCategory || rawCategory || null,
+    });
+    // Keep UI alive even if env not configured.
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(200).json({ items: [], total: 0, page: 1, totalPages: 1, limit: 0 });
+  }
 
   try {
-    const upstream = await fetchUpstreamJson(targetUrl, req);
+    let upstream: { ok: boolean; status: number; json: any } | null = null;
+    let upstreamBase = '';
+    let targetUrl = '';
+
+    for (const candidateBase of candidateBases) {
+      const candidateUrl = buildUpstreamUrl(candidateBase, localizedParams);
+      try {
+        const response = await fetchUpstreamJson(candidateUrl, req);
+        if (response.ok) {
+          upstream = response;
+          upstreamBase = candidateBase;
+          targetUrl = candidateUrl;
+
+          if (candidateBase !== base) {
+            logDevNewsProxy('using_dev_live_fallback', {
+              configuredBase: base || null,
+              fallbackBase: candidateBase,
+              targetUrl: candidateUrl,
+            });
+          }
+          break;
+        }
+
+        logDevNewsProxy('upstream_non_ok', {
+          configuredBase: base || null,
+          candidateBase,
+          targetUrl: candidateUrl,
+          status: response.status,
+        });
+      } catch (error) {
+        logDevNewsProxy('upstream_fetch_failed', {
+          configuredBase: base || null,
+          candidateBase,
+          targetUrl: candidateUrl,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    if (!upstream) {
+      res.setHeader('Cache-Control', 'no-store');
+      return res.status(200).json({ items: [] });
+    }
+
     // If backend is missing the route (or temporarily down), fail open.
     if (upstream.status === 404) {
       res.setHeader('Cache-Control', 'no-store');
@@ -125,7 +204,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           widenedParams.delete('language');
           widenedParams.set('limit', String(Math.max(requestedLimit > 0 ? requestedLimit * 3 : 0, 90)));
 
-          const widened = await fetchUpstreamJson(buildUpstreamUrl(base, widenedParams), req);
+          const widened = await fetchUpstreamJson(buildUpstreamUrl(upstreamBase, widenedParams), req);
           if (widened.ok) {
             const widenedItems = getPayloadItems(widened.json);
             listItems = [

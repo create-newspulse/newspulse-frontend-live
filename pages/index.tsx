@@ -2401,7 +2401,7 @@ function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
                   onClick={(e: React.MouseEvent) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    onToast('Listen (planned)');
+                    onToast('Listen is not available right now.');
                   }}
                 >
                   <Radio className="h-4 w-4" /> {t('common.listen')}
@@ -3004,7 +3004,7 @@ function LiveTVWidget({ theme, enabled = true, onToast, embedUrlOverride }: any)
       </div>
 
       <div className="mt-4 grid gap-2">
-        <Button theme={theme} variant="soft" className="w-full justify-start px-4 py-3" onClick={() => onToast("Live TV full page (planned)")}>
+        <Button theme={theme} variant="soft" className="w-full justify-start px-4 py-3" onClick={() => onToast("Live TV full page is not available right now.")}>
           <Play className="h-4 w-4" /> {t('common.openLiveTv')}
         </Button>
 
@@ -3540,14 +3540,14 @@ function QuickToolsCard({ theme, onToast, viralVideosFrontendEnabled = true }: a
       </div>
 
       <div className="mt-3 grid gap-2">
-        <Button theme={theme} variant="soft" className="w-full justify-start" onClick={() => onToast("AI Explainer (planned)")}>
+        <Button theme={theme} variant="soft" className="w-full justify-start" onClick={() => onToast("AI Explainer is not available right now.")}>
           <Sparkles className="h-4 w-4" /> {t('home.aiExplainer')}
         </Button>
-        <Button theme={theme} variant="soft" className="w-full justify-start" onClick={() => onToast("Swipe-to-Listen (planned)")}>
+        <Button theme={theme} variant="soft" className="w-full justify-start" onClick={() => onToast("Swipe-to-Listen is not available right now.")}>
           <Play className="h-4 w-4" /> {t('home.swipeToListen')}
         </Button>
         {viralVideosFrontendEnabled ? (
-          <Button theme={theme} variant="soft" className="w-full justify-start" onClick={() => onToast("Viral Videos (planned)")}>
+          <Button theme={theme} variant="soft" className="w-full justify-start" onClick={() => onToast("Viral Videos is not available right now.")}>
             <Video className="h-4 w-4" /> {t('categories.viralVideos')}
           </Button>
         ) : null}
@@ -3972,7 +3972,7 @@ function AppPromoSection({ theme, onToast }: any) {
               <div className="mt-6 flex flex-wrap gap-3">
                 <button
                   type="button"
-                  onClick={() => onToast(`${t('common.appStore')} (planned)`) }
+                  onClick={() => onToast(`${t('common.appStore')} release information is not available right now.`) }
                   className="rounded-3xl px-5 py-4 text-sm font-extrabold border transition hover:opacity-[0.98] inline-flex items-center gap-2"
                   style={{
                     background: theme.mode === "dark" ? "rgba(0,0,0,0.55)" : "#0b1220",
@@ -3986,7 +3986,7 @@ function AppPromoSection({ theme, onToast }: any) {
 
                 <button
                   type="button"
-                  onClick={() => onToast(`${t('common.googlePlay')} (planned)`) }
+                  onClick={() => onToast(`${t('common.googlePlay')} release information is not available right now.`) }
                   className="rounded-3xl px-5 py-4 text-sm font-extrabold border transition hover:opacity-[0.98] inline-flex items-center gap-2"
                   style={{
                     background: `linear-gradient(90deg, rgba(16,185,129,0.95), ${theme.accent} 60%)`,
@@ -4068,23 +4068,23 @@ function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
     { label: t('footer.advertiseWithUs'), href: localizePath('/advertise-with-us', lang) },
     { label: t('footer.mediaKit'), href: localizePath('/media-kit', lang) },
     { label: t('footer.advertisingPolicy'), href: localizePath('/advertising-policy', lang) },
-    { label: t('footer.partnerships') },
-    { label: t('footer.licensing') },
+    { label: t('footer.partnerships'), href: localizePath('/contact', lang) },
+    { label: t('footer.licensing'), href: localizePath('/contact', lang) },
   ];
 
   const quickLinks = [
-    { label: t('footer.aboutUs') },
-    { label: t('footer.editorialPolicy') },
+    { label: 'About News Pulse', href: localizePath('/about-us', lang) },
+    { label: t('footer.editorialPolicy'), href: localizePath('/editorial-policy', lang) },
     { label: t('footer.digitalCodeOfEthics'), href: localizePath('/digital-code-of-ethics', lang) },
-    { label: t('footer.privacyPolicy') },
-    { label: t('footer.termsOfService') },
+    { label: t('footer.privacyPolicy'), href: localizePath('/privacy-policy', lang) },
+    { label: t('footer.termsOfService'), href: localizePath('/terms-of-service', lang) },
     { label: t('footer.copyrightPolicy'), href: localizePath('/copyright-policy', lang) },
     { label: t('footer.grievanceRedressal'), href: localizePath('/grievance-redressal', lang) },
     { label: t('footer.monthlyCompliance'), href: localizePath('/monthly-compliance-report', lang) },
-    { label: t('common.contact') },
-    { label: t('footer.careers') },
-    { label: t('common.communityReporter') },
-    { label: t('footer.journalistDesk') },
+    { label: t('common.contact'), href: localizePath('/contact', lang) },
+    { label: t('footer.careers'), href: localizePath('/careers', lang) },
+    { label: t('common.communityReporter'), href: localizePath('/community-reporter', lang) },
+    { label: t('footer.journalistDesk'), href: localizePath('/journalist-desk', lang) },
   ];
 
   return (
@@ -4109,7 +4109,7 @@ function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
                 <button
                   key={x.label}
                   type="button"
-                  onClick={() => onToast(`${x.label} (planned)`)}
+                  onClick={() => onToast(`${x.label} is not available right now.`)}
                   className="h-12 w-12 rounded-2xl border flex items-center justify-center transition hover:opacity-[0.98]"
                   style={{ background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.12)", color: "white" }}
                   aria-label={x.label}
@@ -4132,7 +4132,7 @@ function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
                     {item.label}
                   </Link>
                 ) : (
-                  <button key={item.label} type="button" onClick={() => onToast(`${item.label} (planned)`) } className="text-left hover:underline">
+                  <button key={item.label} type="button" onClick={() => onToast(`${item.label} is not available right now.`) } className="text-left hover:underline">
                     {item.label}
                   </button>
                 )
@@ -4151,7 +4151,7 @@ function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
                     {item.label}
                   </Link>
                 ) : (
-                  <button key={item.label} type="button" onClick={() => onToast(`${item.label} (planned)`) } className="text-left hover:underline">
+                  <button key={item.label} type="button" onClick={() => onToast(`${item.label} is not available right now.`) } className="text-left hover:underline">
                     {item.label}
                   </button>
                 )
@@ -4311,12 +4311,38 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
       const latestResp = await fetchPublicNews({ language: apiLang, limit: HOME_FRESH_SOURCE_LIMIT, signal: controller.signal });
       if (controller.signal.aborted) return;
       const latestArticles = Array.isArray(latestResp.items) ? latestResp.items : [];
+      if (process.env.NODE_ENV !== 'production') {
+        if (latestResp.error) {
+          // eslint-disable-next-line no-console
+          console.error('[homepage] latest news fetch failed', {
+            lang: apiLang,
+            endpoint: latestResp.endpoint,
+            status: latestResp.status ?? null,
+            error: latestResp.error,
+          });
+        } else if (!latestArticles.length) {
+          // eslint-disable-next-line no-console
+          console.warn('[homepage] latest news returned 0 items', {
+            lang: apiLang,
+            endpoint: latestResp.endpoint,
+          });
+        }
+      }
       const editorialLatestArticles = latestArticles.filter((article) => !isHomepageSponsoredContent(article, apiLang));
       setTopStory(editorialLatestArticles[0] || null);
       setLatestRawStories(editorialLatestArticles);
       setLatestFromBackend(editorialLatestArticles.map((a) => articleToFeedItem(a as any, apiLang)));
       const breakingResp = await fetchPublicNews({ category: 'breaking', language: apiLang, limit: 10, signal: controller.signal });
       if (controller.signal.aborted) return;
+      if (process.env.NODE_ENV !== 'production' && breakingResp.error) {
+        // eslint-disable-next-line no-console
+        console.error('[homepage] breaking news fetch failed', {
+          lang: apiLang,
+          endpoint: breakingResp.endpoint,
+          status: breakingResp.status ?? null,
+          error: breakingResp.error,
+        });
+      }
 
       // Keep this fetch for other UI uses; tickers now come from broadcast hook.
       void breakingResp;

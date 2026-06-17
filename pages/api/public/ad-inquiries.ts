@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
+import { getPublicAdOpportunityLabel, normalizePublicAdInquiryValue } from '../../../src/lib/publicAdOpportunities';
 
 const CONTACT_EMAIL = 'newspulse.ads@gmail.com';
 
@@ -39,22 +40,31 @@ export default async function publicAdInquiriesHandler(req: NextApiRequest, res:
   }
 
   const body = readJsonBody(req);
+  const preferredAdSlot = normalizePublicAdInquiryValue(asCleanString(body.preferredAdSlot || body.slot));
+  const preferredAdSlotLabel = asCleanString(body.preferredAdSlotLabel || body.slotLabel) || getPublicAdOpportunityLabel(preferredAdSlot);
+  const campaignGoal = asCleanString(body.campaignGoal || body.target);
+  const preferredDates = asCleanString(body.preferredDates || body.startDate);
   const payload = {
     name: asCleanString(body.name),
     email: asCleanString(body.email),
-    phone: asCleanString(body.phone),
+    phone: asCleanString(body.phone) || 'Not provided',
     company: asCleanString(body.company),
-    slot: asCleanString(body.slot),
-    slotLabel: asCleanString(body.slotLabel),
+    campaignType: asCleanString(body.campaignType),
+    preferredAdSlot,
+    preferredAdSlotLabel,
+    campaignGoal,
+    preferredDates,
     budget: asCleanString(body.budget),
-    target: asCleanString(body.target),
-    startDate: asCleanString(body.startDate),
     message: asCleanString(body.message),
     pageUrl: asCleanString(body.pageUrl),
     contactEmail: CONTACT_EMAIL,
+    slot: preferredAdSlot,
+    slotLabel: preferredAdSlotLabel,
+    target: campaignGoal,
+    startDate: preferredDates,
   };
 
-  if (!payload.name || !isValidEmail(payload.email) || !payload.message) {
+  if (!payload.name || !isValidEmail(payload.email) || !payload.campaignGoal || !payload.message) {
     return res.status(400).json({ ok: false, message: 'Invalid inquiry details' });
   }
 

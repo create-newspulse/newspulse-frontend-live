@@ -1,344 +1,310 @@
-import React, { useState } from 'react';
-import Head from 'next/head';
-import type { GetServerSideProps } from 'next';
-import { fetchServerPublicFounderToggles } from '../lib/publicFounderToggles';
-import { usePublicFounderToggles } from '../hooks/usePublicFounderToggles';
+import Link from 'next/link';
+import React from 'react';
+import { CheckCircle2, ClipboardList, FilePenLine, Mail, Newspaper, SearchCheck, ShieldCheck, UserRoundCheck, Users, Video } from 'lucide-react';
+import PublicBusinessPageLayout, { PageEyebrow, SectionHeading, SurfacePanel } from '../components/public/PublicBusinessPageLayout';
 
-type OrgType = 'print' | 'tv' | 'radio' | 'digital' | 'freelance' | 'other';
+const contactEmail = 'newspulse.team@gmail.com';
+const suggestedSubject = 'Journalist Pitch - [Topic] - [Your Name]';
 
-interface FormState {
-  name: string;
-  email: string;
-  phone: string;
-  city: string;
-  state: string;
-  country: string;
-  organisationName: string;
-  organisationType: OrgType | '';
-  positionTitle: string;
-  beats: string[];
-  yearsExperience: string; // keep as string for input control
-  languages: string[];
-  websiteOrPortfolio?: string;
-  linkedin?: string;
-  twitter?: string;
-  consent: boolean;
-}
+const contributorCards = [
+  {
+    title: 'Journalists',
+    body: 'Professional reporters and journalists with serious story pitches, field reports, interviews, or public-interest submissions.',
+    Icon: Newspaper,
+  },
+  {
+    title: 'Writers',
+    body: 'Writers and columnists who want to submit original explainers, reported features, opinion proposals, or drafts for review.',
+    Icon: FilePenLine,
+  },
+  {
+    title: 'Regional Reporters',
+    body: 'Contributors following local developments, civic issues, community concerns, or region-specific public-interest reporting.',
+    Icon: Users,
+  },
+  {
+    title: 'Editors',
+    body: 'Editors and editorial collaborators who want to discuss content support, review ideas, or newsroom collaboration.',
+    Icon: UserRoundCheck,
+  },
+  {
+    title: 'Researchers',
+    body: 'Researchers and subject-matter contributors who can support reporting with verified documents, context, or evidence.',
+    Icon: SearchCheck,
+  },
+  {
+    title: 'Photo/Video Contributors',
+    body: 'Photo and video contributors who can legally share original visuals or supporting material for editorial review.',
+    Icon: Video,
+  },
+] as const;
 
-const initialForm: FormState = {
-  name: '',
-  email: '',
-  phone: '',
-  city: '',
-  state: '',
-  country: 'India',
-  organisationName: '',
-  organisationType: '',
-  positionTitle: '',
-  beats: [],
-  yearsExperience: '',
-  languages: [],
-  websiteOrPortfolio: '',
-  linkedin: '',
-  twitter: '',
-  consent: false,
-};
+const trustCards = [
+  {
+    title: 'Editorial Review',
+    body: 'All submissions are subject to editorial review, verification, and approval before publication.',
+    Icon: ClipboardList,
+  },
+  {
+    title: 'Source Verification',
+    body: 'Contributors should provide clear sources, supporting details, or evidence wherever applicable.',
+    Icon: SearchCheck,
+  },
+  {
+    title: 'Ethical Standards',
+    body: 'Submissions must follow News Pulse editorial, legal, copyright, privacy, and responsible journalism standards.',
+    Icon: ShieldCheck,
+  },
+  {
+    title: 'Bylines Subject to Approval',
+    body: 'Bylines, credits, contributor tags, and author profiles remain subject to editorial approval.',
+    Icon: CheckCircle2,
+  },
+] as const;
 
-const BEATS = ['Politics','Crime','Business','Education','Civic','Sports','Entertainment','Tech','Other'];
-const LANG_OPTIONS = ['en','hi','gu'];
+const pitchChecklist = [
+  'Full name',
+  'Email address',
+  'City/state',
+  'Professional background or experience',
+  'Story headline or topic',
+  'Short summary of the story',
+  'Why the story matters',
+  'Sources or supporting details',
+  'Whether the content is original and unpublished',
+  'Any photos, videos, or documents, if available',
+] as const;
 
-type JournalistDeskProps = {
-  communityReporterClosed: boolean;
-  reporterPortalClosed: boolean;
-};
+const ethicalRestrictions = [
+  'Plagiarised content',
+  'Fake news or rumours',
+  'Defamatory or baseless allegations',
+  'Hate speech',
+  'Communal, caste, religious, or political provocation',
+  'Private personal information without proper basis',
+  'Copyrighted material without permission',
+  'Manipulated or misleading visuals',
+  'Unsafe or unlawful reporting methods',
+] as const;
 
-const JournalistDeskPage: React.FC<JournalistDeskProps> = ({ communityReporterClosed, reporterPortalClosed }) => {
-  const { toggles: liveToggles } = usePublicFounderToggles({
-    communityReporterClosed,
-    reporterPortalClosed,
-    youthPulseSubmissionsClosed: false,
-    updatedAt: null,
-  });
-  const [form, setForm] = useState<FormState>(initialForm);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [submitting, setSubmitting] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
-  const [errorMessage, setErrorMessage] = useState('');
+export default function JournalistDeskPage() {
+  return (
+    <PublicBusinessPageLayout
+      title="Journalist Desk"
+      description="For professional story pitches, contributor submissions, and editorial collaboration with News Pulse."
+      contactEmail={contactEmail}
+      contactHref={`mailto:${contactEmail}`}
+      contactAriaLabel="Email News Pulse journalist desk"
+      contactTitle="Email News Pulse journalist desk"
+      tone="slate"
+    >
+      <section className="grid items-start gap-6 lg:grid-cols-[minmax(0,1.08fr)_minmax(300px,0.92fr)]">
+        <SurfacePanel className="min-w-0 overflow-hidden sm:p-10">
+          <PageEyebrow tone="slate">Journalist Desk</PageEyebrow>
+          <h1 className="mt-5 max-w-3xl break-words text-4xl font-black tracking-tight text-slate-950 sm:text-[3.1rem] sm:leading-[1.05]">
+            Journalist Desk
+          </h1>
+          <div className="mt-4 text-lg font-semibold text-slate-800 sm:text-[1.3rem]">
+            For professional story pitches, contributor submissions, and editorial collaboration.
+          </div>
+          <p className="mt-5 max-w-3xl text-base leading-8 text-slate-600 sm:text-[17px]">
+            The News Pulse Journalist Desk is for journalists, writers, contributors, editors, regional reporters, and media professionals who want to share story ideas, article pitches, field reports, interviews, explainers, or public-interest reports with News Pulse.
+          </p>
+          <p className="mt-4 max-w-3xl text-base leading-8 text-slate-600 sm:text-[17px]">
+            All submissions are subject to editorial review, verification, and approval before publication.
+          </p>
+          <div className="mt-7 flex flex-wrap gap-3">
+            <a href={`mailto:${contactEmail}`} className="inline-flex items-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
+              Submit a Pitch
+            </a>
+            <Link href="/editorial-policy" className="inline-flex items-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+              Editorial Policy
+            </Link>
+          </div>
+        </SurfacePanel>
 
-  if (liveToggles.communityReporterClosed || liveToggles.reporterPortalClosed) {
-    return (
-      <div className="min-h-screen bg-white dark:bg-dark-primary text-black dark:text-dark-text">
-        <Head>
-          <title>Journalist Desk – Temporarily Closed | News Pulse</title>
-          <meta name="description" content="Reporter access is temporarily unavailable on News Pulse." />
-        </Head>
+        <SurfacePanel className="min-w-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.98),rgba(30,41,59,0.98))] text-white">
+          <div className="text-[11px] font-black uppercase tracking-[0.16em] text-white/55">Submission note</div>
+          <div className="mt-2 text-2xl font-black tracking-tight">Serious editorial submissions only</div>
+          <p className="mt-5 text-sm leading-7 text-white/72">
+            Submitting a pitch or article does not guarantee publication, payment, assignment, or formal association with News Pulse.
+          </p>
+          <div className="mt-6 space-y-3 text-sm leading-7 text-white/74">
+            <div className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-4">Original, accurate, lawful, and properly sourced material is expected.</div>
+            <div className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-4">News Pulse may edit, verify, accept, reject, hold, update, or remove submissions based on editorial requirements.</div>
+            <div className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-4">Submitting content does not make anyone an employee, agent, representative, authorised journalist, or official spokesperson of News Pulse.</div>
+          </div>
+        </SurfacePanel>
+      </section>
 
-        <section className="relative py-16 px-4 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-800 dark:to-gray-900">
-          <div className="max-w-4xl mx-auto">
-            <h1 className="text-4xl md:text-5xl font-black mb-6 bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">
-              Journalist Desk – Join the News Pulse Network
-            </h1>
-            <div className="max-w-3xl rounded-2xl border border-gray-200 bg-white p-8 shadow-lg dark:border-gray-700 dark:bg-gray-800">
-              <p className="text-lg text-gray-700 dark:text-gray-300">
-                Reporter access is temporarily closed. Please check back soon.
-              </p>
+      <section className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {contributorCards.map(({ title, body, Icon }) => (
+          <SurfacePanel key={title} className="min-w-0 p-5">
+            <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-700">
+              <Icon className="h-5 w-5" />
+            </div>
+            <div className="mt-4 text-lg font-black tracking-tight text-slate-950">{title}</div>
+            <p className="mt-2 text-sm leading-7 text-slate-600">{body}</p>
+          </SurfacePanel>
+        ))}
+      </section>
+
+      <section className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {trustCards.map(({ title, body, Icon }) => (
+          <SurfacePanel key={title} className="min-w-0 p-5">
+            <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-700">
+              <Icon className="h-5 w-5" />
+            </div>
+            <div className="mt-4 text-lg font-black tracking-tight text-slate-950">{title}</div>
+            <p className="mt-2 text-sm leading-7 text-slate-600">{body}</p>
+          </SurfacePanel>
+        ))}
+      </section>
+
+      <section className="mt-8 grid gap-5 xl:grid-cols-2">
+        <SurfacePanel className="min-w-0">
+          <SectionHeading title="Who Can Submit" kicker="1" />
+          <div className="mt-5 space-y-4 text-sm leading-7 text-slate-600">
+            <p>The Journalist Desk is intended for professional journalists, independent contributors, writers and columnists, regional reporters, editors and researchers, photo or video contributors, subject-matter contributors, and freelance media professionals.</p>
+            <p>Submitting a pitch or article does not guarantee publication, payment, assignment, or formal association with News Pulse.</p>
+          </div>
+        </SurfacePanel>
+
+        <SurfacePanel className="min-w-0">
+          <SectionHeading title="What You Can Submit" kicker="2" />
+          <div className="mt-5 space-y-4 text-sm leading-7 text-slate-600">
+            <p>You may submit story pitches, draft articles, field reports, interview ideas, explainerships, opinion or editorial proposals, regional reports, public-interest investigations, and photos, videos, or supporting documents where legally shareable.</p>
+            <p>All submitted material must be original, accurate, lawful, and properly sourced.</p>
+          </div>
+        </SurfacePanel>
+      </section>
+
+      <section className="mt-8 grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)]">
+        <SurfacePanel className="min-w-0">
+          <SectionHeading title="Story Pitch Process" kicker="3" />
+          <p className="mt-5 text-sm leading-7 text-slate-600">When submitting a story pitch, please include the following details:</p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            {pitchChecklist.map((item) => (
+              <div key={item} className="rounded-[22px] border border-slate-200/80 bg-white px-4 py-4 text-sm leading-7 text-slate-600 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.22)]">
+                {item}
+              </div>
+            ))}
+          </div>
+        </SurfacePanel>
+
+        <SurfacePanel className="min-w-0">
+          <SectionHeading title="Submit by Email" kicker="Suggested format" />
+          <div className="mt-5 rounded-[24px] border border-slate-200/80 bg-slate-50/90 p-5 shadow-[0_16px_36px_-30px_rgba(15,23,42,0.24)]">
+            <div className="text-sm font-semibold text-slate-800">Email</div>
+            <a href={`mailto:${contactEmail}`} className="mt-2 inline-flex break-all text-sm font-semibold text-sky-700 underline">
+              {contactEmail}
+            </a>
+            <div className="mt-5 text-sm font-semibold text-slate-800">Suggested subject line</div>
+            <div className="mt-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700">
+              {suggestedSubject}
+            </div>
+            <div className="mt-5 text-sm font-semibold text-slate-800">Example</div>
+            <div className="mt-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+              Journalist Pitch - Civic Water Issue in Ahmedabad - Rahul Sharma
             </div>
           </div>
-        </section>
-      </div>
-    );
-  }
+        </SurfacePanel>
+      </section>
 
-  const setField = (name: keyof FormState, value: any) => {
-    setForm(prev => ({ ...prev, [name]: value }));
-    if (errors[name as string]) {
-      setErrors(prev => { const c = { ...prev }; delete c[name as string]; return c; });
-    }
-  };
+      <section className="mt-8 grid gap-5 xl:grid-cols-2">
+        <SurfacePanel className="min-w-0">
+          <SectionHeading title="Editorial Review Required" kicker="4" />
+          <div className="mt-5 space-y-4 text-sm leading-7 text-slate-600">
+            <p>All journalist and contributor submissions may be reviewed by News Pulse before publication.</p>
+            <p>News Pulse may edit, verify, accept, reject, hold, update, or remove submitted content based on editorial standards, accuracy, legality, safety, relevance, copyright, public interest, and ethical requirements.</p>
+          </div>
+        </SurfacePanel>
 
-  const toggleArrayValue = (name: keyof FormState, value: string) => {
-    setForm(prev => {
-      const arr = new Set<string>(prev[name] as string[]);
-      if (arr.has(value)) arr.delete(value); else arr.add(value);
-      return { ...prev, [name]: Array.from(arr) } as FormState;
-    });
-  };
+        <SurfacePanel className="min-w-0">
+          <SectionHeading title="Source Verification Required" kicker="5" />
+          <div className="mt-5 space-y-4 text-sm leading-7 text-slate-600">
+            <p>Journalists and contributors must provide clear sources wherever applicable.</p>
+            <p>Sources may include official records, public documents, direct confirmations, field notes, photographs, videos, verified statements, interviews, or other credible evidence.</p>
+            <p>News Pulse may request additional clarification or supporting material before considering publication.</p>
+          </div>
+        </SurfacePanel>
+      </section>
 
-  const validate = () => {
-    const e: Record<string,string> = {};
-    if (!form.name.trim()) e.name = 'Full name is required.';
-    if (!form.email.trim()) e.email = 'Email is required.';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Enter a valid email.';
-    if (!form.phone.trim()) e.phone = 'Phone is required.';
-    if (!form.city.trim()) e.city = 'City is required.';
-    if (!form.state.trim()) e.state = 'State is required.';
-    if (!form.country.trim()) e.country = 'Country is required.';
-    if (!form.organisationName.trim()) e.organisationName = 'Organisation name is required.';
-    if (!form.organisationType) e.organisationType = 'Organisation type is required.';
-    if (!form.positionTitle.trim()) e.positionTitle = 'Position title is required.';
-    if (form.beats.length === 0) e.beats = 'Select at least one beat.';
-    if (form.yearsExperience && isNaN(Number(form.yearsExperience))) e.yearsExperience = 'Enter a valid number.';
-    if (!form.consent) e.consent = 'Consent is required.';
-    setErrors(e);
-    return Object.keys(e).length === 0;
-  };
+      <section className="mt-8 grid gap-5 xl:grid-cols-2">
+        <SurfacePanel className="min-w-0">
+          <SectionHeading title="Bylines and Credit" kicker="6" />
+          <div className="mt-5 space-y-4 text-sm leading-7 text-slate-600">
+            <p>Bylines, credits, contributor tags, journalist tags, or author profiles are subject to editorial approval.</p>
+            <p>News Pulse may decide whether to publish content with a byline, staff credit, contributor credit, anonymous source reference, or no public credit, depending on the nature of the submission and editorial requirements.</p>
+          </div>
+        </SurfacePanel>
 
-  const handleSubmit: React.FormEventHandler<HTMLFormElement> = async (ev) => {
-    ev.preventDefault();
-    setSuccessMessage('');
-    setErrorMessage('');
-    if (!validate()) return;
-    setSubmitting(true);
-    try {
-      const payload = {
-        name: form.name.trim(),
-        email: form.email.trim(),
-        phone: form.phone.trim(),
-        city: form.city.trim(),
-        state: form.state.trim(),
-        country: form.country.trim(),
-        organisationName: form.organisationName.trim(),
-        organisationType: (form.organisationType || 'other') as OrgType,
-        positionTitle: form.positionTitle.trim(),
-        beats: form.beats,
-        yearsExperience: form.yearsExperience ? Number(form.yearsExperience) : undefined,
-        languages: form.languages,
-        websiteOrPortfolio: form.websiteOrPortfolio?.trim() || undefined,
-        socialLinks: {
-          linkedin: form.linkedin?.trim() || undefined,
-          twitter: form.twitter?.trim() || undefined,
-        }
-      };
+        <SurfacePanel className="min-w-0">
+          <SectionHeading title="Ethical Standards" kicker="7" />
+          <p className="mt-5 text-sm leading-7 text-slate-600">All journalists and contributors must follow News Pulse Editorial Policy, Digital Code of Ethics, Copyright Policy, Privacy Policy, and responsible journalism standards.</p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            {ethicalRestrictions.map((item) => (
+              <div key={item} className="rounded-[22px] border border-slate-200/80 bg-white px-4 py-4 text-sm leading-7 text-slate-600 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.22)]">
+                {item}
+              </div>
+            ))}
+          </div>
+        </SurfacePanel>
+      </section>
 
-      const res = await fetch('/api/journalists/apply', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      let data: any = null;
-      try { data = await res.json(); } catch {}
-      if (res.ok && data?.success !== false) {
-        setSuccessMessage(data?.message || 'Thank you. Your application is now pending verification.');
-        setForm(initialForm);
-      } else {
-        setErrorMessage(data?.message || data?.error || 'Submission failed. Please try again later.');
-      }
-    } catch (err) {
-      setErrorMessage('Network error. Please try again later.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
+      <section className="mt-8 grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_320px]">
+        <SurfacePanel className="min-w-0">
+          <SectionHeading title="No Official Representation" kicker="8" />
+          <div className="mt-5 space-y-4 text-sm leading-7 text-slate-600">
+            <p>Submitting content to the Journalist Desk does not make the submitter an employee, agent, representative, authorised journalist, or official spokesperson of News Pulse.</p>
+            <p>Any formal contributor, journalist, or assignment relationship must be confirmed separately in writing by News Pulse.</p>
+          </div>
+        </SurfacePanel>
 
-  return (
-    <div className="min-h-screen bg-white dark:bg-dark-primary text-black dark:text-dark-text">
-      <Head>
-        <title>Journalist Desk – Join the News Pulse Network</title>
-        <meta name="description" content="Apply to join the News Pulse network as a professional journalist or media partner." />
-      </Head>
-
-      <section className="relative py-16 px-4 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-gray-800 dark:to-gray-900">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-4xl md:text-5xl font-black mb-6 bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">
-            Journalist Desk – Join the News Pulse Network
-          </h1>
-          <p className="text-lg md:text-xl leading-relaxed mb-6 text-gray-700 dark:text-gray-300">
-            If you are a professional journalist, the easiest way is to use the Community Reporter form and choose ‘Professional Journalist’. This page is an optional network registration.
+        <SurfacePanel className="min-w-0 bg-slate-50/90">
+          <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700">
+            <Mail className="h-5 w-5" />
+          </div>
+          <div className="mt-4 text-lg font-black tracking-tight text-slate-950">Submit serious editorial proposals</div>
+          <p className="mt-2 text-sm leading-7 text-slate-600">
+            Submit serious story pitches, field reports, and contributor proposals for editorial review by News Pulse.
           </p>
-        </div>
+          <a href={`mailto:${contactEmail}`} className="mt-4 inline-flex break-all text-sm font-semibold text-sky-700 underline">
+            {contactEmail}
+          </a>
+        </SurfacePanel>
       </section>
 
-      <section className="py-10 px-4">
-        <div className="max-w-3xl mx-auto">
-          <form onSubmit={handleSubmit} className="space-y-6 bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700">
-            {successMessage && (
-              <div className="rounded-md bg-green-50 border border-green-200 p-4 text-green-800 text-sm">{successMessage}</div>
-            )}
-            {errorMessage && (
-              <div className="rounded-md bg-red-50 border border-red-200 p-4 text-red-800 text-sm">{errorMessage}</div>
-            )}
-
-            <h2 className="text-2xl font-bold">Contact info</h2>
-
-            <div className="grid md:grid-cols-2 gap-6">
-              <div>
-                <label className="block font-medium mb-1" htmlFor="name">Full name *</label>
-                <input id="name" type="text" value={form.name} onChange={e => setField('name', e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
-                {errors.name && <p className="text-red-600 text-xs mt-1">{errors.name}</p>}
-              </div>
-              <div>
-                <label className="block font-medium mb-1" htmlFor="email">Email *</label>
-                <input id="email" type="email" value={form.email} onChange={e => setField('email', e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
-                {errors.email && <p className="text-red-600 text-xs mt-1">{errors.email}</p>}
-              </div>
-              <div>
-                <label className="block font-medium mb-1" htmlFor="phone">Phone *</label>
-                <input id="phone" type="tel" value={form.phone} onChange={e => setField('phone', e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
-                {errors.phone && <p className="text-red-600 text-xs mt-1">{errors.phone}</p>}
-                <p className="text-xs text-gray-500 mt-1">For verification only, never shown publicly.</p>
+      <section className="mt-8">
+        <SurfacePanel className="min-w-0 overflow-hidden bg-[linear-gradient(180deg,rgba(248,250,252,0.96),rgba(255,255,255,0.99))]">
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-center">
+            <div className="min-w-0">
+              <SectionHeading title="Contact" kicker="9" />
+              <p className="mt-5 text-sm leading-7 text-slate-600">
+                For journalist pitches, article submissions, contributor proposals, and editorial collaboration, use the contact details below.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <a href={`mailto:${contactEmail}`} className="inline-flex items-center justify-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
+                  Email Journalist Desk
+                </a>
+                <Link href="/digital-code-of-ethics" className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+                  Digital Code of Ethics
+                </Link>
               </div>
             </div>
 
-            <div className="grid md:grid-cols-3 gap-6">
-              <div>
-                <label className="block font-medium mb-1" htmlFor="city">City *</label>
-                <input id="city" type="text" value={form.city} onChange={e => setField('city', e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
-                {errors.city && <p className="text-red-600 text-xs mt-1">{errors.city}</p>}
-              </div>
-              <div>
-                <label className="block font-medium mb-1" htmlFor="state">State *</label>
-                <input id="state" type="text" value={form.state} onChange={e => setField('state', e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
-                {errors.state && <p className="text-red-600 text-xs mt-1">{errors.state}</p>}
-              </div>
-              <div>
-                <label className="block font-medium mb-1" htmlFor="country">Country *</label>
-                <input id="country" type="text" value={form.country} onChange={e => setField('country', e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
-                {errors.country && <p className="text-red-600 text-xs mt-1">{errors.country}</p>}
-              </div>
+            <div className="rounded-[26px] border border-slate-200/80 bg-white p-6 shadow-[0_22px_46px_-34px_rgba(15,23,42,0.26)]">
+              <div className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Contact details</div>
+              <a href={`mailto:${contactEmail}`} className="mt-3 inline-flex break-all text-sm font-semibold text-sky-700 underline">
+                {contactEmail}
+              </a>
+              <a href="https://www.newspulse.co.in" className="mt-3 block text-sm font-semibold text-sky-700 underline">
+                www.newspulse.co.in
+              </a>
             </div>
-
-            <h2 className="text-2xl font-bold">Professional info</h2>
-
-            <div className="grid md:grid-cols-2 gap-6">
-              <div>
-                <label className="block font-medium mb-1" htmlFor="organisationName">Organisation name *</label>
-                <input id="organisationName" type="text" value={form.organisationName} onChange={e => setField('organisationName', e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
-                {errors.organisationName && <p className="text-red-600 text-xs mt-1">{errors.organisationName}</p>}
-              </div>
-              <div>
-                <label className="block font-medium mb-1" htmlFor="organisationType">Organisation type *</label>
-                <select id="organisationType" value={form.organisationType} onChange={e => setField('organisationType', e.target.value as OrgType)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2">
-                  <option value="">Select type</option>
-                  <option value="print">Print</option>
-                  <option value="tv">TV</option>
-                  <option value="radio">Radio</option>
-                  <option value="digital">Digital</option>
-                  <option value="freelance">Freelance</option>
-                  <option value="other">Other</option>
-                </select>
-                {errors.organisationType && <p className="text-red-600 text-xs mt-1">{errors.organisationType}</p>}
-              </div>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-6">
-              <div>
-                <label className="block font-medium mb-1" htmlFor="positionTitle">Position title *</label>
-                <input id="positionTitle" type="text" value={form.positionTitle} onChange={e => setField('positionTitle', e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
-                {errors.positionTitle && <p className="text-red-600 text-xs mt-1">{errors.positionTitle}</p>}
-              </div>
-              <div>
-                <label className="block font-medium mb-1" htmlFor="yearsExperience">Years of experience</label>
-                <input id="yearsExperience" type="number" min="0" value={form.yearsExperience} onChange={e => setField('yearsExperience', e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
-                {errors.yearsExperience && <p className="text-red-600 text-xs mt-1">{errors.yearsExperience}</p>}
-              </div>
-            </div>
-
-            <div>
-              <label className="block font-medium mb-2">Beats *</label>
-              <div className="flex flex-wrap gap-2">
-                {BEATS.map(beat => (
-                  <button type="button" key={beat} onClick={() => toggleArrayValue('beats', beat)} className={`px-3 py-1 rounded-full border ${form.beats.includes(beat) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 border-gray-300 dark:border-gray-600'}`}>{beat}</button>
-                ))}
-              </div>
-              {errors.beats && <p className="text-red-600 text-xs mt-1">{errors.beats}</p>}
-            </div>
-
-            <div>
-              <label className="block font-medium mb-2">Primary languages</label>
-              <div className="flex flex-wrap gap-2">
-                {LANG_OPTIONS.map(code => (
-                  <button type="button" key={code} onClick={() => toggleArrayValue('languages', code)} className={`px-3 py-1 rounded-full border ${form.languages.includes(code) ? 'bg-purple-600 text-white border-purple-600' : 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 border-gray-300 dark:border-gray-600'}`}>{code}</button>
-                ))}
-              </div>
-              <p className="text-xs text-gray-500 mt-1">Select one or more. You can also type additional languages as comma-separated:</p>
-              <input type="text" placeholder="e.g., en, hi, gu" value={form.languages.filter(l => !LANG_OPTIONS.includes(l)).join(', ')} onChange={e => setField('languages', Array.from(new Set([...form.languages.filter(l => LANG_OPTIONS.includes(l)), ...e.target.value.split(',').map(s => s.trim()).filter(Boolean)])))} className="mt-2 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
-            </div>
-
-            <h2 className="text-2xl font-bold">Links (optional)</h2>
-            <div className="grid md:grid-cols-2 gap-6">
-              <div>
-                <label className="block font-medium mb-1" htmlFor="websiteOrPortfolio">Organisation website / portfolio</label>
-                <input id="websiteOrPortfolio" type="url" value={form.websiteOrPortfolio} onChange={e => setField('websiteOrPortfolio', e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
-              </div>
-              <div>
-                <label className="block font-medium mb-1" htmlFor="linkedin">LinkedIn profile</label>
-                <input id="linkedin" type="url" value={form.linkedin} onChange={e => setField('linkedin', e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
-              </div>
-              <div>
-                <label className="block font-medium mb-1" htmlFor="twitter">Twitter / X profile</label>
-                <input id="twitter" type="url" value={form.twitter} onChange={e => setField('twitter', e.target.value)} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2" />
-              </div>
-            </div>
-
-            <div className="flex items-start space-x-3">
-              <input id="consent" type="checkbox" checked={form.consent} onChange={e => setField('consent', e.target.checked)} className="mt-1 h-5 w-5 rounded border-gray-300 focus:ring-blue-500" />
-              <label htmlFor="consent" className="text-sm leading-relaxed">I work professionally in media and accept the News Pulse Contributor Policy and Privacy Policy.</label>
-            </div>
-            {errors.consent && <p className="text-red-600 text-xs -mt-4 mb-2">{errors.consent}</p>}
-
-            <div>
-              <button type="submit" disabled={submitting} className={`w-full font-semibold px-6 py-3 rounded-lg transition-colors ${submitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 text-white'} focus:outline-none focus:ring-2 focus:ring-indigo-500`}>
-                {submitting ? 'Submitting…' : 'Submit Application'}
-              </button>
-            </div>
-          </form>
-        </div>
+          </div>
+        </SurfacePanel>
       </section>
-    </div>
+    </PublicBusinessPageLayout>
   );
-};
-
-export default JournalistDeskPage;
-
-export const getServerSideProps: GetServerSideProps<JournalistDeskProps> = async ({ locale }) => {
-  const toggles = await fetchServerPublicFounderToggles();
-
-  const { getMessages } = await import('../lib/getMessages');
-  return {
-    props: {
-      communityReporterClosed: toggles.communityReporterClosed,
-      reporterPortalClosed: toggles.reporterPortalClosed,
-      messages: await getMessages(locale as string),
-    },
-  };
-};
+}

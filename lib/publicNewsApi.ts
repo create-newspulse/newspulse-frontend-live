@@ -65,6 +65,12 @@ export type PublicNewsMeta = {
   limit?: number;
 };
 
+function logPublicNewsError(event: string, details: Record<string, unknown>) {
+  if (process.env.NODE_ENV === 'production') return;
+  // eslint-disable-next-line no-console
+  console.error('[publicNewsApi]', event, details);
+}
+
 export async function fetchPublicNews(options: {
   category?: string;
   language?: string;
@@ -83,6 +89,13 @@ export async function fetchPublicNews(options: {
   const isBrowser = typeof window !== 'undefined';
   const base = getApiOrigin();
   if (!isBrowser && !base) {
+    logPublicNewsError('missing_api_base', {
+      category: options.category || null,
+      language: options.language || null,
+      q: options.q || null,
+      page: options.page ?? null,
+      limit: options.limit ?? null,
+    });
     return {
       items: [],
       meta: { limit: options.limit },
@@ -130,6 +143,13 @@ export async function fetchPublicNews(options: {
         (data && typeof data === 'object' && (data.message || data.error || data.code))
           ? String(data.message || data.error || data.code)
           : '';
+      logPublicNewsError('http_error', {
+        endpoint,
+        status: res.status,
+        message: msg || null,
+        category: options.category || null,
+        language: options.language || null,
+      });
       return {
         items: [],
         meta: { limit: options.limit },
@@ -148,7 +168,13 @@ export async function fetchPublicNews(options: {
     };
 
     return { items, meta, endpoint };
-  } catch {
+  } catch (error) {
+    logPublicNewsError('fetch_failed', {
+      endpoint,
+      category: options.category || null,
+      language: options.language || null,
+      message: error instanceof Error ? error.message : String(error),
+    });
     return { items: [], meta: { limit: options.limit }, endpoint, error: 'Fetch failed' };
   }
 }
