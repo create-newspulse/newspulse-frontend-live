@@ -7,6 +7,7 @@ import { getPublicSettings, parsePublicSettingsKeys } from '../../../lib/publicS
 import {
   DEFAULT_PUBLIC_SETTINGS_RESPONSE,
   mergePublicSettingsResponseWithDefaults,
+  normalizeLiveTvMode,
   type PublicSettingsResponse,
 } from '../../../src/lib/publicSettings';
 
@@ -141,6 +142,36 @@ function mapSiteSettingsToPublicSettingsResponse(raw: unknown): PublicSettingsRe
   if (typeof (settings as any).liveTvUrl === 'string') {
     out.settings.modules.liveTvCard = { ...out.settings.modules.liveTvCard, url: String((settings as any).liveTvUrl) };
   }
+
+  const liveTvRaw = isRecord((settings as any).liveTv) ? ((settings as any).liveTv as JsonRecord) : null;
+  out.settings.liveTv = {
+    ...out.settings.liveTv,
+    enabled:
+      (typeof (liveTvRaw as any)?.enabled === 'boolean' ? Boolean((liveTvRaw as any).enabled) : undefined) ??
+      liveTvEnabled ??
+      out.settings.liveTv.enabled,
+    mode: normalizeLiveTvMode(
+      (liveTvRaw ? firstString(liveTvRaw, ['mode', 'status', 'channelMode', 'broadcastMode', 'scope']) : undefined) ??
+        firstString(settings, ['liveTvMode', 'liveTvStatus', 'liveTvScope']),
+      out.settings.liveTv.mode
+    ),
+    embedUrl:
+      (liveTvRaw ? firstString(liveTvRaw, ['embedUrl', 'youtubeEmbedUrl', 'liveEmbedUrl', 'url', 'youtubeUrl']) : undefined) ??
+      firstString(settings, ['liveTvEmbedUrl', 'liveTvUrl', 'liveTvYoutubeUrl']) ??
+      out.settings.liveTv.embedUrl,
+    fallbackVideoUrl:
+      (liveTvRaw ? firstString(liveTvRaw, ['fallbackVideoUrl', 'fallbackUrl', 'replayUrl', 'offlineReplayUrl', 'videoUrl']) : undefined) ??
+      firstString(settings, ['liveTvFallbackVideoUrl', 'liveTvFallbackUrl', 'liveTvReplayUrl']) ??
+      out.settings.liveTv.fallbackVideoUrl,
+    title:
+      (liveTvRaw ? firstString(liveTvRaw, ['title', 'heading', 'nextShowTitle', 'scheduledTitle']) : undefined) ??
+      firstString(settings, ['liveTvTitle', 'scheduledShowTitle']) ??
+      out.settings.liveTv.title,
+    subtitle:
+      (liveTvRaw ? firstString(liveTvRaw, ['subtitle', 'description', 'subheading', 'nextShowSubtitle', 'scheduledSubtitle']) : undefined) ??
+      firstString(settings, ['liveTvSubtitle', 'liveTvDescription', 'scheduledShowSubtitle']) ??
+      out.settings.liveTv.subtitle,
+  };
 
   // Optional isolated Inspiration Hub settings pass-through.
   const inspirationHubRaw = isRecord((settings as any).inspirationHub)

@@ -1,5 +1,13 @@
 export type BreakingMode = 'auto' | 'on' | 'off';
 
+export type LiveTvMode =
+  | 'news-pulse-live'
+  | 'aira-bulletin'
+  | 'offline-replay'
+  | 'scheduled-show'
+  | 'breaking-mode'
+  | 'maintenance-coming-soon';
+
 export type LanguageTheme = {
   // Optional defaults controlled by backend for public site.
   lang?: 'en' | 'hi' | 'gu';
@@ -32,12 +40,22 @@ export type PublishedTickerSettings = {
   showWhenEmpty?: boolean;
 };
 
+export type PublicLiveTvSettings = {
+  enabled: boolean;
+  mode: LiveTvMode;
+  embedUrl: string;
+  fallbackVideoUrl: string;
+  title: string;
+  subtitle: string;
+};
+
 export type PublicSettings = {
   modules: Record<HomeModuleKey, PublicSettingsModule>;
   tickers: {
     breaking: PublishedTickerSettings;
     live: PublishedTickerSettings;
   };
+  liveTv: PublicLiveTvSettings;
   // Optional: breaking mode influences content behavior (auto/on/off)
   breakingMode?: BreakingMode;
   // Optional: footer text override
@@ -119,7 +137,7 @@ export type NormalizedPublicSettings = {
     live: { enabled: boolean; speedSec: number; order: number; mode: string; showWhenEmpty: boolean };
     breaking: { enabled: boolean; speedSec: number; order: number; mode: string; showWhenEmpty: boolean };
   };
-  liveTv: { enabled: boolean; embedUrl: string };
+  liveTv: PublicLiveTvSettings;
   languageTheme: { languages: string[]; themePreset: string | null };
   inspirationHub?: NormalizedInspirationHubSettings | null;
 };
@@ -144,6 +162,14 @@ export const DEFAULT_PUBLIC_SETTINGS: PublicSettings = {
     // Match current DEFAULT_PREFS in pages/index.tsx
     breaking: { enabled: true, speedSeconds: 18, showWhenEmpty: true },
     live: { enabled: true, speedSeconds: 24, showWhenEmpty: true },
+  },
+  liveTv: {
+    enabled: true,
+    mode: 'news-pulse-live',
+    embedUrl: '',
+    fallbackVideoUrl: '',
+    title: '',
+    subtitle: '',
   },
   breakingMode: 'auto',
 };
@@ -170,7 +196,14 @@ export const DEFAULT_NORMALIZED_PUBLIC_SETTINGS: NormalizedPublicSettings = {
     live: { enabled: true, speedSec: 24, order: 20, mode: 'auto', showWhenEmpty: false },
     breaking: { enabled: true, speedSec: 18, order: 10, mode: 'auto', showWhenEmpty: false },
   },
-  liveTv: { enabled: true, embedUrl: '' },
+  liveTv: {
+    enabled: true,
+    mode: 'news-pulse-live',
+    embedUrl: '',
+    fallbackVideoUrl: '',
+    title: '',
+    subtitle: '',
+  },
   languageTheme: { languages: ['en', 'hi', 'gu'], themePreset: null },
 };
 
@@ -216,6 +249,82 @@ function getUiBoolean(ui: JsonRecord | null, key: string, fallback: boolean): bo
   return typeof v === 'boolean' ? v : fallback;
 }
 
+function getFirstKnownValue(root: JsonRecord | null, keys: string[]): unknown {
+  if (!root) return undefined;
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(root, key)) {
+      const value = (root as any)[key];
+      if (value != null) return value;
+    }
+  }
+  return undefined;
+}
+
+function normalizeTextValue(raw: unknown): string {
+  return typeof raw === 'string' ? raw.trim() : '';
+}
+
+export function normalizeLiveTvMode(raw: unknown, fallback: LiveTvMode = 'news-pulse-live'): LiveTvMode {
+  const value = String(raw ?? '').toLowerCase().trim().replace(/[\s_]+/g, ' ');
+  if (!value) return fallback;
+
+  if (value === 'news pulse live' || value === 'newspulse live' || value === 'live') return 'news-pulse-live';
+  if (value === 'aira bulletin') return 'aira-bulletin';
+  if (value === 'offline replay' || value === 'replay') return 'offline-replay';
+  if (value === 'scheduled show') return 'scheduled-show';
+  if (value === 'breaking mode') return 'breaking-mode';
+  if (value === 'maintenance / coming soon' || value === 'maintenance coming soon' || value === 'maintenance' || value === 'coming soon') {
+    return 'maintenance-coming-soon';
+  }
+
+  return fallback;
+}
+
+function normalizeVideoUrl(raw: unknown): string {
+  const youtubeEmbed = toSafeYouTubeEmbedUrl(raw);
+  if (youtubeEmbed) return youtubeEmbed;
+  return sanitizeEmbedUrl(raw);
+}
+
+function normalizeLiveTvSettings(
+  raw: unknown,
+  fallback: PublicLiveTvSettings,
+  options?: { root?: JsonRecord | null; liveTvCardRaw?: unknown }
+): PublicLiveTvSettings {
+  const liveTv = isRecord(raw) ? (raw as JsonRecord) : null;
+  const root = options?.root ?? null;
+  const liveTvCardRaw = isRecord(options?.liveTvCardRaw) ? ((options?.liveTvCardRaw as JsonRecord)) : null;
+
+  const enabledRaw =
+    getFirstKnownValue(liveTv, ['enabled', 'isEnabled']) ??
+    getFirstKnownValue(root, ['liveTvEnabled', 'enableLiveTv']);
+  const modeRaw =
+    getFirstKnownValue(liveTv, ['mode', 'status', 'channelMode', 'broadcastMode', 'scope']) ??
+    getFirstKnownValue(root, ['liveTvMode', 'liveTvStatus', 'liveTvScope']);
+  const embedUrlRaw =
+    getFirstKnownValue(liveTv, ['embedUrl', 'youtubeEmbedUrl', 'liveEmbedUrl', 'url', 'youtubeUrl']) ??
+    getFirstKnownValue(root, ['liveTvEmbedUrl', 'liveTvUrl', 'liveTvYoutubeUrl']) ??
+    getFirstKnownValue(liveTvCardRaw, ['embedUrl', 'url']);
+  const fallbackVideoUrlRaw =
+    getFirstKnownValue(liveTv, ['fallbackVideoUrl', 'fallbackUrl', 'replayUrl', 'offlineReplayUrl', 'videoUrl']) ??
+    getFirstKnownValue(root, ['liveTvFallbackVideoUrl', 'liveTvFallbackUrl', 'liveTvReplayUrl']);
+  const titleRaw =
+    getFirstKnownValue(liveTv, ['title', 'heading', 'nextShowTitle', 'scheduledTitle']) ??
+    getFirstKnownValue(root, ['liveTvTitle', 'scheduledShowTitle']);
+  const subtitleRaw =
+    getFirstKnownValue(liveTv, ['subtitle', 'description', 'subheading', 'nextShowSubtitle', 'scheduledSubtitle']) ??
+    getFirstKnownValue(root, ['liveTvSubtitle', 'liveTvDescription', 'scheduledShowSubtitle']);
+
+  return {
+    enabled: normalizeEnabled(enabledRaw, fallback.enabled),
+    mode: normalizeLiveTvMode(modeRaw, fallback.mode),
+    embedUrl: normalizeVideoUrl(embedUrlRaw),
+    fallbackVideoUrl: normalizeVideoUrl(fallbackVideoUrlRaw),
+    title: normalizeTextValue(titleRaw),
+    subtitle: normalizeTextValue(subtitleRaw),
+  };
+}
+
 function normalizeFromAdminPublishedShape(payload: JsonRecord, defaults: PublicSettings): PublicSettings {
   const homeModules = isRecord((payload as any).homepageModules)
     ? ((payload as any).homepageModules as JsonRecord)
@@ -242,6 +351,7 @@ function normalizeFromAdminPublishedShape(payload: JsonRecord, defaults: PublicS
       breaking: { ...defaults.tickers.breaking },
       live: { ...defaults.tickers.live },
     },
+    liveTv: normalizeLiveTvSettings((payload as any).liveTv ?? (payload as any)?.homepage?.liveTv, defaults.liveTv, { root: payload }),
     breakingMode: normalizeBreakingMode((payload as any).breakingMode, defaults.breakingMode ?? 'auto'),
     footerText: typeof (payload as any).footerText === 'string' ? String((payload as any).footerText) : defaults.footerText,
     languageTheme: normalizeLanguageTheme((payload as any).languageTheme) ?? defaults.languageTheme,
@@ -562,6 +672,11 @@ export function mergePublicSettingsWithDefaults(raw: unknown, defaults: PublicSe
       breaking: normalizeTicker(breakingRaw, defaults.tickers.breaking),
       live: normalizeTicker(liveRaw, defaults.tickers.live),
     },
+    liveTv: normalizeLiveTvSettings(
+      (payload as any).liveTv ?? (payload as any)?.homepage?.liveTv ?? (publishedRaw as any)?.liveTv ?? (publishedRaw as any)?.homepage?.liveTv,
+      defaults.liveTv,
+      { root: payload }
+    ),
     breakingMode: normalizeBreakingMode(
       (payload as any).breakingMode ?? (publishedRaw as any)?.breakingMode,
       defaults.breakingMode ?? 'auto'
@@ -777,13 +892,8 @@ export function normalizePublicSettings(raw: unknown, defaults: NormalizedPublic
   const breakingTickerRaw = (tickers as any).breaking;
 
   const liveTv = getRecord(published, 'liveTv') ?? getRecord(published, 'homepage', 'liveTv') ?? ({} as JsonRecord);
-  const liveTvEnabled = normalizeEnabled((liveTv as any).enabled, defaults.liveTv.enabled);
-
-  const embedUrlRaw =
-    getUnknown(liveTv, 'embedUrl') ??
-    getUnknown(liveTv, 'url') ??
-    (isRecord(liveTvCardRaw) ? (liveTvCardRaw as any).embedUrl ?? (liveTvCardRaw as any).url : undefined);
-  const embedUrl = sanitizeEmbedUrl(embedUrlRaw);
+  const normalizedLiveTv = normalizeLiveTvSettings(liveTv, defaults.liveTv, { root: published, liveTvCardRaw });
+  const liveTvEnabled = normalizedLiveTv.enabled;
 
   // languageTheme can exist at root or under published
   const languageTheme =
@@ -827,8 +937,7 @@ export function normalizePublicSettings(raw: unknown, defaults: NormalizedPublic
       breaking: normalizeTickerFrom(breakingTickerRaw, defaults.tickers.breaking),
     },
     liveTv: {
-      enabled: liveTvEnabled,
-      embedUrl,
+      ...normalizedLiveTv,
     },
     languageTheme: {
       languages: normalizeLanguages(languagesRaw, defaults.languageTheme.languages),

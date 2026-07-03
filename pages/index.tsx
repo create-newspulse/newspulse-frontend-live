@@ -14,7 +14,7 @@ import { usePublicTickerAds } from "../hooks/usePublicTickerAds";
 import { isSafeMode } from "../utils/safeMode";
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle } from "../lib/contentFallback";
 import OriginalTag from "../components/OriginalTag";
-import { DEFAULT_NORMALIZED_PUBLIC_SETTINGS, sanitizeEmbedUrl } from "../src/lib/publicSettings";
+import { DEFAULT_NORMALIZED_PUBLIC_SETTINGS, type PublicLiveTvSettings } from "../src/lib/publicSettings";
 import AdSlot from "../src/components/ads/AdSlot";
 import { useBookmarks } from "../hooks/useBookmarks";
 import { resolveArticleSlug } from "../lib/articleSlugs";
@@ -40,6 +40,7 @@ import type { GetStaticProps } from "next";
 import { AnimatePresence, motion } from "framer-motion";
 import { useI18n } from "../src/i18n/LanguageProvider";
 import { resolveInspirationHubDroneTvSettings, resolveInspirationHubSectionText } from "../src/lib/inspirationHubSettings";
+import { resolveLiveTvPresentation } from "../src/lib/liveTv";
 import { usePublicFounderToggles } from "../hooks/usePublicFounderToggles";
 import { DEFAULT_PUBLIC_FOUNDER_TOGGLES, type PublicFounderToggles } from "../lib/publicFounderToggles";
 import { subscribePublicDataRefresh } from "../lib/publicDataRefresh";
@@ -2947,13 +2948,17 @@ function FeedList({ theme, items, lang }: any) {
   );
 }
 
-function LiveTVWidget({ theme, enabled = true, onToast, embedUrlOverride }: any) {
-  const { t } = useI18n();
-  if (!enabled) return null;
+function LiveTVWidget({ theme, liveTvSettings }: { theme: any; liveTvSettings: PublicLiveTvSettings }) {
+  const presentation = resolveLiveTvPresentation(liveTvSettings);
+  if (!liveTvSettings?.enabled) return null;
 
-  const effectiveEmbedUrlRaw = (typeof embedUrlOverride === 'string' && embedUrlOverride.trim()) ? embedUrlOverride : '';
-  const effectiveEmbedUrl = sanitizeEmbedUrl(effectiveEmbedUrlRaw);
-  const hasUrl = !!effectiveEmbedUrl;
+  const accentBackground = presentation.highlightBreaking
+    ? theme.mode === 'dark'
+      ? 'linear-gradient(135deg, rgba(220,38,38,0.32), rgba(234,88,12,0.18) 58%, rgba(56,189,248,0.10) 100%)'
+      : 'linear-gradient(135deg, rgba(220,38,38,0.18), rgba(249,115,22,0.12) 58%, rgba(37,99,235,0.08) 100%)'
+    : theme.mode === 'dark'
+      ? 'linear-gradient(135deg, rgba(239,68,68,0.16), rgba(56,189,248,0.10) 68%, transparent 100%)'
+      : 'linear-gradient(135deg, rgba(220,38,38,0.10), rgba(37,99,235,0.07) 68%, rgba(255,255,255,0.74) 100%)';
 
   return (
     <Surface theme={theme} className="overflow-hidden">
@@ -2961,62 +2966,94 @@ function LiveTVWidget({ theme, enabled = true, onToast, embedUrlOverride }: any)
         className="border-b px-4 py-4"
         style={{
           borderColor: theme.border,
-          background: theme.mode === 'dark'
-            ? 'linear-gradient(135deg, rgba(239,68,68,0.16), rgba(56,189,248,0.10) 68%, transparent 100%)'
-            : 'linear-gradient(135deg, rgba(220,38,38,0.10), rgba(37,99,235,0.07) 68%, rgba(255,255,255,0.74) 100%)',
+          background: accentBackground,
         }}
       >
         <div className="flex items-center justify-between gap-3">
-          <div>
+          <div className="min-w-0 flex-1">
             <div className="text-[12px] font-extrabold uppercase tracking-[0.16em]" style={{ color: theme.sub }}>
               Broadcast module
             </div>
-            <div className="mt-1 text-sm font-black tracking-tight" style={{ color: theme.text }}>
-            {t('common.liveTv')}
+            <div className="mt-1 text-sm font-black tracking-tight leading-[1.25]" style={{ color: theme.text }}>
+              {presentation.title}
             </div>
-            <div className="mt-1 text-xs" style={{ color: theme.sub }}>
-            {t('home.liveTvPartnerChannel')}
+            <div className="mt-1 overflow-hidden text-xs leading-[1.35] [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]" style={{ color: theme.sub }}>
+              {presentation.subtitle || presentation.modeLabel}
             </div>
           </div>
-        </div>
-        <span className="rounded-full px-2.5 py-1 text-xs font-extrabold border text-white" style={{ background: theme.live, borderColor: "rgba(255,255,255,0.18)" }}>
-          {t('common.live')}
-        </span>
-      </div>
-
-      <div className="p-4 pt-4">
-      <div className="rounded-3xl border overflow-hidden shadow-[0_20px_46px_-36px_rgba(15,23,42,0.36)]" style={{ borderColor: theme.border, background: theme.surface2 }}>
-        <div className="relative w-full" style={{ paddingTop: "56.25%" }}>
-          {hasUrl ? (
-            <iframe
-              title="News Pulse Live TV"
-              src={effectiveEmbedUrl}
-              className="absolute inset-0 h-full w-full"
-              allow="autoplay; encrypted-media; picture-in-picture"
-              allowFullScreen
-            />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-xs font-semibold" style={{ color: theme.sub }}>
-              {t('home.liveTvAddEmbedUrl')}
-            </div>
-          )}
+          <span
+            className="rounded-full px-2.5 py-1 text-xs font-extrabold border text-white"
+            style={{
+              background: presentation.highlightBreaking ? 'rgba(185,28,28,0.96)' : theme.live,
+              borderColor: 'rgba(255,255,255,0.18)',
+              boxShadow: presentation.highlightBreaking ? '0 10px 30px -18px rgba(185,28,28,0.95)' : undefined,
+            }}
+          >
+            {presentation.badgeLabel}
+          </span>
         </div>
       </div>
 
-      <div className="mt-4 grid gap-2">
-        <Button theme={theme} variant="soft" className="w-full justify-start px-4 py-3" onClick={() => onToast("Live TV full page is not available right now.")}>
-          <Play className="h-4 w-4" /> {t('common.openLiveTv')}
-        </Button>
+      <div className="px-2 pb-2 pt-1 sm:px-3 sm:pb-3 sm:pt-2">
+        <div className="overflow-hidden rounded-[14px] border bg-white p-px shadow-[0_10px_24px_rgba(15,23,42,0.08)] sm:rounded-[16px]" style={{ borderColor: 'rgba(203,213,225,0.85)' }}>
+          <div className="relative w-full min-h-[205px] overflow-hidden rounded-[13px] bg-black sm:min-h-[235px] sm:rounded-[15px]" style={{ aspectRatio: '16 / 9' }}>
+            {presentation.playerKind === 'iframe' ? (
+              <iframe
+                title={presentation.title}
+                src={presentation.playerUrl}
+                className="absolute inset-0 block h-full w-full rounded-[13px] border-0 sm:rounded-[15px]"
+                allow="autoplay; encrypted-media; picture-in-picture"
+                allowFullScreen
+              />
+            ) : presentation.playerKind === 'video' ? (
+              <video
+                className="absolute inset-0 block h-full w-full rounded-[13px] object-cover sm:rounded-[15px]"
+                controls
+                playsInline
+                preload="metadata"
+                src={presentation.playerUrl}
+              />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center px-3 py-3 text-center sm:px-4 sm:py-4">
+                <div className="w-full bg-transparent">
+                  <div className="text-[12px] font-extrabold uppercase tracking-[0.22em] text-white/88">
+                    {presentation.modeLabel}
+                  </div>
+                  {presentation.showScheduleCard ? (
+                    <>
+                      <div className="mt-3 text-lg font-black tracking-tight text-white">
+                        {presentation.title}
+                      </div>
+                      {presentation.subtitle ? (
+                        <div className="mt-2 text-sm text-white/72">
+                          {presentation.subtitle}
+                        </div>
+                      ) : null}
+                    </>
+                  ) : null}
+                  <div className="mt-3 text-[15px] font-semibold leading-[1.45] text-white/86">
+                    {presentation.message}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
 
-        <Button
-          theme={theme}
-          variant="ghost"
-          className="w-full justify-start px-4 py-3"
-          onClick={() => onToast("Live TV visibility is admin-controlled")}
-        >
-          <X className="h-4 w-4" /> {t('home.turnOffWidget')}
-        </Button>
-      </div>
+        <div className="mt-4">
+          <Link
+            href="/live-tv"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold transition hover:-translate-y-0.5"
+            style={{
+              borderColor: theme.border,
+              color: theme.text,
+              background: theme.mode === 'dark' ? 'rgba(30,41,59,0.72)' : 'rgba(248,250,252,0.98)',
+            }}
+            aria-label="Open Live TV page"
+          >
+            <Play className="h-4 w-4" /> Open Live TV
+          </Link>
+        </div>
       </div>
     </Surface>
   );
@@ -4603,12 +4640,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
       order: effectiveSettings.modules.liveTvCard.order,
       enabled: effectiveSettings.modules.liveTvCard.enabled === true && liveTvEnabled,
       node: (
-        <LiveTVWidget
-          theme={theme}
-          enabled={effectiveSettings.modules.liveTvCard.enabled === true && liveTvEnabled}
-          onToast={onToast}
-          embedUrlOverride={liveTvEmbedUrl}
-        />
+        <LiveTVWidget theme={theme} liveTvSettings={effectiveSettings.liveTv} />
       ),
     },
     {
@@ -5041,7 +5073,9 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
   const heroLeftBlocks = sidebarBlocks.filter((b) => b.key === 'explore');
   const utilityLeftBlocks = sidebarBlocks.filter((b) => b.key !== 'explore');
   const hasSafeLeftRailPlacement = heroLeftBlocks.length > 0;
-  const heroCenterColClass = hasSafeLeftRailPlacement ? 'lg:col-span-6' : 'lg:col-span-9';
+  const hasFeaturedLiveTvBlock = sidebarBlocks.some((b) => b.key === 'liveTvCard');
+  const heroLeftColClass = hasFeaturedLiveTvBlock ? 'lg:col-span-4' : 'lg:col-span-3';
+  const heroCenterColClass = hasSafeLeftRailPlacement ? (hasFeaturedLiveTvBlock ? 'lg:col-span-5' : 'lg:col-span-6') : 'lg:col-span-9';
   const heroLeftRailAdNode = (
     <div>
       <AdSlot slot="HOME_LEFT_300x600" variant="right300x600" />

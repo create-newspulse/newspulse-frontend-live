@@ -145,9 +145,47 @@ describe('publicSettings helpers', () => {
 
     // liveTv.enabled should propagate
     expect(res.liveTv.enabled).toBe(false);
+    expect(res.liveTv.mode).toBe('news-pulse-live');
 
     // Cleanup
     (global as any).fetch = originalFetch;
+  });
+
+  test('normalizePublicSettings keeps approved Live TV modes and fallback fields', () => {
+    const settings = normalizePublicSettings({
+      published: {
+        liveTv: {
+          enabled: true,
+          mode: 'Scheduled Show',
+          title: 'Prime Time Bulletin',
+          subtitle: 'Next show at 8:00 PM',
+          fallbackVideoUrl: 'https://cdn.example.com/replay.mp4',
+        },
+      },
+    });
+
+    expect(settings.liveTv.enabled).toBe(true);
+    expect(settings.liveTv.mode).toBe('scheduled-show');
+    expect(settings.liveTv.title).toBe('Prime Time Bulletin');
+    expect(settings.liveTv.subtitle).toBe('Next show at 8:00 PM');
+    expect(settings.liveTv.fallbackVideoUrl).toBe('https://cdn.example.com/replay.mp4');
+  });
+
+  test('normalizePublicSettings converts YouTube URLs for Live TV embed and replay sources', () => {
+    const settings = normalizePublicSettings({
+      published: {
+        liveTv: {
+          enabled: true,
+          mode: 'Offline Replay',
+          embedUrl: 'https://www.youtube.com/watch?v=AbCdEfGhIjK',
+          replayUrl: 'https://youtu.be/ZyXwVuTsRqP',
+        },
+      },
+    });
+
+    expect(settings.liveTv.mode).toBe('offline-replay');
+    expect(settings.liveTv.embedUrl).toBe('https://www.youtube-nocookie.com/embed/AbCdEfGhIjK?rel=0&modestbranding=1&playsinline=1');
+    expect(settings.liveTv.fallbackVideoUrl).toBe('https://www.youtube-nocookie.com/embed/ZyXwVuTsRqP?rel=0&modestbranding=1&playsinline=1');
   });
 
   test('Inspiration Hub master switch hides DroneTV on all public surfaces', () => {
