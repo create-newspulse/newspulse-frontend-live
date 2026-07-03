@@ -177,7 +177,10 @@ export default function PrivacyPolicyPage() {
 
             {section.title === '12. Contact for Privacy Concerns' ? (
               <div className="mt-6 flex flex-wrap gap-3">
-                <a href={`mailto:${contactEmail}`} className="inline-flex items-center justify-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
+                <Link href="/privacy-request" className="inline-flex items-center justify-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
+                  Privacy Request
+                </Link>
+                <a href={`mailto:${contactEmail}`} className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
                   Email Privacy Desk
                 </a>
                 <Link href="/grievance-redressal" className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">

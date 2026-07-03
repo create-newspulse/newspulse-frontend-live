@@ -70,14 +70,14 @@ export default function DpdpPrivacyRightsPage() {
             DPDP / Privacy Rights
           </h1>
           <p className="mt-5 max-w-3xl text-base leading-8 text-slate-600 sm:text-[17px]">
-            News Pulse respects user privacy and provides public information about privacy rights related to personal data submitted through News Pulse channels. This page explains key rights and user duties in plain language.
+            News Pulse respects user privacy and provides public information about privacy rights related to personal data submitted through News Pulse channels. This page remains available as an informational reference, while the main privacy rights policy is published on the Privacy Policy page.
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
-            <Link href="/data-deletion-request" className="inline-flex items-center justify-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
-              Data Deletion Request
-            </Link>
-            <Link href="/privacy-policy" className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+            <Link href="/privacy-policy" className="inline-flex items-center justify-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
               Privacy Policy
+            </Link>
+            <Link href="/privacy-request" className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+              Privacy Request
             </Link>
           </div>
         </SurfacePanel>
@@ -140,7 +140,7 @@ export default function DpdpPrivacyRightsPage() {
             <div className="min-w-0">
               <SectionHeading title="Related Privacy Pages" kicker="News Pulse" />
               <p className="mt-5 text-sm leading-7 text-slate-600">
-                Users can also review the Privacy Policy, Cookie Policy, and Data Deletion Request instructions for more details about public privacy handling.
+                Users can also review the Privacy Policy, Cookie Policy, and Privacy Request page for more details about public privacy handling.
               </p>
             </div>
             <div className="flex flex-col gap-3">
@@ -150,8 +150,8 @@ export default function DpdpPrivacyRightsPage() {
               <Link href="/cookie-policy" className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
                 Cookie Policy
               </Link>
-              <Link href="/data-deletion-request" className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
-                Data Deletion Request
+              <Link href="/privacy-request" className="inline-flex items-center justify-center rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
+                Privacy Request
               </Link>
             </div>
           </div>

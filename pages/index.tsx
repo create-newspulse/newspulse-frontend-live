@@ -4085,12 +4085,11 @@ function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
   const legalComplianceLinks = [
     { label: t('footer.privacyPolicy'), href: localizePath('/privacy-policy', lang) },
     { label: 'Cookie Policy', href: localizePath('/cookie-policy', lang) },
+    { label: 'Privacy Request', href: localizePath('/privacy-request', lang) },
+    { label: t('footer.grievanceRedressal'), href: localizePath('/grievance-redressal', lang) },
     { label: t('footer.termsOfService'), href: localizePath('/terms-of-service', lang) },
     { label: t('footer.copyrightPolicy'), href: localizePath('/copyright-policy', lang) },
-    { label: t('footer.grievanceRedressal'), href: localizePath('/grievance-redressal', lang) },
-    { label: 'Data Deletion Request', href: localizePath('/data-deletion-request', lang) },
-    { label: 'DPDP / Privacy Rights', href: localizePath('/dpdp-privacy-rights', lang) },
-    { label: t('footer.monthlyCompliance'), href: localizePath('/monthly-compliance-report', lang) },
+    { label: t('footer.monthlyCompliance'), href: localizePath('/monthly-compliance', lang) },
   ];
 
   return (

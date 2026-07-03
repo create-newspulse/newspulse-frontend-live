@@ -104,8 +104,8 @@ export default function CookiePolicyPage() {
             <Link href="/privacy-policy" className="inline-flex items-center justify-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
               Privacy Policy
             </Link>
-            <Link href="/dpdp-privacy-rights" className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
-              DPDP / Privacy Rights
+            <Link href="/privacy-request" className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+              Privacy Request
             </Link>
           </div>
         </SurfacePanel>

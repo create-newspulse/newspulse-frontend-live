@@ -2,11 +2,11 @@ import type { GetServerSideProps } from 'next';
 
 export const getServerSideProps: GetServerSideProps = async () => ({
   redirect: {
-    destination: '/privacy-request',
+    destination: '/monthly-compliance-report',
     permanent: false,
   },
 });
 
-export default function DataDeletionRequestRedirectPage() {
+export default function MonthlyComplianceRedirectPage() {
   return null;
 }
