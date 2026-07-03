@@ -199,6 +199,9 @@ export default function JournalistDeskPage() {
             <a href={`mailto:${contactEmail}`} className="mt-2 inline-flex break-all text-sm font-semibold text-sky-700 underline">
               {contactEmail}
             </a>
+            <p className="mt-4 text-sm leading-7 text-slate-600">
+              News Pulse will use your submitted details only for verification, editorial communication, and contributor management.
+            </p>
             <div className="mt-5 text-sm font-semibold text-slate-800">Suggested subject line</div>
             <div className="mt-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700">
               {suggestedSubject}

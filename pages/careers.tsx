@@ -231,6 +231,9 @@ export default function CareersPage() {
               <a href={`mailto:${contactEmail}`} className="mt-4 inline-flex break-all text-sm font-semibold text-sky-700 underline">
                 {contactEmail}
               </a>
+              <p className="mt-4 text-sm leading-7 text-slate-600">
+                News Pulse will use your submitted details only for recruitment and review purposes.
+              </p>
             </div>
           </div>
         </SurfacePanel>

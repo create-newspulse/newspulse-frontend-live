@@ -4076,15 +4076,21 @@ function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
     { label: 'About News Pulse', href: localizePath('/about-us', lang) },
     { label: t('footer.editorialPolicy'), href: localizePath('/editorial-policy', lang) },
     { label: t('footer.digitalCodeOfEthics'), href: localizePath('/digital-code-of-ethics', lang) },
-    { label: t('footer.privacyPolicy'), href: localizePath('/privacy-policy', lang) },
-    { label: t('footer.termsOfService'), href: localizePath('/terms-of-service', lang) },
-    { label: t('footer.copyrightPolicy'), href: localizePath('/copyright-policy', lang) },
-    { label: t('footer.grievanceRedressal'), href: localizePath('/grievance-redressal', lang) },
-    { label: t('footer.monthlyCompliance'), href: localizePath('/monthly-compliance-report', lang) },
     { label: t('common.contact'), href: localizePath('/contact', lang) },
     { label: t('footer.careers'), href: localizePath('/careers', lang) },
     { label: t('common.communityReporter'), href: localizePath('/community-reporter', lang) },
     { label: t('footer.journalistDesk'), href: localizePath('/journalist-desk', lang) },
+  ];
+
+  const legalComplianceLinks = [
+    { label: t('footer.privacyPolicy'), href: localizePath('/privacy-policy', lang) },
+    { label: 'Cookie Policy', href: localizePath('/cookie-policy', lang) },
+    { label: t('footer.termsOfService'), href: localizePath('/terms-of-service', lang) },
+    { label: t('footer.copyrightPolicy'), href: localizePath('/copyright-policy', lang) },
+    { label: t('footer.grievanceRedressal'), href: localizePath('/grievance-redressal', lang) },
+    { label: 'Data Deletion Request', href: localizePath('/data-deletion-request', lang) },
+    { label: 'DPDP / Privacy Rights', href: localizePath('/dpdp-privacy-rights', lang) },
+    { label: t('footer.monthlyCompliance'), href: localizePath('/monthly-compliance-report', lang) },
   ];
 
   return (
@@ -4122,21 +4128,44 @@ function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
           </div>
 
           <div className="md:col-span-4">
-            <div className="text-lg font-extrabold" style={{ color: theme.accent }}>
-              {t('footer.quickLinksTitle')}
-            </div>
-            <div className="mt-4 grid gap-3 text-sm text-white/85">
-              {quickLinks.map((item) => (
-                item.href ? (
-                  <Link key={item.label} href={item.href} className="text-left hover:underline">
-                    {item.label}
-                  </Link>
-                ) : (
-                  <button key={item.label} type="button" onClick={() => onToast(`${item.label} is not available right now.`) } className="text-left hover:underline">
-                    {item.label}
-                  </button>
-                )
-              ))}
+            <div className="grid gap-8 sm:grid-cols-2">
+              <div>
+                <div className="text-lg font-extrabold" style={{ color: theme.accent }}>
+                  {t('footer.quickLinksTitle')}
+                </div>
+                <div className="mt-4 grid gap-3 text-sm text-white/85">
+                  {quickLinks.map((item) => (
+                    item.href ? (
+                      <Link key={item.label} href={item.href} className="text-left hover:underline">
+                        {item.label}
+                      </Link>
+                    ) : (
+                      <button key={item.label} type="button" onClick={() => onToast(`${item.label} is not available right now.`) } className="text-left hover:underline">
+                        {item.label}
+                      </button>
+                    )
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-lg font-extrabold" style={{ color: theme.accent }}>
+                  Legal &amp; Compliance
+                </div>
+                <div className="mt-4 grid gap-3 text-sm text-white/85">
+                  {legalComplianceLinks.map((item) => (
+                    item.href ? (
+                      <Link key={item.label} href={item.href} className="text-left hover:underline">
+                        {item.label}
+                      </Link>
+                    ) : (
+                      <button key={item.label} type="button" onClick={() => onToast(`${item.label} is not available right now.`) } className="text-left hover:underline">
+                        {item.label}
+                      </button>
+                    )
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 

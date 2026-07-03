@@ -419,6 +419,10 @@ export default function AdvertiseWithUsPage() {
                 />
               </div>
 
+              <p className="rounded-2xl border border-amber-200/80 bg-amber-50/80 px-4 py-3 text-sm leading-7 text-amber-900">
+                News Pulse will use your business contact details only to respond to your advertising or partnership inquiry.
+              </p>
+
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <button
                   type="submit"

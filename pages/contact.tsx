@@ -221,6 +221,9 @@ export default function ContactPage({ initialType }: ContactPageProps) {
               <a href={`mailto:${contactEmail}`} className="mt-3 inline-flex break-all text-sm font-semibold text-sky-700 underline">
                 {contactEmail}
               </a>
+              <p className="mt-4 text-sm leading-7 text-slate-600">
+                News Pulse will use your name, email/mobile, and message only to respond to your inquiry.
+              </p>
             </div>
           </div>
         </SurfacePanel>
