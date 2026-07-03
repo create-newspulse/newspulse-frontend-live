@@ -2994,20 +2994,20 @@ function LiveTVWidget({ theme, liveTvSettings }: { theme: any; liveTvSettings: P
         </div>
       </div>
 
-      <div className="px-2 pb-2 pt-1 sm:px-3 sm:pb-3 sm:pt-2">
-        <div className="overflow-hidden rounded-[14px] border bg-white p-px shadow-[0_10px_24px_rgba(15,23,42,0.08)] sm:rounded-[16px]" style={{ borderColor: 'rgba(203,213,225,0.85)' }}>
-          <div className="relative w-full min-h-[205px] overflow-hidden rounded-[13px] bg-black sm:min-h-[235px] sm:rounded-[15px]" style={{ aspectRatio: '16 / 9' }}>
+      <div className="pt-1 sm:pt-2">
+        <div className="overflow-hidden rounded-none bg-transparent">
+          <div className="relative w-full min-h-[205px] overflow-hidden rounded-none bg-black sm:min-h-[235px]" style={{ aspectRatio: '16 / 9' }}>
             {presentation.playerKind === 'iframe' ? (
               <iframe
                 title={presentation.title}
                 src={presentation.playerUrl}
-                className="absolute inset-0 block h-full w-full rounded-[13px] border-0 sm:rounded-[15px]"
+                className="absolute inset-0 block h-full w-full rounded-none border-0"
                 allow="autoplay; encrypted-media; picture-in-picture"
                 allowFullScreen
               />
             ) : presentation.playerKind === 'video' ? (
               <video
-                className="absolute inset-0 block h-full w-full rounded-[13px] object-cover sm:rounded-[15px]"
+                className="absolute inset-0 block h-full w-full rounded-none object-cover"
                 controls
                 playsInline
                 preload="metadata"

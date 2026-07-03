@@ -71,41 +71,38 @@ export default function LiveTvPage() {
             </div>
 
             <div className="p-4 sm:p-6">
-              <div className="rounded-[28px] border border-slate-200 bg-white p-3 shadow-[0_24px_64px_-34px_rgba(15,23,42,0.12)] sm:p-4">
-                <div className="relative w-full min-h-[220px] overflow-hidden rounded-[22px] border border-[rgba(148,163,184,0.28)] bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] p-2 shadow-[0_20px_50px_rgba(15,23,42,0.10),inset_0_1px_0_rgba(255,255,255,0.8)] sm:rounded-[26px] sm:p-3 md:min-h-[360px] lg:rounded-[30px] lg:p-[14px]" style={{ aspectRatio: '16 / 9' }}>
-                  <div className="pointer-events-none absolute left-[12%] right-[12%] top-0 h-[3px] bg-[linear-gradient(90deg,transparent,#ef233c,transparent)] opacity-65" />
-                  <div className="relative h-full w-full overflow-hidden rounded-[16px] border border-[rgba(203,213,225,0.75)] bg-[radial-gradient(circle_at_center,rgba(37,99,235,0.08),transparent_42%),linear-gradient(180deg,#ffffff_0%,#f9fbff_100%)] sm:rounded-[18px] lg:rounded-[22px]">
-                    {liveTv.enabled && presentation.playerKind === 'iframe' ? (
-                      <iframe
-                        title={presentation.title}
-                        src={presentation.playerUrl}
-                        className="absolute inset-0 h-full w-full rounded-[16px] border-0 bg-transparent sm:rounded-[18px] lg:rounded-[22px]"
-                        allow="autoplay; encrypted-media; picture-in-picture"
-                        allowFullScreen
-                      />
-                    ) : liveTv.enabled && presentation.playerKind === 'video' ? (
-                      <video
-                        className="absolute inset-0 h-full w-full rounded-[16px] bg-transparent object-cover sm:rounded-[18px] lg:rounded-[22px]"
-                        controls
-                        playsInline
-                        preload="metadata"
-                        src={presentation.playerUrl}
-                      />
-                    ) : (
-                      <div className="absolute inset-0 flex items-center justify-center px-5 py-6 text-center sm:px-8 sm:py-8 lg:px-10 lg:py-10">
-                        <div className="max-w-2xl">
-                          <div className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-slate-500">{presentation.modeLabel}</div>
-                          {presentation.showScheduleCard ? (
-                            <>
-                              <div className="mt-4 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">{presentation.title}</div>
-                              {presentation.subtitle ? <div className="mt-2 text-sm text-slate-600 sm:text-base">{presentation.subtitle}</div> : null}
-                            </>
-                          ) : null}
-                          <div className="mt-4 text-sm font-semibold text-slate-700 sm:text-base">{presentation.message}</div>
-                        </div>
+              <div className="overflow-hidden rounded-[18px] bg-transparent sm:rounded-[22px] lg:rounded-[24px]">
+                <div className="relative w-full min-h-[220px] overflow-hidden rounded-[18px] bg-black sm:rounded-[22px] md:min-h-[360px] lg:rounded-[24px]" style={{ aspectRatio: '16 / 9' }}>
+                  {liveTv.enabled && presentation.playerKind === 'iframe' ? (
+                    <iframe
+                      title={presentation.title}
+                      src={presentation.playerUrl}
+                      className="absolute inset-0 h-full w-full rounded-[18px] border-0 bg-transparent sm:rounded-[22px] lg:rounded-[24px]"
+                      allow="autoplay; encrypted-media; picture-in-picture"
+                      allowFullScreen
+                    />
+                  ) : liveTv.enabled && presentation.playerKind === 'video' ? (
+                    <video
+                      className="absolute inset-0 h-full w-full rounded-[18px] bg-transparent object-cover sm:rounded-[22px] lg:rounded-[24px]"
+                      controls
+                      playsInline
+                      preload="metadata"
+                      src={presentation.playerUrl}
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center px-5 py-6 text-center sm:px-8 sm:py-8 lg:px-10 lg:py-10">
+                      <div className="max-w-2xl">
+                        <div className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-white/80">{presentation.modeLabel}</div>
+                        {presentation.showScheduleCard ? (
+                          <>
+                            <div className="mt-4 text-2xl font-black tracking-tight text-white sm:text-3xl">{presentation.title}</div>
+                            {presentation.subtitle ? <div className="mt-2 text-sm text-white/72 sm:text-base">{presentation.subtitle}</div> : null}
+                          </>
+                        ) : null}
+                        <div className="mt-4 text-sm font-semibold text-white/86 sm:text-base">{presentation.message}</div>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
