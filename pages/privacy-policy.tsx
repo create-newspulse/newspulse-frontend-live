@@ -8,7 +8,7 @@ const contactEmail = 'privacy@newspulse.co.in';
 const trustCards = [
   {
     title: 'Limited Data',
-    body: 'News Pulse aims to collect only the information needed to respond, review, improve the website, or handle lawful requests.',
+    body: 'News Pulse aims to collect only the personal data that is necessary to respond, review, improve the website, or handle lawful requests.',
     Icon: UserRoundCheck,
   },
   {
@@ -23,7 +23,7 @@ const trustCards = [
   },
   {
     title: 'User Control',
-    body: 'Users can manage browser cookie settings and choose what information they share when contacting News Pulse.',
+    body: 'Users may request access, correction, update, erasure or deletion, withdrawal of consent, grievance review, or nomination through the published privacy channel.',
     Icon: Cookie,
   },
 ] as const;
@@ -32,7 +32,7 @@ const policySections = [
   {
     title: '1. Information We May Collect',
     body: [
-      'News Pulse may collect limited information when users interact with our website, such as name and email address submitted through contact forms, information submitted through grievance forms, community reporter submissions, news tips, photos, videos, story ideas, advertising or business enquiry details, and basic technical or analytics information such as browser type, device type, pages visited, and general usage patterns.',
+      'News Pulse may collect only the personal data that is reasonably necessary when users interact with our website, such as name and email address submitted through contact forms, information submitted through grievance forms, community reporter submissions, news tips, photos, videos, story ideas, advertising or business enquiry details, and basic technical or analytics information such as browser type, device type, pages visited, and general usage patterns.',
       'News Pulse may also use cookies or similar technologies where enabled for analytics, performance, security, or advertising support. News Pulse does not ask users to submit unnecessary personal information.',
     ],
   },
@@ -50,51 +50,66 @@ const policySections = [
     ],
   },
   {
-    title: '4. Cookies and Analytics',
+    title: '4. DPDP and Privacy Rights',
+    body: [
+      'Users may request access to personal data, correction or update of personal data, erasure or deletion where applicable, withdrawal of consent where consent applies, grievance review, and nomination where recognised under applicable law.',
+      `Requests must be sent to ${contactEmail}. News Pulse may verify identity before processing requests to protect users, prevent misuse, and confirm that the request is authorised.`,
+    ],
+  },
+  {
+    title: '5. Retention and Deletion Requests',
+    body: [
+      'Submitting a privacy or deletion request does not guarantee automatic deletion. News Pulse may review each request on its facts and may retain information where required for legal, security, editorial, audit, record-keeping, or compliance reasons.',
+      'News Pulse may also retain limited records necessary to document request handling, protect the platform, prevent abuse, or comply with lawful obligations.',
+    ],
+  },
+  {
+    title: '6. Cookies and Analytics',
     body: [
       'News Pulse may use cookies, analytics tools, or similar technologies to understand website usage, improve performance, measure audience engagement, and support advertising features where enabled.',
       'Users may manage or disable cookies through their browser settings. Some website features may not work properly if cookies are disabled.',
     ],
   },
   {
-    title: '5. User Submissions',
-    body: [
-      'When users submit news tips, photos, videos, local updates, or story ideas, News Pulse may review the submitted material for accuracy, legality, safety, relevance, and editorial suitability.',
-      'Submission does not guarantee publication. News Pulse may edit, reject, hold, or remove submitted content if it is misleading, unsafe, copied, defamatory, promotional, hateful, illegal, or against our policies.',
-    ],
-  },
-  {
-    title: '6. Data Protection and Security',
+    title: '7. Data Protection and Security',
     body: [
       'News Pulse aims to use reasonable safeguards to protect information submitted through the website. However, no online system can be guaranteed to be completely secure.',
       'Users should avoid sending sensitive personal information unless it is necessary for the specific purpose of communication or complaint handling.',
     ],
   },
   {
-    title: '7. Children’s Privacy',
+    title: '8. User Submissions',
+    body: [
+      'When users submit news tips, photos, videos, local updates, or story ideas, News Pulse may review the submitted material for accuracy, legality, safety, relevance, and editorial suitability.',
+      'Submission does not guarantee publication. News Pulse may edit, reject, hold, or remove submitted content if it is misleading, unsafe, copied, defamatory, promotional, hateful, illegal, or against our policies.',
+    ],
+  },
+  {
+    title: '9. Children’s Privacy',
     body: [
       'News Pulse does not knowingly collect personal information from children without appropriate permission. Content involving children, minors, or sensitive matters is handled with extra care.',
     ],
   },
   {
-    title: '8. Third-Party Links',
+    title: '10. Third-Party Links',
     body: [
       'News Pulse may contain links to third-party websites, social media platforms, embedded content, or advertising services. News Pulse is not responsible for the privacy practices, content, or policies of third-party websites.',
       'Users should review the privacy policies of third-party websites before sharing personal information with them.',
     ],
   },
   {
-    title: '9. Updates to This Policy',
+    title: '11. Updates to This Policy',
     body: [
       'News Pulse may update this Privacy Policy from time to time to reflect changes in website features, legal requirements, technology, or internal practices.',
       'The latest version will be available on the News Pulse website.',
     ],
   },
   {
-    title: '10. Contact for Privacy Concerns',
+    title: '12. Contact for Privacy Concerns',
     body: [
-      'For privacy-related questions, correction requests, DPDP requests, or data concerns, users may contact News Pulse through the published privacy channel.',
+      'For privacy-related questions, access requests, correction requests, deletion requests, withdrawal of consent, grievance requests, nomination requests, or other data concerns, users should contact News Pulse through the published privacy channel.',
       'Privacy / DPDP Email: privacy@newspulse.co.in',
+      'Identity verification may be requested before processing a request. No automatic deletion is promised.',
       'Website: www.newspulse.co.in',
     ],
   },
@@ -119,7 +134,7 @@ export default function PrivacyPolicyPage() {
           </h1>
           <div className="mt-4 text-lg font-semibold text-slate-800 sm:text-[1.3rem]">Your privacy matters to News Pulse.</div>
           <p className="mt-5 max-w-3xl text-base leading-8 text-slate-600 sm:text-[17px]">
-            News Pulse respects your privacy and collects only the information needed to respond, improve the website, protect users, and handle lawful requests. This policy explains what information we may collect, how it may be used, and how users can contact us regarding privacy-related concerns.
+            News Pulse respects your privacy and aims to collect only the information needed to respond, improve the website, protect users, and handle lawful requests. This policy is the main public News Pulse privacy and DPDP information page. It explains what information may be collected, how it may be used, what rights users may exercise, and how privacy requests should be submitted.
           </p>
           <div className="mt-5 text-sm text-slate-600">
             <div>Last Updated: 18 June 2026</div>
@@ -133,7 +148,7 @@ export default function PrivacyPolicyPage() {
           <div className="mt-6 space-y-3 text-sm leading-7 text-white/74">
             <div className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-4">Only limited user information may be collected through public site interactions and direct submissions.</div>
             <div className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-4">Submitted information may be used to respond, review, improve site operations, and handle lawful or regulatory needs.</div>
-            <div className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-4">Users can contact News Pulse through public contact and grievance channels for privacy-related concerns.</div>
+            <div className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-4">Privacy and DPDP requests should be sent to privacy@newspulse.co.in and may require identity verification before review.</div>
           </div>
         </SurfacePanel>
       </section>
@@ -160,7 +175,7 @@ export default function PrivacyPolicyPage() {
               ))}
             </div>
 
-            {section.title === '10. Contact for Privacy Concerns' ? (
+            {section.title === '12. Contact for Privacy Concerns' ? (
               <div className="mt-6 flex flex-wrap gap-3">
                 <a href={`mailto:${contactEmail}`} className="inline-flex items-center justify-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
                   Email Privacy Desk
@@ -180,7 +195,7 @@ export default function PrivacyPolicyPage() {
             <div className="min-w-0">
               <SectionHeading title="Privacy Contact" kicker="Reader support" />
               <p className="mt-5 text-sm leading-7 text-slate-600">
-                For privacy-related questions, correction requests, or data concerns, readers can use the public contact and grievance routes listed on the website.
+                For privacy-related questions, access requests, correction requests, deletion requests, withdrawal of consent, grievance requests, nomination requests, or other data concerns, readers should use the published privacy route listed on this page.
               </p>
             </div>
 

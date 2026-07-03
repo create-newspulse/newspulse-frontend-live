@@ -134,6 +134,9 @@ export default function DataDeletionRequestPage() {
           <p className="mt-5 text-sm leading-7 text-slate-600">
             Identity verification may be requested only when necessary to confirm that the person making the request is authorised to do so, to prevent misuse, or to meet legal and security requirements.
           </p>
+          <p className="mt-4 text-sm leading-7 text-slate-600">
+            Submitting a data deletion request does not result in automatic deletion. News Pulse may verify your identity before processing any access, correction, deletion, withdrawal of consent, or grievance request. Requests that appear false, duplicate, abusive, incomplete, or unauthorised may be rejected or closed after review. Please submit requests only for personal data that belongs to you. Do not impersonate another person or submit false or frivolous requests.
+          </p>
         </SurfacePanel>
       </section>
     </PublicBusinessPageLayout>
