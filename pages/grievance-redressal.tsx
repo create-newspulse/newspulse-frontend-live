@@ -6,6 +6,7 @@ import { usePublicComplianceSettings } from '../hooks/usePublicComplianceSetting
 const grievanceFormAnchor = '#grievance-form';
 const grievanceOfficerFallback = 'To be appointed / Details will be updated shortly';
 const chiefEditorFallback = 'Details will be updated shortly';
+const privacyEmail = 'privacy@newspulse.co.in';
 const submitSuccessMessage = 'Your grievance has been submitted successfully. Our team will review it as per the applicable timeline.';
 const declarationText = 'I hereby declare that the information furnished above is true, correct, and complete to the best of my knowledge and belief.';
 
@@ -169,11 +170,18 @@ export default function GrievanceRedressalPage() {
           <div className="mt-6 flex flex-col gap-3">
             <ContactPill
               email={grievanceEmail}
-              label={grievanceEmail}
+              label={`Editorial / Content Grievance: ${grievanceEmail}`}
               href={grievanceFormAnchor}
               onClick={openForm}
               ariaLabel={grievanceEmail}
               title={grievanceEmail}
+            />
+            <ContactPill
+              email={privacyEmail}
+              label={`Privacy / DPDP Request: ${privacyEmail}`}
+              href={`mailto:${privacyEmail}`}
+              ariaLabel={privacyEmail}
+              title={privacyEmail}
             />
           </div>
           <div className="mt-6 rounded-[24px] border border-slate-200/80 bg-slate-50/85 p-5 shadow-[0_16px_36px_-30px_rgba(15,23,42,0.24)]">
@@ -198,7 +206,7 @@ export default function GrievanceRedressalPage() {
           <div className="mt-6 space-y-3 text-sm leading-7 text-white/74">
             <div className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-4">Submit the grievance form below for direct review by the News Pulse team.</div>
             <div className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-4">Provide precise publication references and a detailed description of the alleged violation.</div>
-            <div className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-4">If submission fails, email {grievanceEmail} directly using the CTA on this page.</div>
+            <div className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-4">For editorial or content grievances, use {grievanceEmail}. For privacy or DPDP requests, use {privacyEmail}.</div>
           </div>
         </SurfacePanel>
       </section>
@@ -213,7 +221,8 @@ export default function GrievanceRedressalPage() {
             title: 'Grievance Officer',
             body: grievanceOfficer,
           },
-          { icon: Mail, title: 'Official Grievance Email', body: grievanceEmail },
+          { icon: Mail, title: 'Editorial / Content Grievance', body: grievanceEmail },
+          { icon: Mail, title: 'Privacy / DPDP Request', body: privacyEmail },
           { icon: Globe, title: 'Location', body: grievanceLocation },
         ].map((item) => (
           <SurfacePanel key={item.title} className="p-5">

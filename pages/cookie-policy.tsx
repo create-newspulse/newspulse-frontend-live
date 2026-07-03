@@ -3,7 +3,7 @@ import React from 'react';
 import { BarChart3, Cookie, Megaphone, Settings, ShieldCheck } from 'lucide-react';
 import PublicBusinessPageLayout, { PageEyebrow, SectionHeading, SurfacePanel } from '../components/public/PublicBusinessPageLayout';
 
-const contactEmail = 'grievance@newspulse.co.in';
+const contactEmail = 'privacy@newspulse.co.in';
 
 const cookieCards = [
   {
@@ -75,7 +75,7 @@ const policySections = [
     title: '7. Contact',
     body: [
       `For cookie or privacy questions, users may contact News Pulse at ${contactEmail}.`,
-      'This email is being used as the temporary privacy contact until a dedicated privacy address is configured.',
+      'This is the official privacy and DPDP contact email for News Pulse.',
     ],
   },
 ] as const;

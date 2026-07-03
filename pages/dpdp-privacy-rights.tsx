@@ -3,7 +3,7 @@ import React from 'react';
 import { BadgeCheck, FilePenLine, ShieldCheck, Trash2, Undo2, UserRoundCheck } from 'lucide-react';
 import PublicBusinessPageLayout, { PageEyebrow, SectionHeading, SurfacePanel } from '../components/public/PublicBusinessPageLayout';
 
-const contactEmail = 'grievance@newspulse.co.in';
+const contactEmail = 'privacy@newspulse.co.in';
 
 const rightsCards = [
   {
@@ -84,9 +84,9 @@ export default function DpdpPrivacyRightsPage() {
 
         <SurfacePanel className="min-w-0 bg-slate-950 text-white">
           <div className="text-[11px] font-black uppercase tracking-[0.16em] text-white/55">Request channel</div>
-          <div className="mt-2 text-2xl font-black tracking-tight">Use the published privacy/grievance email for now.</div>
+          <div className="mt-2 text-2xl font-black tracking-tight">Use the official privacy and DPDP email.</div>
           <p className="mt-5 text-sm leading-7 text-white/72">
-            Until a dedicated privacy address is configured, DPDP and privacy rights requests may be sent to {contactEmail}.
+            DPDP and privacy rights requests may be sent to {contactEmail}.
           </p>
           <a href={`mailto:${contactEmail}?subject=${encodeURIComponent(mailSubject)}`} className="mt-6 inline-flex break-all text-sm font-semibold text-white underline">
             {contactEmail}

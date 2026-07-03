@@ -3,7 +3,7 @@ import React from 'react';
 import { Cookie, LockKeyhole, ShieldCheck, UserRoundCheck } from 'lucide-react';
 import PublicBusinessPageLayout, { PageEyebrow, SectionHeading, SurfacePanel } from '../components/public/PublicBusinessPageLayout';
 
-const contactEmail = 'grievance@newspulse.co.in';
+const contactEmail = 'privacy@newspulse.co.in';
 
 const trustCards = [
   {
@@ -93,8 +93,8 @@ const policySections = [
   {
     title: '10. Contact for Privacy Concerns',
     body: [
-      'For privacy-related questions, correction requests, or data concerns, users may contact News Pulse through the public contact or grievance channels available on the website.',
-      'Privacy / Grievance Email: grievance@newspulse.co.in',
+      'For privacy-related questions, correction requests, DPDP requests, or data concerns, users may contact News Pulse through the published privacy channel.',
+      'Privacy / DPDP Email: privacy@newspulse.co.in',
       'Website: www.newspulse.co.in',
     ],
   },
@@ -106,7 +106,7 @@ export default function PrivacyPolicyPage() {
       title="Privacy Policy"
       description="The News Pulse privacy policy explains what user information may be collected and how public inquiries can be made."
       contactEmail={contactEmail}
-      contactHref="/contact"
+      contactHref={`mailto:${contactEmail}`}
       contactAriaLabel="Contact News Pulse about privacy"
       contactTitle="Contact News Pulse about privacy"
       tone="slate"
@@ -162,9 +162,9 @@ export default function PrivacyPolicyPage() {
 
             {section.title === '10. Contact for Privacy Concerns' ? (
               <div className="mt-6 flex flex-wrap gap-3">
-                <Link href="/contact" className="inline-flex items-center justify-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
-                  Contact Us
-                </Link>
+                <a href={`mailto:${contactEmail}`} className="inline-flex items-center justify-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
+                  Email Privacy Desk
+                </a>
                 <Link href="/grievance-redressal" className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
                   Grievance Redressal
                 </Link>
@@ -185,7 +185,7 @@ export default function PrivacyPolicyPage() {
             </div>
 
             <div className="rounded-[26px] border border-slate-200/80 bg-white p-6 shadow-[0_22px_46px_-34px_rgba(15,23,42,0.26)]">
-              <div className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Privacy / Grievance Email</div>
+              <div className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Privacy / DPDP Email</div>
               <div className="mt-3 text-lg font-black tracking-tight text-slate-950">News Pulse</div>
               <p className="mt-2 text-sm leading-7 text-slate-600">Users can reach News Pulse through published privacy, grievance, and contact channels for public-facing concerns.</p>
               <div className="mt-4 text-sm font-semibold text-slate-700">Email: {contactEmail}</div>

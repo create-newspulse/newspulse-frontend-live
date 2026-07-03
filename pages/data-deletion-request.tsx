@@ -3,7 +3,7 @@ import React from 'react';
 import { ClipboardList, FileText, Mail, ShieldCheck, UserRoundCheck } from 'lucide-react';
 import PublicBusinessPageLayout, { PageEyebrow, SectionHeading, SurfacePanel } from '../components/public/PublicBusinessPageLayout';
 
-const contactEmail = 'grievance@newspulse.co.in';
+const contactEmail = 'privacy@newspulse.co.in';
 
 const requestDetails = [
   'Full name',
@@ -25,7 +25,7 @@ const processCards = [
   },
   {
     title: 'Privacy Channel',
-    body: `Until a dedicated privacy email is configured, users may send requests to ${contactEmail}.`,
+    body: `Users may send privacy and DPDP requests to ${contactEmail}.`,
     Icon: Mail,
   },
 ] as const;
@@ -106,7 +106,7 @@ export default function DataDeletionRequestPage() {
             Send an email to the address below with a clear subject such as "Privacy Request - News Pulse" and include the required details.
           </p>
           <div className="mt-5 rounded-[24px] border border-slate-200/80 bg-slate-50/90 p-5 shadow-[0_16px_36px_-30px_rgba(15,23,42,0.24)]">
-            <div className="text-sm font-semibold text-slate-800">Temporary privacy contact</div>
+            <div className="text-sm font-semibold text-slate-800">Privacy / DPDP contact</div>
             <a href={`mailto:${contactEmail}?subject=${encodeURIComponent(mailSubject)}`} className="mt-2 inline-flex break-all text-sm font-semibold text-sky-700 underline">
               {contactEmail}
             </a>
