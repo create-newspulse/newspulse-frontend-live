@@ -5073,9 +5073,9 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
   const heroLeftBlocks = sidebarBlocks.filter((b) => b.key === 'explore');
   const utilityLeftBlocks = sidebarBlocks.filter((b) => b.key !== 'explore');
   const hasSafeLeftRailPlacement = heroLeftBlocks.length > 0;
-  const hasFeaturedLiveTvBlock = sidebarBlocks.some((b) => b.key === 'liveTvCard');
-  const heroLeftColClass = hasFeaturedLiveTvBlock ? 'lg:col-span-4' : 'lg:col-span-3';
-  const heroCenterColClass = hasSafeLeftRailPlacement ? (hasFeaturedLiveTvBlock ? 'lg:col-span-5' : 'lg:col-span-6') : 'lg:col-span-9';
+  const heroGridClass = hasSafeLeftRailPlacement
+    ? 'grid grid-cols-12 items-start gap-4 lg:grid-cols-[370px_minmax(0,1fr)_370px] lg:gap-6'
+    : 'grid grid-cols-12 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_370px] lg:gap-6';
   const heroLeftRailAdNode = (
     <div>
       <AdSlot slot="HOME_LEFT_300x600" variant="right300x600" />
@@ -5099,7 +5099,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
   const rightRailTopAdNode = <AdSlot slot="HOME_RIGHT_300x250" variant="right300" />;
   const rightRailTallAdNode = <AdSlot slot="HOME_RIGHT_300x600" variant="right300x600" />;
   const rightRailNode = (
-    <div className="sticky top-4 grid gap-4">
+    <div className="sticky top-4 grid w-full min-w-0 gap-4">
       {rightRailTopAdNode}
 
       <FeedList
@@ -5274,9 +5274,9 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
       <div className="mx-auto w-full max-w-[1440px] px-4 md:px-8 pb-10 pt-4">
         <div className="relative">
           <div className="relative grid gap-6">
-            <div className="grid grid-cols-12 items-start gap-4 lg:gap-5">
+            <div className={heroGridClass}>
               {showLeftRail ? (
-                <aside className="col-span-12 order-3 lg:order-1 lg:col-span-3">
+                <aside className="col-span-12 min-w-0 order-3 lg:order-1 lg:col-span-1 lg:w-full lg:justify-self-start">
                   <div className="grid gap-4">
                     {leftRailBlocks.map((b) => (
                       <React.Fragment key={b.key}>
@@ -5287,7 +5287,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
                 </aside>
               ) : null}
 
-              <main className={`col-span-12 order-1 lg:order-2 ${heroCenterColClass}`}>
+              <main className="col-span-12 min-w-0 order-1 lg:order-2 lg:col-span-1">
                 <div className="grid gap-4">
                   <div id="top-story">
                     <FeaturedCard
@@ -5306,7 +5306,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
                 </div>
               </main>
 
-              <aside className="col-span-12 order-2 self-start lg:order-3 lg:col-span-3">
+              <aside className="col-span-12 min-w-0 order-2 self-start lg:relative lg:left-auto lg:right-auto lg:order-3 lg:col-span-1 lg:m-0 lg:w-full lg:justify-self-end lg:transform-none">
                 {rightRailNode}
               </aside>
             </div>
