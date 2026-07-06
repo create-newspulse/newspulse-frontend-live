@@ -137,11 +137,14 @@ export default function NewsPulseVideoPlayer({
   onPosterError,
 }: NewsPulseVideoPlayerProps) {
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
+  const safeSrc = String(src || '').trim();
   const [playing, setPlaying] = React.useState(false);
   const [muted, setMuted] = React.useState(false);
   const [currentTime, setCurrentTime] = React.useState(0);
   const [duration, setDuration] = React.useState(0);
   const [playbackRate, setPlaybackRate] = React.useState(1);
+  const [videoLoadFailed, setVideoLoadFailed] = React.useState(false);
+  const videoUnavailable = !safeSrc || videoLoadFailed;
 
   React.useEffect(() => {
     const video = videoRef.current;
@@ -149,7 +152,8 @@ export default function NewsPulseVideoPlayer({
     setCurrentTime(0);
     setDuration(0);
     setPlaybackRate(1);
-    if (!video) return;
+    setVideoLoadFailed(false);
+    if (!video || !safeSrc) return;
     video.playbackRate = 1;
     video.load();
     if (!autoPlay) return;
@@ -158,11 +162,11 @@ export default function NewsPulseVideoPlayer({
     if (playRequest && typeof playRequest.catch === 'function') {
       playRequest.catch(() => setPlaying(false));
     }
-  }, [autoPlay, src]);
+  }, [autoPlay, safeSrc]);
 
   const togglePlay = React.useCallback(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || videoUnavailable) return;
 
     if (video.paused || video.ended) {
       if (video.ended) video.currentTime = 0;
@@ -174,30 +178,30 @@ export default function NewsPulseVideoPlayer({
     }
 
     video.pause();
-  }, []);
+  }, [videoUnavailable]);
 
   const seekBy = React.useCallback((amount: number) => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || videoUnavailable) return;
     video.currentTime = Math.min(Math.max(video.currentTime + amount, 0), Number.isFinite(video.duration) ? video.duration : video.currentTime + amount);
-  }, []);
+  }, [videoUnavailable]);
 
   const toggleMute = React.useCallback(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || videoUnavailable) return;
     video.muted = !video.muted;
     setMuted(video.muted);
-  }, []);
+  }, [videoUnavailable]);
 
   const cycleSpeed = React.useCallback(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || videoUnavailable) return;
     const rates = [1, 1.25, 1.5, 2];
     const currentIndex = rates.indexOf(playbackRate);
     const nextRate = rates[(currentIndex + 1) % rates.length] || 1;
     video.playbackRate = nextRate;
     setPlaybackRate(nextRate);
-  }, [playbackRate]);
+  }, [playbackRate, videoUnavailable]);
 
   const progressValue = duration > 0 ? Math.min((currentTime / duration) * 100, 100) : 0;
   const hasReadNewsHref = Boolean(readNewsHref);
@@ -289,7 +293,7 @@ export default function NewsPulseVideoPlayer({
         playsInline
         preload="metadata"
         poster={posterSrc || undefined}
-        src={src}
+        src={safeSrc || undefined}
         onClick={togglePlay}
         onContextMenu={(event) => event.preventDefault()}
         onLoadedMetadata={(event) => setDuration(event.currentTarget.duration || 0)}
@@ -305,8 +309,18 @@ export default function NewsPulseVideoPlayer({
           setPlaying(false);
         }}
         onVolumeChange={(event) => setMuted(event.currentTarget.muted)}
-        onError={onPosterError}
+        onError={(event) => {
+          setVideoLoadFailed(true);
+          setPlaying(false);
+          onPosterError?.(event);
+        }}
       />
+
+      {videoUnavailable ? (
+        <div className="pointer-events-none absolute inset-0 z-40 grid place-items-center bg-[#111318] text-center text-sm font-black text-white/86">
+          Video unavailable right now.
+        </div>
+      ) : null}
 
       <div className={lightTopChrome
         ? 'pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.10)_0%,rgba(2,6,23,0.04)_24%,rgba(2,6,23,0.05)_48%,rgba(2,6,23,0.82)_100%)]'

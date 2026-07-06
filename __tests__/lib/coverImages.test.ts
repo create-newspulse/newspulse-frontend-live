@@ -56,4 +56,26 @@ describe('coverImages', () => {
 
     expect(resolveCoverImageUrl(article)).toBe('https://res.cloudinary.com/demo/image/upload/fallback-remote.jpg');
   });
+
+  test('skips trashed or deleted media records before using image URLs', () => {
+    const article: any = {
+      _id: 'article-5',
+      coverImage: {
+        status: 'trashed',
+        url: 'https://res.cloudinary.com/demo/image/upload/trashed.jpg',
+      },
+      media: [
+        {
+          status: 'deleted',
+          image: 'https://res.cloudinary.com/demo/image/upload/deleted.jpg',
+        },
+        {
+          status: 'published',
+          image: 'https://res.cloudinary.com/demo/image/upload/active.jpg',
+        },
+      ],
+    };
+
+    expect(resolveCoverImageUrl(article)).toBe('https://res.cloudinary.com/demo/image/upload/active.jpg');
+  });
 });

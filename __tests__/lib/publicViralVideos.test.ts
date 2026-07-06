@@ -50,6 +50,35 @@ describe('publicViralVideos helpers', () => {
     );
   });
 
+  test('ignores trashed or deleted viral video media URLs', () => {
+    const payload = normalizePublicViralVideosPayload({
+      ok: true,
+      settings: { frontendEnabled: true },
+      items: [
+        {
+          id: 'active-video',
+          title: 'Active video with deleted media fallback',
+          status: 'published',
+          media: [
+            {
+              status: 'deleted',
+              thumbnailUrl: 'https://cdn.example.com/deleted-thumb.jpg',
+              videoFileUrl: 'https://cdn.example.com/deleted-video.mp4',
+            },
+            {
+              status: 'published',
+              thumbnailUrl: 'https://cdn.example.com/active-thumb.jpg',
+              videoFileUrl: 'https://cdn.example.com/active-video.mp4',
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(getPublicViralVideoPosterUrl(payload.items[0])).toBe('https://cdn.example.com/active-thumb.jpg');
+    expect(resolvePublicViralVideoPlayback(payload.items[0])).toEqual(expect.objectContaining({ mode: 'direct', directUrl: 'https://cdn.example.com/active-video.mp4' }));
+  });
+
   test('classifies YouTube, direct/cloud video, and social/external URLs', () => {
     expect(getPublicViralVideoKind('https://youtu.be/AbCdEfGhIjK')).toBe('youtube');
     expect(getYouTubeEmbedUrl('https://www.youtube.com/shorts/AbCdEfGhIjK')).toContain('/embed/AbCdEfGhIjK');

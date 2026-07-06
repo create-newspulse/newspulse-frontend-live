@@ -95,6 +95,23 @@ function pickFirstString(...values: unknown[]): string {
   return '';
 }
 
+function isInactiveMediaRecord(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  const status = pickFirstString(value.status, value.mediaStatus, value.state).toLowerCase();
+  return status === 'trashed' || status === 'deleted';
+}
+
+function pickFirstActiveMediaString(...values: unknown[]): string {
+  for (const value of values) {
+    if (isInactiveMediaRecord(value)) continue;
+    const text = isRecord(value)
+      ? pickFirstString(value.url, value.src, value.href, value.videoUrl, value.videoFileUrl, value.fileUrl, value.assetUrl, value.mediaUrl, value.cloudinaryUrl)
+      : pickFirstString(value);
+    if (text) return text;
+  }
+  return '';
+}
+
 function pickFirstBoolean(...values: unknown[]): boolean | undefined {
   for (const value of values) {
     if (typeof value === 'boolean') return value;
@@ -391,10 +408,10 @@ export function normalizePublicViralVideo(raw: unknown): PublicViralVideo | null
   if (!isRecord(raw)) return null;
 
   const video = isRecord(raw.video) ? raw.video : null;
-  const media = Array.isArray(raw.media) ? raw.media.find(isRecord) || null : isRecord(raw.media) ? raw.media : null;
+  const media = Array.isArray(raw.media) ? raw.media.find((item) => isRecord(item) && !isInactiveMediaRecord(item)) || null : isRecord(raw.media) && !isInactiveMediaRecord(raw.media) ? raw.media : null;
   const id = pickFirstString(raw._id, raw.id, raw.uuid, raw.slug);
   const title = pickFirstString(raw.title, raw.headline, raw.name, video?.title);
-  const posterImageUrl = resolvePublicViralVideoMediaUrl(pickFirstString(
+  const posterImageUrl = resolvePublicViralVideoMediaUrl(pickFirstActiveMediaString(
     raw.posterImageUrl,
     raw.posterImage,
     raw.posterUrl,
@@ -406,7 +423,7 @@ export function normalizePublicViralVideo(raw: unknown): PublicViralVideo | null
     media?.posterImage,
     media?.posterUrl
   ));
-  const thumbnailUrl = resolvePublicViralVideoMediaUrl(pickFirstString(
+  const thumbnailUrl = resolvePublicViralVideoMediaUrl(pickFirstActiveMediaString(
     raw.thumbnailUrl,
     raw.thumbnail,
     raw.imageUrl,
@@ -417,7 +434,7 @@ export function normalizePublicViralVideo(raw: unknown): PublicViralVideo | null
     media?.imageUrl,
     media?.image
   ));
-  const videoFileUrl = resolvePublicViralVideoMediaUrl(pickFirstString(
+  const videoFileUrl = resolvePublicViralVideoMediaUrl(pickFirstActiveMediaString(
     raw.videoFileUrl,
     raw.videoFile,
     raw.fileUrl,
@@ -461,7 +478,7 @@ export function normalizePublicViralVideo(raw: unknown): PublicViralVideo | null
     video?.newsUrl,
     video?.articleUrl
   );
-  const sourceUrl = pickFirstString(
+  const sourceUrl = pickFirstActiveMediaString(
     raw.sourceUrl,
     raw.source,
     raw.externalUrl,
@@ -475,7 +492,7 @@ export function normalizePublicViralVideo(raw: unknown): PublicViralVideo | null
     media?.source,
     media?.externalUrl
   );
-  const videoUrl = pickFirstString(
+  const videoUrl = pickFirstActiveMediaString(
     raw.videoUrl,
     raw.url,
     raw.embedUrl,

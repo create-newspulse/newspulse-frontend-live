@@ -58,4 +58,11 @@ describe('PublicViralVideoCard', () => {
     render(<PublicViralVideoCard video={makeVideo({ videoUrl: 'x.com/i/status/2049868222804222122', sourceUrl: '' })} />);
     expect(screen.queryByRole('link', { name: /open source/i })).toBeNull();
   });
+
+  test('shows video unavailable text when playback source is missing', () => {
+    render(<PublicViralVideoCard video={makeVideo({ videoUrl: '', sourceUrl: '', videoFileUrl: '', playbackMode: '', videoType: '', kind: 'unsupported' })} />);
+
+    expect(screen.getByText(/video unavailable/i)).toBeTruthy();
+    expect(screen.queryByRole('link', { name: /open source/i })).toBeNull();
+  });
 });

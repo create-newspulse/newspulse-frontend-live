@@ -14,10 +14,17 @@ function readText(value: unknown): string {
   return String(value || '').trim();
 }
 
+function isInactiveMediaRecord(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const status = readText((value as any).status || (value as any).mediaStatus || (value as any).state).toLowerCase();
+  return status === 'trashed' || status === 'deleted';
+}
+
 function readImageCandidate(value: unknown): string {
   if (!value) return '';
   if (typeof value === 'string') return value.trim();
   if (typeof value === 'object') {
+    if (isInactiveMediaRecord(value)) return '';
     const url = typeof (value as any)?.url === 'string' ? String((value as any).url).trim() : '';
     if (url) return url;
     const src = typeof (value as any)?.src === 'string' ? String((value as any).src).trim() : '';
@@ -68,7 +75,8 @@ function collectPreferredLocalizedImageContainers(article: any, lang?: unknown):
 
 function collectImageCandidates(source: any): unknown[] {
   const media = source?.media;
-  const media0 = Array.isArray(media) ? media[0] : media;
+  const activeMedia = Array.isArray(media) ? media.filter((item) => !isInactiveMediaRecord(item)) : media;
+  const media0 = Array.isArray(activeMedia) ? activeMedia[0] : activeMedia;
 
   return [
     source?.coverImage,
@@ -80,9 +88,9 @@ function collectImageCandidates(source: any): unknown[] {
     source?.featuredImage,
     source?.featuredImageUrl,
     source?.thumbnail,
-    source?.media?.cover,
-    source?.media?.image,
-    source?.media?.thumbnail,
+    !Array.isArray(activeMedia) ? activeMedia?.cover : undefined,
+    !Array.isArray(activeMedia) ? activeMedia?.image : undefined,
+    !Array.isArray(activeMedia) ? activeMedia?.thumbnail : undefined,
     media0?.cover,
     media0?.image,
     media0?.thumbnail,

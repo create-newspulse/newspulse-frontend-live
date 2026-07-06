@@ -20,11 +20,15 @@ function formatDate(value: string): string {
 function DarkVideoFallback({ showIcon = true, title }: { showIcon?: boolean; title: string }) {
   return (
     <div className="absolute inset-0 grid place-items-center bg-[radial-gradient(circle_at_top,rgba(125,211,252,0.16),transparent_24%),radial-gradient(circle_at_bottom,rgba(59,130,246,0.18),transparent_30%),linear-gradient(180deg,#172033_0%,#060b16_100%)]">
-      {showIcon ? (
-        <span className="grid h-14 w-14 place-items-center rounded-full bg-white/18 text-white shadow-[0_18px_36px_-18px_rgba(0,0,0,0.85)] ring-1 ring-white/30 backdrop-blur-md" aria-label={title}>
-          <Play className="ml-0.5 h-6 w-6 fill-current" />
-        </span>
-      ) : null}
+      <div className="grid place-items-center gap-3 text-center">
+        {showIcon ? (
+          <span className="grid h-14 w-14 place-items-center rounded-full bg-white/18 text-white shadow-[0_18px_36px_-18px_rgba(0,0,0,0.85)] ring-1 ring-white/30 backdrop-blur-md" aria-label={title}>
+            <Play className="ml-0.5 h-6 w-6 fill-current" />
+          </span>
+        ) : (
+          <span className="text-sm font-black text-white/86">Video unavailable</span>
+        )}
+      </div>
     </div>
   );
 }
@@ -38,6 +42,7 @@ export default function PublicViralVideoCard({ video, compact = false, lightTopC
   const labels = React.useMemo(() => getViralVideoUiLabels(video.language), [video.language]);
   const isPlayableEmbed = playback.mode === 'youtube' && playback.embedUrl;
   const isHtml5Video = playback.mode === 'direct';
+  const isVideoUnavailable = playback.mode === 'unavailable';
   const sourcePreviewUrl = playback.mode === 'external' ? playback.externalUrl : '';
   const canOpenSourcePreview = Boolean(sourcePreviewUrl);
   const dateLabel = formatDate(video.publishedAt);
@@ -76,7 +81,7 @@ export default function PublicViralVideoCard({ video, compact = false, lightTopC
           />
         ) : (
           <>
-            <DarkVideoFallback showIcon={!isPlayableEmbed} title={video.title} />
+            <DarkVideoFallback showIcon={!isPlayableEmbed && !isVideoUnavailable} title={video.title} />
             {canLoadPoster ? (
               <img
                 src={posterSrc}
