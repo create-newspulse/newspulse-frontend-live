@@ -231,10 +231,58 @@ export default function NewsPulseVideoPlayer({
   };
 
   return (
-    <div className={`relative h-full w-full overflow-hidden bg-slate-950 ${minHeightClassName} ${className}`}>
+    <div className={`portrait-video-card viral-video-player viral-video-card video-player-card video-reel-card relative h-full w-full overflow-hidden rounded-[24px] border-0 bg-[#111318] p-0 shadow-none outline-none ${minHeightClassName} ${className}`}>
+      <style jsx>{`
+        .portrait-video-card,
+        .viral-video-card,
+        .video-player-card {
+          position: relative;
+          border: none !important;
+          outline: none !important;
+          box-shadow: none !important;
+          padding: 0 !important;
+          overflow: hidden !important;
+          border-radius: 24px;
+          background: #111318;
+          isolation: isolate;
+          clip-path: inset(0 round 24px);
+        }
+        .portrait-video-card::before,
+        .portrait-video-card::after,
+        .viral-video-card::before,
+        .viral-video-card::after,
+        .video-player-card::before,
+        .video-player-card::after {
+          border: none !important;
+          outline: none !important;
+          box-shadow: none !important;
+        }
+        .portrait-video-card video,
+        .viral-video-player video,
+        .viral-video-card video,
+        .video-player-card video,
+        .video-reel-card video,
+        .portrait-video-card img,
+        .viral-video-player img,
+        .viral-video-card img,
+        .video-player-card img,
+        .video-reel-card img,
+        .video-media-wrapper {
+          display: block;
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          border: none !important;
+          outline: none !important;
+          box-shadow: none !important;
+          padding: 0 !important;
+          border-radius: inherit;
+          transform: scale(1.01);
+        }
+      `}</style>
       <video
         ref={videoRef}
-        className="h-full w-full cursor-pointer object-cover"
+        className="portrait-video-media video-media-wrapper video-shell video-frame h-full w-full cursor-pointer rounded-[24px] border-0 object-cover outline-none"
         controls={false}
         controlsList="nodownload noplaybackrate noremoteplayback nofullscreen"
         disablePictureInPicture
@@ -263,16 +311,15 @@ export default function NewsPulseVideoPlayer({
       <div className={lightTopChrome
         ? 'pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.10)_0%,rgba(2,6,23,0.04)_24%,rgba(2,6,23,0.05)_48%,rgba(2,6,23,0.82)_100%)]'
         : 'pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.58)_0%,rgba(2,6,23,0.10)_28%,rgba(2,6,23,0.05)_52%,rgba(2,6,23,0.88)_100%)]'} />
-      <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10" />
 
       {!hideTopBranding || hasReadNewsHref ? (
         <div className="absolute inset-x-[18px] top-4 z-30 flex items-start justify-between gap-3">
           {!hideTopBranding ? (
             <>
-              <span className="rounded-full bg-[#2563EB] px-3 py-1 text-xs font-black uppercase tracking-[0.18em] leading-none text-white shadow-[0_10px_24px_rgba(37,99,235,0.35)]">Viral</span>
-              <span className="ml-auto truncate pt-1 text-xs font-black uppercase tracking-[0.18em] leading-none text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.55)]">
+              <span className="truncate pt-1 text-xs font-black uppercase tracking-[0.18em] leading-none text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.55)]">
                 News Pulse
               </span>
+              <span className="ml-auto rounded-full bg-[#2563EB] px-3 py-1 text-xs font-black uppercase tracking-[0.18em] leading-none text-white shadow-[0_10px_24px_rgba(37,99,235,0.35)]">Viral</span>
             </>
           ) : (
             <span className="min-w-0" />

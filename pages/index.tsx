@@ -89,6 +89,7 @@ import {
 const cx = (...c: Array<string | false | null | undefined>) => c.filter(Boolean).join(" ");
 
 const STYLE_STORAGE_KEY = 'np_style';
+const HOME_STORY_CACHE_KEY = 'newspulse-home-cache';
 
 function readSavedStyleId(): string | null {
   if (typeof window === 'undefined') return null;
@@ -105,6 +106,67 @@ function writeSavedStyleId(themeId: string) {
   if (typeof window === 'undefined') return;
   try {
     window.localStorage.setItem(STYLE_STORAGE_KEY, String(themeId || ''));
+  } catch {}
+}
+
+type HomeStoryCache = {
+  lang: UiLangCode;
+  topStory: Article | null;
+  freshStories: any[];
+  timestamp: number;
+};
+
+function normalizeHomeStoryCache(raw: any, lang: UiLangCode): HomeStoryCache | null {
+  if (!raw || typeof raw !== 'object') return null;
+  if (raw.lang && raw.lang !== lang) return null;
+
+  const topStory = raw.topStory && typeof raw.topStory === 'object' ? raw.topStory as Article : null;
+  const freshStories = Array.isArray(raw.freshStories) ? raw.freshStories : [];
+  const timestamp = Number(raw.timestamp);
+
+  if (!topStory && freshStories.length === 0) return null;
+
+  return {
+    lang,
+    topStory,
+    freshStories,
+    timestamp: Number.isFinite(timestamp) ? timestamp : 0,
+  };
+}
+
+function readHomeStoryCache(lang: UiLangCode): HomeStoryCache | null {
+  if (typeof window === 'undefined') return null;
+
+  const stores = [window.localStorage, window.sessionStorage];
+  for (const store of stores) {
+    try {
+      const raw = store.getItem(HOME_STORY_CACHE_KEY);
+      const cache = normalizeHomeStoryCache(raw ? safeJsonParse(raw) : null, lang);
+      if (cache) return cache;
+    } catch {}
+  }
+
+  return null;
+}
+
+function writeHomeStoryCache(lang: UiLangCode, topStory: Article | null, freshStories: any[]) {
+  if (typeof window === 'undefined') return;
+  if (!topStory && (!Array.isArray(freshStories) || freshStories.length === 0)) return;
+
+  const payload = JSON.stringify({
+    lang,
+    topStory,
+    freshStories: Array.isArray(freshStories) ? freshStories : [],
+    timestamp: Date.now(),
+  });
+
+  try {
+    window.localStorage.setItem(HOME_STORY_CACHE_KEY, payload);
+    return;
+  } catch {}
+
+  try {
+    window.sessionStorage.setItem(HOME_STORY_CACHE_KEY, payload);
   } catch {}
 }
 
@@ -499,20 +561,42 @@ function clampNum(n: any, min: number, max: number, fallback: number) {
 type HomePageStaticProps = {
   messages: any;
   initialHomepageSponsoredFeature: HomepageSponsoredFeature | null;
+  initialTopStory: Article | null;
+  initialFreshStories: any[] | null;
 };
 
 export const getStaticProps: GetStaticProps<HomePageStaticProps> = async ({ locale }) => {
   const { getMessages } = await import("../lib/getMessages");
   const { normalizeSponsoredFeatureLang, resolvePublicHomepageSponsoredFeature } = await import("../lib/publicSponsoredFeatureSource");
+  const initialLang = toUiLangCode(locale);
   const sponsoredFeatureResult = await resolvePublicHomepageSponsoredFeature({
     placement: 'homepage',
     lang: normalizeSponsoredFeatureLang(locale),
   });
+  let initialTopStory: Article | null = null;
+  let initialFreshStories: any[] | null = null;
+
+  try {
+    const latestResp = await fetchPublicNews({ language: initialLang, limit: HOME_FRESH_SOURCE_LIMIT });
+    if (!latestResp.error) {
+      const editorialLatestArticles = (Array.isArray(latestResp.items) ? latestResp.items : [])
+        .filter((article) => !isHomepageSponsoredContent(article, initialLang));
+      if (editorialLatestArticles.length > 0) {
+        initialTopStory = editorialLatestArticles[0] || null;
+        initialFreshStories = editorialLatestArticles.map((article) => articleToFeedItem(article as any, initialLang));
+      }
+    }
+  } catch {
+    initialTopStory = null;
+    initialFreshStories = null;
+  }
 
   return {
     props: {
       messages: await getMessages(locale as string),
       initialHomepageSponsoredFeature: normalizeHomepageSponsoredFeatureProps(sponsoredFeatureResult.feature),
+      initialTopStory,
+      initialFreshStories,
     },
   };
 };
@@ -1233,7 +1317,7 @@ function TickerBar({
   return (
     <div className="np-marqueeWrap w-full min-w-0" aria-live="polite">
       <div className="w-full">
-        <div className="w-full rounded-2xl overflow-hidden border" style={{ background: bg, borderColor: theme.border }}>
+        <div className="ticker-row w-full rounded-2xl overflow-hidden border" style={{ background: bg, borderColor: theme.border }}>
           <div className="px-3 py-2">
             <div className="flex items-center gap-3">
               <span
@@ -1245,7 +1329,7 @@ function TickerBar({
               </span>
 
               <div
-                className="relative min-w-0 flex-1 overflow-hidden pr-6"
+                className="ticker-content relative min-w-0 flex-1 overflow-hidden pr-6"
                 style={{
                   WebkitMaskImage: "linear-gradient(to right, black 0%, black 90%, transparent)",
                   maskImage: "linear-gradient(to right, black 0%, black 90%, transparent)",
@@ -1379,9 +1463,9 @@ function TrendingStrip({ theme, onPick }: any) {
   }, []);
 
   return (
-    <div className="mx-auto w-full max-w-[1440px] px-4 md:px-8">
-      <div className="mt-3">
-        <Surface theme={theme} className="px-4 py-3">
+    <div className="home-shell trending-shell">
+      <div className="mt-3 trending-shell-inner">
+        <Surface theme={theme} className="trending-surface px-4 py-3">
           <div className="flex items-center gap-2">
             <span
               className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-extrabold border"
@@ -1542,9 +1626,9 @@ function TopCategoriesStrip({ theme, activeKey, onPick, founderToggles }: any) {
 
   return (
     <div className="w-full">
-      <div className="mx-auto w-full max-w-[1440px] px-4 md:px-8">
+      <div className="home-shell category-nav-shell">
         <div className="rounded-2xl border border-black/10 shadow-sm ring-1 ring-black/5 bg-white/80 backdrop-blur-md">
-          <div className="px-3 py-2">
+          <div className="category-nav-surface px-3 py-2">
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -1641,7 +1725,7 @@ function TopCategoriesStrip({ theme, activeKey, onPick, founderToggles }: any) {
                 const content = (
                   <div
                     className={cx(
-                      "inline-flex items-center gap-2 whitespace-nowrap h-9 rounded-full border px-3 text-xs font-semibold transition-all duration-200 focus-visible:outline-none",
+                      "category-chip inline-flex items-center gap-2 whitespace-nowrap h-9 rounded-full border px-3 text-xs font-semibold transition-all duration-200 focus-visible:outline-none",
                       chipTheme.base,
                       "bg-white/90 border-black/10",
                       "hover:bg-black/[0.02]",
@@ -1649,7 +1733,7 @@ function TopCategoriesStrip({ theme, activeKey, onPick, founderToggles }: any) {
                       active ? "border-black/20 shadow-sm" : null
                     )}
                   >
-                    <span className={cx("grid place-items-center w-7 h-7 rounded-full border bg-white/90 text-slate-700", "border-black/10")}>
+                    <span className={cx("category-chip-icon grid place-items-center w-7 h-7 rounded-full border bg-white/90 text-slate-700", "border-black/10")}>
                       <c.Icon className="h-4 w-4" />
                     </span>
                     {t(labelKeyForCategory(c.key))}
@@ -2317,7 +2401,7 @@ function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
           </div>
 
           <div className="mt-4 flex items-start gap-2">
-            <h1 className="min-w-0 text-[1.82rem] font-extrabold leading-[1.18] tracking-[-0.015em] sm:text-[2.15rem] sm:leading-[1.15] md:text-[2.35rem]" style={{ color: theme.text, ...lineClamp4 }}>
+            <h1 className="top-story-title min-w-0 text-[1.82rem] font-extrabold leading-[1.18] tracking-[-0.015em] sm:text-[2.15rem] sm:leading-[1.15] md:text-[2.35rem]" style={{ color: theme.text, ...lineClamp4 }}>
               {topStoryTitleParts.highlightedHook ? <span style={{ color: topStoryTitleHookColor }}>{topStoryTitleParts.highlightedHook}</span> : null}
               {topStoryTitleParts.remainingTitle ? <span>{` ${topStoryTitleParts.remainingTitle}`}</span> : null}
             </h1>
@@ -3676,6 +3760,7 @@ function ViralVideosRightRailBlock({ theme, lang }: any) {
         const params = new URLSearchParams();
         if (safeLang) params.set('lang', safeLang);
         params.set('limit', '6');
+        params.set('homepage', '1');
         const apiUrl = `/api/public/viral-videos?${params.toString()}`;
         let { response, normalized } = await fetchViralVideos(apiUrl);
 
@@ -3704,7 +3789,10 @@ function ViralVideosRightRailBlock({ theme, lang }: any) {
         }
 
         setFrontendEnabled(true);
-        const homepageItems = normalized.items.filter((video) => video.showOnHomepage && video.globalFrontend !== false).slice(0, 6);
+        const selectedHomepageItems = normalized.items.filter((video) => video.showOnHomepage && video.globalFrontend !== false).slice(0, 6);
+        const homepageItems = selectedHomepageItems.length
+          ? selectedHomepageItems
+          : normalized.items.filter((video) => video.globalFrontend !== false).slice(0, 6);
         if (debugEnabled) {
           const selected = homepageItems[0] || null;
           // eslint-disable-next-line no-console
@@ -3776,21 +3864,24 @@ function ViralVideosRightRailBlock({ theme, lang }: any) {
   if (!resolved || !frontendEnabled || !featuredVideo) return null;
 
   return (
-    <section aria-label={t('categories.viralVideos')} className="relative w-full overflow-hidden rounded-[18px] border p-[5px] shadow-[0_10px_22px_-26px_rgba(15,23,42,0.16)]"
+    <section aria-label={t('categories.viralVideos')} className="video-card-wrapper relative w-full overflow-hidden rounded-[24px] border-0 p-0 shadow-[0_14px_30px_-28px_rgba(15,23,42,0.45)] outline-none"
       style={{
-        borderColor: 'rgba(226,232,240,0.9)',
-        background: '#ffffff',
+        background: 'transparent',
+        border: 'none',
+        outline: 'none',
       }}
     >
       <div className="grid gap-3">
         <div
-            className="group relative block w-full overflow-hidden rounded-[13px] shadow-[0_14px_30px_-28px_rgba(15,23,42,0.45)]"
+            className="video-card group relative block w-full overflow-hidden rounded-[24px] border-0 p-0 shadow-[0_14px_30px_-28px_rgba(15,23,42,0.45)] outline-none"
             style={{
               background: '#0f172a',
+              border: 'none',
+              outline: 'none',
               boxShadow: '0 14px 30px -28px rgba(15,23,42,0.45)',
             }}
           >
-            <div className="relative w-full overflow-hidden aspect-[9/16] min-h-[420px] max-h-[560px]">
+            <div className="video-card-media relative w-full overflow-hidden rounded-[24px] aspect-[9/16] min-h-[420px] max-h-[560px] border-0 outline-none">
               {inlinePlaying ? (
                 <NewsPulseVideoPlayer
                   key={featuredVideo.id}
@@ -3811,13 +3902,12 @@ function ViralVideosRightRailBlock({ theme, lang }: any) {
                   <img
                     src={featuredImage}
                     alt={featuredText}
-                    className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+                    className="block h-full w-full rounded-[24px] border-0 object-cover outline-none transition duration-300 group-hover:scale-[1.02]"
                     loading="lazy"
                     decoding="async"
                     onError={handlePosterError}
                   />
                   <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.34)_0%,rgba(2,6,23,0.08)_30%,rgba(2,6,23,0.08)_50%,rgba(2,6,23,0.82)_100%)]" />
-                  <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-white/10" />
                 </>
               )}
               <div className="absolute inset-x-0 top-0 z-30 flex items-center justify-between gap-2 p-3">
@@ -4245,18 +4335,19 @@ function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
   );
 }
 
-export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomePageStaticProps) {
+export default function UiPreviewV145({ initialHomepageSponsoredFeature, initialTopStory, initialFreshStories }: HomePageStaticProps) {
   const { t, lang, setLang } = useI18n();
   const router = useRouter();
   const { toggles: founderToggles } = usePublicFounderToggles();
   const SAFE_MODE = isSafeMode();
-  const [prefs, setPrefs] = useState<any>(() => {
-    const saved = readSavedStyleId();
-    const valid = saved && THEMES.some((t) => t.id === saved);
-    return normalizePrefs({ ...DEFAULT_PREFS, themeId: valid ? saved : DEFAULT_PREFS.themeId });
-  });
+  const [prefs, setPrefs] = useState<any>(() => normalizePrefs(DEFAULT_PREFS));
   const theme = useMemo(() => getTheme(prefs.themeId), [prefs.themeId]);
   usePublicMode();
+
+  const apiLang = useMemo(() => {
+    const code = toUiLangCode(lang);
+    return (code === 'en' ? 'en' : code === 'hi' ? 'hi' : 'gu') as 'en' | 'hi' | 'gu';
+  }, [lang]);
 
   const setThemeId = React.useCallback((themeId: string) => {
     const next = String(themeId || '').trim().toLowerCase();
@@ -4305,17 +4396,13 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
   } = usePublicSettings();
 
   const effectiveSettings = settings ?? DEFAULT_NORMALIZED_PUBLIC_SETTINGS;
-  const [latestFromBackend, setLatestFromBackend] = useState<any[] | null>(null);
+  const [latestFromBackend, setLatestFromBackend] = useState<any[] | null>(() => initialFreshStories ?? null);
   const [latestRawStories, setLatestRawStories] = useState<Article[] | null>(null);
-  const [topStory, setTopStory] = useState<Article | null>(null);
+  const [topStory, setTopStory] = useState<Article | null>(() => initialTopStory ?? null);
   const [homepageSponsoredFeature, setHomepageSponsoredFeature] = useState<HomepageSponsoredFeature | null>(initialHomepageSponsoredFeature);
   const [homeSectionNews, setHomeSectionNews] = useState<Record<string, Article[]>>({});
   const [homepagePublicRefreshTick, setHomepagePublicRefreshTick] = useState(0);
-
-  const apiLang = useMemo(() => {
-    const code = toUiLangCode(lang);
-    return (code === 'en' ? 'en' : code === 'hi' ? 'hi' : 'gu') as 'en' | 'hi' | 'gu';
-  }, [lang]);
+  const [hydrated, setHydrated] = useState(false);
 
   const broadcastTickers = usePublicBroadcastTicker({
     lang: apiLang,
@@ -4347,6 +4434,17 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
   const youth = useYouthPulse();
 
   React.useEffect(() => {
+    setHydrated(true);
+  }, []);
+
+  React.useEffect(() => {
+    const saved = readSavedStyleId();
+    if (saved && THEMES.some((t) => t.id === saved)) {
+      setPrefs((current: any) => normalizePrefs({ ...current, themeId: saved }));
+    }
+  }, []);
+
+  React.useEffect(() => {
     if (typeof window === 'undefined') return;
 
     return subscribePublicDataRefresh(() => {
@@ -4361,20 +4459,47 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
   }, [lang]);
 
 
+  // Hydrate cached center stories only after React has matched the server HTML.
+  React.useEffect(() => {
+    if (!hydrated) return;
+
+    const cachedHome = readHomeStoryCache(apiLang);
+    if (!cachedHome) return;
+
+    setTopStory((current) => current || cachedHome.topStory || null);
+    setLatestFromBackend((current) => (Array.isArray(current) && current.length > 0) ? current : cachedHome.freshStories);
+  }, [apiLang, hydrated]);
+
+
   // Fetch homepage data (latest) from backend.
   React.useEffect(() => {
+    if (!hydrated) return;
+
     const controller = new AbortController();
     const isBackgroundRefresh = homepagePublicRefreshTick > 0;
+    const cachedHome = readHomeStoryCache(apiLang);
 
     if (!isBackgroundRefresh) {
-      setLatestFromBackend(null);
       setLatestRawStories(null);
     }
 
     (async () => {
-      // Latest news list (homepage)
-      const latestResp = await fetchPublicNews({ language: apiLang, limit: HOME_FRESH_SOURCE_LIMIT, signal: controller.signal });
+      // Latest news drives the center homepage; do not wait for side-channel fetches.
+      const latestPromise = fetchPublicNews({ language: apiLang, limit: HOME_FRESH_SOURCE_LIMIT, signal: controller.signal });
+      const breakingPromise = fetchPublicNews({ category: 'breaking', language: apiLang, limit: 10, signal: controller.signal });
+      breakingPromise.catch(() => null);
+
+      const [latestResult] = await Promise.allSettled([latestPromise]);
       if (controller.signal.aborted) return;
+      const latestResp = latestResult.status === 'fulfilled'
+        ? latestResult.value
+        : {
+            items: [],
+            meta: { limit: HOME_FRESH_SOURCE_LIMIT },
+            endpoint: '',
+            status: undefined,
+            error: latestResult.reason instanceof Error ? latestResult.reason.message : 'fetch failed',
+          };
       const latestArticles = Array.isArray(latestResp.items) ? latestResp.items : [];
       if (process.env.NODE_ENV !== 'production') {
         if (latestResp.error) {
@@ -4393,12 +4518,25 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
           });
         }
       }
+
+      if (latestResp.error && cachedHome) {
+        return;
+      }
+
       const editorialLatestArticles = latestArticles.filter((article) => !isHomepageSponsoredContent(article, apiLang));
-      setTopStory(editorialLatestArticles[0] || null);
+      const nextTopStory = editorialLatestArticles[0] || null;
+      const nextFreshStories = editorialLatestArticles.map((a) => articleToFeedItem(a as any, apiLang));
+
+      setTopStory(nextTopStory);
       setLatestRawStories(editorialLatestArticles);
-      setLatestFromBackend(editorialLatestArticles.map((a) => articleToFeedItem(a as any, apiLang)));
-      const breakingResp = await fetchPublicNews({ category: 'breaking', language: apiLang, limit: 10, signal: controller.signal });
+      setLatestFromBackend(nextFreshStories);
+      writeHomeStoryCache(apiLang, nextTopStory, nextFreshStories);
+
+      const [breakingResult] = await Promise.allSettled([breakingPromise]);
       if (controller.signal.aborted) return;
+      const breakingResp = breakingResult.status === 'fulfilled'
+        ? breakingResult.value
+        : { error: breakingResult.reason instanceof Error ? breakingResult.reason.message : 'fetch failed', endpoint: null, status: null };
       if (process.env.NODE_ENV !== 'production' && breakingResp.error) {
         // eslint-disable-next-line no-console
         console.error('[homepage] breaking news fetch failed', {
@@ -4413,13 +4551,15 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
       void breakingResp;
     })().catch(() => {
       if (controller.signal.aborted) return;
-      setTopStory(null);
-      setLatestRawStories([]);
-      setLatestFromBackend([]);
+      if (!cachedHome) {
+        setTopStory(null);
+        setLatestRawStories([]);
+        setLatestFromBackend([]);
+      }
     });
 
     return () => controller.abort();
-  }, [apiLang, homepagePublicRefreshTick]);
+  }, [apiLang, homepagePublicRefreshTick, hydrated]);
 
   React.useEffect(() => {
     const controller = new AbortController();
@@ -5074,8 +5214,8 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
   const utilityLeftBlocks = sidebarBlocks.filter((b) => b.key !== 'explore');
   const hasSafeLeftRailPlacement = heroLeftBlocks.length > 0;
   const heroGridClass = hasSafeLeftRailPlacement
-    ? 'grid grid-cols-12 items-start gap-4 lg:grid-cols-[370px_minmax(0,1fr)_370px] lg:gap-6'
-    : 'grid grid-cols-12 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_370px] lg:gap-6';
+    ? 'home-grid home-grid--three'
+    : 'home-grid home-grid--two';
   const heroLeftRailAdNode = (
     <div>
       <AdSlot slot="HOME_LEFT_300x600" variant="right300x600" />
@@ -5166,8 +5306,8 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
       enabled: showAnyTicker,
       node: (
         <div className="mt-0 w-full max-w-full">
-          <div className="mx-auto w-full max-w-[1440px] px-4 md:px-8">
-            <div className="rounded-2xl border border-black/10 bg-white/80 backdrop-blur-md shadow-sm ring-1 ring-black/5 overflow-hidden p-2 flex flex-col gap-2">
+          <div className="home-shell">
+            <div className="ticker-wrapper rounded-2xl border border-black/10 bg-white/80 backdrop-blur-md shadow-sm ring-1 ring-black/5 overflow-hidden p-2 flex flex-col gap-2">
               {tickerBlocks.map((b) => (
                 <React.Fragment key={b.key}>{b.node}</React.Fragment>
               ))}
@@ -5193,11 +5333,189 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
           -webkit-box-orient: vertical;
           overflow: hidden;
         }
+        html,
+        body {
+          max-width: 100%;
+          overflow-x: hidden;
+        }
+        .home-shell,
+        .home-container {
+          width: min(calc(100% - 48px), 1480px);
+          margin-left: auto;
+          margin-right: auto;
+          box-sizing: border-box;
+        }
+        .home-grid {
+          display: grid;
+          grid-template-columns: clamp(300px, 24vw, 360px) minmax(560px, 1fr) clamp(300px, 22vw, 340px);
+          gap: 24px;
+          align-items: start;
+          width: 100%;
+          min-width: 0;
+          min-height: 0;
+        }
+        .home-grid-section {
+          margin-bottom: 24px;
+          padding-bottom: 0;
+        }
+        .post-home-grid-ads {
+          margin-top: 24px !important;
+        }
+        .post-home-grid-ads:empty {
+          margin-top: 0 !important;
+          height: 0;
+        }
+        .post-home-grid-ads:empty + .spotlight-section {
+          margin-top: 0 !important;
+        }
+        .spotlight-section {
+          margin-top: 24px !important;
+        }
+        .home-grid--three {
+          grid-template-columns: clamp(300px, 24vw, 360px) minmax(560px, 1fr) clamp(300px, 22vw, 340px);
+        }
+        .home-grid--two {
+          grid-template-columns: minmax(560px, 1fr) clamp(300px, 22vw, 340px);
+        }
+        .home-left,
+        .home-center,
+        .home-right,
+        .top-story-card,
+        .fresh-stories-card {
+          width: 100%;
+          min-width: 0;
+        }
+        .video-card-wrapper,
+        .video-card,
+        .video-card-media,
+        .video-card img,
+        .video-card video {
+          border: none !important;
+          outline: none !important;
+        }
+        .video-card-wrapper,
+        .video-card,
+        .video-card-media {
+          overflow: hidden;
+        }
+        .video-card img,
+        .video-card video {
+          display: block;
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        @media (min-width: 1200px) and (max-width: 1479px) {
+          .home-grid--three {
+            grid-template-columns: clamp(280px, 24vw, 330px) minmax(0, 1fr) clamp(280px, 22vw, 320px);
+            gap: 24px;
+          }
+          .home-grid--two {
+            grid-template-columns: minmax(0, 1fr) clamp(280px, 22vw, 320px);
+            gap: 24px;
+          }
+        }
+        @media (min-width: 1480px) {
+          .home-shell,
+          .home-container {
+            max-width: 1480px;
+          }
+        }
+        @media (max-width: 1280px) {
+          .home-shell,
+          .home-container {
+            width: min(calc(100% - 32px), 100%);
+          }
+        }
+        @media (max-width: 1200px) {
+          .home-shell,
+          .home-container {
+            width: min(calc(100% - 32px), 100%);
+          }
+          .home-grid,
+          .home-grid--three,
+          .home-grid--two {
+            grid-template-columns: 1fr;
+            gap: 20px;
+            min-height: 0;
+          }
+          .home-left { order: 3; }
+          .home-center { order: 1; }
+          .home-right { order: 2; }
+          .home-grid-section {
+            margin-bottom: 20px;
+          }
+          .post-home-grid-ads,
+          .spotlight-section {
+            margin-top: 20px !important;
+          }
+        }
+        @media (min-width: 1201px) {
+          .header-shell {
+            padding-top: 14px;
+          }
+          .header-surface {
+            padding-top: 10px !important;
+            padding-bottom: 10px !important;
+          }
+          .category-nav-shell {
+            margin-top: 10px;
+          }
+          .category-nav-surface {
+            padding-top: 8px !important;
+            padding-bottom: 8px !important;
+          }
+          .category-chip {
+            height: 42px !important;
+            padding-left: 18px !important;
+            padding-right: 18px !important;
+            font-size: 14px !important;
+          }
+          .category-chip-icon {
+            width: 34px !important;
+            height: 34px !important;
+          }
+          .ticker-wrapper {
+            padding-top: 6px !important;
+            padding-bottom: 6px !important;
+            gap: 6px !important;
+          }
+          .ticker-row {
+            width: 100%;
+            max-width: 100%;
+            overflow: hidden;
+          }
+          .ticker-content {
+            min-width: 0;
+            white-space: nowrap;
+          }
+          .trending-shell-inner {
+            margin-top: 10px !important;
+          }
+          .trending-surface {
+            padding-top: 9px !important;
+            padding-bottom: 9px !important;
+          }
+          .home-container {
+            padding-top: 14px !important;
+          }
+          .top-story-title {
+            max-width: 760px;
+            font-size: clamp(32px, 2.15vw, 44px) !important;
+            line-height: 1.08 !important;
+            letter-spacing: -0.03em !important;
+          }
+          .home-left,
+          .home-center,
+          .home-right {
+            order: 0;
+          }
+        }
       `}</style>
 
       {/* TOP HEADER */}
-      <div className="mx-auto w-full max-w-[1440px] px-4 md:px-8 pt-4">
-        <Surface theme={theme} className="p-3">
+      <div className="home-shell header-shell pt-4">
+        <Surface theme={theme} className="header-surface p-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center min-w-0" style={{ gap: 12 }}>
               <IconButton theme={theme} onClick={() => setMobileLeftOpen(true)} label={t('common.menu')}>
@@ -5253,30 +5571,18 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
         <React.Fragment key={b.key}>{b.node}</React.Fragment>
       ))}
 
-      <AdSlot
-        slot="HOME_728x90"
-        variant="homeBanner"
-        className="mx-auto mt-3 mb-4"
-      />
-
-      <AdSlot
-        slot="HOME_BILLBOARD_970x250"
-        variant="billboard970x250"
-        className="mx-auto mt-2 mb-8"
-      />
-
-      {/* TRENDING (below top advertisement) */}
+      {/* TRENDING */}
       {showTrendingStrip ? (
         <TrendingStrip theme={theme} onPick={(t: string) => onToast(`Trending: ${t}`)} />
       ) : null}
 
       {/* HERO ROW */}
-      <div className="mx-auto w-full max-w-[1440px] px-4 md:px-8 pb-10 pt-4">
+      <div className="home-container pb-6 pt-4">
         <div className="relative">
-          <div className="relative grid gap-6">
+          <div className="home-grid-section relative grid gap-6">
             <div className={heroGridClass}>
               {showLeftRail ? (
-                <aside className="col-span-12 min-w-0 order-3 lg:order-1 lg:col-span-1 lg:w-full lg:justify-self-start">
+                <aside className="home-left">
                   <div className="grid gap-4">
                     {leftRailBlocks.map((b) => (
                       <React.Fragment key={b.key}>
@@ -5287,9 +5593,9 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
                 </aside>
               ) : null}
 
-              <main className="col-span-12 min-w-0 order-1 lg:order-2 lg:col-span-1">
+              <main className="home-center">
                 <div className="grid gap-4">
-                  <div id="top-story">
+                  <div id="top-story" className="top-story-card">
                     <FeaturedCard
                       theme={theme}
                       item={{
@@ -5302,15 +5608,31 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
                       isLoading={latestFromBackend == null}
                     />
                   </div>
-                  <CenterStoryFeed theme={theme} items={centerFeedItems} lang={apiLang} />
+                  <div className="fresh-stories-card">
+                    <CenterStoryFeed theme={theme} items={centerFeedItems} lang={apiLang} />
+                  </div>
                 </div>
               </main>
 
-              <aside className="col-span-12 min-w-0 order-2 self-start lg:relative lg:left-auto lg:right-auto lg:order-3 lg:col-span-1 lg:m-0 lg:w-full lg:justify-self-end lg:transform-none">
+              <aside className="home-right self-start">
                 {rightRailNode}
               </aside>
             </div>
           </div>
+        </div>
+
+        <div className="post-home-grid-ads grid gap-4">
+          <AdSlot
+            slot="HOME_728x90"
+            variant="homeBanner"
+            className="mx-auto"
+          />
+
+          <AdSlot
+            slot="HOME_BILLBOARD_970x250"
+            variant="billboard970x250"
+            className="mx-auto"
+          />
         </div>
 
         {homepageSponsoredFeature ? (
@@ -5355,7 +5677,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature }: HomeP
         ) : null}
 
         {spotlightItems.length ? (
-          <div className="mt-8">
+          <div className="spotlight-section">
             <HomeSpotlightCarousel
               theme={theme}
               title="News Pulse Spotlight"

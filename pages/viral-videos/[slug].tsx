@@ -454,8 +454,8 @@ export default function ViralVideoDetailPage({ initialVideo }: Props) {
             <section className="relative flex flex-1 flex-col items-center justify-start pt-0 sm:pt-2">
               <div className="relative flex w-full justify-center lg:min-h-[calc(100vh-5.5rem)]">
                 <div className="mx-auto min-w-0" style={{ width: 'min(100%, clamp(360px, calc(82vh * 9 / 16), 460px))' }}>
-                  <div className="relative overflow-hidden rounded-[22px] border border-white/14 bg-black shadow-[0_42px_96px_-48px_rgba(0,0,0,0.98)]">
-                    <div className="relative aspect-[9/16] w-full overflow-hidden bg-slate-950" style={{ aspectRatio: '9 / 16' }}>
+                  <div className="video-reel-card relative overflow-hidden rounded-[24px] border-0 bg-[#111318] p-0 shadow-none outline-none">
+                    <div className="video-shell video-frame relative aspect-[9/16] w-full overflow-hidden rounded-[24px] border-0 bg-[#111318] outline-none" style={{ aspectRatio: '9 / 16' }}>
                       {playback.mode === 'direct' ? (
                         <NewsPulseVideoPlayer
                           key={video.id}
