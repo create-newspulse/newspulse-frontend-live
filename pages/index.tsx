@@ -3034,7 +3034,10 @@ function FeedList({ theme, items, lang }: any) {
 
 function LiveTVWidget({ theme, liveTvSettings }: { theme: any; liveTvSettings: PublicLiveTvSettings }) {
   const presentation = resolveLiveTvPresentation(liveTvSettings);
-  if (!liveTvSettings?.enabled) return null;
+  const shouldShowFallbackMedia = !liveTvSettings?.enabled || !presentation.playerUrl;
+  const offlineLoopVideoUrl = shouldShowFallbackMedia ? presentation.offlineLoopVideoUrl : '';
+  const offlinePosterImageUrl = shouldShowFallbackMedia ? presentation.offlinePosterImageUrl : '';
+  const fallbackVideoUrl = shouldShowFallbackMedia ? presentation.fallbackVideoUrl : '';
 
   const accentBackground = presentation.highlightBreaking
     ? theme.mode === 'dark'
@@ -3096,6 +3099,40 @@ function LiveTVWidget({ theme, liveTvSettings }: { theme: any; liveTvSettings: P
                 playsInline
                 preload="metadata"
                 src={presentation.playerUrl}
+              />
+            ) : offlineLoopVideoUrl ? (
+              <video
+                className="absolute inset-0 block h-full w-full rounded-none object-cover"
+                autoPlay
+                controls
+                loop
+                muted
+                playsInline
+                poster={offlinePosterImageUrl || undefined}
+                preload="metadata"
+                src={offlineLoopVideoUrl}
+              />
+            ) : offlinePosterImageUrl ? (
+              <img
+                src={offlinePosterImageUrl}
+                alt={presentation.title || 'News Pulse Live TV offline'}
+                className="absolute inset-0 block h-full w-full rounded-none object-cover"
+              />
+            ) : fallbackVideoUrl && presentation.fallbackVideoKind === 'iframe' ? (
+              <iframe
+                title={presentation.title}
+                src={fallbackVideoUrl}
+                className="absolute inset-0 block h-full w-full rounded-none border-0"
+                allow="autoplay; encrypted-media; picture-in-picture"
+                allowFullScreen
+              />
+            ) : fallbackVideoUrl && presentation.fallbackVideoKind === 'video' ? (
+              <video
+                className="absolute inset-0 block h-full w-full rounded-none object-cover"
+                controls
+                playsInline
+                preload="metadata"
+                src={fallbackVideoUrl}
               />
             ) : (
               <div className="absolute inset-0 flex items-center justify-center px-3 py-3 text-center sm:px-4 sm:py-4">
@@ -4726,6 +4763,12 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
   const onToast = (m: string) => setToast(m);
 
   const liveTvEnabled = effectiveSettings.liveTv.enabled === true;
+  const hasLiveTvFallbackMedia = !!(
+    effectiveSettings.liveTv.embedUrl ||
+    effectiveSettings.liveTv.offlineLoopVideoUrl ||
+    effectiveSettings.liveTv.offlinePosterImageUrl ||
+    effectiveSettings.liveTv.fallbackVideoUrl
+  );
   const liveTvEmbedUrl = effectiveSettings.liveTv.embedUrl;
   const inspirationHomepageSectionText = resolveInspirationHubSectionText(effectiveSettings);
   const inspirationHomepageDroneTvSettings = resolveInspirationHubDroneTvSettings(effectiveSettings, 'homepage');
@@ -4750,7 +4793,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
     categoryStrip: showCategoryStrip,
     trending: showTrendingStrip,
     explore: effectiveSettings.modules.explore.enabled === true,
-    liveTvCard: effectiveSettings.modules.liveTvCard.enabled === true && liveTvEnabled,
+    liveTvCard: effectiveSettings.modules.liveTvCard.enabled === true && (liveTvEnabled || hasLiveTvFallbackMedia),
     quickTools: effectiveSettings.modules.quickTools.enabled === true,
     snapshots: effectiveSettings.modules.snapshots.enabled === true,
     appPromo: effectiveSettings.modules.appPromo.enabled === true,
@@ -4778,7 +4821,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
     {
       key: 'liveTvCard',
       order: effectiveSettings.modules.liveTvCard.order,
-      enabled: effectiveSettings.modules.liveTvCard.enabled === true && liveTvEnabled,
+      enabled: effectiveSettings.modules.liveTvCard.enabled === true && (liveTvEnabled || hasLiveTvFallbackMedia),
       node: (
         <LiveTVWidget theme={theme} liveTvSettings={effectiveSettings.liveTv} />
       ),

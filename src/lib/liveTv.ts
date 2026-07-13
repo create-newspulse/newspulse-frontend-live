@@ -57,6 +57,8 @@ export type LiveTvPresentation = {
   playerKind: 'iframe' | 'video' | null;
   offlineLoopVideoUrl: string;
   offlinePosterImageUrl: string;
+  fallbackVideoUrl: string;
+  fallbackVideoKind: 'iframe' | 'video' | null;
   highlightBreaking: boolean;
   showScheduleCard: boolean;
   scheduleLabel: string;
@@ -164,9 +166,15 @@ function normalizePlayableUrl(raw: unknown, provider?: string): string {
   if (!input) return '';
   const providerValue = String(provider || '').toLowerCase();
   if (providerValue.includes('mp4') || providerValue.includes('video') || isDirectVideoUrl(input)) {
-    return sanitizeEmbedUrl(input);
+    return sanitizeMediaUrl(input);
   }
   return toSafeYouTubeEmbedUrl(input) || sanitizeEmbedUrl(input);
+}
+
+export function hasLiveTvOfflineMediaFields(raw: unknown): boolean {
+  const source = unwrapCurrentSource(raw);
+  if (!source) return false;
+  return Object.prototype.hasOwnProperty.call(source, 'offlinePosterImageUrl') || Object.prototype.hasOwnProperty.call(source, 'offlineLoopVideoUrl');
 }
 
 function isYouTubeUrl(raw: unknown): boolean {
@@ -333,25 +341,24 @@ function getCurrentSourcePlayerUrl(source: LiveTvCurrentSource): string {
 
   const embedUrl = normalizePlayableUrl(source.embedUrl, source.provider);
   const currentVideoUrl = normalizePlayableUrl(source.currentVideoUrl, source.provider);
-  const fallbackVideoUrl = normalizePlayableUrl(source.fallbackVideoUrl, source.provider);
 
   switch (source.sourceType) {
     case 'youtube_live':
-      return embedUrl || currentVideoUrl || fallbackVideoUrl;
+      return embedUrl || currentVideoUrl;
     case 'custom_embed':
-      return embedUrl || currentVideoUrl || fallbackVideoUrl;
+      return embedUrl || currentVideoUrl;
     case 'aira_bulletin':
-      return (isYouTubeUrl(source.embedUrl) ? embedUrl : '') || currentVideoUrl || fallbackVideoUrl || embedUrl;
+      return (isYouTubeUrl(source.embedUrl) ? embedUrl : '') || currentVideoUrl || embedUrl;
     case 'offline_replay':
-      return fallbackVideoUrl || currentVideoUrl || embedUrl;
+      return '';
     case 'scheduled_program':
-      return isWithinScheduleWindow(source.startTime, source.endTime) ? currentVideoUrl || embedUrl || fallbackVideoUrl : '';
+      return isWithinScheduleWindow(source.startTime, source.endTime) ? currentVideoUrl || embedUrl : '';
     case 'breaking_bulletin':
-      return currentVideoUrl || embedUrl || fallbackVideoUrl;
+      return currentVideoUrl || embedUrl;
     case 'sponsored_program':
-      return currentVideoUrl || embedUrl || fallbackVideoUrl;
+      return currentVideoUrl || embedUrl;
     default:
-      return embedUrl || currentVideoUrl || fallbackVideoUrl;
+      return embedUrl || currentVideoUrl;
   }
 }
 
@@ -363,6 +370,7 @@ export function resolveLiveTvCurrentSourcePresentation(source: LiveTvCurrentSour
   const playerUrl = getCurrentSourcePlayerUrl(source);
   const offlineLoopVideoUrl = sanitizeMediaUrl(source.offlineLoopVideoUrl);
   const offlinePosterImageUrl = sanitizeMediaUrl(source.offlinePosterImageUrl);
+  const fallbackVideoUrl = normalizePlayableUrl(source.fallbackVideoUrl, source.provider);
   const maintenanceMessage = source.maintenanceMessage || source.message || LIVE_TV_COMING_SOON_MESSAGE;
   const message = !source.enabled
     ? LIVE_TV_OFFLINE_MESSAGE
@@ -384,6 +392,8 @@ export function resolveLiveTvCurrentSourcePresentation(source: LiveTvCurrentSour
     playerKind: getLiveTvPlayerKind(playerUrl, source.provider),
     offlineLoopVideoUrl,
     offlinePosterImageUrl,
+    fallbackVideoUrl,
+    fallbackVideoKind: getLiveTvPlayerKind(fallbackVideoUrl, source.provider),
     highlightBreaking: source.sourceType === 'breaking_bulletin',
     showScheduleCard: source.sourceType === 'scheduled_program' || !!scheduleLabel,
     scheduleLabel,
@@ -419,16 +429,12 @@ export function normalizeLiveTvUpcomingSchedule(raw: unknown): LiveTvScheduleIte
 export function resolveLiveTvPresentation(liveTv: PublicLiveTvSettings | null | undefined): LiveTvPresentation {
   const mode = liveTv?.mode ?? 'news-pulse-live';
   const embedUrl = String(liveTv?.embedUrl || '').trim();
-  const fallbackVideoUrl = String(liveTv?.fallbackVideoUrl || '').trim();
+  const fallbackVideoUrl = toSafeYouTubeEmbedUrl(liveTv?.fallbackVideoUrl || '') || sanitizeMediaUrl(liveTv?.fallbackVideoUrl || '');
   const offlineLoopVideoUrl = sanitizeMediaUrl(liveTv?.offlineLoopVideoUrl || '');
   const offlinePosterImageUrl = sanitizeMediaUrl(liveTv?.offlinePosterImageUrl || '');
 
-  let playerUrl = '';
-  if (mode === 'offline-replay' && fallbackVideoUrl) {
-    playerUrl = fallbackVideoUrl;
-  } else if (embedUrl) {
-    playerUrl = embedUrl;
-  }
+  const hasActiveEmbed = liveTv?.enabled !== false && mode !== 'offline-replay' && mode !== 'maintenance-coming-soon' && !!embedUrl;
+  const playerUrl = hasActiveEmbed ? embedUrl : '';
 
   const title = String(liveTv?.title || '').trim() || 'News Pulse Live TV';
   const subtitle = String(liveTv?.subtitle || '').trim();
@@ -444,6 +450,8 @@ export function resolveLiveTvPresentation(liveTv: PublicLiveTvSettings | null | 
     playerKind: getLiveTvPlayerKind(playerUrl),
     offlineLoopVideoUrl,
     offlinePosterImageUrl,
+    fallbackVideoUrl,
+    fallbackVideoKind: getLiveTvPlayerKind(fallbackVideoUrl),
     highlightBreaking: mode === 'breaking-mode',
     showScheduleCard: mode === 'scheduled-show' && !playerUrl,
     scheduleLabel: '',

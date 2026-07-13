@@ -292,6 +292,12 @@ function normalizeVideoUrl(raw: unknown): string {
   return sanitizeEmbedUrl(raw);
 }
 
+function normalizeVideoOrMediaUrl(raw: unknown): string {
+  const youtubeEmbed = toSafeYouTubeEmbedUrl(raw);
+  if (youtubeEmbed) return youtubeEmbed;
+  return sanitizeMediaUrl(raw);
+}
+
 function normalizeLiveTvSettings(
   raw: unknown,
   fallback: PublicLiveTvSettings,
@@ -331,7 +337,7 @@ function normalizeLiveTvSettings(
     enabled: normalizeEnabled(enabledRaw, fallback.enabled),
     mode: normalizeLiveTvMode(modeRaw, fallback.mode),
     embedUrl: normalizeVideoUrl(embedUrlRaw),
-    fallbackVideoUrl: normalizeVideoUrl(fallbackVideoUrlRaw),
+    fallbackVideoUrl: normalizeVideoOrMediaUrl(fallbackVideoUrlRaw),
     offlineLoopVideoUrl: sanitizeMediaUrl(offlineLoopVideoUrlRaw) || fallback.offlineLoopVideoUrl,
     offlinePosterImageUrl: sanitizeMediaUrl(offlinePosterImageUrlRaw) || fallback.offlinePosterImageUrl,
     title: normalizeTextValue(titleRaw),
@@ -978,6 +984,36 @@ export function normalizePublished(published: unknown): NormalizedPublicSettings
   return normalizePublicSettings({ published });
 }
 
+let warnedMissingLiveTvOfflineMediaFields = false;
+
+function hasPublicLiveTvOfflineMediaFields(raw: unknown): boolean {
+  const root = isRecord(raw) ? (raw as JsonRecord) : null;
+  if (!root) return false;
+
+  const candidates = [
+    getRecord(root, 'liveTv'),
+    getRecord(root, 'settings', 'liveTv'),
+    getRecord(root, 'published', 'liveTv'),
+    getRecord(root, 'published', 'homepage', 'liveTv'),
+    getRecord(root, 'data', 'liveTv'),
+    getRecord(root, 'data', 'settings', 'liveTv'),
+    getRecord(root, 'data', 'published', 'liveTv'),
+  ];
+
+  return candidates.some((candidate) => {
+    if (!candidate) return false;
+    return Object.prototype.hasOwnProperty.call(candidate, 'offlinePosterImageUrl') || Object.prototype.hasOwnProperty.call(candidate, 'offlineLoopVideoUrl');
+  });
+}
+
+function warnIfLiveTvOfflineMediaFieldsMissing(raw: unknown): void {
+  if (process.env.NODE_ENV !== 'development') return;
+  if (warnedMissingLiveTvOfflineMediaFields) return;
+  if (hasPublicLiveTvOfflineMediaFields(raw)) return;
+  warnedMissingLiveTvOfflineMediaFields = true;
+  console.warn('Live TV offline media fields missing from API response.');
+}
+
 async function fetchPublicSettingsBody(options?: { signal?: AbortSignal }): Promise<unknown> {
   // Always use same-origin. Next.js rewrites (and/or the local API route)
   // take care of proxying to the backend.
@@ -1003,6 +1039,8 @@ async function fetchPublicSettingsBody(options?: { signal?: AbortSignal }): Prom
   if (!res.ok || !body) {
     throw new Error(`PUBLIC_SETTINGS_FETCH_FAILED_${res.status || 0}`);
   }
+
+  warnIfLiveTvOfflineMediaFieldsMissing(body);
 
   return body;
 }

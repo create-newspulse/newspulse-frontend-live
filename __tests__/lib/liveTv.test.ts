@@ -4,6 +4,7 @@ import {
   normalizeLiveTvCurrentSource,
   normalizeLiveTvUpcomingSchedule,
   resolveLiveTvCurrentSourcePresentation,
+  resolveLiveTvPresentation,
 } from '../../src/lib/liveTv';
 
 describe('Live TV current source presentation', () => {
@@ -24,7 +25,7 @@ describe('Live TV current source presentation', () => {
     expect(presentation.playerUrl).toBe('https://www.youtube-nocookie.com/embed/AbCdEfGhIjK?rel=0&modestbranding=1&playsinline=1');
   });
 
-  test('uses an HTML5 video player for MP4 replay sources', () => {
+  test('keeps MP4 replay sources as fallback media', () => {
     const source = normalizeLiveTvCurrentSource({
       enabled: true,
       sourceType: 'offline_replay',
@@ -35,8 +36,48 @@ describe('Live TV current source presentation', () => {
     const presentation = resolveLiveTvCurrentSourcePresentation(source!);
 
     expect(presentation.badgeLabel).toBe('REPLAY');
-    expect(presentation.playerKind).toBe('video');
-    expect(presentation.playerUrl).toBe('https://cdn.example.com/replays/latest.mp4');
+    expect(presentation.playerKind).toBeNull();
+    expect(presentation.playerUrl).toBe('');
+    expect(presentation.fallbackVideoKind).toBe('video');
+    expect(presentation.fallbackVideoUrl).toBe('https://cdn.example.com/replays/latest.mp4');
+  });
+
+  test('prefers offline media over fallback replay when there is no active stream', () => {
+    const presentation = resolveLiveTvPresentation({
+      enabled: false,
+      mode: 'offline-replay',
+      embedUrl: 'https://www.youtube.com/watch?v=AbCdEfGhIjK',
+      offlineLoopVideoUrl: 'https://cdn.example.com/live-tv/offline-loop.mp4',
+      offlinePosterImageUrl: 'https://cdn.example.com/live-tv/offline-poster.jpg',
+      fallbackVideoUrl: 'https://youtu.be/ZyXwVuTsRqP',
+      title: '',
+      subtitle: '',
+    });
+
+    expect(presentation.playerUrl).toBe('');
+    expect(presentation.playerKind).toBeNull();
+    expect(presentation.offlineLoopVideoUrl).toBe('https://cdn.example.com/live-tv/offline-loop.mp4');
+    expect(presentation.offlinePosterImageUrl).toBe('https://cdn.example.com/live-tv/offline-poster.jpg');
+    expect(presentation.fallbackVideoUrl).toBe('https://www.youtube-nocookie.com/embed/ZyXwVuTsRqP?rel=0&modestbranding=1&playsinline=1');
+    expect(presentation.fallbackVideoKind).toBe('iframe');
+  });
+
+  test('keeps active YouTube embed as the primary player', () => {
+    const presentation = resolveLiveTvPresentation({
+      enabled: true,
+      mode: 'news-pulse-live',
+      embedUrl: 'https://www.youtube-nocookie.com/embed/AbCdEfGhIjK?rel=0&modestbranding=1&playsinline=1',
+      offlineLoopVideoUrl: 'https://cdn.example.com/live-tv/offline-loop.mp4',
+      offlinePosterImageUrl: 'https://cdn.example.com/live-tv/offline-poster.jpg',
+      fallbackVideoUrl: 'https://cdn.example.com/live-tv/replay.mp4',
+      title: '',
+      subtitle: '',
+    });
+
+    expect(presentation.playerKind).toBe('iframe');
+    expect(presentation.playerUrl).toBe('https://www.youtube-nocookie.com/embed/AbCdEfGhIjK?rel=0&modestbranding=1&playsinline=1');
+    expect(presentation.offlineLoopVideoUrl).toBe('https://cdn.example.com/live-tv/offline-loop.mp4');
+    expect(presentation.fallbackVideoUrl).toBe('https://cdn.example.com/live-tv/replay.mp4');
   });
 
   test('shows offline message when current source is disabled', () => {

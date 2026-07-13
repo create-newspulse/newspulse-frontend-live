@@ -8,11 +8,14 @@ import { DEFAULT_NORMALIZED_PUBLIC_SETTINGS } from '../src/lib/publicSettings';
 import {
   normalizeLiveTvCurrentSource,
   normalizeLiveTvUpcomingSchedule,
+  hasLiveTvOfflineMediaFields,
   resolveLiveTvCurrentSourcePresentation,
   resolveLiveTvPresentation,
   type LiveTvCurrentSource,
   type LiveTvScheduleItem,
 } from '../src/lib/liveTv';
+
+let warnedMissingCurrentSourceOfflineMediaFields = false;
 
 async function fetchCurrentLiveTvSource(signal: AbortSignal): Promise<LiveTvCurrentSource | null> {
   const res = await fetch('/api/live-tv/current-source', {
@@ -28,6 +31,10 @@ async function fetchCurrentLiveTvSource(signal: AbortSignal): Promise<LiveTvCurr
 
   if (!res.ok) return null;
   const body = await res.json().catch(() => null);
+  if (process.env.NODE_ENV === 'development' && body && !warnedMissingCurrentSourceOfflineMediaFields && !hasLiveTvOfflineMediaFields(body)) {
+    warnedMissingCurrentSourceOfflineMediaFields = true;
+    console.warn('Live TV offline media fields missing from API response.');
+  }
   return normalizeLiveTvCurrentSource(body);
 }
 
@@ -85,9 +92,11 @@ export default function LiveTvPage() {
   const settingsPresentation = resolveLiveTvPresentation(liveTv);
   const presentation = currentSource ? resolveLiveTvCurrentSourcePresentation(currentSource) : settingsPresentation;
   const isEnabled = currentSource ? currentSource.enabled : liveTv.enabled;
-  const shouldShowOfflineMedia = !isEnabled || !presentation.playerUrl;
-  const offlineLoopVideoUrl = shouldShowOfflineMedia ? presentation.offlineLoopVideoUrl || settingsPresentation.offlineLoopVideoUrl : '';
-  const offlinePosterImageUrl = shouldShowOfflineMedia ? presentation.offlinePosterImageUrl || settingsPresentation.offlinePosterImageUrl : '';
+  const shouldShowFallbackMedia = !isEnabled || !presentation.playerUrl;
+  const offlineLoopVideoUrl = shouldShowFallbackMedia ? presentation.offlineLoopVideoUrl || settingsPresentation.offlineLoopVideoUrl : '';
+  const offlinePosterImageUrl = shouldShowFallbackMedia ? presentation.offlinePosterImageUrl || settingsPresentation.offlinePosterImageUrl : '';
+  const fallbackVideoUrl = shouldShowFallbackMedia ? presentation.fallbackVideoUrl || settingsPresentation.fallbackVideoUrl : '';
+  const fallbackVideoKind = presentation.fallbackVideoUrl ? presentation.fallbackVideoKind : settingsPresentation.fallbackVideoKind;
   const detailLine = presentation.title && presentation.title !== 'News Pulse Live TV'
     ? presentation.title
     : presentation.modeLabel;
@@ -177,6 +186,22 @@ export default function LiveTvPage() {
                       src={offlinePosterImageUrl}
                       alt={presentation.title || 'News Pulse Live TV offline'}
                       className="absolute inset-0 h-full w-full rounded-[18px] bg-transparent object-cover sm:rounded-[22px] lg:rounded-[24px]"
+                    />
+                  ) : fallbackVideoUrl && fallbackVideoKind === 'iframe' ? (
+                    <iframe
+                      title={presentation.title}
+                      src={fallbackVideoUrl}
+                      className="absolute inset-0 h-full w-full rounded-[18px] border-0 bg-transparent sm:rounded-[22px] lg:rounded-[24px]"
+                      allow="autoplay; encrypted-media; picture-in-picture"
+                      allowFullScreen
+                    />
+                  ) : fallbackVideoUrl && fallbackVideoKind === 'video' ? (
+                    <video
+                      className="absolute inset-0 h-full w-full rounded-[18px] bg-transparent object-cover sm:rounded-[22px] lg:rounded-[24px]"
+                      controls
+                      playsInline
+                      preload="metadata"
+                      src={fallbackVideoUrl}
                     />
                   ) : (
                     <div className="absolute inset-0 flex items-center justify-center px-5 py-6 text-center sm:px-8 sm:py-8 lg:px-10 lg:py-10">
