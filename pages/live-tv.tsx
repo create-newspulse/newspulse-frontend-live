@@ -1,23 +1,93 @@
 import Head from 'next/head';
 import Link from 'next/link';
+import React from 'react';
 import { ChevronLeft, Play, Radio } from 'lucide-react';
 
 import { usePublicSettings } from '../src/context/PublicSettingsContext';
 import { DEFAULT_NORMALIZED_PUBLIC_SETTINGS } from '../src/lib/publicSettings';
-import { resolveLiveTvPresentation } from '../src/lib/liveTv';
+import {
+  normalizeLiveTvCurrentSource,
+  normalizeLiveTvUpcomingSchedule,
+  resolveLiveTvCurrentSourcePresentation,
+  resolveLiveTvPresentation,
+  type LiveTvCurrentSource,
+  type LiveTvScheduleItem,
+} from '../src/lib/liveTv';
 
-function getLiveTvStatusBadge(mode: string): string {
-  if (mode === 'offline-replay' || mode === 'aira-bulletin') return 'REPLAY';
-  if (mode === 'scheduled-show') return 'SCHEDULED';
-  if (mode === 'maintenance-coming-soon') return 'COMING SOON';
-  return 'LIVE';
+async function fetchCurrentLiveTvSource(signal: AbortSignal): Promise<LiveTvCurrentSource | null> {
+  const res = await fetch('/api/live-tv/current-source', {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      'Cache-Control': 'no-store',
+      Pragma: 'no-cache',
+    },
+    cache: 'no-store',
+    signal,
+  });
+
+  if (!res.ok) return null;
+  const body = await res.json().catch(() => null);
+  return normalizeLiveTvCurrentSource(body);
+}
+
+async function fetchUpcomingLiveTvSchedule(signal: AbortSignal): Promise<LiveTvScheduleItem[]> {
+  const res = await fetch('/api/live-tv/schedule/upcoming', {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      'Cache-Control': 'no-store',
+      Pragma: 'no-cache',
+    },
+    cache: 'no-store',
+    signal,
+  });
+
+  if (!res.ok) return [];
+  const body = await res.json().catch(() => null);
+  return normalizeLiveTvUpcomingSchedule(body);
 }
 
 export default function LiveTvPage() {
   const { settings } = usePublicSettings();
+  const [currentSource, setCurrentSource] = React.useState<LiveTvCurrentSource | null>(null);
+  const [scheduleItems, setScheduleItems] = React.useState<LiveTvScheduleItem[]>([]);
+
+  React.useEffect(() => {
+    const controller = new AbortController();
+
+    fetchCurrentLiveTvSource(controller.signal)
+      .then((source) => {
+        if (!controller.signal.aborted) setCurrentSource(source);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setCurrentSource(null);
+      });
+
+    return () => controller.abort();
+  }, []);
+
+  React.useEffect(() => {
+    const controller = new AbortController();
+
+    fetchUpcomingLiveTvSchedule(controller.signal)
+      .then((items) => {
+        if (!controller.signal.aborted) setScheduleItems(items);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setScheduleItems([]);
+      });
+
+    return () => controller.abort();
+  }, []);
+
   const liveTv = settings?.liveTv ?? DEFAULT_NORMALIZED_PUBLIC_SETTINGS.liveTv;
-  const presentation = resolveLiveTvPresentation(liveTv);
-  const statusBadge = getLiveTvStatusBadge(presentation.mode);
+  const settingsPresentation = resolveLiveTvPresentation(liveTv);
+  const presentation = currentSource ? resolveLiveTvCurrentSourcePresentation(currentSource) : settingsPresentation;
+  const isEnabled = currentSource ? currentSource.enabled : liveTv.enabled;
+  const shouldShowOfflineMedia = !isEnabled || !presentation.playerUrl;
+  const offlineLoopVideoUrl = shouldShowOfflineMedia ? presentation.offlineLoopVideoUrl || settingsPresentation.offlineLoopVideoUrl : '';
+  const offlinePosterImageUrl = shouldShowOfflineMedia ? presentation.offlinePosterImageUrl || settingsPresentation.offlinePosterImageUrl : '';
   const detailLine = presentation.title && presentation.title !== 'News Pulse Live TV'
     ? presentation.title
     : presentation.modeLabel;
@@ -61,11 +131,12 @@ export default function LiveTvPage() {
                   <div className="mt-2 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
                     <h1 className="text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">News Pulse Live</h1>
                     <div className={presentation.highlightBreaking ? 'inline-flex items-center gap-2 rounded-full bg-red-700 px-4 py-2 text-xs font-extrabold tracking-[0.18em] text-white shadow-[0_18px_40px_-24px_rgba(185,28,28,0.9)]' : 'inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-2 text-xs font-extrabold tracking-[0.18em] text-white'}>
-                      <Radio className="h-4 w-4" /> {statusBadge}
+                      <Radio className="h-4 w-4" /> {presentation.badgeLabel}
                     </div>
                   </div>
                   <p className="mt-2 max-w-2xl text-sm font-semibold text-slate-700 sm:text-base">{detailLine}</p>
                   {presentation.subtitle ? <p className="mt-1 max-w-2xl text-sm text-slate-600 sm:text-base">{presentation.subtitle}</p> : null}
+                  {presentation.scheduleLabel ? <p className="mt-1 max-w-2xl text-sm text-slate-600 sm:text-base">{presentation.scheduleLabel}</p> : null}
                 </div>
               </div>
             </div>
@@ -73,7 +144,7 @@ export default function LiveTvPage() {
             <div className="p-4 sm:p-6">
               <div className="overflow-hidden rounded-[18px] bg-transparent sm:rounded-[22px] lg:rounded-[24px]">
                 <div className="relative w-full min-h-[220px] overflow-hidden rounded-[18px] bg-black sm:rounded-[22px] md:min-h-[360px] lg:rounded-[24px]" style={{ aspectRatio: '16 / 9' }}>
-                  {liveTv.enabled && presentation.playerKind === 'iframe' ? (
+                  {isEnabled && presentation.playerKind === 'iframe' ? (
                     <iframe
                       title={presentation.title}
                       src={presentation.playerUrl}
@@ -81,13 +152,31 @@ export default function LiveTvPage() {
                       allow="autoplay; encrypted-media; picture-in-picture"
                       allowFullScreen
                     />
-                  ) : liveTv.enabled && presentation.playerKind === 'video' ? (
+                  ) : isEnabled && presentation.playerKind === 'video' ? (
                     <video
                       className="absolute inset-0 h-full w-full rounded-[18px] bg-transparent object-cover sm:rounded-[22px] lg:rounded-[24px]"
                       controls
                       playsInline
                       preload="metadata"
                       src={presentation.playerUrl}
+                    />
+                  ) : offlineLoopVideoUrl ? (
+                    <video
+                      className="absolute inset-0 h-full w-full rounded-[18px] bg-transparent object-cover sm:rounded-[22px] lg:rounded-[24px]"
+                      autoPlay
+                      controls
+                      loop
+                      muted
+                      playsInline
+                      poster={offlinePosterImageUrl || undefined}
+                      preload="metadata"
+                      src={offlineLoopVideoUrl}
+                    />
+                  ) : offlinePosterImageUrl ? (
+                    <img
+                      src={offlinePosterImageUrl}
+                      alt={presentation.title || 'News Pulse Live TV offline'}
+                      className="absolute inset-0 h-full w-full rounded-[18px] bg-transparent object-cover sm:rounded-[22px] lg:rounded-[24px]"
                     />
                   ) : (
                     <div className="absolute inset-0 flex items-center justify-center px-5 py-6 text-center sm:px-8 sm:py-8 lg:px-10 lg:py-10">
@@ -97,6 +186,7 @@ export default function LiveTvPage() {
                           <>
                             <div className="mt-4 text-2xl font-black tracking-tight text-white sm:text-3xl">{presentation.title}</div>
                             {presentation.subtitle ? <div className="mt-2 text-sm text-white/72 sm:text-base">{presentation.subtitle}</div> : null}
+                            {presentation.scheduleLabel ? <div className="mt-2 text-sm text-white/72 sm:text-base">{presentation.scheduleLabel}</div> : null}
                           </>
                         ) : null}
                         <div className="mt-4 text-sm font-semibold text-white/86 sm:text-base">{presentation.message}</div>
@@ -110,8 +200,31 @@ export default function LiveTvPage() {
                 <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700">
                   <Play className="h-4 w-4" /> {presentation.modeLabel}
                 </div>
-                {!liveTv.enabled ? <div className="text-sm text-slate-600">{presentation.message}</div> : null}
+                {!isEnabled || (!presentation.playerUrl && presentation.message) ? <div className="text-sm text-slate-600">{presentation.message}</div> : null}
               </div>
+
+              {scheduleItems.length ? (
+                <div className="mt-6 border-t border-slate-200 pt-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <h2 className="text-base font-black tracking-tight text-slate-950">Upcoming Schedule</h2>
+                    <div className="text-xs font-extrabold uppercase tracking-[0.16em] text-slate-500">Live TV</div>
+                  </div>
+                  <div className="mt-3 divide-y divide-slate-100 rounded-[18px] bg-slate-50/80">
+                    {scheduleItems.map((item, index) => (
+                      <div key={`${item.time}-${item.title}-${index}`} className="grid gap-2 px-4 py-3 sm:grid-cols-[minmax(120px,0.7fr)_minmax(0,1.6fr)_auto] sm:items-center">
+                        <div className="text-sm font-bold text-slate-700">{item.time || 'TBA'}</div>
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-extrabold text-slate-950">{item.title}</div>
+                          <div className="mt-0.5 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{item.type.replace(/_/g, ' ')}</div>
+                        </div>
+                        <div className={item.type === 'breaking_bulletin' ? 'inline-flex w-fit items-center rounded-full bg-red-700 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.14em] text-white sm:justify-self-end' : 'inline-flex w-fit items-center rounded-full bg-slate-950 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.14em] text-white sm:justify-self-end'}>
+                          {item.label}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </section>
         </div>

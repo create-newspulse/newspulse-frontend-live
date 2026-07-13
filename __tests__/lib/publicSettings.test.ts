@@ -160,6 +160,8 @@ describe('publicSettings helpers', () => {
           title: 'Prime Time Bulletin',
           subtitle: 'Next show at 8:00 PM',
           fallbackVideoUrl: 'https://cdn.example.com/replay.mp4',
+          offlineLoopVideoUrl: 'https://cdn.example.com/offline-loop.mp4',
+          offlinePosterImageUrl: 'https://cdn.example.com/offline-poster.jpg',
         },
       },
     });
@@ -169,6 +171,20 @@ describe('publicSettings helpers', () => {
     expect(settings.liveTv.title).toBe('Prime Time Bulletin');
     expect(settings.liveTv.subtitle).toBe('Next show at 8:00 PM');
     expect(settings.liveTv.fallbackVideoUrl).toBe('https://cdn.example.com/replay.mp4');
+    expect(settings.liveTv.offlineLoopVideoUrl).toBe('https://cdn.example.com/offline-loop.mp4');
+    expect(settings.liveTv.offlinePosterImageUrl).toBe('https://cdn.example.com/offline-poster.jpg');
+  });
+
+  test('normalizePublicSettings accepts flat Live TV offline media aliases', () => {
+    const settings = normalizePublicSettings({
+      published: {
+        liveTvOfflineLoopUrl: 'uploads/live-tv/loop.webm',
+        liveTvPosterImageUrl: '/uploads/live-tv/poster.png',
+      },
+    });
+
+    expect(settings.liveTv.offlineLoopVideoUrl).toBe('/uploads/live-tv/loop.webm');
+    expect(settings.liveTv.offlinePosterImageUrl).toBe('/uploads/live-tv/poster.png');
   });
 
   test('normalizePublicSettings converts YouTube URLs for Live TV embed and replay sources', () => {

@@ -45,6 +45,8 @@ export type PublicLiveTvSettings = {
   mode: LiveTvMode;
   embedUrl: string;
   fallbackVideoUrl: string;
+  offlineLoopVideoUrl: string;
+  offlinePosterImageUrl: string;
   title: string;
   subtitle: string;
 };
@@ -168,6 +170,8 @@ export const DEFAULT_PUBLIC_SETTINGS: PublicSettings = {
     mode: 'news-pulse-live',
     embedUrl: '',
     fallbackVideoUrl: '',
+    offlineLoopVideoUrl: '',
+    offlinePosterImageUrl: '',
     title: '',
     subtitle: '',
   },
@@ -201,6 +205,8 @@ export const DEFAULT_NORMALIZED_PUBLIC_SETTINGS: NormalizedPublicSettings = {
     mode: 'news-pulse-live',
     embedUrl: '',
     fallbackVideoUrl: '',
+    offlineLoopVideoUrl: '',
+    offlinePosterImageUrl: '',
     title: '',
     subtitle: '',
   },
@@ -308,6 +314,12 @@ function normalizeLiveTvSettings(
   const fallbackVideoUrlRaw =
     getFirstKnownValue(liveTv, ['fallbackVideoUrl', 'fallbackUrl', 'replayUrl', 'offlineReplayUrl', 'videoUrl']) ??
     getFirstKnownValue(root, ['liveTvFallbackVideoUrl', 'liveTvFallbackUrl', 'liveTvReplayUrl']);
+  const offlineLoopVideoUrlRaw =
+    getFirstKnownValue(liveTv, ['offlineLoopVideoUrl', 'offlineLoopUrl', 'loopVideoUrl', 'offlineVideoLoopUrl', 'holdingLoopVideoUrl']) ??
+    getFirstKnownValue(root, ['liveTvOfflineLoopVideoUrl', 'liveTvOfflineLoopUrl', 'liveTvLoopVideoUrl']);
+  const offlinePosterImageUrlRaw =
+    getFirstKnownValue(liveTv, ['offlinePosterImageUrl', 'offlinePosterUrl', 'posterImageUrl', 'posterUrl', 'offlineImageUrl', 'holdingImageUrl']) ??
+    getFirstKnownValue(root, ['liveTvOfflinePosterImageUrl', 'liveTvOfflinePosterUrl', 'liveTvPosterImageUrl']);
   const titleRaw =
     getFirstKnownValue(liveTv, ['title', 'heading', 'nextShowTitle', 'scheduledTitle']) ??
     getFirstKnownValue(root, ['liveTvTitle', 'scheduledShowTitle']);
@@ -320,6 +332,8 @@ function normalizeLiveTvSettings(
     mode: normalizeLiveTvMode(modeRaw, fallback.mode),
     embedUrl: normalizeVideoUrl(embedUrlRaw),
     fallbackVideoUrl: normalizeVideoUrl(fallbackVideoUrlRaw),
+    offlineLoopVideoUrl: sanitizeMediaUrl(offlineLoopVideoUrlRaw) || fallback.offlineLoopVideoUrl,
+    offlinePosterImageUrl: sanitizeMediaUrl(offlinePosterImageUrlRaw) || fallback.offlinePosterImageUrl,
     title: normalizeTextValue(titleRaw),
     subtitle: normalizeTextValue(subtitleRaw),
   };
@@ -782,6 +796,16 @@ export function sanitizeEmbedUrl(raw: unknown): string {
   } catch {
     return '';
   }
+}
+
+export function sanitizeMediaUrl(raw: unknown): string {
+  if (typeof raw !== 'string') return '';
+  const s = raw.trim();
+  if (!s || /[\u0000-\u001f\u007f]/.test(s) || s.includes('\\')) return '';
+  if (s.startsWith('//')) return '';
+  if (s.startsWith('/')) return s;
+  if (/^uploads\//i.test(s)) return `/${s}`;
+  return sanitizeEmbedUrl(s);
 }
 
 function getRecord(root: unknown, ...path: Array<string>): JsonRecord | null {

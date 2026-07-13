@@ -163,6 +163,14 @@ function mapSiteSettingsToPublicSettingsResponse(raw: unknown): PublicSettingsRe
       (liveTvRaw ? firstString(liveTvRaw, ['fallbackVideoUrl', 'fallbackUrl', 'replayUrl', 'offlineReplayUrl', 'videoUrl']) : undefined) ??
       firstString(settings, ['liveTvFallbackVideoUrl', 'liveTvFallbackUrl', 'liveTvReplayUrl']) ??
       out.settings.liveTv.fallbackVideoUrl,
+    offlineLoopVideoUrl:
+      (liveTvRaw ? firstString(liveTvRaw, ['offlineLoopVideoUrl', 'offlineLoopUrl', 'loopVideoUrl', 'offlineVideoLoopUrl', 'holdingLoopVideoUrl']) : undefined) ??
+      firstString(settings, ['liveTvOfflineLoopVideoUrl', 'liveTvOfflineLoopUrl', 'liveTvLoopVideoUrl']) ??
+      out.settings.liveTv.offlineLoopVideoUrl,
+    offlinePosterImageUrl:
+      (liveTvRaw ? firstString(liveTvRaw, ['offlinePosterImageUrl', 'offlinePosterUrl', 'posterImageUrl', 'posterUrl', 'offlineImageUrl', 'holdingImageUrl']) : undefined) ??
+      firstString(settings, ['liveTvOfflinePosterImageUrl', 'liveTvOfflinePosterUrl', 'liveTvPosterImageUrl']) ??
+      out.settings.liveTv.offlinePosterImageUrl,
     title:
       (liveTvRaw ? firstString(liveTvRaw, ['title', 'heading', 'nextShowTitle', 'scheduledTitle']) : undefined) ??
       firstString(settings, ['liveTvTitle', 'scheduledShowTitle']) ??
