@@ -256,6 +256,21 @@ export function getLiveTvPlayerKind(url: string, provider?: string): 'iframe' | 
   return providerValue.includes('mp4') || providerValue.includes('video') || isDirectVideoUrl(safeUrl) ? 'video' : 'iframe';
 }
 
+export function getLiveTvDisplayBadgeLabel(
+  presentation: Pick<LiveTvPresentation, 'badgeLabel' | 'playerUrl' | 'offlineLoopVideoUrl' | 'offlinePosterImageUrl' | 'fallbackVideoUrl'>,
+  media?: { offlineLoopVideoUrl?: string; offlinePosterImageUrl?: string; fallbackVideoUrl?: string }
+): string {
+  if (presentation.playerUrl) return presentation.badgeLabel;
+
+  const offlineLoopVideoUrl = media?.offlineLoopVideoUrl ?? presentation.offlineLoopVideoUrl;
+  const offlinePosterImageUrl = media?.offlinePosterImageUrl ?? presentation.offlinePosterImageUrl;
+  const fallbackVideoUrl = media?.fallbackVideoUrl ?? presentation.fallbackVideoUrl;
+
+  if (offlineLoopVideoUrl || offlinePosterImageUrl) return 'OFFLINE';
+  if (fallbackVideoUrl) return 'REPLAY';
+  return presentation.badgeLabel === 'LIVE' ? 'COMING SOON' : presentation.badgeLabel;
+}
+
 export function normalizeLiveTvCurrentSource(raw: unknown): LiveTvCurrentSource | null {
   const source = unwrapCurrentSource(raw);
   if (!source) return null;

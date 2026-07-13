@@ -985,29 +985,41 @@ export function normalizePublished(published: unknown): NormalizedPublicSettings
 }
 
 let warnedMissingLiveTvOfflineMediaFields = false;
+let loggedLiveTvSettingsResponse = false;
 
-function hasPublicLiveTvOfflineMediaFields(raw: unknown): boolean {
+function getPublicLiveTvPayload(raw: unknown): JsonRecord | null {
   const root = isRecord(raw) ? (raw as JsonRecord) : null;
-  if (!root) return false;
+  if (!root) return null;
 
-  const candidates = [
-    getRecord(root, 'liveTv'),
-    getRecord(root, 'settings', 'liveTv'),
-    getRecord(root, 'published', 'liveTv'),
-    getRecord(root, 'published', 'homepage', 'liveTv'),
-    getRecord(root, 'data', 'liveTv'),
-    getRecord(root, 'data', 'settings', 'liveTv'),
-    getRecord(root, 'data', 'published', 'liveTv'),
-  ];
-
-  return candidates.some((candidate) => {
-    if (!candidate) return false;
-    return Object.prototype.hasOwnProperty.call(candidate, 'offlinePosterImageUrl') || Object.prototype.hasOwnProperty.call(candidate, 'offlineLoopVideoUrl');
-  });
+  return (
+    getRecord(root, 'liveTv') ??
+    getRecord(root, 'settings', 'liveTv') ??
+    getRecord(root, 'published', 'liveTv') ??
+    getRecord(root, 'published', 'homepage', 'liveTv') ??
+    getRecord(root, 'data', 'liveTv') ??
+    getRecord(root, 'data', 'settings', 'liveTv') ??
+    getRecord(root, 'data', 'published', 'liveTv') ??
+    null
+  );
 }
 
-function warnIfLiveTvOfflineMediaFieldsMissing(raw: unknown): void {
+function hasPublicLiveTvOfflineMediaFields(raw: unknown): boolean {
+  const liveTv = getPublicLiveTvPayload(raw);
+  if (!liveTv) return false;
+  return Object.prototype.hasOwnProperty.call(liveTv, 'offlinePosterImageUrl') || Object.prototype.hasOwnProperty.call(liveTv, 'offlineLoopVideoUrl');
+}
+
+function debugLiveTvSettingsResponse(raw: unknown): void {
   if (process.env.NODE_ENV !== 'development') return;
+  const liveTv = getPublicLiveTvPayload(raw);
+  if (!loggedLiveTvSettingsResponse) {
+    loggedLiveTvSettingsResponse = true;
+    console.debug('[LiveTV] public settings response', {
+      liveTv,
+      offlinePosterImageUrl: (liveTv as any)?.offlinePosterImageUrl,
+      offlineLoopVideoUrl: (liveTv as any)?.offlineLoopVideoUrl,
+    });
+  }
   if (warnedMissingLiveTvOfflineMediaFields) return;
   if (hasPublicLiveTvOfflineMediaFields(raw)) return;
   warnedMissingLiveTvOfflineMediaFields = true;
@@ -1040,7 +1052,7 @@ async function fetchPublicSettingsBody(options?: { signal?: AbortSignal }): Prom
     throw new Error(`PUBLIC_SETTINGS_FETCH_FAILED_${res.status || 0}`);
   }
 
-  warnIfLiveTvOfflineMediaFieldsMissing(body);
+  debugLiveTvSettingsResponse(body);
 
   return body;
 }

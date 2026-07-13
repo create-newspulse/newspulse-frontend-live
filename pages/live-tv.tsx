@@ -9,6 +9,7 @@ import {
   normalizeLiveTvCurrentSource,
   normalizeLiveTvUpcomingSchedule,
   hasLiveTvOfflineMediaFields,
+  getLiveTvDisplayBadgeLabel,
   resolveLiveTvCurrentSourcePresentation,
   resolveLiveTvPresentation,
   type LiveTvCurrentSource,
@@ -16,6 +17,7 @@ import {
 } from '../src/lib/liveTv';
 
 let warnedMissingCurrentSourceOfflineMediaFields = false;
+let loggedCurrentSourceResponse = false;
 
 async function fetchCurrentLiveTvSource(signal: AbortSignal): Promise<LiveTvCurrentSource | null> {
   const res = await fetch('/api/live-tv/current-source', {
@@ -31,9 +33,21 @@ async function fetchCurrentLiveTvSource(signal: AbortSignal): Promise<LiveTvCurr
 
   if (!res.ok) return null;
   const body = await res.json().catch(() => null);
-  if (process.env.NODE_ENV === 'development' && body && !warnedMissingCurrentSourceOfflineMediaFields && !hasLiveTvOfflineMediaFields(body)) {
-    warnedMissingCurrentSourceOfflineMediaFields = true;
-    console.warn('Live TV offline media fields missing from API response.');
+  if (process.env.NODE_ENV === 'development' && body) {
+    const source = normalizeLiveTvCurrentSource(body);
+    if (!loggedCurrentSourceResponse) {
+      loggedCurrentSourceResponse = true;
+      console.debug('[LiveTV] current source response', {
+        source,
+        offlinePosterImageUrl: source?.offlinePosterImageUrl,
+        offlineLoopVideoUrl: source?.offlineLoopVideoUrl,
+      });
+    }
+    if (!warnedMissingCurrentSourceOfflineMediaFields && !hasLiveTvOfflineMediaFields(body)) {
+      warnedMissingCurrentSourceOfflineMediaFields = true;
+      console.warn('Live TV offline media fields missing from API response.');
+    }
+    return source;
   }
   return normalizeLiveTvCurrentSource(body);
 }
@@ -97,6 +111,7 @@ export default function LiveTvPage() {
   const offlinePosterImageUrl = shouldShowFallbackMedia ? presentation.offlinePosterImageUrl || settingsPresentation.offlinePosterImageUrl : '';
   const fallbackVideoUrl = shouldShowFallbackMedia ? presentation.fallbackVideoUrl || settingsPresentation.fallbackVideoUrl : '';
   const fallbackVideoKind = presentation.fallbackVideoUrl ? presentation.fallbackVideoKind : settingsPresentation.fallbackVideoKind;
+  const displayBadgeLabel = getLiveTvDisplayBadgeLabel(presentation, { offlineLoopVideoUrl, offlinePosterImageUrl, fallbackVideoUrl });
   const detailLine = presentation.title && presentation.title !== 'News Pulse Live TV'
     ? presentation.title
     : presentation.modeLabel;
@@ -140,7 +155,7 @@ export default function LiveTvPage() {
                   <div className="mt-2 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
                     <h1 className="text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">News Pulse Live</h1>
                     <div className={presentation.highlightBreaking ? 'inline-flex items-center gap-2 rounded-full bg-red-700 px-4 py-2 text-xs font-extrabold tracking-[0.18em] text-white shadow-[0_18px_40px_-24px_rgba(185,28,28,0.9)]' : 'inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-2 text-xs font-extrabold tracking-[0.18em] text-white'}>
-                      <Radio className="h-4 w-4" /> {presentation.badgeLabel}
+                      <Radio className="h-4 w-4" /> {displayBadgeLabel}
                     </div>
                   </div>
                   <p className="mt-2 max-w-2xl text-sm font-semibold text-slate-700 sm:text-base">{detailLine}</p>

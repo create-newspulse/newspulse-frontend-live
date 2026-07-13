@@ -40,7 +40,7 @@ import type { GetStaticProps } from "next";
 import { AnimatePresence, motion } from "framer-motion";
 import { useI18n } from "../src/i18n/LanguageProvider";
 import { resolveInspirationHubDroneTvSettings, resolveInspirationHubSectionText } from "../src/lib/inspirationHubSettings";
-import { resolveLiveTvPresentation } from "../src/lib/liveTv";
+import { getLiveTvDisplayBadgeLabel, resolveLiveTvPresentation } from "../src/lib/liveTv";
 import { usePublicFounderToggles } from "../hooks/usePublicFounderToggles";
 import { DEFAULT_PUBLIC_FOUNDER_TOGGLES, type PublicFounderToggles } from "../lib/publicFounderToggles";
 import { subscribePublicDataRefresh } from "../lib/publicDataRefresh";
@@ -3038,6 +3038,7 @@ function LiveTVWidget({ theme, liveTvSettings }: { theme: any; liveTvSettings: P
   const offlineLoopVideoUrl = shouldShowFallbackMedia ? presentation.offlineLoopVideoUrl : '';
   const offlinePosterImageUrl = shouldShowFallbackMedia ? presentation.offlinePosterImageUrl : '';
   const fallbackVideoUrl = shouldShowFallbackMedia ? presentation.fallbackVideoUrl : '';
+  const displayBadgeLabel = getLiveTvDisplayBadgeLabel(presentation, { offlineLoopVideoUrl, offlinePosterImageUrl, fallbackVideoUrl });
 
   const accentBackground = presentation.highlightBreaking
     ? theme.mode === 'dark'
@@ -3076,7 +3077,7 @@ function LiveTVWidget({ theme, liveTvSettings }: { theme: any; liveTvSettings: P
               boxShadow: presentation.highlightBreaking ? '0 10px 30px -18px rgba(185,28,28,0.95)' : undefined,
             }}
           >
-            {presentation.badgeLabel}
+            {displayBadgeLabel}
           </span>
         </div>
       </div>
