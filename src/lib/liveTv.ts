@@ -68,6 +68,10 @@ function isDirectVideoUrl(url: string): boolean {
   return /\.(mp4|webm|ogg|m3u8)(?:$|[?#])/i.test(url);
 }
 
+function isImageUrl(url: string): boolean {
+  return /\.(avif|gif|jpe?g|png|svg|webp)(?:$|[?#])/i.test(url);
+}
+
 function isRecord(v: unknown): v is Record<string, unknown> {
   return !!v && typeof v === 'object' && !Array.isArray(v);
 }
@@ -164,6 +168,7 @@ function unwrapScheduleItems(raw: unknown): unknown[] {
 function normalizePlayableUrl(raw: unknown, provider?: string): string {
   const input = cleanString(raw);
   if (!input) return '';
+  if (isImageUrl(input)) return '';
   const providerValue = String(provider || '').toLowerCase();
   if (providerValue.includes('mp4') || providerValue.includes('video') || isDirectVideoUrl(input)) {
     return sanitizeMediaUrl(input);
@@ -252,6 +257,7 @@ function getLiveTvBadgeLabel(mode: LiveTvMode): string {
 export function getLiveTvPlayerKind(url: string, provider?: string): 'iframe' | 'video' | null {
   const safeUrl = String(url || '').trim();
   if (!safeUrl) return null;
+  if (isImageUrl(safeUrl)) return null;
   const providerValue = String(provider || '').toLowerCase();
   return providerValue.includes('mp4') || providerValue.includes('video') || isDirectVideoUrl(safeUrl) ? 'video' : 'iframe';
 }
@@ -448,7 +454,7 @@ export function resolveLiveTvPresentation(liveTv: PublicLiveTvSettings | null | 
   const offlineLoopVideoUrl = sanitizeMediaUrl(liveTv?.offlineLoopVideoUrl || '');
   const offlinePosterImageUrl = sanitizeMediaUrl(liveTv?.offlinePosterImageUrl || '');
 
-  const hasActiveEmbed = liveTv?.enabled !== false && mode !== 'offline-replay' && mode !== 'maintenance-coming-soon' && !!embedUrl;
+  const hasActiveEmbed = liveTv?.enabled !== false && mode !== 'offline-replay' && mode !== 'maintenance-coming-soon' && !!embedUrl && !isImageUrl(embedUrl);
   const playerUrl = hasActiveEmbed ? embedUrl : '';
 
   const title = String(liveTv?.title || '').trim() || 'News Pulse Live TV';

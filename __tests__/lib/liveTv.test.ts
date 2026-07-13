@@ -81,6 +81,24 @@ describe('Live TV current source presentation', () => {
     expect(presentation.fallbackVideoUrl).toBe('https://cdn.example.com/live-tv/replay.mp4');
   });
 
+  test('does not treat image URLs as iframe players', () => {
+    const presentation = resolveLiveTvPresentation({
+      enabled: true,
+      mode: 'news-pulse-live',
+      embedUrl: 'https://cdn.example.com/live-tv/offline-poster.jpg',
+      offlineLoopVideoUrl: '',
+      offlinePosterImageUrl: 'https://cdn.example.com/live-tv/offline-poster.jpg',
+      fallbackVideoUrl: 'https://cdn.example.com/live-tv/replay-poster.png',
+      title: '',
+      subtitle: '',
+    });
+
+    expect(presentation.playerUrl).toBe('');
+    expect(presentation.playerKind).toBeNull();
+    expect(presentation.offlinePosterImageUrl).toBe('https://cdn.example.com/live-tv/offline-poster.jpg');
+    expect(presentation.fallbackVideoKind).toBeNull();
+  });
+
   test('uses non-live badges for offline and fallback media', () => {
     const offline = resolveLiveTvPresentation({
       enabled: false,

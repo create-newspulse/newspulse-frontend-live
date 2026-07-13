@@ -36,6 +36,7 @@ describe('LiveTvOfflineSequence', () => {
     );
 
     expect(container.querySelector('img')?.getAttribute('src')).toBe('/uploads/live-tv/poster.jpg');
+    expect(container.querySelector('img')?.getAttribute('alt')).toBe('News Pulse Live TV offline poster');
     expect(container.querySelector('video')).toBeNull();
 
     act(() => {

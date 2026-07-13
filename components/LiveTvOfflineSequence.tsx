@@ -86,7 +86,7 @@ export default function LiveTvOfflineSequence({
     return (
       <img
         src={posterUrl}
-        alt={title || 'News Pulse Live TV offline'}
+        alt="News Pulse Live TV offline poster"
         className={mediaClassName}
       />
     );
