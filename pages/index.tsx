@@ -34,6 +34,7 @@ import { getStoryTitleHookColor, splitStoryTitleHook } from "../lib/storyTitleHo
 import StoryImage, { TopStoryImage } from "../src/components/story/StoryImage";
 import { getTickerMarqueeText, mergeTickerItemsWithAds, type TickerMarqueeItem } from "../lib/publicTickerAds";
 import InspirationHubHomepageSection from "../components/home/InspirationHubHomepageSection";
+import LiveTvOfflineSequence from "../components/LiveTvOfflineSequence";
 import NewsPulseVideoPlayer, { getViralVideoUiLabels } from "../components/viral-videos/NewsPulseVideoPlayer";
 import HeaderLogo from "../src/components/layout/HeaderLogo";
 import type { GetStaticProps } from "next";
@@ -3039,6 +3040,64 @@ function LiveTVWidget({ theme, liveTvSettings }: { theme: any; liveTvSettings: P
   const offlinePosterImageUrl = shouldShowFallbackMedia ? presentation.offlinePosterImageUrl : '';
   const fallbackVideoUrl = shouldShowFallbackMedia ? presentation.fallbackVideoUrl : '';
   const displayBadgeLabel = getLiveTvDisplayBadgeLabel(presentation, { offlineLoopVideoUrl, offlinePosterImageUrl, fallbackVideoUrl });
+  const playbackDebugKeyRef = React.useRef('');
+  const comingSoonNode = (
+    <div className="absolute inset-0 flex items-center justify-center px-3 py-3 text-center sm:px-4 sm:py-4">
+      <div className="w-full bg-transparent">
+        <div className="text-[12px] font-extrabold uppercase tracking-[0.22em] text-white/88">
+          {presentation.modeLabel}
+        </div>
+        {presentation.showScheduleCard ? (
+          <>
+            <div className="mt-3 text-lg font-black tracking-tight text-white">
+              {presentation.title}
+            </div>
+            {presentation.subtitle ? (
+              <div className="mt-2 text-sm text-white/72">
+                {presentation.subtitle}
+              </div>
+            ) : null}
+          </>
+        ) : null}
+        <div className="mt-3 text-[15px] font-semibold leading-[1.45] text-white/86">
+          {presentation.message}
+        </div>
+      </div>
+    </div>
+  );
+  const fallbackReplayNode = fallbackVideoUrl && presentation.fallbackVideoKind === 'iframe' ? (
+    <iframe
+      title={presentation.title}
+      src={fallbackVideoUrl}
+      className="absolute inset-0 block h-full w-full rounded-none border-0"
+      allow="autoplay; encrypted-media; picture-in-picture"
+      allowFullScreen
+    />
+  ) : fallbackVideoUrl && presentation.fallbackVideoKind === 'video' ? (
+    <video
+      className="absolute inset-0 block h-full w-full rounded-none object-cover"
+      controls
+      playsInline
+      preload="metadata"
+      src={fallbackVideoUrl}
+    />
+  ) : comingSoonNode;
+
+  React.useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return;
+    const playbackMode = presentation.playerUrl ? 'live' : offlinePosterImageUrl ? 'poster' : offlineLoopVideoUrl ? 'video' : fallbackVideoUrl ? 'fallback' : 'fallback';
+    const key = `broadcast:${playbackMode}:${presentation.playerUrl}:${offlinePosterImageUrl}:${offlineLoopVideoUrl}:${fallbackVideoUrl}`;
+    if (playbackDebugKeyRef.current === key) return;
+    playbackDebugKeyRef.current = key;
+
+    console.debug('[LiveTV] playback mode', {
+      surface: 'broadcast-module',
+      activeLive: !!presentation.playerUrl,
+      offlinePosterImageUrl,
+      offlineLoopVideoUrl,
+      playbackMode,
+    });
+  }, [fallbackVideoUrl, offlineLoopVideoUrl, offlinePosterImageUrl, presentation.playerUrl]);
 
   const accentBackground = presentation.highlightBreaking
     ? theme.mode === 'dark'
@@ -3101,23 +3160,14 @@ function LiveTVWidget({ theme, liveTvSettings }: { theme: any; liveTvSettings: P
                 preload="metadata"
                 src={presentation.playerUrl}
               />
-            ) : offlineLoopVideoUrl ? (
-              <video
-                className="absolute inset-0 block h-full w-full rounded-none object-cover"
-                autoPlay
-                controls
-                loop
-                muted
-                playsInline
-                poster={offlinePosterImageUrl || undefined}
-                preload="metadata"
-                src={offlineLoopVideoUrl}
-              />
-            ) : offlinePosterImageUrl ? (
-              <img
-                src={offlinePosterImageUrl}
-                alt={presentation.title || 'News Pulse Live TV offline'}
-                className="absolute inset-0 block h-full w-full rounded-none object-cover"
+            ) : offlineLoopVideoUrl || offlinePosterImageUrl ? (
+              <LiveTvOfflineSequence
+                posterUrl={offlinePosterImageUrl}
+                videoUrl={offlineLoopVideoUrl}
+                title={presentation.title}
+                mediaClassName="absolute inset-0 block h-full w-full rounded-none object-cover"
+                surface="broadcast-module"
+                fallbackNode={fallbackReplayNode}
               />
             ) : fallbackVideoUrl && presentation.fallbackVideoKind === 'iframe' ? (
               <iframe
@@ -3135,30 +3185,7 @@ function LiveTVWidget({ theme, liveTvSettings }: { theme: any; liveTvSettings: P
                 preload="metadata"
                 src={fallbackVideoUrl}
               />
-            ) : (
-              <div className="absolute inset-0 flex items-center justify-center px-3 py-3 text-center sm:px-4 sm:py-4">
-                <div className="w-full bg-transparent">
-                  <div className="text-[12px] font-extrabold uppercase tracking-[0.22em] text-white/88">
-                    {presentation.modeLabel}
-                  </div>
-                  {presentation.showScheduleCard ? (
-                    <>
-                      <div className="mt-3 text-lg font-black tracking-tight text-white">
-                        {presentation.title}
-                      </div>
-                      {presentation.subtitle ? (
-                        <div className="mt-2 text-sm text-white/72">
-                          {presentation.subtitle}
-                        </div>
-                      ) : null}
-                    </>
-                  ) : null}
-                  <div className="mt-3 text-[15px] font-semibold leading-[1.45] text-white/86">
-                    {presentation.message}
-                  </div>
-                </div>
-              </div>
-            )}
+            ) : comingSoonNode}
           </div>
         </div>
 

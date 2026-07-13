@@ -3,6 +3,7 @@ import Link from 'next/link';
 import React from 'react';
 import { ChevronLeft, Play, Radio } from 'lucide-react';
 
+import LiveTvOfflineSequence from '../components/LiveTvOfflineSequence';
 import { usePublicSettings } from '../src/context/PublicSettingsContext';
 import { DEFAULT_NORMALIZED_PUBLIC_SETTINGS } from '../src/lib/publicSettings';
 import {
@@ -112,6 +113,55 @@ export default function LiveTvPage() {
   const fallbackVideoUrl = shouldShowFallbackMedia ? presentation.fallbackVideoUrl || settingsPresentation.fallbackVideoUrl : '';
   const fallbackVideoKind = presentation.fallbackVideoUrl ? presentation.fallbackVideoKind : settingsPresentation.fallbackVideoKind;
   const displayBadgeLabel = getLiveTvDisplayBadgeLabel(presentation, { offlineLoopVideoUrl, offlinePosterImageUrl, fallbackVideoUrl });
+  const playbackDebugKeyRef = React.useRef('');
+  const comingSoonNode = (
+    <div className="absolute inset-0 flex items-center justify-center px-5 py-6 text-center sm:px-8 sm:py-8 lg:px-10 lg:py-10">
+      <div className="max-w-2xl">
+        <div className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-white/80">{presentation.modeLabel}</div>
+        {presentation.showScheduleCard ? (
+          <>
+            <div className="mt-4 text-2xl font-black tracking-tight text-white sm:text-3xl">{presentation.title}</div>
+            {presentation.subtitle ? <div className="mt-2 text-sm text-white/72 sm:text-base">{presentation.subtitle}</div> : null}
+            {presentation.scheduleLabel ? <div className="mt-2 text-sm text-white/72 sm:text-base">{presentation.scheduleLabel}</div> : null}
+          </>
+        ) : null}
+        <div className="mt-4 text-sm font-semibold text-white/86 sm:text-base">{presentation.message}</div>
+      </div>
+    </div>
+  );
+  const fallbackReplayNode = fallbackVideoUrl && fallbackVideoKind === 'iframe' ? (
+    <iframe
+      title={presentation.title}
+      src={fallbackVideoUrl}
+      className="absolute inset-0 h-full w-full rounded-[18px] border-0 bg-transparent sm:rounded-[22px] lg:rounded-[24px]"
+      allow="autoplay; encrypted-media; picture-in-picture"
+      allowFullScreen
+    />
+  ) : fallbackVideoUrl && fallbackVideoKind === 'video' ? (
+    <video
+      className="absolute inset-0 h-full w-full rounded-[18px] bg-transparent object-cover sm:rounded-[22px] lg:rounded-[24px]"
+      controls
+      playsInline
+      preload="metadata"
+      src={fallbackVideoUrl}
+    />
+  ) : comingSoonNode;
+
+  React.useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') return;
+    const playbackMode = presentation.playerUrl ? 'live' : offlinePosterImageUrl ? 'poster' : offlineLoopVideoUrl ? 'video' : fallbackVideoUrl ? 'fallback' : 'fallback';
+    const key = `live-tv-page:${playbackMode}:${presentation.playerUrl}:${offlinePosterImageUrl}:${offlineLoopVideoUrl}:${fallbackVideoUrl}`;
+    if (playbackDebugKeyRef.current === key) return;
+    playbackDebugKeyRef.current = key;
+
+    console.debug('[LiveTV] playback mode', {
+      surface: 'live-tv-page',
+      activeLive: !!presentation.playerUrl,
+      offlinePosterImageUrl,
+      offlineLoopVideoUrl,
+      playbackMode,
+    });
+  }, [fallbackVideoUrl, offlineLoopVideoUrl, offlinePosterImageUrl, presentation.playerUrl]);
   const detailLine = presentation.title && presentation.title !== 'News Pulse Live TV'
     ? presentation.title
     : presentation.modeLabel;
@@ -184,23 +234,14 @@ export default function LiveTvPage() {
                       preload="metadata"
                       src={presentation.playerUrl}
                     />
-                  ) : offlineLoopVideoUrl ? (
-                    <video
-                      className="absolute inset-0 h-full w-full rounded-[18px] bg-transparent object-cover sm:rounded-[22px] lg:rounded-[24px]"
-                      autoPlay
-                      controls
-                      loop
-                      muted
-                      playsInline
-                      poster={offlinePosterImageUrl || undefined}
-                      preload="metadata"
-                      src={offlineLoopVideoUrl}
-                    />
-                  ) : offlinePosterImageUrl ? (
-                    <img
-                      src={offlinePosterImageUrl}
-                      alt={presentation.title || 'News Pulse Live TV offline'}
-                      className="absolute inset-0 h-full w-full rounded-[18px] bg-transparent object-cover sm:rounded-[22px] lg:rounded-[24px]"
+                  ) : offlineLoopVideoUrl || offlinePosterImageUrl ? (
+                    <LiveTvOfflineSequence
+                      posterUrl={offlinePosterImageUrl}
+                      videoUrl={offlineLoopVideoUrl}
+                      title={presentation.title}
+                      mediaClassName="absolute inset-0 h-full w-full rounded-[18px] bg-transparent object-cover sm:rounded-[22px] lg:rounded-[24px]"
+                      surface="live-tv-page"
+                      fallbackNode={fallbackReplayNode}
                     />
                   ) : fallbackVideoUrl && fallbackVideoKind === 'iframe' ? (
                     <iframe
@@ -218,21 +259,7 @@ export default function LiveTvPage() {
                       preload="metadata"
                       src={fallbackVideoUrl}
                     />
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center px-5 py-6 text-center sm:px-8 sm:py-8 lg:px-10 lg:py-10">
-                      <div className="max-w-2xl">
-                        <div className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-white/80">{presentation.modeLabel}</div>
-                        {presentation.showScheduleCard ? (
-                          <>
-                            <div className="mt-4 text-2xl font-black tracking-tight text-white sm:text-3xl">{presentation.title}</div>
-                            {presentation.subtitle ? <div className="mt-2 text-sm text-white/72 sm:text-base">{presentation.subtitle}</div> : null}
-                            {presentation.scheduleLabel ? <div className="mt-2 text-sm text-white/72 sm:text-base">{presentation.scheduleLabel}</div> : null}
-                          </>
-                        ) : null}
-                        <div className="mt-4 text-sm font-semibold text-white/86 sm:text-base">{presentation.message}</div>
-                      </div>
-                    </div>
-                  )}
+                  ) : comingSoonNode}
                 </div>
               </div>
 
