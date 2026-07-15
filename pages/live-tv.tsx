@@ -240,6 +240,7 @@ export default function LiveTvPage() {
                       videoUrl={offlineLoopVideoUrl}
                       title={presentation.title}
                       mediaClassName="absolute inset-0 block h-full w-full rounded-[18px] bg-transparent object-cover sm:rounded-[22px] lg:rounded-[24px]"
+                      posterClassName="offlinePosterImage absolute inset-0 block h-full w-full rounded-[18px] bg-black object-contain object-center sm:rounded-[22px] lg:rounded-[24px]"
                       surface="live-tv-page"
                       fallbackNode={fallbackReplayNode}
                     />

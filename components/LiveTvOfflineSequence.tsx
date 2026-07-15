@@ -7,6 +7,7 @@ type LiveTvOfflineSequenceProps = {
   videoUrl: string;
   title: string;
   mediaClassName: string;
+  posterClassName?: string;
   fallbackNode: React.ReactNode;
   surface: string;
   posterDurationMs?: number;
@@ -26,6 +27,7 @@ export default function LiveTvOfflineSequence({
   videoUrl,
   title,
   mediaClassName,
+  posterClassName,
   fallbackNode,
   surface,
   posterDurationMs = DEFAULT_POSTER_DURATION_MS,
@@ -87,7 +89,8 @@ export default function LiveTvOfflineSequence({
       <img
         src={posterUrl}
         alt="News Pulse Live TV offline poster"
-        className={mediaClassName}
+        className={posterClassName || mediaClassName}
+        style={{ objectFit: 'contain', objectPosition: 'center center', background: '#000' }}
       />
     );
   }
@@ -98,6 +101,7 @@ export default function LiveTvOfflineSequence({
         key={videoUrl}
         ref={videoRef}
         className={mediaClassName}
+        style={{ objectFit: 'cover', background: '#000' }}
         autoPlay
         controls={controls}
         loop={!hasPoster}

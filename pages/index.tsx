@@ -3166,6 +3166,7 @@ function LiveTVWidget({ theme, liveTvSettings }: { theme: any; liveTvSettings: P
                 videoUrl={offlineLoopVideoUrl}
                 title={presentation.title}
                 mediaClassName="absolute inset-0 block h-full w-full rounded-none object-cover"
+                posterClassName="offlinePosterImage absolute inset-0 block h-full w-full rounded-none bg-black object-contain object-center"
                 surface="broadcast-module"
                 fallbackNode={fallbackReplayNode}
               />

@@ -29,14 +29,19 @@ describe('LiveTvOfflineSequence', () => {
         videoUrl="/uploads/live-tv/loop.mp4"
         title="Offline Live TV"
         mediaClassName="media"
+        posterClassName="poster-media"
         surface="test"
         posterDurationMs={1000}
         fallbackNode={<div data-testid="fallback">Coming soon</div>}
       />
     );
 
-    expect(container.querySelector('img')?.getAttribute('src')).toBe('/uploads/live-tv/poster.jpg');
-    expect(container.querySelector('img')?.getAttribute('alt')).toBe('News Pulse Live TV offline poster');
+    const poster = container.querySelector('img');
+    expect(poster?.getAttribute('src')).toBe('/uploads/live-tv/poster.jpg');
+    expect(poster?.getAttribute('alt')).toBe('News Pulse Live TV offline poster');
+    expect(poster?.className).toBe('poster-media');
+    expect(poster?.style.objectFit).toBe('contain');
+    expect(poster?.style.objectPosition).toBe('center center');
     expect(container.querySelector('video')).toBeNull();
 
     act(() => {
@@ -45,8 +50,15 @@ describe('LiveTvOfflineSequence', () => {
 
     const video = container.querySelector('video');
     expect(video?.getAttribute('src')).toBe('/uploads/live-tv/loop.mp4');
+    expect(video?.className).toBe('media');
+    expect(video?.hasAttribute('autoplay')).toBe(true);
+    expect((video as HTMLVideoElement).muted).toBe(true);
     expect(video?.hasAttribute('loop')).toBe(false);
+    expect(video?.hasAttribute('playsinline')).toBe(true);
+    expect(video?.style.objectFit).toBe('cover');
+    expect(video?.style.background).toBe('rgb(0, 0, 0)');
     expect(playMock).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('img')).toBeNull();
 
     fireEvent.ended(video as HTMLVideoElement);
 
@@ -72,7 +84,10 @@ describe('LiveTvOfflineSequence', () => {
 
     fireEvent.error(container.querySelector('video') as HTMLVideoElement);
 
-    expect(container.querySelector('img')?.getAttribute('src')).toBe('/uploads/live-tv/poster.jpg');
+    const poster = container.querySelector('img');
+    expect(poster?.getAttribute('src')).toBe('/uploads/live-tv/poster.jpg');
+    expect(poster?.style.objectFit).toBe('contain');
+    expect(poster?.style.objectPosition).toBe('center center');
   });
 
   test('uses fallback node if video-only offline media fails', () => {
@@ -83,7 +98,6 @@ describe('LiveTvOfflineSequence', () => {
         title="Offline Live TV"
         mediaClassName="media"
         surface="test"
-        posterDurationMs={1000}
         fallbackNode={<div data-testid="fallback">Coming soon</div>}
       />
     );

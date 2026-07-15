@@ -985,6 +985,7 @@ export function normalizePublished(published: unknown): NormalizedPublicSettings
 }
 
 let warnedMissingLiveTvOfflineMediaFields = false;
+let warnedMissingLiveTvOfflineLoopVideoUrl = false;
 let loggedLiveTvSettingsResponse = false;
 
 function getPublicLiveTvPayload(raw: unknown): JsonRecord | null {
@@ -1012,13 +1013,27 @@ function hasPublicLiveTvOfflineMediaFields(raw: unknown): boolean {
 function debugLiveTvSettingsResponse(raw: unknown): void {
   if (process.env.NODE_ENV !== 'development') return;
   const liveTv = getPublicLiveTvPayload(raw);
+  const offlineLoopVideoUrl = getFirstKnownValue(liveTv, ['offlineLoopVideoUrl', 'offlineLoopUrl', 'loopVideoUrl', 'offlineVideoLoopUrl', 'holdingLoopVideoUrl']);
+  const offlinePosterImageUrl = getFirstKnownValue(liveTv, ['offlinePosterImageUrl', 'offlinePosterUrl', 'posterImageUrl', 'posterUrl', 'offlineImageUrl', 'holdingImageUrl']);
+  const fallbackVideoUrl = getFirstKnownValue(liveTv, ['fallbackVideoUrl', 'fallbackUrl', 'replayUrl', 'offlineReplayUrl', 'videoUrl']);
+  const embedUrl = getFirstKnownValue(liveTv, ['embedUrl', 'youtubeEmbedUrl', 'liveEmbedUrl', 'url', 'youtubeUrl']);
   if (!loggedLiveTvSettingsResponse) {
     loggedLiveTvSettingsResponse = true;
     console.debug('[LiveTV] public settings response', {
       liveTv,
-      offlinePosterImageUrl: (liveTv as any)?.offlinePosterImageUrl,
-      offlineLoopVideoUrl: (liveTv as any)?.offlineLoopVideoUrl,
+      offlineLoopVideoUrl,
+      offlinePosterImageUrl,
+      fallbackVideoUrl,
+      embedUrl,
+      enabled: (liveTv as any)?.enabled,
+      status: (liveTv as any)?.status,
+      sourceType: (liveTv as any)?.sourceType,
+      mode: (liveTv as any)?.mode,
     });
+  }
+  if (!warnedMissingLiveTvOfflineLoopVideoUrl && !offlineLoopVideoUrl) {
+    warnedMissingLiveTvOfflineLoopVideoUrl = true;
+    console.warn('offlineLoopVideoUrl missing from Live TV API response.');
   }
   if (warnedMissingLiveTvOfflineMediaFields) return;
   if (hasPublicLiveTvOfflineMediaFields(raw)) return;
