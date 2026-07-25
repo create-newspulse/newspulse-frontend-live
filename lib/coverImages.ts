@@ -70,6 +70,12 @@ function collectPreferredLocalizedImageContainers(article: any, lang?: unknown):
     containers.push(value);
   }
 
+  for (const value of [article?.image?.[preferredLang], article?.images?.[preferredLang], article?.coverImage?.[preferredLang], article?.coverImages?.[preferredLang]]) {
+    if (!value || typeof value !== 'object') continue;
+    if (containers.includes(value)) continue;
+    containers.push(value);
+  }
+
   return containers;
 }
 
@@ -79,6 +85,8 @@ function collectImageCandidates(source: any): unknown[] {
   const media0 = Array.isArray(activeMedia) ? activeMedia[0] : activeMedia;
 
   return [
+    source?.url,
+    source?.src,
     source?.coverImage,
     source?.coverImageUrl,
     source?.imageUrl,

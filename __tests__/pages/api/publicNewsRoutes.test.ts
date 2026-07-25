@@ -128,6 +128,190 @@ describe('public news route localization', () => {
     expect(res.body.items[0]._id).toBe('article-hi');
   });
 
+  test('Gujarati non-category feed requests gu and prioritizes the Gujarati translation group record', async () => {
+    const fetchMock = jest.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        items: [
+          {
+            _id: 'article-en',
+            translationGroupId: 'group-gujarati-home',
+            language: 'en',
+            status: 'published',
+            title: 'English headline',
+            summary: 'English summary',
+            content: '<p>English body</p>',
+            slug: 'english-headline',
+          },
+        ],
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        items: [
+          {
+            _id: 'article-en',
+            translationGroupId: 'group-gujarati-home',
+            language: 'en',
+            status: 'published',
+            title: 'English headline',
+            summary: 'English summary',
+            content: '<p>English body</p>',
+            slug: 'english-headline',
+          },
+          {
+            _id: 'article-gu',
+            translationGroupId: 'group-gujarati-home',
+            language: 'gu',
+            status: 'published',
+            title: 'ગુજરાતી શીર્ષક',
+            summary: 'ગુજરાતી સારાંશ',
+            content: '<p>ગુજરાતી બોડી</p>',
+            slug: 'gujarati-headline',
+          },
+        ],
+      }));
+
+    global.fetch = fetchMock as any;
+
+    const req = createReq({
+      url: '/api/public/news?lang=gu&language=gu&limit=40',
+      query: { lang: 'gu', language: 'gu', limit: '40' },
+    });
+    const res = createRes();
+
+    await newsHandler(req as any, res as any);
+
+    expect(String(fetchMock.mock.calls[0][0])).toContain('lang=gu');
+    expect(String(fetchMock.mock.calls[0][0])).toContain('language=gu');
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain('gj');
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain('Gujarati');
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain('gu-IN');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0]).toEqual(expect.objectContaining({
+      _id: 'article-gu',
+      title: 'ગુજરાતી શીર્ષક',
+      summary: 'ગુજરાતી સારાંશ',
+      content: '<p>ગુજરાતી બોડી</p>',
+    }));
+  });
+
+  test('Gujarati feed preserves English fallback only when no Gujarati group record exists', async () => {
+    const fetchMock = jest.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        items: [
+          {
+            _id: 'article-en',
+            translationGroupId: 'group-fallback-home',
+            language: 'en',
+            status: 'published',
+            title: 'English fallback headline',
+            summary: 'English fallback summary',
+            content: '<p>English fallback body</p>',
+            slug: 'english-fallback-headline',
+          },
+        ],
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        items: [
+          {
+            _id: 'article-en',
+            translationGroupId: 'group-fallback-home',
+            language: 'en',
+            status: 'published',
+            title: 'English fallback headline',
+            summary: 'English fallback summary',
+            content: '<p>English fallback body</p>',
+            slug: 'english-fallback-headline',
+          },
+        ],
+      }));
+
+    global.fetch = fetchMock as any;
+
+    const req = createReq({
+      url: '/api/public/news?lang=gu&language=gu&limit=40',
+      query: { lang: 'gu', language: 'gu', limit: '40' },
+    });
+    const res = createRes();
+
+    await newsHandler(req as any, res as any);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0]).toEqual(expect.objectContaining({
+      _id: 'article-en',
+      title: 'English fallback headline',
+      summary: 'English fallback summary',
+      content: '<p>English fallback body</p>',
+    }));
+  });
+
+  test('Gujarati slug detail promotes an English slug hit to the Gujarati translation group record', async () => {
+    const fetchMock = jest.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        article: {
+          _id: 'article-en',
+          translationGroupId: 'group-detail-gujarati',
+          language: 'en',
+          status: 'published',
+          title: 'Why Responsible Digital Journalism Matters More Than Ever',
+          summary: 'English article summary',
+          content: '<p>English article body</p>',
+          slug: 'why-responsible-digital-journalism-matters-more-than-ever',
+        },
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        items: [
+          {
+            _id: 'article-en',
+            translationGroupId: 'group-detail-gujarati',
+            language: 'en',
+            status: 'published',
+            title: 'Why Responsible Digital Journalism Matters More Than Ever',
+            summary: 'English article summary',
+            content: '<p>English article body</p>',
+            slug: 'why-responsible-digital-journalism-matters-more-than-ever',
+          },
+          {
+            _id: 'article-gu',
+            translationGroupId: 'group-detail-gujarati',
+            language: 'gu',
+            status: 'published',
+            title: 'જવાબદાર ડિજિટલ પત્રકારિતા શા માટે જરૂરી છે',
+            summary: 'ગુજરાતી લેખનો સારાંશ',
+            content: '<p>ગુજરાતી લેખની સંપૂર્ણ સામગ્રી</p>',
+            slug: 'javabdar-digital-patrakarita',
+          },
+        ],
+      }));
+
+    global.fetch = fetchMock as any;
+
+    const req = createReq({
+      url: '/api/public/news/slug/why-responsible-digital-journalism-matters-more-than-ever?lang=gu&language=gu',
+      query: {
+        slug: 'why-responsible-digital-journalism-matters-more-than-ever',
+        lang: 'gu',
+        language: 'gu',
+      },
+    });
+    const res = createRes();
+
+    await newsBySlugHandler(req as any, res as any);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/api/public/news/slug/why-responsible-digital-journalism-matters-more-than-ever?lang=gu&language=gu');
+    expect(String(fetchMock.mock.calls[1][0])).toContain('/api/public/news/group/group-detail-gujarati?lang=gu&language=gu');
+    expect(res.statusCode).toBe(200);
+    expect(res.body.article).toEqual(expect.objectContaining({
+      _id: 'article-gu',
+      title: 'જવાબદાર ડિજિટલ પત્રકારિતા શા માટે જરૂરી છે',
+      summary: 'ગુજરાતી લેખનો સારાંશ',
+      content: '<p>ગુજરાતી લેખની સંપૂર્ણ સામગ્રી</p>',
+      slug: 'javabdar-digital-patrakarita',
+    }));
+  });
+
   test('id detail route promotes a visible locale variant from the translation group', async () => {
     const fetchMock = jest.fn()
       .mockResolvedValueOnce(jsonResponse({

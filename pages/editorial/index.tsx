@@ -21,5 +21,5 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
 };
 
 export default function EditorialPage() {
-  return <CategoryFeedPage title="Editorial" categoryKey="editorial" extraQuery={{ founderOnly: 'true' }} />;
+  return <CategoryFeedPage title="Editorial" categoryKey="editorial" />;
 }

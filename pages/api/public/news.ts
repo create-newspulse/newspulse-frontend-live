@@ -114,6 +114,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const requestedLocale = normalizeRouteLocale(
     asSingleQueryValue(req.query.language as any) || asSingleQueryValue(req.query.lang as any)
   );
+  const hasRequestedLocale = Boolean(asSingleQueryValue(req.query.language as any) || asSingleQueryValue(req.query.lang as any));
   const strictLocale = isTruthyQueryValue(req.query.strictLocale as any);
   const rawCategory = asSingleQueryValue(req.query.category as any);
   const routeSlug = rawCategory ? getCategoryRouteKey(rawCategory) : '';
@@ -124,7 +125,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (normalizedCategory) localizedParams.set('category', normalizedCategory);
 
-  const shouldWidenCategoryFetch = Boolean(normalizedCategory) && strictLocale;
+  const shouldWidenLocaleFetch = hasRequestedLocale;
 
   if (!candidateBases.length) {
     logDevNewsProxy('missing_upstream_base', {
@@ -197,7 +198,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const primaryItems = getPayloadItems(json);
       let listItems = Array.isArray(primaryItems) ? primaryItems : [];
 
-      if (shouldWidenCategoryFetch) {
+      if (shouldWidenLocaleFetch) {
         try {
           const widenedParams = new URLSearchParams(localizedParams);
           widenedParams.delete('lang');
@@ -219,8 +220,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       // Enforce a single public-content contract:
       // - never return unpublished/deleted items
-      // - never return cross-locale items unless translation is APPROVED
-      const itemsResolved = shouldWidenCategoryFetch
+      // - requested-language records win within a translation group
+      // - strict locale feeds hide cross-locale fallback; normal feeds keep English fallback
+      const itemsResolved = shouldWidenLocaleFetch
         ? pickFreshestArticlesForLocale({
             articles: listItems,
             locale: requestedLocale,

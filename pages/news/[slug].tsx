@@ -7,23 +7,33 @@ import { useRouter } from 'next/router';
 import AdSlot from '../../src/components/ads/AdSlot';
 import CategoryHeader from '../../src/components/category/CategoryHeader';
 import { getCategoryQueryKey, getCategoryRouteKey } from '../../lib/categoryKeys';
-import { getLocalizedArticleFields, type RouteLocale } from '../../lib/localizedArticleFields';
+import { getLocalizedArticleFields, STRICT_LOCALE_POLICY, type RouteLocale } from '../../lib/localizedArticleFields';
 import { formatArticleBodyHtml, splitArticleBodyBlocks, stripDuplicateOpeningParagraph } from '../../lib/articleBody';
 import { fetchPublicNews, fetchPublicNewsGroup, unwrapArticle, type Article } from '../../lib/publicNewsApi';
-import type { PublicViralVideo } from '../../lib/publicViralVideos';
-import { normalizePublicViralVideosPayload } from '../../lib/publicViralVideos';
 import { subscribePublicDataRefresh } from '../../lib/publicDataRefresh';
 import { pickFreshestArticleForLocale, shouldReplaceArticleWithFreshCandidate } from '../../lib/translationGroupSync';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { tHeading, toLanguageKey } from '../../utils/localizedNames';
 import { buildNewsUrl } from '../../lib/newsRoutes';
-import PublicViralVideoCard from '../../components/viral-videos/PublicViralVideoCard';
+import HomeRightRail, { articleToHomeRightRailFeedItem } from '../../components/home/HomeRightRail';
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
 import { resolveSponsoredContentMeta } from '../../lib/sponsoredContent';
 import { debugStoryCard, getStoryId, getStoryReactKey } from '../../lib/storyIdentity';
+import { formatEditorialDateTime } from '../../lib/storyDateTime';
 import { getStoryTitleHookColor, splitStoryTitleHook } from '../../lib/storyTitleHook';
 import StoryImage, { ArticleHeroImage } from '../../src/components/story/StoryImage';
 import { useArticleAnalytics } from '../../hooks/useArticleAnalytics';
+import {
+  getArticleAuthorDesignation,
+  getArticleAuthorName,
+  getEditorialTypeLabel,
+  getImageAltText,
+  getImageCaption,
+  getImageCredit,
+  getLocalizedSeoValue,
+  getStoredSeoValue,
+  isEditorialArticle,
+} from '../../lib/editorialDisplay';
 
 type ArticleDisplayAdProps = {
   slotId: 'ARTICLE_INLINE' | 'ARTICLE_END';
@@ -82,90 +92,6 @@ function localePrefix(lang: 'en' | 'hi' | 'gu'): '' | '/hi' | '/gu' {
   return lang === 'en' ? '' : (lang === 'hi' ? '/hi' : '/gu');
 }
 
-function ArticleLatestSidebarWidget({
-  lang,
-  items,
-  loading,
-}: {
-  lang: 'en' | 'hi' | 'gu';
-  items: Article[];
-  loading: boolean;
-}) {
-  const { t } = useI18n();
-  const prefix = localePrefix(lang);
-
-  if (!loading && items.length === 0) return null;
-
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="px-4 py-3 border-b border-slate-200 flex items-start justify-between gap-3">
-        <div>
-          <div className="text-[11px] font-black uppercase tracking-[0.16em] text-newsPulse-blue/80">Latest</div>
-          <div className="mt-1 text-sm font-extrabold text-slate-900">News Pulse</div>
-        </div>
-        <Link href={`${prefix}/latest`.replace(/\/\//g, '/')} className="text-xs font-semibold text-slate-700 hover:underline">
-          {t('common.viewAll') || 'View all'}
-        </Link>
-      </div>
-      <div className="p-2">
-        {loading ? (
-          Array.from({ length: 4 }).map((_, index) => (
-            <div key={`article-latest-sk-${index}`} className="rounded-xl px-2 py-2">
-              <div className="h-3 w-16 animate-pulse rounded bg-slate-100" />
-              <div className="mt-2 h-4 w-full animate-pulse rounded bg-slate-100" />
-            </div>
-          ))
-        ) : (
-          items.slice(0, 6).map((story, index) => {
-            const id = getStoryId(story);
-            const localizedStory = getLocalizedArticleFields(story || {}, lang);
-            if (!localizedStory.isVisible) return null;
-            const href = id ? buildNewsUrl({ id, slug: id, lang }) : '#';
-            const titleText = cleanText(localizedStory.title || (story as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
-            const category = String((story as any)?.category || '').trim();
-            return (
-              <a
-                key={getStoryReactKey(story, href) || `article-latest-${index}`}
-                href={href}
-                className="block rounded-xl px-2 py-2 hover:bg-slate-50"
-              >
-                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                  {category ? <span className="truncate">{category}</span> : null}
-                </div>
-                <div className="mt-1 line-clamp-2 text-sm font-semibold text-slate-900">{titleText}</div>
-              </a>
-            );
-          })
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ArticleVideoFeatureSidebar({ lang, video }: { lang: 'en' | 'hi' | 'gu'; video: PublicViralVideo | null }) {
-  const { t } = useI18n();
-  const prefix = localePrefix(lang);
-
-  if (!video) return null;
-
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-      <div className="px-4 py-3 border-b border-slate-200 flex items-start justify-between gap-3">
-        <div>
-          <div className="text-[11px] font-black uppercase tracking-[0.16em] text-newsPulse-blue/80">Video</div>
-          <div className="mt-1 text-sm font-extrabold text-slate-900">Feature Card</div>
-        </div>
-        <Link href={`${prefix}/viral-videos`.replace(/\/\//g, '/')} className="text-xs font-semibold text-slate-700 hover:underline">
-          {t('common.viewAll') || 'View all'}
-        </Link>
-      </div>
-      <div className="p-3">
-        <PublicViralVideoCard video={video} compact lightTopChrome />
-      </div>
-    </div>
-  );
-}
-
 function tagList(tags: any): string[] {
   if (!tags) return [];
   if (Array.isArray(tags)) return tags.map((t) => String(t || '').toLowerCase().trim()).filter(Boolean);
@@ -219,6 +145,13 @@ type Props = {
   relatedStories: Article[];
   error?: string | null;
   pending?: boolean;
+  pendingSourceLang?: 'en' | 'hi' | 'gu' | null;
+};
+
+const LANG_LABELS: Record<'en' | 'hi' | 'gu', string> = {
+  en: 'English',
+  hi: 'Hindi',
+  gu: 'Gujarati',
 };
 
 function isPendingTranslationPayload(payload: any): boolean {
@@ -232,12 +165,37 @@ function isPendingTranslationPayload(payload: any): boolean {
   return nestedStatus === 'pending' || nestedStatus === 'translating';
 }
 
+function getPendingSourceLang(payload: any): 'en' | 'hi' | 'gu' | null {
+  const candidates = [
+    payload?.sourceLang,
+    payload?.sourceLanguage,
+    payload?.availableLang,
+    payload?.availableLanguage,
+    payload?.data?.sourceLang,
+    payload?.data?.sourceLanguage,
+    payload?.data?.availableLang,
+    payload?.data?.availableLanguage,
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    return normalizeLang(candidate);
+  }
+  return null;
+}
+
+function getArticleSourceLang(article: Article | null): 'en' | 'hi' | 'gu' | null {
+  if (!article) return null;
+  const raw = (article as any)?.sourceLang || (article as any)?.sourceLanguage || (article as any)?.language || (article as any)?.lang;
+  return raw ? normalizeLang(raw) : null;
+}
+
 function debugNewsDetailResolution(stage: string, payload: Record<string, unknown>) {
   if (process.env.NODE_ENV === 'production') return;
   console.info('[pages/news/[slug]]', { stage, ...payload });
 }
 
-export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topStories, relatedStories, error, pending }: Props) {
+export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topStories, relatedStories, error, pending, pendingSourceLang = null }: Props) {
   const { t } = useI18n();
   const router = useRouter();
 
@@ -246,20 +204,18 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
   const [pendingTranslate, setPendingTranslate] = React.useState<boolean>(Boolean(pending));
   const [pendingError, setPendingError] = React.useState<string | null>(error || null);
   const [pendingExhausted, setPendingExhausted] = React.useState<boolean>(false);
-  const [sidebarLatestItems, setSidebarLatestItems] = React.useState<Article[]>([]);
-  const [sidebarLatestLoading, setSidebarLatestLoading] = React.useState<boolean>(true);
-  const [sidebarVideoFeature, setSidebarVideoFeature] = React.useState<PublicViralVideo | null>(null);
+  const [sidebarLatestItems, setSidebarLatestItems] = React.useState<any[] | null>(null);
   const pendingTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingAttemptsRef = React.useRef<number>(0);
 
   const routeLocale = React.useMemo(() => toRouteLocale(lang), [lang]);
   const localized = React.useMemo(
-    () => getLocalizedArticleFields(resolvedArticle || {}, routeLocale),
+    () => getLocalizedArticleFields(resolvedArticle || {}, routeLocale, STRICT_LOCALE_POLICY),
     [resolvedArticle, routeLocale]
   );
-  const rawTitle = cleanText(localized.title || (resolvedArticle as any)?.title);
+  const rawTitle = cleanText(localized.title);
   const displayTitle = rawTitle.length > 180 ? `${rawTitle.slice(0, 177).trimEnd()}…` : rawTitle;
-  const displaySummary = cleanText(localized.summary || (resolvedArticle as any)?.summary);
+  const displaySummary = cleanText(localized.summary);
 
   const clearPendingTimer = React.useCallback(() => {
     if (pendingTimerRef.current) {
@@ -280,10 +236,11 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
       currentArticle: current,
       groupArticles: group.items,
       locale: toRouteLocale(lang),
+      policy: STRICT_LOCALE_POLICY,
     });
     if (!shouldReplaceArticleWithFreshCandidate(current, freshest, toRouteLocale(lang))) return;
 
-    const localizedFreshest = getLocalizedArticleFields(freshest || {}, lang);
+    const localizedFreshest = getLocalizedArticleFields(freshest || {}, lang, STRICT_LOCALE_POLICY);
     if (!localizedFreshest.isVisible) return;
 
     setResolvedArticle(freshest as Article);
@@ -339,7 +296,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
         return;
       }
 
-      const localizedNext = getLocalizedArticleFields(next || {}, lang);
+      const localizedNext = getLocalizedArticleFields(next || {}, lang, STRICT_LOCALE_POLICY);
       if (!localizedNext.isVisible) {
         setPendingTranslate(false);
         setPendingError('Not found');
@@ -394,34 +351,20 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
 
   React.useEffect(() => {
     const controller = new AbortController();
-    setSidebarLatestLoading(true);
+    setSidebarLatestItems(null);
 
     (async () => {
-      const videoParams = new URLSearchParams({ limit: '6', lang, language: lang });
-      const [latestResp, viralResp] = await Promise.all([
-        fetchPublicNews({ language: lang, limit: 6, signal: controller.signal }),
-        fetch(`/api/public/viral-videos?${videoParams.toString()}`, {
-          method: 'GET',
-          headers: { Accept: 'application/json' },
-          signal: controller.signal,
-        })
-          .then(async (response) => ({ ok: response.ok, json: await response.json().catch(() => null) }))
-          .catch(() => ({ ok: false, json: null })),
-      ]);
+      const latestResp = await fetchPublicNews({ language: lang, limit: 40, extraQuery: { strictLocale: '1' }, signal: controller.signal });
 
       if (controller.signal.aborted) return;
 
-      setSidebarLatestItems(Array.isArray(latestResp.items) ? latestResp.items.slice(0, 6) : []);
-      setSidebarLatestLoading(false);
-
-      const normalizedVideos = normalizePublicViralVideosPayload(viralResp.json);
-      const featuredVideo = normalizedVideos.items.find((item) => item.showOnHomepage) || normalizedVideos.items[0] || null;
-      setSidebarVideoFeature(viralResp.ok ? featuredVideo : null);
+      const latestItems = Array.isArray(latestResp.items)
+        ? latestResp.items.map((item) => articleToHomeRightRailFeedItem(item as Article, lang))
+        : [];
+      setSidebarLatestItems(latestItems);
     })().catch(() => {
       if (controller.signal.aborted) return;
       setSidebarLatestItems([]);
-      setSidebarLatestLoading(false);
-      setSidebarVideoFeature(null);
     });
 
     return () => controller.abort();
@@ -495,21 +438,39 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
   const prefix = React.useMemo(() => localePrefix(lang), [lang]);
   const categoryKey = React.useMemo(() => resolveCategoryKey(resolvedArticle), [resolvedArticle]);
   const categoryLabel = React.useMemo(() => categoryLabelFromKey(categoryKey), [categoryKey]);
+  const displayCategoryLabel = React.useMemo(() => cleanText(localized.categoryLabel) || categoryLabel, [categoryLabel, localized.categoryLabel]);
+  const editorialLabel = React.useMemo(() => (isEditorialArticle(resolvedArticle) ? getEditorialTypeLabel(resolvedArticle) : ''), [resolvedArticle]);
+  const authorName = React.useMemo(() => getArticleAuthorName(resolvedArticle), [resolvedArticle]);
+  const authorDesignation = React.useMemo(() => getArticleAuthorDesignation(resolvedArticle), [resolvedArticle]);
+  const imageCaption = React.useMemo(() => getImageCaption(resolvedArticle, lang), [lang, resolvedArticle]);
+  const imageCredit = React.useMemo(() => getImageCredit(resolvedArticle, lang), [lang, resolvedArticle]);
+  const imageAltText = React.useMemo(() => cleanText(getImageAltText(resolvedArticle, lang)) || displayTitle, [displayTitle, lang, resolvedArticle]);
+  const publishedDate = React.useMemo(() => cleanText((resolvedArticle as any)?.publishedAt), [resolvedArticle]);
+  const updatedDate = React.useMemo(() => {
+    const raw = cleanText((resolvedArticle as any)?.updatedAt || (resolvedArticle as any)?.modifiedAt);
+    if (!raw || raw === publishedDate) return '';
+    return raw;
+  }, [publishedDate, resolvedArticle]);
 
   const homeHref = React.useMemo(() => (prefix ? prefix : '/'), [prefix]);
   const categoryHref = React.useMemo(() => (categoryKey ? `${prefix}/${categoryKey}`.replace(/\/\//g, '/') : ''), [categoryKey, prefix]);
+  const sourceLang = React.useMemo(() => getArticleSourceLang(resolvedArticle) || pendingSourceLang || 'en', [pendingSourceLang, resolvedArticle]);
+  const pendingSourceHref = React.useMemo(() => {
+    const id = String((resolvedArticle as any)?._id || slug || '').trim();
+    return buildNewsUrl({ id, slug: id, lang: sourceLang });
+  }, [resolvedArticle, slug, sourceLang]);
 
   const categoryHeaderTitle = React.useMemo(() => {
     const langKey = toLanguageKey(lang);
-    if (!categoryKey) return categoryLabel;
+    if (!categoryKey) return displayCategoryLabel;
     try {
       const out = tHeading(langKey as any, categoryKey as any);
       const text = String(out || '').trim();
-      return text || categoryLabel;
+      return text || displayCategoryLabel;
     } catch {
-      return categoryLabel;
+      return displayCategoryLabel;
     }
-  }, [categoryKey, categoryLabel]);
+  }, [categoryKey, displayCategoryLabel]);
 
   const categoryHeaderSubtitle = React.useMemo(() => {
     // Keep it compact; use i18n if present, else plain English.
@@ -524,12 +485,19 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
   }, [categoryHeaderTitle, categoryKey, tx]);
 
   const canonicalUrl = React.useMemo(() => {
+    const storedCanonical = getStoredSeoValue(resolvedArticle, 'canonicalUrl', 'canonical', 'url');
+    if (storedCanonical) return storedCanonical;
     if (!resolvedArticle?._id) return '';
     const id = String(resolvedArticle._id || '').trim();
     const path = buildNewsUrl({ id, slug: localized.slug || id, lang });
     const base = typeof window !== 'undefined' ? window.location.origin : '';
     return base ? `${base}${path}` : path;
   }, [resolvedArticle, lang, localized.slug]);
+  const seoTitle = React.useMemo(() => getLocalizedSeoValue(resolvedArticle, lang, 'pageTitle', 'seoTitle', 'metaTitle', 'ogTitle', 'openGraphTitle', 'title') || displayTitle, [displayTitle, lang, resolvedArticle]);
+  const seoDescription = React.useMemo(() => getLocalizedSeoValue(resolvedArticle, lang, 'metaDescription', 'seoDescription', 'ogDescription', 'openGraphDescription', 'socialDescription', 'description') || displaySummary, [displaySummary, lang, resolvedArticle]);
+  const ogTitle = React.useMemo(() => getLocalizedSeoValue(resolvedArticle, lang, 'ogTitle', 'openGraphTitle') || seoTitle || displayTitle, [displayTitle, lang, resolvedArticle, seoTitle]);
+  const ogDescription = React.useMemo(() => getLocalizedSeoValue(resolvedArticle, lang, 'ogDescription', 'openGraphDescription', 'socialDescription') || seoDescription, [lang, resolvedArticle, seoDescription]);
+  const ogImage = React.useMemo(() => getLocalizedSeoValue(resolvedArticle, lang, 'ogImage', 'openGraphImage', 'image') || heroSrc || '', [heroSrc, lang, resolvedArticle]);
 
   const shareThis = async () => {
     const url = canonicalUrl || (typeof window !== 'undefined' ? stripQueryHash(window.location.href) : '');
@@ -555,38 +523,24 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
     }
   };
 
-  const trendingTopics = React.useMemo(() => {
-    const counts = new Map<string, number>();
-    const pushTags = (tags: any) => {
-      for (const tag of tagList(tags)) {
-        if (!tag || tag.length < 3) continue;
-        if (tag === 'breaking') continue;
-        counts.set(tag, (counts.get(tag) || 0) + 1);
-      }
-    };
-
-    pushTags((resolvedArticle as any)?.tags);
-    for (const s of topStories || []) pushTags((s as any)?.tags);
-    for (const s of relatedStories || []) pushTags((s as any)?.tags);
-
-    const out: Array<[string, number]> = [];
-    counts.forEach((v, k) => out.push([k, v]));
-    return out
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([k]) => k);
-  }, [resolvedArticle, relatedStories, topStories]);
-
   const articleTitleParts = React.useMemo(() => splitStoryTitleHook(displayTitle), [displayTitle]);
   const articleTitleHookColor = React.useMemo(
-    () => getStoryTitleHookColor(categoryLabel || (resolvedArticle as any)?.category || (resolvedArticle as any)?.section),
-    [categoryLabel, resolvedArticle]
+    () => getStoryTitleHookColor(displayCategoryLabel || (resolvedArticle as any)?.category || (resolvedArticle as any)?.section),
+    [displayCategoryLabel, resolvedArticle]
   );
 
   return (
     <>
       <Head>
-        <title>{`${(pendingTranslate && !displayTitle) ? 'Translating…' : (displayTitle || 'News')} | News Pulse`}</title>
+        <title>{`${(pendingTranslate && !displayTitle) ? 'Translating…' : (seoTitle || displayTitle || 'News')} | News Pulse`}</title>
+        {seoDescription ? <meta name="description" content={seoDescription} /> : null}
+        {canonicalUrl ? <link rel="canonical" href={canonicalUrl} /> : null}
+        {ogTitle ? <meta property="og:title" content={ogTitle} /> : null}
+        {ogDescription ? <meta property="og:description" content={ogDescription} /> : null}
+        {ogImage ? <meta property="og:image" content={ogImage} /> : null}
+        {publishedDate ? <meta property="article:published_time" content={publishedDate} /> : null}
+        {updatedDate ? <meta property="article:modified_time" content={updatedDate} /> : null}
+        {authorName ? <meta name="author" content={authorName} /> : null}
       </Head>
 
       <main className="min-h-screen bg-white">
@@ -613,9 +567,9 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                     <a href={homeHref} className="hover:underline">{tx('common.home', 'Home')}</a>
                     <span className="text-slate-300">›</span>
                     {categoryKey ? (
-                      <a href={categoryHref} className="hover:underline">{categoryLabel}</a>
+                      <a href={categoryHref} className="hover:underline">{displayCategoryLabel}</a>
                     ) : (
-                      <span>{categoryLabel}</span>
+                      <span>{displayCategoryLabel}</span>
                     )}
                     {(() => {
                       const state = String((resolvedArticle as any)?.state || (resolvedArticle as any)?.region || '').trim();
@@ -631,6 +585,14 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                   </div>
 
                   <div className="mt-2 flex flex-col gap-2">
+                    {editorialLabel ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="inline-flex items-center rounded-full border border-newsPulse-blue/20 bg-newsPulse-blue/10 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.16em] text-newsPulse-blue">
+                          {editorialLabel}
+                        </span>
+                      </div>
+                    ) : null}
+
                     {sponsoredMeta.isArticle ? (
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.16em] text-amber-800">
@@ -652,8 +614,13 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                     {pendingError ? <div className="text-sm text-red-600">{pendingError}</div> : null}
 
                     {pendingTranslate ? (
-                      <div className="text-sm font-semibold text-slate-700">
-                        Translating...
+                      <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-700">
+                        <span>{`This article is being prepared in ${LANG_LABELS[lang]}.`}</span>
+                        {sourceLang !== lang ? (
+                          <a href={pendingSourceHref} className="underline underline-offset-2 hover:text-slate-900">
+                            {`Read in ${LANG_LABELS[sourceLang]}`}
+                          </a>
+                        ) : null}
                       </div>
                     ) : null}
 
@@ -678,9 +645,21 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
 
                     <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
                       <div className="min-w-0 text-xs font-semibold text-slate-500">
-                        {displayProvider ? displayProvider : null}
-                        {displayProvider && displayGeneratedAt ? ' • ' : null}
-                        {displayGeneratedAt ? displayGeneratedAt : null}
+                        {authorName ? (
+                          <div className="text-sm text-slate-800">
+                            <span className="font-bold">By {authorName}</span>
+                            {authorDesignation ? <span className="text-slate-500">, {authorDesignation}</span> : null}
+                          </div>
+                        ) : null}
+                        <div className={authorName ? 'mt-1' : ''}>
+                          {publishedDate ? <span>Published {formatEditorialDateTime(publishedDate)}</span> : null}
+                          {publishedDate && updatedDate ? ' • ' : null}
+                          {updatedDate ? <span>Updated {formatEditorialDateTime(updatedDate)}</span> : null}
+                          {(publishedDate || updatedDate) && (displayProvider || displayGeneratedAt) ? ' • ' : null}
+                          {displayProvider ? displayProvider : null}
+                          {displayProvider && displayGeneratedAt ? ' • ' : null}
+                          {displayGeneratedAt ? displayGeneratedAt : null}
+                        </div>
                       </div>
 
                       <button
@@ -690,6 +669,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                       >
                         {tx('common.share', 'Share')}
                       </button>
+
                     </div>
 
                     {Array.isArray((resolvedArticle as any)?.tags) && (resolvedArticle as any)?.tags?.length ? (
@@ -715,9 +695,17 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                     storyId={getStoryId(resolvedArticle)}
                     src={heroSrc}
                     fallbackSrc={COVER_PLACEHOLDER_SRC}
-                    alt={displayTitle}
+                    alt={imageAltText}
                     priority
                   />
+
+                  {imageCaption || imageCredit ? (
+                    <div className="mt-2 text-xs leading-5 text-slate-500">
+                      {imageCaption ? <span>{imageCaption}</span> : null}
+                      {imageCaption && imageCredit ? <span> • </span> : null}
+                      {imageCredit ? <span>{imageCredit}</span> : null}
+                    </div>
+                  ) : null}
 
                   {displaySummary ? (
                     <p className="mt-4 text-base md:text-lg text-slate-700">
@@ -789,12 +777,12 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                   <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {relatedStories.slice(0, 6).map((s, idx) => {
                       const id = getStoryId(s);
-                      const localizedStory = getLocalizedArticleFields(s || {}, lang);
+                      const localizedStory = getLocalizedArticleFields(s || {}, lang, STRICT_LOCALE_POLICY);
                       if (!localizedStory.isVisible) return null;
-                      const href = id ? buildNewsUrl({ id, slug: id, lang }) : '#';
-                      const img = resolveCoverImageUrl(s) || COVER_PLACEHOLDER_SRC;
-                      const titleText = cleanText(localizedStory.title || (s as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
-                      const excerpt = String(localizedStory.summary || (s as any)?.summary || (s as any)?.excerpt || '').trim();
+                      const href = id ? buildNewsUrl({ id, slug: localizedStory.slug || id, lang }) : '#';
+                      const img = resolveCoverImageUrl(s, { lang }) || COVER_PLACEHOLDER_SRC;
+                      const titleText = cleanText(localizedStory.title) || String(t('common.untitled') || 'Untitled').trim();
+                      const excerpt = String(localizedStory.summary || '').trim();
 
                       debugStoryCard('article-related-grid', s, img);
 
@@ -829,71 +817,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
 
             {/* Sidebar */}
             <aside className="lg:col-span-4">
-              <div className="lg:sticky lg:top-4 space-y-4">
-                {/* Trending Topics */}
-                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                  <div className="px-4 py-3 border-b border-slate-200">
-                    <div className="text-sm font-extrabold text-slate-900">{tx('common.trending', 'Trending Topics')}</div>
-                  </div>
-                  <div className="p-4 flex flex-wrap gap-2">
-                    {trendingTopics.length ? (
-                      trendingTopics.map((topic) => (
-                        <a
-                          key={topic}
-                          href={`${prefix}/topic/${encodeURIComponent(slugifyTopic(topic))}?q=${encodeURIComponent(topic)}`.replace(/\/\//g, '/')}
-                          className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200"
-                        >
-                          #{topic}
-                        </a>
-                      ))
-                    ) : (
-                      <div className="text-sm text-slate-600">{tx('common.noResults', 'No topics yet.')}</div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Ad */}
-                <AdSlot slot="HOME_RIGHT_300x250" variant="right300" />
-
-                {/* Top Stories */}
-                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                  <div className="px-4 py-3 border-b border-slate-200">
-                    <div className="text-sm font-extrabold text-slate-900">{tx('common.topStories', 'Top Stories')}</div>
-                  </div>
-                  <div className="p-2">
-                    {topStories && topStories.length ? (
-                      topStories.slice(0, 8).map((s, i) => {
-                        const id = getStoryId(s);
-                        const localizedStory = getLocalizedArticleFields(s || {}, lang);
-                        if (!localizedStory.isVisible) return null;
-                        const href = id ? buildNewsUrl({ id, slug: id, lang }) : '#';
-                        const titleText = cleanText(localizedStory.title || (s as any)?.title) || String(t('common.untitled') || 'Untitled').trim();
-                        return (
-                          <a
-                            key={getStoryReactKey(s, href)}
-                            href={href}
-                            className="flex items-start gap-3 rounded-xl px-2 py-2 hover:bg-slate-50"
-                          >
-                            <div className="shrink-0 text-xs font-black text-slate-500 w-5 text-right">{i + 1}</div>
-                            <div className="min-w-0">
-                              <div className="line-clamp-2 text-sm font-semibold text-slate-900">{titleText}</div>
-                            </div>
-                          </a>
-                        );
-                      })
-                    ) : (
-                      <div className="p-3 text-sm text-slate-600">{tx('common.loading', 'Loading…')}</div>
-                    )}
-                  </div>
-                </div>
-
-                <ArticleLatestSidebarWidget lang={lang} items={sidebarLatestItems} loading={sidebarLatestLoading} />
-
-                <AdSlot slot="HOME_RIGHT_300x600" variant="right300x600" className="mx-auto" />
-
-                <ArticleVideoFeatureSidebar lang={lang} video={sidebarVideoFeature} />
-
-              </div>
+              <HomeRightRail lang={lang} latestItems={sidebarLatestItems} includeTallAd={false} />
             </aside>
           </div>
         </div>
@@ -1075,6 +999,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
           relatedStories: [],
           error: null,
           pending: true,
+          pendingSourceLang: getPendingSourceLang(data),
         },
       };
     }
@@ -1087,9 +1012,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
         articleId: null,
         translationFound: false,
       });
-      return {
-        props: { messages, locale, lang, slug: rawSlug, article: null, safeHtml: '', topStories: [], relatedStories: [], error: 'Not found', pending: false },
-      };
+      return { notFound: true };
     }
 
     const translationGroupId = String((article as any)?.translationGroupId || '').trim();
@@ -1109,13 +1032,14 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
           currentArticle: article,
           groupArticles: groupItems,
           locale: toRouteLocale(lang),
+          policy: STRICT_LOCALE_POLICY,
         }) as Article | null;
       } catch {
         // Keep original article when the sync group endpoint is unavailable.
       }
     }
 
-    const localized = getLocalizedArticleFields(article, lang);
+    const localized = getLocalizedArticleFields(article, lang, STRICT_LOCALE_POLICY);
     if (!localized.isVisible) {
       debugNewsDetailResolution('ssr-hidden', {
         locale: lang,
@@ -1157,6 +1081,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
         if (categoryKey) params.set('category', categoryKey);
         params.set('lang', lang);
         params.set('language', lang);
+        params.set('strictLocale', '1');
         params.set('limit', String(limit));
 
         const endpoint = `${origin}/api/public/news?${params.toString()}`;
@@ -1203,8 +1128,6 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
       },
     };
   } catch {
-    return {
-      props: { messages, locale, lang, slug: rawSlug, article: null, safeHtml: '', topStories: [], relatedStories: [], error: 'Fetch failed', pending: false },
-    };
+    return { notFound: true };
   }
 };

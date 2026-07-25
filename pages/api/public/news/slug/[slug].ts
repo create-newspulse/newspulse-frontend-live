@@ -1,8 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 import { getPublicApiBaseUrl } from '../../../../../lib/publicApiBase';
-import { getLocalizedArticleFields, getLocalizedSlug, normalizeRouteLocale, type RouteLocale } from '../../../../../lib/localizedArticleFields';
+import { getLocalizedArticleFields, getLocalizedSlug, normalizeRouteLocale, STRICT_LOCALE_POLICY, type RouteLocale } from '../../../../../lib/localizedArticleFields';
 import { unwrapArticle, unwrapArticles } from '../../../../../lib/publicNewsApi';
+import { pickFreshestArticleForLocale } from '../../../../../lib/translationGroupSync';
 
 function asSingleQueryValue(value: string | string[] | undefined): string {
   return String(Array.isArray(value) ? value[0] : value || '').trim();
@@ -62,6 +63,36 @@ function isPendingTranslationPayload(payload: any): boolean {
   return nestedStatus === 'pending' || nestedStatus === 'translating';
 }
 
+async function resolveArticleFromTranslationGroup(options: {
+  base: string;
+  qs: string;
+  requestHeaders: Record<string, string>;
+  article: any;
+  requestedLocale: RouteLocale;
+}): Promise<any> {
+  const translationGroupId = String(options.article?.translationGroupId || '').trim();
+  if (!options.article?._id || !translationGroupId) return options.article;
+
+  try {
+    const groupUrl = `${options.base}/api/public/news/group/${encodeURIComponent(translationGroupId)}${options.qs}`;
+    const groupRes = await fetch(groupUrl, {
+      method: 'GET',
+      headers: options.requestHeaders,
+    });
+    const groupText = await groupRes.text().catch(() => '');
+    const groupJson = groupText ? JSON.parse(groupText) : { items: [] };
+    const groupItems = groupRes.ok ? getItemsFromPayload(groupJson) : [];
+    return pickFreshestArticleForLocale({
+      currentArticle: options.article,
+      groupArticles: groupItems,
+      locale: options.requestedLocale,
+      policy: STRICT_LOCALE_POLICY,
+    }) || options.article;
+  } catch {
+    return options.article;
+  }
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
@@ -95,7 +126,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   };
 
   const returnResolvedArticle = (json: any, article: any, stage: string) => {
-    const localized = getLocalizedArticleFields(article, requestedLocale);
+    const localized = getLocalizedArticleFields(article, requestedLocale, STRICT_LOCALE_POLICY);
     debugSlugResolution(stage, {
       locale: requestedLocale,
       receivedSlug: normalizedRequestedSlug,
@@ -123,16 +154,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       const article = unwrapArticle(json);
-      const localized = getLocalizedArticleFields(article, requestedLocale);
-      if (article?._id && localized.isVisible) {
-        return returnResolvedArticle(json, article, 'direct-hit');
+      if (article?._id) {
+        const resolvedArticle = await resolveArticleFromTranslationGroup({
+          base,
+          qs,
+          requestHeaders,
+          article,
+          requestedLocale,
+        });
+        const localized = getLocalizedArticleFields(resolvedArticle, requestedLocale, STRICT_LOCALE_POLICY);
+        if (localized.isVisible) {
+          return returnResolvedArticle({ ...json, article: resolvedArticle }, resolvedArticle, resolvedArticle === article ? 'direct-hit' : 'direct-group-hit');
+        }
       }
 
       const listParams = new URLSearchParams(qsIndex >= 0 ? (req.url || '').slice(qsIndex + 1) : '');
       const currentLimit = Number(listParams.get('limit') || 0);
       if (!Number.isFinite(currentLimit) || currentLimit < 200) listParams.set('limit', '200');
+      listParams.set('strictLocale', '1');
 
-      const listUrl = `${base}/api/public/news?${listParams.toString() ? `?${listParams.toString()}` : ''}`;
+      const listQuery = listParams.toString();
+      const listUrl = `${base}/api/public/news${listQuery ? `?${listQuery}` : ''}`;
       const listRes = await fetch(listUrl, {
         method: 'GET',
         headers: requestHeaders,

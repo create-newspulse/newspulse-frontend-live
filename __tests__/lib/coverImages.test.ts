@@ -31,6 +31,22 @@ describe('coverImages', () => {
     expect(resolveCoverImageUrl(article, { lang: 'en' })).toBe('https://res.cloudinary.com/demo/image/upload/default.jpg');
   });
 
+  test('prefers image.en, image.hi, and image.gu records when present', () => {
+    const article: any = {
+      _id: 'article-lang-image',
+      coverImageUrl: 'https://res.cloudinary.com/demo/image/upload/default.jpg',
+      image: {
+        en: { url: 'https://res.cloudinary.com/demo/image/upload/english.jpg' },
+        hi: { url: 'https://res.cloudinary.com/demo/image/upload/hindi-direct.jpg' },
+        gu: { url: 'https://res.cloudinary.com/demo/image/upload/gujarati-direct.jpg' },
+      },
+    };
+
+    expect(resolveCoverImageUrl(article, { lang: 'en' })).toBe('https://res.cloudinary.com/demo/image/upload/english.jpg');
+    expect(resolveCoverImageUrl(article, { lang: 'hi' })).toBe('https://res.cloudinary.com/demo/image/upload/hindi-direct.jpg');
+    expect(resolveCoverImageUrl(article, { lang: 'gu' })).toBe('https://res.cloudinary.com/demo/image/upload/gujarati-direct.jpg');
+  });
+
   test('falls back to nested media image fields used by some article shapes', () => {
     const article: any = {
       _id: 'article-3',

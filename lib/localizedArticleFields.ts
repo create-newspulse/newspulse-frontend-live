@@ -153,26 +153,34 @@ function getSourceLocale(article: any): RouteLocale | null {
 export function getPublicArticleStatus(article: any): LocalizedArticleFields['status'] {
   const statusRaw = String(article?.status || article?.state || '').toLowerCase().trim();
   const deletedFlag = article?.deleted === true || article?.isDeleted === true || !!article?.deletedAt;
+  const archivedFlag = article?.archived === true || article?.isArchived === true || !!article?.archivedAt;
+  const publishedAtRaw = String(article?.publishedAt || article?.publishAt || '').trim();
+  const publishedAtMs = publishedAtRaw ? Date.parse(publishedAtRaw) : NaN;
+  const isScheduledForFuture = Number.isFinite(publishedAtMs) && publishedAtMs > Date.now();
 
   if (deletedFlag) return 'deleted';
+  if (archivedFlag) return 'unpublished';
   if (statusRaw === 'deleted' || statusRaw === 'removed' || statusRaw === 'trash') return 'deleted';
-
-  const publishedFlag =
-    article?.isPublished === true ||
-    article?.published === true ||
-    statusRaw === 'published' ||
-    !!String(article?.publishedAt || '').trim();
+  if (statusRaw === 'archived' || statusRaw === 'archive') return 'unpublished';
 
   const explicitlyUnpublished =
     article?.isPublished === false ||
     article?.published === false ||
     statusRaw === 'unpublished' ||
     statusRaw === 'draft' ||
+    statusRaw === 'scheduled' ||
     statusRaw === 'pending' ||
     statusRaw === 'rejected';
 
+  if (explicitlyUnpublished || isScheduledForFuture) return 'unpublished';
+
+  const publishedFlag =
+    article?.isPublished === true ||
+    article?.published === true ||
+    statusRaw === 'published' ||
+    !!publishedAtRaw;
+
   if (publishedFlag) return 'published';
-  if (explicitlyUnpublished) return 'unpublished';
 
   // If it's missing both a publish marker and an explicit state, treat as not safe for public listings.
   return 'unknown';

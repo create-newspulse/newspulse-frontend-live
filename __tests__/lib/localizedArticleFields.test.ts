@@ -134,4 +134,22 @@ describe('localizedArticleFields', () => {
     expect(localized.slug).toBe('hindi-title');
     expect(localized.title).toBe('हिंदी शीर्षक');
   });
+
+  test('hides drafts, scheduled, archived, deleted, and future-published articles from public visibility', () => {
+    const baseArticle: any = {
+      _id: 'editorial-public-contract',
+      category: 'editorial',
+      language: 'en',
+      title: 'Public Editorial',
+      content: '<p>Body</p>',
+      slug: 'public-editorial',
+    };
+
+    expect(getLocalizedArticleFields({ ...baseArticle, status: 'published', publishedAt: '2026-01-01T10:00:00.000Z' }, 'en').isVisible).toBe(true);
+    expect(getLocalizedArticleFields({ ...baseArticle, status: 'draft' }, 'en').isVisible).toBe(false);
+    expect(getLocalizedArticleFields({ ...baseArticle, status: 'published', publishedAt: '2999-01-01T10:00:00.000Z' }, 'en').isVisible).toBe(false);
+    expect(getLocalizedArticleFields({ ...baseArticle, status: 'archived', publishedAt: '2026-01-01T10:00:00.000Z' }, 'en').isVisible).toBe(false);
+    expect(getLocalizedArticleFields({ ...baseArticle, archived: true, publishedAt: '2026-01-01T10:00:00.000Z' }, 'en').isVisible).toBe(false);
+    expect(getLocalizedArticleFields({ ...baseArticle, deleted: true, publishedAt: '2026-01-01T10:00:00.000Z' }, 'en').isVisible).toBe(false);
+  });
 });

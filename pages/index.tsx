@@ -1,7 +1,6 @@
 import React, { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { useYouthPulse } from "../features/youthPulse/useYouthPulse";
 import { usePublicMode } from "../utils/PublicModeProvider";
 import { usePublicSettings } from "../src/context/PublicSettingsContext";
 import { DEFAULT_TRENDING_TOPICS, type TrendingTopic } from "../src/config/trendingTopics";
@@ -21,6 +20,7 @@ import { resolveArticleSlug } from "../lib/articleSlugs";
 import { buildNewsUrl } from "../lib/newsRoutes";
 import { resolveSponsoredContentMeta } from "../lib/sponsoredContent";
 import HomepageSponsoredFeatureCard from "../components/home/HomepageSponsoredFeatureCard";
+import HomeRightRail from "../components/home/HomeRightRail";
 import {
   fetchHomepageSponsoredFeature,
   normalizeHomepageSponsoredFeatureProps,
@@ -35,7 +35,6 @@ import StoryImage, { TopStoryImage } from "../src/components/story/StoryImage";
 import { getTickerMarqueeText, mergeTickerItemsWithAds, type TickerMarqueeItem } from "../lib/publicTickerAds";
 import InspirationHubHomepageSection from "../components/home/InspirationHubHomepageSection";
 import LiveTvOfflineSequence from "../components/LiveTvOfflineSequence";
-import NewsPulseVideoPlayer, { getViralVideoUiLabels } from "../components/viral-videos/NewsPulseVideoPlayer";
 import HeaderLogo from "../src/components/layout/HeaderLogo";
 import type { GetStaticProps } from "next";
 import { AnimatePresence, motion } from "framer-motion";
@@ -45,7 +44,6 @@ import { getLiveTvDisplayBadgeLabel, resolveLiveTvPresentation } from "../src/li
 import { usePublicFounderToggles } from "../hooks/usePublicFounderToggles";
 import { DEFAULT_PUBLIC_FOUNDER_TOGGLES, type PublicFounderToggles } from "../lib/publicFounderToggles";
 import { subscribePublicDataRefresh } from "../lib/publicDataRefresh";
-import { getPublicViralVideoPosterUrl, normalizePublicViralVideosPayload, resolvePublicViralVideoMediaUrl, type PublicViralVideo } from "../lib/publicViralVideos";
 import {
   ArrowRight,
   Bell,
@@ -91,6 +89,11 @@ const cx = (...c: Array<string | false | null | undefined>) => c.filter(Boolean)
 
 const STYLE_STORAGE_KEY = 'np_style';
 const HOME_STORY_CACHE_KEY = 'newspulse-home-cache';
+
+function getHomeStoryCacheKey(lang: UiLangCode): string {
+  const safeLang = lang === 'hi' || lang === 'gu' ? lang : 'en';
+  return `${HOME_STORY_CACHE_KEY}:${safeLang}`;
+}
 
 function readSavedStyleId(): string | null {
   if (typeof window === 'undefined') return null;
@@ -232,7 +235,6 @@ const CATEGORIES = [
   { key: "community", label: "Community Reporter", Icon: Users },
 ] as const;
 
-// Map categories to real routes where available
 const CATEGORY_ROUTES: Record<string, string> = {
   breaking: "/breaking",
   regional: "/regional/gujarat",
@@ -276,21 +278,6 @@ const HOME_FRESH_SUMMARY_STORY_LIMIT = 3;
 const HOME_FRESH_COMPACT_STORY_LIMIT = 14;
 const HOME_FRESH_STORY_LIMIT = HOME_FRESH_SUMMARY_STORY_LIMIT + HOME_FRESH_COMPACT_STORY_LIMIT;
 const HOME_FRESH_SOURCE_LIMIT = 40;
-const HOME_YOUTH_TRENDING_VISIBLE_LIMIT = 9;
-const HOME_YOUTH_TRENDING_FALLBACK_ITEMS = [
-  {
-    id: 'home-youth-trending-fallback-study-habits',
-    title: 'How Students Can Build Better Study Habits With Simple Daily Routines',
-  },
-  {
-    id: 'home-youth-trending-fallback-exam-stress',
-    title: 'Smart Ways To Prepare For Exams Without Last-Minute Stress',
-  },
-  {
-    id: 'home-youth-trending-fallback-career-skills',
-    title: 'Simple Career Skills Every Student Should Learn Early',
-  },
-];
 
 const CATEGORY_THEME: Record<string, { base: string; icon: string; hover: string; ring: string; active: string; dot: string }> = {
   breaking: {
@@ -310,38 +297,30 @@ const CATEGORY_THEME: Record<string, { base: string; icon: string; hover: string
     dot: "bg-emerald-500/80",
   },
   national: {
-    base: "bg-amber-50 border-amber-200 text-amber-700",
-    icon: "bg-amber-100 border-amber-200 text-amber-700",
-    hover: "hover:bg-amber-100",
-    ring: "focus-visible:ring-2 focus-visible:ring-amber-300/50",
-    active: "bg-amber-100 ring-2 ring-amber-300/50",
-    dot: "bg-amber-500/80",
+    base: "bg-orange-50 border-orange-200 text-orange-700",
+    icon: "bg-orange-100 border-orange-200 text-orange-700",
+    hover: "hover:bg-orange-100",
+    ring: "focus-visible:ring-2 focus-visible:ring-orange-300/50",
+    active: "bg-orange-100 ring-2 ring-orange-300/50",
+    dot: "bg-orange-500/80",
   },
   international: {
-    base: "bg-newsPulse-blue/10 border-newsPulse-blue/25 text-newsPulse-blue",
-    icon: "bg-newsPulse-blue/10 border-newsPulse-blue/25 text-newsPulse-blue",
-    hover: "hover:bg-newsPulse-blue/15",
-    ring: "focus-visible:ring-2 focus-visible:ring-newsPulse-blue/30",
-    active: "bg-newsPulse-blue/10 ring-2 ring-newsPulse-blue/30",
-    dot: "bg-newsPulse-blue/80",
+    base: "bg-purple-50 border-purple-200 text-purple-700",
+    icon: "bg-purple-100 border-purple-200 text-purple-700",
+    hover: "hover:bg-purple-100",
+    ring: "focus-visible:ring-2 focus-visible:ring-purple-300/50",
+    active: "bg-purple-100 ring-2 ring-purple-300/50",
+    dot: "bg-purple-500/80",
   },
   business: {
-    base: "bg-indigo-50 border-indigo-200 text-indigo-700",
-    icon: "bg-indigo-100 border-indigo-200 text-indigo-700",
-    hover: "hover:bg-indigo-100",
-    ring: "focus-visible:ring-2 focus-visible:ring-indigo-300/50",
-    active: "bg-indigo-100 ring-2 ring-indigo-300/50",
-    dot: "bg-indigo-500/80",
+    base: "bg-blue-50 border-blue-200 text-blue-700",
+    icon: "bg-blue-100 border-blue-200 text-blue-700",
+    hover: "hover:bg-blue-100",
+    ring: "focus-visible:ring-2 focus-visible:ring-blue-300/50",
+    active: "bg-blue-100 ring-2 ring-blue-300/50",
+    dot: "bg-blue-500/80",
   },
-  "science-technology": {
-    base: "bg-violet-50 border-violet-200 text-violet-700",
-    icon: "bg-violet-100 border-violet-200 text-violet-700",
-    hover: "hover:bg-violet-100",
-    ring: "focus-visible:ring-2 focus-visible:ring-violet-300/50",
-    active: "bg-violet-100 ring-2 ring-violet-300/50",
-    dot: "bg-violet-500/80",
-  },
-  sports: {
+  'science-technology': {
     base: "bg-cyan-50 border-cyan-200 text-cyan-700",
     icon: "bg-cyan-100 border-cyan-200 text-cyan-700",
     hover: "hover:bg-cyan-100",
@@ -349,7 +328,23 @@ const CATEGORY_THEME: Record<string, { base: string; icon: string; hover: string
     active: "bg-cyan-100 ring-2 ring-cyan-300/50",
     dot: "bg-cyan-500/80",
   },
+  sports: {
+    base: "bg-green-50 border-green-200 text-green-700",
+    icon: "bg-green-100 border-green-200 text-green-700",
+    hover: "hover:bg-green-100",
+    ring: "focus-visible:ring-2 focus-visible:ring-green-300/50",
+    active: "bg-green-100 ring-2 ring-green-300/50",
+    dot: "bg-green-500/80",
+  },
   lifestyle: {
+    base: "bg-pink-50 border-pink-200 text-pink-700",
+    icon: "bg-pink-100 border-pink-200 text-pink-700",
+    hover: "hover:bg-pink-100",
+    ring: "focus-visible:ring-2 focus-visible:ring-pink-300/50",
+    active: "bg-pink-100 ring-2 ring-pink-300/50",
+    dot: "bg-pink-500/80",
+  },
+  glamour: {
     base: "bg-rose-50 border-rose-200 text-rose-700",
     icon: "bg-rose-100 border-rose-200 text-rose-700",
     hover: "hover:bg-rose-100",
@@ -357,31 +352,7 @@ const CATEGORY_THEME: Record<string, { base: string; icon: string; hover: string
     active: "bg-rose-100 ring-2 ring-rose-300/50",
     dot: "bg-rose-500/80",
   },
-  glamour: {
-    base: "bg-fuchsia-50 border-fuchsia-200 text-fuchsia-700",
-    icon: "bg-fuchsia-100 border-fuchsia-200 text-fuchsia-700",
-    hover: "hover:bg-fuchsia-100",
-    ring: "focus-visible:ring-2 focus-visible:ring-fuchsia-300/50",
-    active: "bg-fuchsia-100 ring-2 ring-fuchsia-300/50",
-    dot: "bg-fuchsia-500/80",
-  },
-  "web-stories": {
-    base: "bg-yellow-50 border-yellow-200 text-yellow-700",
-    icon: "bg-yellow-100 border-yellow-200 text-yellow-700",
-    hover: "hover:bg-yellow-100",
-    ring: "focus-visible:ring-2 focus-visible:ring-yellow-300/50",
-    active: "bg-yellow-100 ring-2 ring-yellow-300/50",
-    dot: "bg-yellow-500/80",
-  },
-  "viral-videos": {
-    base: "bg-lime-50 border-lime-200 text-lime-700",
-    icon: "bg-lime-100 border-lime-200 text-lime-700",
-    hover: "hover:bg-lime-100",
-    ring: "focus-visible:ring-2 focus-visible:ring-lime-300/50",
-    active: "bg-lime-100 ring-2 ring-lime-300/50",
-    dot: "bg-lime-500/80",
-  },
-  editorial: {
+  'web-stories': {
     base: "bg-slate-50 border-slate-200 text-slate-700",
     icon: "bg-slate-100 border-slate-200 text-slate-700",
     hover: "hover:bg-slate-100",
@@ -2830,209 +2801,6 @@ function MoreReadsSection({ theme, items, lang }: any) {
   );
 }
 
-function FeedList({ theme, items, lang }: any) {
-  const { t } = useI18n();
-  const safeLang = (lang === 'hi' || lang === 'gu') ? lang : 'en';
-  const prefix = safeLang === 'en' ? '' : `/${safeLang}`;
-
-  const MAX_ITEMS = 8;
-  const CATEGORY_ORDER = [
-    'regional',
-    'national',
-    'international',
-    'business',
-    'science-tech',
-    'sports',
-    'lifestyle',
-    'glamour',
-  ] as const;
-  type LatestCategoryKey = (typeof CATEGORY_ORDER)[number] | 'unknown';
-
-  const normalizeCategoryKey = (raw: unknown): LatestCategoryKey => {
-    const v = String(raw || '').toLowerCase().trim();
-    if (!v) return 'unknown';
-    if (v.includes('sci') || v.includes('tech') || v.includes('science')) return 'science-tech';
-    if (v.includes('international') || v.includes('world')) return 'international';
-    if (v.includes('national')) return 'national';
-    if (v.includes('business')) return 'business';
-    if (v.includes('sport')) return 'sports';
-    if (v.includes('lifestyle')) return 'lifestyle';
-    if (v.includes('glamour') || v.includes('entertain')) return 'glamour';
-    if (v.includes('regional') || v.includes('gujarat') || v.includes('local')) return 'regional';
-    return 'unknown';
-  };
-
-  const categoryBadgeClasses = (raw: unknown): string => {
-    const key = normalizeCategoryKey(raw);
-    if (key === 'business') return 'bg-newsPulse-blue/10 text-newsPulse-blue border-newsPulse-blue/20';
-    if (key === 'national') return 'bg-orange-50 text-orange-700 border-orange-100';
-    if (key === 'international') return 'bg-purple-50 text-purple-700 border-purple-100';
-    if (key === 'sports') return 'bg-green-50 text-green-700 border-green-100';
-    if (key === 'science-tech') return 'bg-cyan-50 text-cyan-700 border-cyan-100';
-    if (key === 'lifestyle') return 'bg-pink-50 text-pink-700 border-pink-100';
-    if (key === 'glamour') return 'bg-rose-50 text-rose-700 border-rose-100';
-    if (key === 'regional') return 'bg-emerald-50 text-emerald-700 border-emerald-100';
-    return 'bg-slate-50 text-slate-700 border-slate-100';
-  };
-
-  const isLoading = items == null;
-  const listItems: any[] = Array.isArray(items) ? items : [];
-
-  const FILTER_OPTIONS = [
-    { key: 'all', label: 'All' },
-    { key: 'regional', label: 'Regional' },
-    { key: 'national', label: 'National' },
-    { key: 'international', label: 'International' },
-  ] as const;
-  type LatestFilterKey = (typeof FILTER_OPTIONS)[number]['key'];
-  const [activeFilter, setActiveFilter] = React.useState<LatestFilterKey>('all');
-
-  const orderedItems = React.useMemo(() => {
-    const picked: any[] = [];
-    const pickedIds = new Set<string>();
-
-    const getItemId = (it: any): string => {
-      return getStoryId(it) || getStorySlug(it);
-    };
-
-    for (const item of listItems) {
-      const id = getItemId(item);
-      if (!id || pickedIds.has(id)) {
-        continue;
-      }
-      picked.push(item);
-      pickedIds.add(id);
-    }
-
-    const filtered = activeFilter === 'all'
-      ? picked
-      : picked.filter((item) => normalizeCategoryKey(item?.category) === activeFilter);
-
-    return filtered.slice(0, MAX_ITEMS);
-  }, [activeFilter, listItems]);
-
-  if (!isLoading && !orderedItems.length) return null;
-
-  return (
-    <div className="overflow-hidden rounded-[28px] border border-slate-200/70 bg-white/85 backdrop-blur shadow-[0_22px_48px_-38px_rgba(15,23,42,0.34)] transition hover:shadow-[0_28px_56px_-38px_rgba(15,23,42,0.38)]">
-      <div
-        className="border-b p-4"
-        style={{
-          borderColor: theme.border,
-          background: theme.mode === 'dark'
-            ? 'linear-gradient(135deg, rgba(167,139,250,0.12), transparent 58%)'
-            : 'linear-gradient(135deg, rgba(37,99,235,0.08), rgba(255,255,255,0.70) 58%)',
-        }}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="inline-block h-2.5 w-2.5 rounded-full" aria-hidden="true" style={{ background: theme.accent }} />
-              <div className="truncate text-sm font-extrabold uppercase tracking-[0.16em]" style={{ color: theme.sub }}>
-                LATEST
-              </div>
-            </div>
-            <div className="mt-1 text-base font-black tracking-tight" style={{ color: theme.text }}>
-              News Pulse
-            </div>
-          </div>
-
-          <Link
-            href={`${prefix}/latest`}
-            className="shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-semibold transition"
-            style={{ color: theme.text, borderColor: theme.border, background: theme.surface }}
-          >
-            {t('common.viewAll')}
-          </Link>
-        </div>
-
-        <div className="mt-3 flex flex-wrap gap-2">
-          {FILTER_OPTIONS.map((option) => {
-            const isActive = activeFilter === option.key;
-            return (
-              <button
-                key={option.key}
-                type="button"
-                onClick={() => setActiveFilter(option.key)}
-                className="rounded-full border px-3 py-1.5 text-xs font-semibold tracking-[0.08em] transition"
-                style={{
-                  borderColor: isActive ? theme.accent : theme.border,
-                  color: isActive ? theme.accent : theme.sub,
-                  background: isActive
-                    ? (theme.mode === 'dark' ? 'rgba(56,189,248,0.12)' : 'rgba(37,99,235,0.08)')
-                    : theme.surface,
-                }}
-              >
-                {option.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="px-2 pb-2 pt-2">
-        {isLoading ? (
-          <div className="px-2">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={`sk-${i}`} className="border-b border-slate-100 last:border-b-0 py-2.5">
-                <div className="h-3 w-2/3 rounded bg-slate-100 animate-pulse" />
-                <div className="mt-2 h-4 w-full rounded bg-slate-100 animate-pulse" />
-              </div>
-            ))}
-          </div>
-        ) : !orderedItems.length ? (
-          <div className="px-4 pb-4 pt-2 text-sm text-slate-500">No fresh updates right now</div>
-        ) : (
-          orderedItems.map((f: any) => {
-            const storyId = getStoryId(f);
-            const rawSlug = getStorySlug(f);
-            const href = buildNewsUrl({ id: storyId || rawSlug, slug: rawSlug, lang: safeLang });
-            const time = String(f?.time || '').trim();
-            const category = String(f?.category || '').trim();
-            const metaText = time;
-            const storyKey = getStoryReactKey(f, href);
-            const titleText = String(f?.title || '').trim();
-            const titleParts = splitStoryTitleHook(titleText);
-            const titleHookColor = getStoryTitleHookColor(category);
-
-            debugStoryCard('home-feed-list', f, f?.imageSrc);
-
-            return (
-              <Link
-                key={storyKey}
-                href={href}
-                className="block rounded-[20px] border-b border-slate-100 px-3 py-2.5 transition last:border-b-0 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  {metaText ? (
-                    <div className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{metaText}</div>
-                  ) : null}
-
-                  {category ? (
-                    <span
-                      className={`ml-auto shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${categoryBadgeClasses(category)}`}
-                    >
-                      {category}
-                    </span>
-                  ) : null}
-                </div>
-
-                <div className="mt-1 flex items-start gap-2">
-                  <span className="line-clamp-2 font-semibold text-sm leading-snug" style={{ color: theme.text }}>
-                    {titleParts.highlightedHook ? <span style={{ color: titleHookColor }}>{titleParts.highlightedHook}</span> : null}
-                    {titleParts.remainingTitle ? <span>{` ${titleParts.remainingTitle}`}</span> : null}
-                  </span>
-                  {f?.titleIsOriginal ? <OriginalTag /> : null}
-                </div>
-              </Link>
-            );
-          })
-        )}
-      </div>
-    </div>
-  );
-}
-
 function LiveTVWidget({ theme, liveTvSettings }: { theme: any; liveTvSettings: PublicLiveTvSettings }) {
   const presentation = resolveLiveTvPresentation(liveTvSettings);
   const shouldShowFallbackMedia = !liveTvSettings?.enabled || !presentation.playerUrl;
@@ -3743,274 +3511,6 @@ function QuickToolsCard({ theme, onToast, viralVideosFrontendEnabled = true }: a
   );
 }
 
-function getHomepageViralVideoText(video: PublicViralVideo | null): string {
-  if (!video) return '';
-
-  const raw = video.raw && typeof video.raw === 'object' && !Array.isArray(video.raw)
-    ? video.raw as Record<string, any>
-    : {};
-  const nestedVideo = raw.video && typeof raw.video === 'object' && !Array.isArray(raw.video)
-    ? raw.video as Record<string, any>
-    : {};
-
-  const candidates = [
-    video.title,
-    raw.title,
-    nestedVideo.title,
-    raw.headline,
-    nestedVideo.headline,
-    raw.shortTitle,
-    nestedVideo.shortTitle,
-    video.summary,
-    raw.summary,
-    nestedVideo.summary,
-    raw.shortSummary,
-    nestedVideo.shortSummary,
-  ];
-
-  for (const candidate of candidates) {
-    const text = String(candidate || '').trim();
-    if (text) return text;
-  }
-
-  return 'Short video';
-}
-
-function ViralVideosRightRailBlock({ theme, lang }: any) {
-  const { t } = useI18n();
-  const safeLang = lang === 'hi' || lang === 'gu' ? lang : 'en';
-  const localizedHref = localizePath('/viral-videos', safeLang);
-  const debugEnabled = process.env.NODE_ENV === 'development';
-  const [resolved, setResolved] = React.useState(false);
-  const [frontendEnabled, setFrontendEnabled] = React.useState(false);
-  const [items, setItems] = React.useState<PublicViralVideo[]>([]);
-  const [inlinePlayingId, setInlinePlayingId] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    let mounted = true;
-    let inFlightController: AbortController | null = null;
-    const isFastRefreshEnv = process.env.NODE_ENV !== 'production'
-      || (typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname));
-    const pollMs = isFastRefreshEnv ? 4000 : 20000;
-
-    const loadFeaturedVideo = async (initial = false) => {
-      inFlightController?.abort();
-      const controller = new AbortController();
-      inFlightController = controller;
-
-      if (initial) setResolved(false);
-
-      try {
-        const fetchViralVideos = async (apiUrl: string) => {
-          if (debugEnabled) {
-            // eslint-disable-next-line no-console
-            console.debug('[ShortVideoDesk] public viral videos API URL:', apiUrl);
-          }
-
-          const response = await fetch(apiUrl, {
-            method: 'GET',
-            headers: { Accept: 'application/json' },
-            cache: 'no-store',
-            signal: controller.signal,
-          });
-          const payload = await response.json().catch(() => null);
-          const normalized = normalizePublicViralVideosPayload(payload);
-          if (debugEnabled) {
-            // eslint-disable-next-line no-console
-            console.debug('[ShortVideoDesk] count returned:', normalized.items.length);
-          }
-
-          return { response, normalized };
-        };
-
-        const params = new URLSearchParams();
-        if (safeLang) params.set('lang', safeLang);
-        params.set('limit', '6');
-        params.set('homepage', '1');
-        const apiUrl = `/api/public/viral-videos?${params.toString()}`;
-        let { response, normalized } = await fetchViralVideos(apiUrl);
-
-        if (!mounted || controller.signal.aborted) return;
-        if (!response.ok || normalized.settings.frontendEnabled !== true) {
-          if (debugEnabled) {
-            // eslint-disable-next-line no-console
-            console.debug(
-              '[ShortVideoDesk] empty state reason:',
-              !response.ok ? `response not ok (${response.status})` : 'frontend disabled'
-            );
-          }
-          setFrontendEnabled(false);
-          setItems([]);
-          setResolved(true);
-          return;
-        }
-
-        if (normalized.items.length === 0) {
-          const fallback = await fetchViralVideos('/api/public/viral-videos?limit=6');
-          if (!mounted || controller.signal.aborted) return;
-          if (fallback.response.ok && fallback.normalized.settings.frontendEnabled === true && fallback.normalized.items.length > 0) {
-            response = fallback.response;
-            normalized = fallback.normalized;
-          }
-        }
-
-        setFrontendEnabled(true);
-        const selectedHomepageItems = normalized.items.filter((video) => video.showOnHomepage && video.globalFrontend !== false).slice(0, 6);
-        const homepageItems = selectedHomepageItems.length
-          ? selectedHomepageItems
-          : normalized.items.filter((video) => video.globalFrontend !== false).slice(0, 6);
-        if (debugEnabled) {
-          const selected = homepageItems[0] || null;
-          // eslint-disable-next-line no-console
-          console.debug('[ShortVideoDesk] selected homepage video ID/title:', selected ? `${selected.id} / ${selected.title}` : 'none');
-        }
-        setItems(homepageItems);
-        setResolved(true);
-      } catch (error) {
-        if (mounted && !controller.signal.aborted) {
-          if (debugEnabled) {
-            // eslint-disable-next-line no-console
-            console.debug('[ShortVideoDesk] empty state reason:', error instanceof Error ? error.message : 'fetch failed');
-          }
-          setFrontendEnabled(false);
-          setItems([]);
-          setResolved(true);
-        }
-      } finally {
-        if (inFlightController === controller) inFlightController = null;
-      }
-    };
-
-    void loadFeaturedVideo(true);
-    const intervalId = window.setInterval(() => {
-      void loadFeaturedVideo();
-    }, pollMs);
-
-    return () => {
-      mounted = false;
-      inFlightController?.abort();
-      window.clearInterval(intervalId);
-    };
-  }, [safeLang]);
-
-  const hasHomepageVideos = items.length > 0;
-  const featuredVideo = items[0] || null;
-  const reelLabels = getViralVideoUiLabels(safeLang);
-  const videoLabel = reelLabels.videoBadge;
-
-  React.useEffect(() => {
-    if (debugEnabled && resolved && frontendEnabled && !hasHomepageVideos) {
-      // eslint-disable-next-line no-console
-      console.debug('[ShortVideoDesk] empty state reason:', 'No homepage-featured public viral videos returned');
-    }
-  }, [debugEnabled, frontendEnabled, hasHomepageVideos, resolved]);
-
-  const featuredDetailHref = featuredVideo
-    ? localizePath(`/viral-videos/${encodeURIComponent(featuredVideo.slug || featuredVideo.id)}`, safeLang)
-    : localizedHref;
-  const featuredPoster = getPublicViralVideoPosterUrl(featuredVideo);
-  const featuredImage = featuredPoster || COVER_PLACEHOLDER_SRC;
-  const featuredText = getHomepageViralVideoText(featuredVideo);
-  const featuredVideoSrc = resolvePublicViralVideoMediaUrl(featuredVideo?.videoFileUrl || '');
-  const inlinePlaying = Boolean(featuredVideo && featuredVideoSrc && inlinePlayingId === featuredVideo.id);
-
-  React.useEffect(() => {
-    setInlinePlayingId(null);
-  }, [featuredVideo?.id]);
-
-  const handlePosterError = (event: React.SyntheticEvent<HTMLImageElement>) => {
-    if (debugEnabled) {
-      // eslint-disable-next-line no-console
-      console.debug('[ShortVideoDesk] poster failed to load:', event.currentTarget.src, featuredVideo?.id || featuredVideo?.slug || featuredVideo?.title || 'none');
-    }
-    if (event.currentTarget.src.endsWith(COVER_PLACEHOLDER_SRC)) return;
-    event.currentTarget.src = COVER_PLACEHOLDER_SRC;
-  };
-
-  if (!resolved || !frontendEnabled || !featuredVideo) return null;
-
-  return (
-    <section aria-label={t('categories.viralVideos')} className="video-card-wrapper relative w-full overflow-hidden rounded-[24px] border-0 p-0 shadow-[0_14px_30px_-28px_rgba(15,23,42,0.45)] outline-none"
-      style={{
-        background: 'transparent',
-        border: 'none',
-        outline: 'none',
-      }}
-    >
-      <div className="grid gap-3">
-        <div
-            className="video-card group relative block w-full overflow-hidden rounded-[24px] border-0 p-0 shadow-[0_14px_30px_-28px_rgba(15,23,42,0.45)] outline-none"
-            style={{
-              background: '#0f172a',
-              border: 'none',
-              outline: 'none',
-              boxShadow: '0 14px 30px -28px rgba(15,23,42,0.45)',
-            }}
-          >
-            <div className="video-card-media relative w-full overflow-hidden rounded-[24px] aspect-[9/16] min-h-[420px] max-h-[560px] border-0 outline-none">
-              {inlinePlaying ? (
-                <NewsPulseVideoPlayer
-                  key={featuredVideo.id}
-                  src={featuredVideoSrc}
-                  posterSrc={featuredImage}
-                  title={featuredText}
-                  readNewsHref=""
-                  labels={reelLabels}
-                  autoPlay
-                  showBottomTitle={false}
-                  compactReelControls
-                  hideTopBranding
-                  minHeightClassName="min-h-full"
-                />
-              ) : (
-                <>
-                  <Link href={featuredDetailHref} aria-label={featuredText} className="absolute inset-0 z-10" />
-                  <img
-                    src={featuredImage}
-                    alt={featuredText}
-                    className="block h-full w-full rounded-[24px] border-0 object-cover outline-none transition duration-300 group-hover:scale-[1.02]"
-                    loading="lazy"
-                    decoding="async"
-                    onError={handlePosterError}
-                  />
-                  <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(2,6,23,0.34)_0%,rgba(2,6,23,0.08)_30%,rgba(2,6,23,0.08)_50%,rgba(2,6,23,0.82)_100%)]" />
-                </>
-              )}
-              <div className="absolute inset-x-0 top-0 z-30 flex items-center justify-between gap-2 p-3">
-                <span className="rounded-full bg-newsPulse-blue px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-newsPulse-white shadow-sm ring-1 ring-white/18 backdrop-blur">
-                  {videoLabel}
-                </span>
-                <Link
-                  href={localizedHref}
-                  onClick={(event) => event.stopPropagation()}
-                  className="relative z-40 rounded-full bg-black/48 px-2.5 py-1 text-[10px] font-bold text-white ring-1 ring-white/20 backdrop-blur transition hover:bg-black/62"
-                >
-                  {reelLabels.viewMore}
-                </Link>
-              </div>
-              {!inlinePlaying && featuredVideoSrc ? (
-                <button type="button" onClick={() => setInlinePlayingId(featuredVideo.id)} aria-label={`Play ${featuredText}`} className="absolute left-1/2 top-1/2 z-30 grid h-16 w-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/20 text-white shadow-[0_18px_36px_-18px_rgba(0,0,0,0.85)] ring-1 ring-white/34 backdrop-blur-md transition hover:scale-105 hover:bg-white/26 group-hover:scale-105 group-hover:bg-white/26">
-                  <Play className="ml-0.5 h-7 w-7 fill-current" />
-                </button>
-              ) : null}
-              {!featuredVideoSrc ? (
-                <div className="absolute inset-x-5 top-1/2 z-30 -translate-y-1/2 rounded-lg bg-black/58 p-3 text-center text-sm font-bold text-white shadow-xl ring-1 ring-white/15 backdrop-blur">
-                  Video source unavailable
-                </div>
-              ) : null}
-              {!inlinePlaying ? <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 p-4">
-                <h3 className="line-clamp-3 text-[15px] font-black leading-tight text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.55)]">
-                  {featuredText}
-                </h3>
-              </div> : null}
-            </div>
-        </div>
-      </div>
-    </section>
-  );
-
-}
-
 function SnapshotsCard({ theme }: any) {
   const { t } = useI18n();
   const [weatherValue, setWeatherValue] = useState<string>('');
@@ -4496,9 +3996,6 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mobileLeftOpen, setMobileLeftOpen] = useState(false);
 
-  // Real data hooks
-  const youth = useYouthPulse();
-
   React.useEffect(() => {
     setHydrated(true);
   }, []);
@@ -4916,7 +4413,6 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
 
   const showAnyTicker = tickerBlocks.length > 0;
 
-  const localizedYouthPulseHref = localizePath('/youth-pulse', apiLang);
   const viralVideosFrontendEnabled = founderToggles.viralVideosFrontendEnabled !== false;
   const mobileMenuCurrentPath = React.useMemo(() => {
     const normalized = getUnprefixedPath(router.asPath || '/');
@@ -4969,64 +4465,6 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
       { key: 'gu', label: 'Gujarati' },
     ] as const,
     []
-  );
-
-  const rightRailYouthTrendingItems = React.useMemo(() => {
-    const items = Array.isArray(youth.trending) ? youth.trending.slice(0, HOME_YOUTH_TRENDING_VISIBLE_LIMIT) : [];
-    if (!youth.loading && items.length > 0 && items.length < HOME_YOUTH_TRENDING_VISIBLE_LIMIT) {
-      return [...items, ...HOME_YOUTH_TRENDING_FALLBACK_ITEMS].slice(0, HOME_YOUTH_TRENDING_VISIBLE_LIMIT);
-    }
-    return items;
-  }, [youth.loading, youth.trending]);
-
-  const youthPulseTrendingBlock = !youth.loading && rightRailYouthTrendingItems.length === 0 ? null : (
-    <div className="overflow-hidden rounded-[28px] border shadow-[0_18px_42px_-34px_rgba(15,23,42,0.30)]" style={{ background: theme.surface2, borderColor: theme.border }}>
-      <div
-        className="flex items-center justify-between gap-3 border-b px-4 py-4"
-        style={{
-          borderColor: theme.border,
-          background: theme.mode === 'dark'
-            ? 'linear-gradient(135deg, rgba(79,70,229,0.16), rgba(56,189,248,0.08) 70%, transparent 100%)'
-            : 'linear-gradient(135deg, rgba(79,70,229,0.10), rgba(37,99,235,0.05) 70%, rgba(255,255,255,0.72) 100%)',
-        }}
-      >
-        <div className="min-w-0">
-          <div className="text-[12px] font-extrabold uppercase tracking-[0.16em]" style={{ color: theme.sub }}>YOUTH DESK</div>
-          <div className="mt-1 text-sm font-black tracking-tight" style={{ color: theme.text }}>{t('home.youthPulseTrending')}</div>
-        </div>
-        <a href={localizedYouthPulseHref} className="shrink-0 whitespace-nowrap text-xs font-semibold" style={{ color: theme.accent2 }}>{t('common.viewAll')} →</a>
-      </div>
-      <div className="grid gap-2.5 p-4">
-        {rightRailYouthTrendingItems.map((y: any) => (
-          <a
-            key={String(y.id)}
-            href={localizedYouthPulseHref}
-            className="group flex items-center gap-3 rounded-[20px] border px-3.5 py-3 text-sm shadow-[0_14px_30px_-28px_rgba(15,23,42,0.32)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_34px_-28px_rgba(15,23,42,0.36)]"
-            style={{ background: theme.surface, borderColor: theme.border, color: theme.text }}
-          >
-            <span
-              aria-hidden="true"
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border"
-              style={{
-                borderColor: theme.mode === 'dark' ? 'rgba(148,163,184,0.22)' : 'rgba(99,102,241,0.18)',
-                background: theme.mode === 'dark'
-                  ? 'linear-gradient(135deg, rgba(79,70,229,0.22), rgba(14,165,233,0.12))'
-                  : 'linear-gradient(135deg, rgba(79,70,229,0.12), rgba(14,165,233,0.08))',
-              }}
-            >
-              <GraduationCap className="h-3.5 w-3.5" style={{ color: theme.accent2 }} />
-            </span>
-            <span className="min-w-0 flex-1 font-semibold leading-snug">
-              {y.title}
-            </span>
-            <ChevronRight className="h-4 w-4 shrink-0 opacity-45 transition group-hover:translate-x-0.5 group-hover:opacity-75" />
-          </a>
-        ))}
-        {youth.loading && !youth.trending.length ? (
-          <div className="rounded-[22px] border px-3 py-7 animate-pulse" style={{ background: theme.surface, borderColor: theme.border }} />
-        ) : null}
-      </div>
-    </div>
   );
 
   const homepageSponsoredFeatureIdentitySet = React.useMemo(() => {
@@ -5308,26 +4746,8 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
         .concat([leftRailSmallAdBlock])
     : [];
   const showLeftRail = leftRailBlocks.length > 0;
-  const rightRailTopAdNode = <AdSlot slot="HOME_RIGHT_300x250" variant="right300" />;
-  const rightRailTallAdNode = <AdSlot slot="HOME_RIGHT_300x600" variant="right300x600" />;
   const rightRailNode = (
-    <div className="sticky top-4 grid w-full min-w-0 gap-4">
-      {rightRailTopAdNode}
-
-      <FeedList
-        theme={theme}
-        title={t('home.latest')}
-        items={latestFromBackend}
-        lang={apiLang}
-      />
-
-      {rightRailTallAdNode}
-
-      {/* Required order: 300x600 ad slot -> Viral Videos -> Youth Pulse trending */}
-      <ViralVideosRightRailBlock theme={theme} lang={apiLang} />
-
-      {youthPulseTrendingBlock}
-    </div>
+    <HomeRightRail theme={theme} latestItems={latestFromBackend} lang={apiLang} />
   );
 
   const hasSnapshotsBlock = sidebarBlocks.some((b) => b.key === 'snapshots');

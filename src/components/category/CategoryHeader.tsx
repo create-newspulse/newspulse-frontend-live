@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
+import { Newspaper } from 'lucide-react';
 import React from 'react';
 
 export type CategoryHeaderVariant = 'page' | 'compact';
@@ -64,6 +65,30 @@ function iconFor(categorySlug: string): string {
   }
 }
 
+const EDITORIAL_COPY: Record<'en' | 'hi' | 'gu', { title: string; subtitle: string; searchPlaceholder: string }> = {
+  en: {
+    title: 'Editorial',
+    subtitle: 'In-depth Editorials and Special Stories from News Pulse.',
+    searchPlaceholder: 'Search Editorials and Special Stories...',
+  },
+  hi: {
+    title: 'संपादकीय',
+    subtitle: 'न्यूज़ पल्स के गहन संपादकीय और विशेष लेख।',
+    searchPlaceholder: 'संपादकीय और विशेष लेख खोजें...',
+  },
+  gu: {
+    title: 'સંપાદકીય',
+    subtitle: 'ન્યૂઝ પલ્સના વિશ્લેષણાત્મક સંપાદકીય અને વિશેષ લેખો.',
+    searchPlaceholder: 'સંપાદકીય અને વિશેષ લેખો શોધો...',
+  },
+};
+
+function langFromPrefix(prefix: '' | '/hi' | '/gu' | '/en'): 'en' | 'hi' | 'gu' {
+  if (prefix === '/hi') return 'hi';
+  if (prefix === '/gu') return 'gu';
+  return 'en';
+}
+
 export default function CategoryHeader({
   categorySlug,
   title,
@@ -82,6 +107,11 @@ export default function CategoryHeader({
   const basePath = categoryBasePath(categorySlug);
   const categoryHref = withPrefix(prefix, basePath);
   const browseStatesHref = withPrefix(prefix, '/national/states');
+  const isEditorial = String(categorySlug || '').toLowerCase().trim() === 'editorial';
+  const editorialCopy = EDITORIAL_COPY[langFromPrefix(prefix)];
+  const displayTitle = isEditorial ? editorialCopy.title : title;
+  const displaySubtitle = isEditorial ? editorialCopy.subtitle : subtitle;
+  const displaySearchPlaceholder = isEditorial ? editorialCopy.searchPlaceholder : (searchPlaceholder || `Search ${title}…`);
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,8 +125,8 @@ export default function CategoryHeader({
     router.push(next).catch(() => {});
   };
 
-  const outerPad = variant === 'page' ? 'py-3' : 'py-2';
-  const titleSize = variant === 'page' ? 'text-xl md:text-2xl' : 'text-lg md:text-xl';
+  const outerPad = isEditorial ? 'py-3' : (variant === 'page' ? 'py-3' : 'py-2');
+  const titleSize = isEditorial ? 'text-[26px] md:text-[28px]' : (variant === 'page' ? 'text-xl md:text-2xl' : 'text-lg md:text-xl');
   const accentClass = categorySlug === 'breaking' ? 'bg-newsPulse-red' : 'bg-newsPulse-blue';
 
   return (
@@ -105,10 +135,13 @@ export default function CategoryHeader({
       >
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3 min-w-0">
-            <div className={`h-9 w-1 rounded-full ${accentClass}`} />
+            <div className={`${isEditorial ? 'h-14' : 'h-9'} w-1 rounded-full ${accentClass}`} />
             <div className="min-w-0">
-              <div className={`font-extrabold leading-tight truncate text-newsPulse-navy ${titleSize}`}>{iconFor(categorySlug)} {title}</div>
-              {subtitle ? <div className="text-xs text-newsPulse-slate">{subtitle}</div> : null}
+              <div className={`flex min-w-0 items-center gap-2 font-bold leading-tight text-newsPulse-navy ${titleSize}`}>
+                {isEditorial ? <Newspaper className="h-6 w-6 shrink-0 text-newsPulse-blue" aria-hidden="true" /> : <span aria-hidden="true">{iconFor(categorySlug)}</span>}
+                <span className="truncate">{displayTitle}</span>
+              </div>
+              {displaySubtitle ? <div className="mt-1 text-sm text-newsPulse-slate">{displaySubtitle}</div> : null}
             </div>
 
             {showBrowseStates ? (
@@ -124,7 +157,7 @@ export default function CategoryHeader({
                 <input
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
-                  placeholder={searchPlaceholder || `Search ${title}…`}
+                  placeholder={displaySearchPlaceholder}
                   className="w-full rounded-xl border border-newsPulse-slate/25 bg-newsPulse-white px-3 py-2 text-sm text-newsPulse-navy outline-none focus:ring-2 focus:ring-newsPulse-blue/20"
                 />
               </div>

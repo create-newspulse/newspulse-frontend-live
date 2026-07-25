@@ -1,6 +1,7 @@
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
+import { Newspaper } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 import { getCategoryQueryKey, getCategoryRouteKey } from '../lib/categoryKeys';
 import { fetchPublicNews, type Article } from '../lib/publicNewsApi';
@@ -12,6 +13,7 @@ import { COVER_PLACEHOLDER_SRC, resolveCoverFitMode, resolveCoverImageUrl } from
 import { debugStoryCard, getStoryId, getStoryReactKey } from '../lib/storyIdentity';
 import { formatEditorialDateTime, resolveStoryDateIso } from '../lib/storyDateTime';
 import StoryImage from '../src/components/story/StoryImage';
+import { getArticleAuthorDesignation, getArticleAuthorName, getArticleReadingTime, getEditorialTypeLabel, isEditorialArticle } from '../lib/editorialDisplay';
 
 export type CategoryFeedPageProps = {
   title: string;
@@ -41,6 +43,24 @@ function categoryKeyToI18nKey(categoryKey: string): string | null {
   return null;
 }
 
+const EDITORIAL_HEADER_COPY: Record<string, { title: string; subtitle: string; searchPlaceholder: string }> = {
+  en: {
+    title: 'Editorial',
+    subtitle: 'In-depth Editorials and Special Stories from News Pulse.',
+    searchPlaceholder: 'Search Editorials and Special Stories...',
+  },
+  hi: {
+    title: 'संपादकीय',
+    subtitle: 'न्यूज़ पल्स के गहन संपादकीय और विशेष लेख।',
+    searchPlaceholder: 'संपादकीय और विशेष लेख खोजें...',
+  },
+  gu: {
+    title: 'સંપાદકીય',
+    subtitle: 'ન્યૂઝ પલ્સના વિશ્લેષણાત્મક સંપાદકીય અને વિશેષ લેખો.',
+    searchPlaceholder: 'સંપાદકીય અને વિશેષ લેખો શોધો...',
+  },
+};
+
 export default function CategoryFeedPage({ title, categoryKey, extraQuery }: CategoryFeedPageProps) {
   const router = useRouter();
   const { language } = useLanguage();
@@ -62,6 +82,9 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
     const key = categoryKeyToI18nKey(routeCategoryKey);
     return key ? t(key) : title;
   }, [routeCategoryKey, t, title]);
+  const isEditorialPage = routeCategoryKey === 'editorial';
+  const editorialHeaderCopy = EDITORIAL_HEADER_COPY[language] || EDITORIAL_HEADER_COPY.en;
+  const pageTitle = isEditorialPage ? editorialHeaderCopy.title : localizedTitle;
 
   // Allow deep-linking into a filtered view (used by article-page category header search).
   React.useEffect(() => {
@@ -147,16 +170,43 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
   return (
     <>
       <Head>
-        <title>{`${localizedTitle} | ${t('brand.name')}`}</title>
+        <title>{`${pageTitle} | ${t('brand.name')}`}</title>
       </Head>
 
       <main className="min-h-screen bg-newsPulse-white">
         <div className="max-w-6xl mx-auto px-4 py-10">
-          <header className="flex flex-col gap-2">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h1 className="text-4xl font-extrabold tracking-tight text-newsPulse-navy">{localizedTitle}</h1>
-            </div>
-          </header>
+          {isEditorialPage ? (
+            <header className="border-b border-newsPulse-slate/20 pb-5">
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div className="flex min-w-0 items-center gap-4">
+                  <div className="h-14 w-1 shrink-0 rounded-full bg-newsPulse-blue" aria-hidden="true" />
+                  <Newspaper className="h-6 w-6 shrink-0 text-newsPulse-blue" aria-hidden="true" />
+                  <div className="min-w-0">
+                    <h1 className="text-[28px] font-bold leading-tight text-newsPulse-navy">{editorialHeaderCopy.title}</h1>
+                    <p className="mt-1 text-sm leading-5 text-newsPulse-slate">{editorialHeaderCopy.subtitle}</p>
+                  </div>
+                </div>
+
+                <div className="w-full md:w-[min(360px,40%)]">
+                  <label htmlFor="editorial-search" className="sr-only">{editorialHeaderCopy.searchPlaceholder}</label>
+                  <input
+                    id="editorial-search"
+                    type="search"
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder={editorialHeaderCopy.searchPlaceholder}
+                    className="w-full rounded-xl border border-newsPulse-slate/25 bg-newsPulse-white px-4 py-2.5 text-sm text-newsPulse-navy outline-none transition focus:border-newsPulse-blue focus:ring-2 focus:ring-newsPulse-blue/15"
+                  />
+                </div>
+              </div>
+            </header>
+          ) : (
+            <header className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h1 className="text-4xl font-extrabold tracking-tight text-newsPulse-navy">{localizedTitle}</h1>
+              </div>
+            </header>
+          )}
 
           {error ? (
             <div className="mt-6 rounded-2xl border border-newsPulse-slate/25 bg-newsPulse-slate/10 p-5 text-newsPulse-navy">
@@ -192,6 +242,10 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
                   const summary = localized.summary;
                   const image = resolveCoverImageUrl(a) || COVER_PLACEHOLDER_SRC;
                   const fitMode = resolveCoverFitMode(a, { src: image, altText: title });
+                  const editorialLabel = routeCategoryKey === 'editorial' || isEditorialArticle(a) ? getEditorialTypeLabel(a) : '';
+                  const authorName = editorialLabel ? getArticleAuthorName(a) : '';
+                  const authorDesignation = editorialLabel ? getArticleAuthorDesignation(a) : '';
+                  const readingTime = editorialLabel ? getArticleReadingTime(a) : '';
 
                   debugStoryCard('category-feed', a, image);
 
@@ -207,6 +261,12 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
                       />
 
                       <div className="p-4">
+                        {editorialLabel ? (
+                          <div className="mb-2 text-[11px] font-black uppercase tracking-[0.16em] text-newsPulse-blue">
+                            {editorialLabel}
+                          </div>
+                        ) : null}
+
                         <Link href={href} className="block text-lg font-bold text-newsPulse-navy hover:text-newsPulse-blue hover:underline">
                           <span>{title}</span>
                         </Link>
@@ -225,7 +285,21 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
                           </p>
                         ) : null}
 
-                        {when ? <div className="mt-3 text-xs font-medium text-newsPulse-slate">{when}</div> : null}
+                        {authorName ? (
+                          <div className="mt-3 text-sm text-newsPulse-navy">
+                            <div className="font-semibold">By {authorName}</div>
+                            {authorDesignation ? <div className="text-newsPulse-slate">{authorDesignation}</div> : null}
+                          </div>
+                        ) : null}
+
+                        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-newsPulse-slate">
+                          {when ? <span>{when}</span> : null}
+                          {readingTime ? <span>{readingTime}</span> : null}
+                        </div>
+
+                        <Link href={href} className="mt-4 inline-flex text-sm font-bold text-newsPulse-blue hover:underline">
+                          Read More
+                        </Link>
                       </div>
                     </li>
                   );
