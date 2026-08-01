@@ -6,6 +6,7 @@ import React from 'react';
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Copy, Play, Share2 } from 'lucide-react';
 
 import NewsPulseVideoPlayer, { getViralVideoUiLabels } from '../../components/viral-videos/NewsPulseVideoPlayer';
+import EmbeddedMediaConsentGate from '../../src/consent/EmbeddedMediaConsentGate';
 import { COVER_PLACEHOLDER_SRC } from '../../lib/coverImages';
 import { fetchServerPublicFounderToggles } from '../../lib/publicFounderToggles';
 import { getPublicViralVideoPosterUrl, getPublicViralVideoXEmbedUrl, normalizePublicViralVideo, normalizePublicViralVideosPayload, resolvePublicViralVideoPlayback, type PublicViralVideo } from '../../lib/publicViralVideos';
@@ -474,13 +475,15 @@ export default function ViralVideoDetailPage({ initialVideo }: Props) {
                         />
                       ) : playback.mode === 'youtube' ? (
                         <>
-                          <iframe
-                            title={video.title}
-                            src={playback.embedUrl}
-                            className="h-full w-full"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                            allowFullScreen
-                          />
+                          <EmbeddedMediaConsentGate title={video.title} className="absolute inset-0">
+                            <iframe
+                              title={video.title}
+                              src={playback.embedUrl}
+                              className="h-full w-full"
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                              allowFullScreen
+                            />
+                          </EmbeddedMediaConsentGate>
                           <div className="absolute inset-x-[18px] top-4 z-30 flex items-start justify-between gap-3">
                             <PlayerTopOverlay />
                             {relatedNewsHref ? <div className="pointer-events-auto ml-2 shrink-0"><ReadNewsAction href={relatedNewsHref} label={reelLabels.readNews} /></div> : null}
@@ -488,7 +491,9 @@ export default function ViralVideoDetailPage({ initialVideo }: Props) {
                         </>
                       ) : xEmbedUrl ? (
                         <>
-                          <XEmbedPlayer key={xEmbedUrl} tweetUrl={xEmbedUrl} posterSrc={posterSrc} title={video.title} slug={String(debugSlug || video.slug || video.id || '')} />
+                          <EmbeddedMediaConsentGate title={video.title} className="absolute inset-0">
+                            <XEmbedPlayer key={xEmbedUrl} tweetUrl={xEmbedUrl} posterSrc={posterSrc} title={video.title} slug={String(debugSlug || video.slug || video.id || '')} />
+                          </EmbeddedMediaConsentGate>
                           <div className="absolute inset-x-[18px] top-4 z-30 flex items-start justify-between gap-3">
                             <PlayerTopOverlay />
                             {relatedNewsHref ? <div className="pointer-events-auto ml-2 shrink-0"><ReadNewsAction href={relatedNewsHref} label={reelLabels.readNews} /></div> : null}

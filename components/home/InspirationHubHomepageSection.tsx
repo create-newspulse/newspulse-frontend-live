@@ -5,6 +5,7 @@ import inspirationData from "../../data/inspiration.json";
 import { getInspirationHubContent } from "../../data/inspirationHubContent";
 import { sanitizeEmbedUrl } from "../../src/lib/publicSettings";
 import { useI18n } from "../../src/i18n/LanguageProvider";
+import EmbeddedMediaConsentGate from "../../src/consent/EmbeddedMediaConsentGate";
 import InspirationListenButton from "../inspiration/InspirationListenButton";
 
 type InspirationHubHomepageSectionProps = {
@@ -137,15 +138,17 @@ export default function InspirationHubHomepageSection({ theme, href, sectionTitl
             >
               <div className="relative aspect-[16/9] w-full overflow-hidden bg-black">
                 {hasEmbed ? (
-                  <iframe
-                    title={t("inspirationHub.homepage.drone.iframeTitle")}
-                    src={embedUrl}
-                    className="absolute inset-0 h-full w-full bg-black"
-                    loading="lazy"
-                    referrerPolicy="strict-origin-when-cross-origin"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    allowFullScreen
-                  />
+                  <EmbeddedMediaConsentGate title={displayDroneTitle} className="absolute inset-0">
+                    <iframe
+                      title={t("inspirationHub.homepage.drone.iframeTitle")}
+                      src={embedUrl}
+                      className="absolute inset-0 h-full w-full bg-black"
+                      loading="lazy"
+                      referrerPolicy="strict-origin-when-cross-origin"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                    />
+                  </EmbeddedMediaConsentGate>
                 ) : (
                   <div className="absolute inset-0 overflow-hidden">
                     <div

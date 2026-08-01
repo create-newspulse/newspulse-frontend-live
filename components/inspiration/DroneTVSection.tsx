@@ -1,6 +1,7 @@
 import { ExternalLink, Play, Radio } from "lucide-react";
 import type { ScenicMediaItem } from "../../data/inspirationHubContent";
 import { useI18n } from "../../src/i18n/LanguageProvider";
+import EmbeddedMediaConsentGate from "../../src/consent/EmbeddedMediaConsentGate";
 
 type Props = {
   items: ScenicMediaItem[];
@@ -64,15 +65,17 @@ export default function DroneTVSection({ items, videoEmbedUrl, videoTitle, video
               </div>
 
               <div className="relative aspect-[16/9] w-full overflow-hidden bg-black">
-                <iframe
-                  title={t("inspirationHub.page.drone.iframeTitle")}
-                  src={videoEmbedUrl}
-                  className="absolute inset-0 h-full w-full bg-black"
-                  loading="lazy"
-                  referrerPolicy="strict-origin-when-cross-origin"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowFullScreen
-                />
+                <EmbeddedMediaConsentGate title={displayTitle} className="absolute inset-0">
+                  <iframe
+                    title={t("inspirationHub.page.drone.iframeTitle")}
+                    src={videoEmbedUrl}
+                    className="absolute inset-0 h-full w-full bg-black"
+                    loading="lazy"
+                    referrerPolicy="strict-origin-when-cross-origin"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                  />
+                </EmbeddedMediaConsentGate>
               </div>
 
               <div className="flex flex-col gap-3 border-t border-slate-200/70 bg-white px-4 py-4 text-slate-700 sm:flex-row sm:items-center sm:justify-between sm:px-5">

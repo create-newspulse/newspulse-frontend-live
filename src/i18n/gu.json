@@ -273,6 +273,10 @@
     "grievanceRedressal": "શિકાયત નિવારણ",
     "monthlyCompliance": "માસિક પાલન",
     "privacyPolicy": "ગોપનીયતા નીતિ",
+    "cookiePolicy": "કુકી નીતિ",
+    "cookieSettings": "કુકી સેટિંગ્સ",
+    "privacyRequest": "ગોપનીયતા વિનંતી",
+    "legalComplianceTitle": "કાનૂની અને પાલન",
     "termsOfService": "સેવાની શરતો",
     "copyrightPolicy": "પ્રતિલિપિ અધિકાર નીતિ",
     "careers": "કેરિયર્સ",
@@ -284,6 +288,55 @@
     "apiAccess": "API એક્સેસ",
     "licensing": "લાઇસેન્સિંગ",
     "copyright": "© 2025–2026 News Pulse Media. All Rights Reserved. | Powered by Innovation"
+  },
+  "cookieConsent": {
+    "links": {
+      "cookiePolicy": "કુકી નીતિ",
+      "privacyPolicy": "ગોપનીયતા નીતિ"
+    },
+    "actions": {
+      "acceptAll": "બધું સ્વીકારો",
+      "rejectNonEssential": "બિન-આવશ્યક નકારો",
+      "managePreferences": "પસંદગીઓ મેનેજ કરો",
+      "savePreferences": "પસંદગીઓ સાચવો",
+      "close": "કુકી પસંદગીઓ બંધ કરો"
+    },
+    "banner": {
+      "title": "તમારી ગોપનીયતા પસંદગીઓ",
+      "text": "News Pulse વેબસાઇટને સુરક્ષિત અને કાર્યરત રાખવા માટે જરૂરી તકનીકોનો ઉપયોગ કરે છે. તમારી મંજૂરીથી અમે analytics, preference, advertising અને embedded-media તકનીકોનો પણ ઉપયોગ કરી શકીએ છીએ. તમે બધું સ્વીકારી શકો છો, બિન-આવશ્યક તકનીકો નકારી શકો છો અથવા દરેક શ્રેણી અલગથી મેનેજ કરી શકો છો."
+    },
+    "modal": {
+      "eyebrow": "ગોપનીયતા નિયંત્રણો",
+      "title": "કુકી પસંદગીઓ",
+      "text": "આ ઉપકરણ પર News Pulse કઈ વૈકલ્પિક તકનીકોનો ઉપયોગ કરી શકે તે પસંદ કરો. Strictly necessary તકનીકો હંમેશા સક્રિય રહે છે કારણ કે વેબસાઇટને કામ કરવા માટે તેમની જરૂર છે."
+    },
+    "categories": {
+      "necessary": {
+        "title": "સખત જરૂરી",
+        "description": "સુરક્ષા, consent storage, session continuity અને વિશ્વસનીય વેબસાઇટ કામગીરી માટે જરૂરી. આ શ્રેણી હંમેશા સક્ષમ છે."
+      },
+      "preferences": {
+        "title": "પસંદગીઓ",
+        "description": "News Pulse ને આ ઉપકરણ પર વૈકલ્પિક ભાષા અને display preferences યાદ રાખવાની મંજૂરી આપે છે."
+      },
+      "analytics": {
+        "title": "એનાલિટિક્સ",
+        "description": "સંમતિ પછી aggregate traffic, article performance અને technical measurement માટે મંજૂરી આપે છે."
+      },
+      "advertising": {
+        "title": "જાહેરાત",
+        "description": "જ્યાં advertising enabled હોય ત્યાં ad delivery અને measurement માટે મંજૂરી આપે છે."
+      },
+      "embeddedMedia": {
+        "title": "એમ્બેડેડ મીડિયા",
+        "description": "YouTube, YouTube Live અને અન્ય third-party media embeds લોડ કરવાની મંજૂરી આપે છે."
+      }
+    },
+    "embeddedMediaPlaceholder": {
+      "title": "એમ્બેડેડ મીડિયા અટકાવ્યું છે",
+      "text": "YouTube, YouTube Live અથવા social embeds ને third-party providers પરથી લોડ કરવા embedded media ને મંજૂરી આપો.",
+      "action": "Embedded Media મંજૂર કરો"
+    }
   },
   "categoryPage": {
     "unableToLoadTitle": "લેખ લોડ થઈ શક્યા નથી",

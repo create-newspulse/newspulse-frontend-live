@@ -1,3 +1,5 @@
+import { hasStoredConsentForCategory } from '../../src/consent/cookieConsent';
+
 export type ArticleAnalyticsLang = 'en' | 'hi' | 'gu';
 
 export type ArticleAnalyticsDeviceType = 'mobile' | 'tablet' | 'desktop';
@@ -134,6 +136,7 @@ function writeCookie(name: string, value: string, maxAgeSec: number) {
 }
 
 export function getOrCreateVisitorId(): string {
+  if (!hasStoredConsentForCategory('analytics')) return '';
   // Prefer localStorage, fallback to cookie.
   const ls = safeGetLocalStorage();
   if (ls) {
@@ -161,6 +164,7 @@ export function getOrCreateVisitorId(): string {
 export function getOrCreateSessionId(options?: {
   inactivityWindowMs?: number;
 }): { sessionId: string; isNew: boolean } {
+  if (!hasStoredConsentForCategory('analytics')) return { sessionId: '', isNew: true };
   const inactivityWindowMs = options?.inactivityWindowMs ?? DEFAULT_INACTIVITY_WINDOW_MS;
   const ss = safeGetSessionStorage();
   const ts = now();
@@ -195,6 +199,7 @@ export function getOrCreateSessionId(options?: {
 }
 
 export function touchSessionActivity() {
+  if (!hasStoredConsentForCategory('analytics')) return;
   const ss = safeGetSessionStorage();
   if (!ss) return;
   try {
@@ -256,6 +261,7 @@ export function shouldTrackClientAnalytics(options?: {
   allowLocalhost?: boolean;
 }): boolean {
   try {
+    if (!hasStoredConsentForCategory('analytics')) return false;
     if (typeof window === 'undefined' || typeof document === 'undefined') return false;
 
     const hostname = options?.hostname ?? window.location.hostname;
@@ -381,6 +387,7 @@ export function computeSource(options?: {
 
 export async function postAnalyticsEvent(event: string, payload: any): Promise<void> {
   try {
+    if (!hasStoredConsentForCategory('analytics')) return;
     if (typeof window === 'undefined') return;
     const url = `/api/analytics/${encodeURIComponent(String(event || 'event'))}`;
     const body = JSON.stringify(payload ?? {});

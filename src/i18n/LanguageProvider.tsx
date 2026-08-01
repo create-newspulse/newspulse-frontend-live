@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useMemo } from 'react';
+import { deleteCookie as deleteConsentManagedCookie, hasStoredConsentForCategory } from '../consent/cookieConsent';
 
 import en from './en.json';
 import hi from './hi.json';
@@ -113,6 +114,17 @@ export function LanguageProvider({
     const persist = options?.persist !== false;
     if (!persist) {
       // Ephemeral language change (backend-controlled defaults) without touching user storage.
+      return;
+    }
+    if (!hasStoredConsentForCategory('preferences')) {
+      try {
+        window.localStorage.removeItem(STORAGE_KEY);
+      } catch {
+        // ignore
+      }
+      deleteConsentManagedCookie(COOKIE_KEY);
+      deleteConsentManagedCookie(LEGACY_COOKIE_KEY);
+      deleteConsentManagedCookie(NEXT_LOCALE_COOKIE);
       return;
     }
     try {

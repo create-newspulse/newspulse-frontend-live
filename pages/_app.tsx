@@ -1,6 +1,5 @@
 import React from 'react';
 import { useRouter } from 'next/router';
-import Script from 'next/script';
 import * as gtag from '../lib/gtag';
 import { LanguageProvider, getMessagesForLang, normalizeLang, useI18n } from '../src/i18n/LanguageProvider';
 import { PublicSettingsProvider } from '../src/context/PublicSettingsContext';
@@ -16,6 +15,7 @@ import SeoAlternates from '../components/SeoAlternates';
 import BrandTopHeader from '../src/components/layout/BrandTopHeader';
 import SmartBackButton from '../src/components/navigation/SmartBackButton';
 import { usePublicVersion } from '../hooks/usePublicVersion';
+import { CookieConsentProvider } from '../src/consent/CookieConsentProvider';
 
 const CATEGORY_ROUTE_SEGMENTS = new Set([
   'breaking',
@@ -266,37 +266,22 @@ function MyApp({ Component, pageProps }) {
   }, [router.events]);
 
   return (
-    <>
-      {/* Google Analytics */}
-      <Script src={`https://www.googletagmanager.com/gtag/js?id=${process.env.NEXT_PUBLIC_GA_ID}`} strategy="afterInteractive" />
-      <Script
-        id="gtag-init"
-        strategy="afterInteractive"
-        dangerouslySetInnerHTML={{
-          __html: `
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);} 
-            gtag('js', new Date());
-            gtag('config', '${process.env.NEXT_PUBLIC_GA_ID}');
-          `,
-        }}
-      />
-
-      <ThemeProvider>
-        <PublicVersionWatcher />
-        <PublicSettingsProvider>
-          <PublicModeProvider initialMode={pageProps?.publicMode}>
-            <FeatureFlagProvider initialFlags={pageProps?.featureFlags}>
-              <LanguageProvider initialLang={routeLang}>
+    <ThemeProvider>
+      <PublicVersionWatcher />
+      <PublicSettingsProvider>
+        <PublicModeProvider initialMode={pageProps?.publicMode}>
+          <FeatureFlagProvider initialFlags={pageProps?.featureFlags}>
+            <LanguageProvider initialLang={routeLang}>
+              <CookieConsentProvider>
                 <PublishedThemeApplier />
                 <RouteLanguageSync />
                 <I18nBridge Component={Component} pageProps={pageProps} />
-              </LanguageProvider>
-            </FeatureFlagProvider>
-          </PublicModeProvider>
-        </PublicSettingsProvider>
-      </ThemeProvider>
-    </>
+              </CookieConsentProvider>
+            </LanguageProvider>
+          </FeatureFlagProvider>
+        </PublicModeProvider>
+      </PublicSettingsProvider>
+    </ThemeProvider>
   );
 }
 

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { hasStoredConsentForCategory } from '../src/consent/cookieConsent';
 
 // Extend Window interface for gtag
 declare global {
@@ -14,6 +15,7 @@ export const usePageAnalytics = () => {
   const readingTimeRef = useRef<number>(0);
 
   useEffect(() => {
+    if (!hasStoredConsentForCategory('analytics')) return;
     // Track page view
     if (typeof window !== 'undefined' && window.gtag) {
       window.gtag('event', 'page_view', {
@@ -70,6 +72,7 @@ export const usePageAnalytics = () => {
 
 // Track article interactions
 export const trackArticleClick = (articleId: string, title: string, category: string) => {
+  if (!hasStoredConsentForCategory('analytics')) return;
   if (typeof window !== 'undefined' && window.gtag) {
     window.gtag('event', 'article_click', {
       article_id: articleId,
@@ -97,6 +100,7 @@ export const trackArticleClick = (articleId: string, title: string, category: st
 
 // Track search queries
 export const trackSearch = (query: string, resultsCount: number) => {
+  if (!hasStoredConsentForCategory('analytics')) return;
   if (typeof window !== 'undefined' && window.gtag) {
     window.gtag('event', 'search', {
       search_term: query,
@@ -119,6 +123,7 @@ export const trackSearch = (query: string, resultsCount: number) => {
 
 // Track feature usage
 export const trackFeatureUsage = (feature: string, action: string, value?: string) => {
+  if (!hasStoredConsentForCategory('analytics')) return;
   if (typeof window !== 'undefined' && window.gtag) {
     window.gtag('event', 'feature_usage', {
       feature_name: feature,
@@ -143,6 +148,7 @@ export const trackFeatureUsage = (feature: string, action: string, value?: strin
 // Performance monitoring hook
 export const usePerformanceMonitoring = () => {
   useEffect(() => {
+    if (!hasStoredConsentForCategory('analytics')) return;
     // Monitor Core Web Vitals
     const observer = new PerformanceObserver((list) => {
       list.getEntries().forEach((entry) => {

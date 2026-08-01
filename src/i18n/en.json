@@ -273,6 +273,10 @@
     "grievanceRedressal": "Grievance Redressal",
     "monthlyCompliance": "Monthly Compliance",
     "privacyPolicy": "Privacy Policy",
+    "cookiePolicy": "Cookie Policy",
+    "cookieSettings": "Cookie Settings",
+    "privacyRequest": "Privacy Request",
+    "legalComplianceTitle": "Legal & Compliance",
     "termsOfService": "Terms of Service",
     "copyrightPolicy": "Copyright Policy",
     "careers": "Careers",
@@ -284,6 +288,55 @@
     "apiAccess": "API Access",
     "licensing": "Licensing",
     "copyright": "© 2025–2026 News Pulse Media. All Rights Reserved. | Powered by Innovation"
+  },
+  "cookieConsent": {
+    "links": {
+      "cookiePolicy": "Cookie Policy",
+      "privacyPolicy": "Privacy Policy"
+    },
+    "actions": {
+      "acceptAll": "Accept All",
+      "rejectNonEssential": "Reject Non-Essential",
+      "managePreferences": "Manage Preferences",
+      "savePreferences": "Save Preferences",
+      "close": "Close cookie preferences"
+    },
+    "banner": {
+      "title": "Your privacy choices",
+      "text": "News Pulse uses essential technologies to keep the website secure and working. With your permission, we may also use analytics, preference, advertising and embedded-media technologies. You can accept all, reject non-essential technologies, or manage individual categories."
+    },
+    "modal": {
+      "eyebrow": "Privacy controls",
+      "title": "Cookie Preferences",
+      "text": "Choose which optional technologies News Pulse may use on this device. Strictly necessary technologies are always active because the website needs them to work."
+    },
+    "categories": {
+      "necessary": {
+        "title": "Strictly Necessary",
+        "description": "Required for security, consent storage, session continuity and reliable website operation. This category is always enabled."
+      },
+      "preferences": {
+        "title": "Preferences",
+        "description": "Allows News Pulse to remember optional language and display preferences on this device."
+      },
+      "analytics": {
+        "title": "Analytics",
+        "description": "Allows aggregate traffic, article performance and technical measurement after consent."
+      },
+      "advertising": {
+        "title": "Advertising",
+        "description": "Allows advertising delivery and measurement where advertising is enabled."
+      },
+      "embeddedMedia": {
+        "title": "Embedded Media",
+        "description": "Allows YouTube, YouTube Live and other third-party media embeds to load."
+      }
+    },
+    "embeddedMediaPlaceholder": {
+      "title": "Embedded media is blocked",
+      "text": "Allow embedded media to load YouTube, YouTube Live or social embeds from third-party providers.",
+      "action": "Allow Embedded Media"
+    }
   },
   "categoryPage": {
     "unableToLoadTitle": "Unable to load articles",

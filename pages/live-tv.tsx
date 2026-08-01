@@ -4,6 +4,7 @@ import React from 'react';
 import { ChevronLeft, Play, Radio } from 'lucide-react';
 
 import LiveTvOfflineSequence from '../components/LiveTvOfflineSequence';
+import EmbeddedMediaConsentGate from '../src/consent/EmbeddedMediaConsentGate';
 import { usePublicSettings } from '../src/context/PublicSettingsContext';
 import { DEFAULT_NORMALIZED_PUBLIC_SETTINGS } from '../src/lib/publicSettings';
 import {
@@ -130,13 +131,15 @@ export default function LiveTvPage() {
     </div>
   );
   const fallbackReplayNode = fallbackVideoUrl && fallbackVideoKind === 'iframe' ? (
-    <iframe
-      title={presentation.title}
-      src={fallbackVideoUrl}
-      className="absolute inset-0 h-full w-full rounded-[18px] border-0 bg-transparent sm:rounded-[22px] lg:rounded-[24px]"
-      allow="autoplay; encrypted-media; picture-in-picture"
-      allowFullScreen
-    />
+    <EmbeddedMediaConsentGate title={presentation.title} className="absolute inset-0">
+      <iframe
+        title={presentation.title}
+        src={fallbackVideoUrl}
+        className="absolute inset-0 h-full w-full rounded-[18px] border-0 bg-transparent sm:rounded-[22px] lg:rounded-[24px]"
+        allow="autoplay; encrypted-media; picture-in-picture"
+        allowFullScreen
+      />
+    </EmbeddedMediaConsentGate>
   ) : fallbackVideoUrl && fallbackVideoKind === 'video' ? (
     <video
       className="absolute inset-0 h-full w-full rounded-[18px] bg-transparent object-cover sm:rounded-[22px] lg:rounded-[24px]"
@@ -219,13 +222,15 @@ export default function LiveTvPage() {
               <div className="overflow-hidden rounded-[18px] bg-transparent sm:rounded-[22px] lg:rounded-[24px]">
                 <div className="relative w-full min-h-[220px] overflow-hidden rounded-[18px] bg-black sm:rounded-[22px] md:min-h-[360px] lg:rounded-[24px]" style={{ aspectRatio: '16 / 9' }}>
                   {isEnabled && presentation.playerKind === 'iframe' ? (
-                    <iframe
-                      title={presentation.title}
-                      src={presentation.playerUrl}
-                      className="absolute inset-0 h-full w-full rounded-[18px] border-0 bg-transparent sm:rounded-[22px] lg:rounded-[24px]"
-                      allow="autoplay; encrypted-media; picture-in-picture"
-                      allowFullScreen
-                    />
+                    <EmbeddedMediaConsentGate title={presentation.title} className="absolute inset-0">
+                      <iframe
+                        title={presentation.title}
+                        src={presentation.playerUrl}
+                        className="absolute inset-0 h-full w-full rounded-[18px] border-0 bg-transparent sm:rounded-[22px] lg:rounded-[24px]"
+                        allow="autoplay; encrypted-media; picture-in-picture"
+                        allowFullScreen
+                      />
+                    </EmbeddedMediaConsentGate>
                   ) : isEnabled && presentation.playerKind === 'video' ? (
                     <video
                       className="absolute inset-0 h-full w-full rounded-[18px] bg-transparent object-cover sm:rounded-[22px] lg:rounded-[24px]"
@@ -245,13 +250,15 @@ export default function LiveTvPage() {
                       fallbackNode={fallbackReplayNode}
                     />
                   ) : fallbackVideoUrl && fallbackVideoKind === 'iframe' ? (
-                    <iframe
-                      title={presentation.title}
-                      src={fallbackVideoUrl}
-                      className="absolute inset-0 h-full w-full rounded-[18px] border-0 bg-transparent sm:rounded-[22px] lg:rounded-[24px]"
-                      allow="autoplay; encrypted-media; picture-in-picture"
-                      allowFullScreen
-                    />
+                    <EmbeddedMediaConsentGate title={presentation.title} className="absolute inset-0">
+                      <iframe
+                        title={presentation.title}
+                        src={fallbackVideoUrl}
+                        className="absolute inset-0 h-full w-full rounded-[18px] border-0 bg-transparent sm:rounded-[22px] lg:rounded-[24px]"
+                        allow="autoplay; encrypted-media; picture-in-picture"
+                        allowFullScreen
+                      />
+                    </EmbeddedMediaConsentGate>
                   ) : fallbackVideoUrl && fallbackVideoKind === 'video' ? (
                     <video
                       className="absolute inset-0 h-full w-full rounded-[18px] bg-transparent object-cover sm:rounded-[22px] lg:rounded-[24px]"

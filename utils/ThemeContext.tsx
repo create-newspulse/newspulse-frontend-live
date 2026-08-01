@@ -1,4 +1,5 @@
 import { createContext, useContext, useMemo, useState, useEffect, ReactNode } from 'react';
+import { hasStoredConsentForCategory } from '../src/consent/cookieConsent';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -19,7 +20,7 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
     const media = window.matchMedia('(prefers-color-scheme: dark)');
     setSystemDark(media.matches);
 
-    const savedTheme = localStorage.getItem('theme');
+    const savedTheme = hasStoredConsentForCategory('preferences') ? localStorage.getItem('theme') : null;
     if (savedTheme === 'dark' || savedTheme === 'light' || savedTheme === 'system') {
       setMode(savedTheme as ThemeMode);
     } else {
@@ -52,7 +53,8 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
     // Apply theme to document
     document.documentElement.classList.toggle('dark', isDark);
     try {
-      localStorage.setItem('theme', mode);
+      if (hasStoredConsentForCategory('preferences')) localStorage.setItem('theme', mode);
+      else localStorage.removeItem('theme');
     } catch {}
   }, [isDark, mode]);
 

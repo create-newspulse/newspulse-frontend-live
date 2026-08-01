@@ -3,6 +3,7 @@ import { renderHook, act } from '@testing-library/react';
 
 import { useArticleAnalytics } from '../../hooks/useArticleAnalytics';
 import { shouldTrackClientAnalytics } from '../../lib/analytics/articleAnalytics';
+import { COOKIE_CONSENT_NAME, createConsentRecord, writeConsentCookie } from '../../src/consent/cookieConsent';
 
 jest.mock('next/router', () => ({
   useRouter: () => ({
@@ -53,9 +54,12 @@ describe('useArticleAnalytics', () => {
 
     // Reset scrollY to be writable
     Object.defineProperty(window, 'scrollY', { value: 0, writable: true, configurable: true });
+
+    writeConsentCookie(createConsentRecord('custom', { preferences: false, analytics: true, advertising: false, embeddedMedia: false }, new Date()));
   });
 
   afterEach(() => {
+    document.cookie = `${COOKIE_CONSENT_NAME}=; Path=/; Max-Age=0`;
     jest.useRealTimers();
     jest.resetAllMocks();
   });
@@ -199,6 +203,27 @@ describe('useArticleAnalytics', () => {
         allowLocalhost: false,
       })
     ).toBe(false);
+  });
+
+  it('does not post analytics when analytics consent is withdrawn', async () => {
+    document.cookie = `${COOKIE_CONSENT_NAME}=; Path=/; Max-Age=0`;
+    writeConsentCookie(createConsentRecord('rejected', { preferences: false, analytics: false, advertising: false, embeddedMedia: false }, new Date()));
+
+    const article = { _id: 'a-denied', category: 'business', language: 'en' } as any;
+    renderHook(
+      (props: any) => {
+        useArticleAnalytics(props);
+        return null;
+      },
+      { initialProps: { article, slug: 'denied', lang: 'en' } }
+    );
+
+    await act(async () => {
+      jest.advanceTimersByTime(2000);
+    });
+
+    const calls = await readBeaconCalls((navigator as any).sendBeacon);
+    expect(calls.filter((c) => c.url.includes('/api/analytics/')).length).toBe(0);
   });
 
   it('never throws even if analytics posting fails', async () => {

@@ -36,6 +36,8 @@ import { getTickerMarqueeText, mergeTickerItemsWithAds, type TickerMarqueeItem }
 import InspirationHubHomepageSection from "../components/home/InspirationHubHomepageSection";
 import LiveTvOfflineSequence from "../components/LiveTvOfflineSequence";
 import HeaderLogo from "../src/components/layout/HeaderLogo";
+import EmbeddedMediaConsentGate from "../src/consent/EmbeddedMediaConsentGate";
+import { useCookieConsent } from "../src/consent/CookieConsentProvider";
 import type { GetStaticProps } from "next";
 import { AnimatePresence, motion } from "framer-motion";
 import { useI18n } from "../src/i18n/LanguageProvider";
@@ -44,6 +46,7 @@ import { getLiveTvDisplayBadgeLabel, resolveLiveTvPresentation } from "../src/li
 import { usePublicFounderToggles } from "../hooks/usePublicFounderToggles";
 import { DEFAULT_PUBLIC_FOUNDER_TOGGLES, type PublicFounderToggles } from "../lib/publicFounderToggles";
 import { subscribePublicDataRefresh } from "../lib/publicDataRefresh";
+import { hasStoredConsentForCategory } from "../src/consent/cookieConsent";
 import {
   ArrowRight,
   Bell,
@@ -97,6 +100,7 @@ function getHomeStoryCacheKey(lang: UiLangCode): string {
 
 function readSavedStyleId(): string | null {
   if (typeof window === 'undefined') return null;
+  if (!hasStoredConsentForCategory('preferences')) return null;
   try {
     const raw = window.localStorage.getItem(STYLE_STORAGE_KEY);
     const v = String(raw || '').trim().toLowerCase();
@@ -108,6 +112,7 @@ function readSavedStyleId(): string | null {
 
 function writeSavedStyleId(themeId: string) {
   if (typeof window === 'undefined') return;
+  if (!hasStoredConsentForCategory('preferences')) return;
   try {
     window.localStorage.setItem(STYLE_STORAGE_KEY, String(themeId || ''));
   } catch {}
@@ -2834,13 +2839,15 @@ function LiveTVWidget({ theme, liveTvSettings }: { theme: any; liveTvSettings: P
     </div>
   );
   const fallbackReplayNode = fallbackVideoUrl && presentation.fallbackVideoKind === 'iframe' ? (
-    <iframe
-      title={presentation.title}
-      src={fallbackVideoUrl}
-      className="absolute inset-0 block h-full w-full rounded-none border-0"
-      allow="autoplay; encrypted-media; picture-in-picture"
-      allowFullScreen
-    />
+    <EmbeddedMediaConsentGate title={presentation.title} className="absolute inset-0">
+      <iframe
+        title={presentation.title}
+        src={fallbackVideoUrl}
+        className="absolute inset-0 block h-full w-full rounded-none border-0"
+        allow="autoplay; encrypted-media; picture-in-picture"
+        allowFullScreen
+      />
+    </EmbeddedMediaConsentGate>
   ) : fallbackVideoUrl && presentation.fallbackVideoKind === 'video' ? (
     <video
       className="absolute inset-0 block h-full w-full rounded-none object-cover"
@@ -2913,13 +2920,15 @@ function LiveTVWidget({ theme, liveTvSettings }: { theme: any; liveTvSettings: P
         <div className="overflow-hidden rounded-none bg-transparent">
           <div className="relative w-full min-h-[205px] overflow-hidden rounded-none bg-black sm:min-h-[235px]" style={{ aspectRatio: '16 / 9' }}>
             {presentation.playerKind === 'iframe' ? (
-              <iframe
-                title={presentation.title}
-                src={presentation.playerUrl}
-                className="absolute inset-0 block h-full w-full rounded-none border-0"
-                allow="autoplay; encrypted-media; picture-in-picture"
-                allowFullScreen
-              />
+              <EmbeddedMediaConsentGate title={presentation.title} className="absolute inset-0">
+                <iframe
+                  title={presentation.title}
+                  src={presentation.playerUrl}
+                  className="absolute inset-0 block h-full w-full rounded-none border-0"
+                  allow="autoplay; encrypted-media; picture-in-picture"
+                  allowFullScreen
+                />
+              </EmbeddedMediaConsentGate>
             ) : presentation.playerKind === 'video' ? (
               <video
                 className="absolute inset-0 block h-full w-full rounded-none object-cover"
@@ -2939,13 +2948,15 @@ function LiveTVWidget({ theme, liveTvSettings }: { theme: any; liveTvSettings: P
                 fallbackNode={fallbackReplayNode}
               />
             ) : fallbackVideoUrl && presentation.fallbackVideoKind === 'iframe' ? (
-              <iframe
-                title={presentation.title}
-                src={fallbackVideoUrl}
-                className="absolute inset-0 block h-full w-full rounded-none border-0"
-                allow="autoplay; encrypted-media; picture-in-picture"
-                allowFullScreen
-              />
+              <EmbeddedMediaConsentGate title={presentation.title} className="absolute inset-0">
+                <iframe
+                  title={presentation.title}
+                  src={fallbackVideoUrl}
+                  className="absolute inset-0 block h-full w-full rounded-none border-0"
+                  allow="autoplay; encrypted-media; picture-in-picture"
+                  allowFullScreen
+                />
+              </EmbeddedMediaConsentGate>
             ) : fallbackVideoUrl && presentation.fallbackVideoKind === 'video' ? (
               <video
                 className="absolute inset-0 block h-full w-full rounded-none object-cover"
@@ -3751,6 +3762,7 @@ function AppPromoSection({ theme, onToast }: any) {
 
 function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
   const { t } = useI18n();
+  const { openPreferences } = useCookieConsent();
 
   const footerBg =
     theme.mode === "dark"
@@ -3777,8 +3789,9 @@ function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
 
   const legalComplianceLinks = [
     { label: t('footer.privacyPolicy'), href: localizePath('/privacy-policy', lang) },
-    { label: 'Cookie Policy', href: localizePath('/cookie-policy', lang) },
-    { label: 'Privacy Request', href: localizePath('/privacy-request', lang) },
+    { label: t('footer.cookiePolicy'), href: localizePath('/cookie-policy', lang) },
+    { label: t('footer.cookieSettings'), onClick: openPreferences },
+    { label: t('footer.privacyRequest'), href: localizePath('/privacy-request', lang) },
     { label: t('footer.grievanceRedressal'), href: localizePath('/grievance-redressal', lang) },
     { label: t('footer.termsOfService'), href: localizePath('/terms-of-service', lang) },
     { label: t('footer.copyrightPolicy'), href: localizePath('/copyright-policy', lang) },
@@ -3842,7 +3855,7 @@ function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
 
               <div>
                 <div className="text-lg font-extrabold" style={{ color: theme.accent }}>
-                  Legal &amp; Compliance
+                  {t('footer.legalComplianceTitle')}
                 </div>
                 <div className="mt-4 grid gap-3 text-sm text-white/85">
                   {legalComplianceLinks.map((item) => (
@@ -3851,7 +3864,7 @@ function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
                         {item.label}
                       </Link>
                     ) : (
-                      <button key={item.label} type="button" onClick={() => onToast(`${item.label} is not available right now.`) } className="text-left hover:underline">
+                      <button key={item.label} type="button" onClick={item.onClick || (() => onToast(`${item.label} is not available right now.`))} className="text-left hover:underline">
                         {item.label}
                       </button>
                     )

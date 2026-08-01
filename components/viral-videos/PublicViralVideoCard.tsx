@@ -3,6 +3,7 @@ import { ExternalLink, Play } from 'lucide-react';
 
 import NewsPulseVideoPlayer, { getViralVideoUiLabels } from './NewsPulseVideoPlayer';
 import { getPublicViralVideoPosterUrl, resolvePublicViralVideoPlayback, type PublicViralVideo } from '../../lib/publicViralVideos';
+import EmbeddedMediaConsentGate from '../../src/consent/EmbeddedMediaConsentGate';
 
 type Props = {
   video: PublicViralVideo;
@@ -72,13 +73,15 @@ export default function PublicViralVideoCard({ video, compact = false, lightTopC
             lightTopChrome={lightTopChrome}
           />
         ) : isPlayableEmbed && playing ? (
-          <iframe
-            title={video.title}
-            src={playback.embedUrl}
-            className="h-full w-full"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowFullScreen
-          />
+          <EmbeddedMediaConsentGate title={video.title} className="absolute inset-0">
+            <iframe
+              title={video.title}
+              src={playback.embedUrl}
+              className="h-full w-full"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+            />
+          </EmbeddedMediaConsentGate>
         ) : (
           <>
             <DarkVideoFallback showIcon={!isPlayableEmbed && !isVideoUnavailable} title={video.title} />

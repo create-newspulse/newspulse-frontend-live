@@ -273,6 +273,10 @@
     "grievanceRedressal": "शिकायत निवारण",
     "monthlyCompliance": "मासिक अनुपालन",
     "privacyPolicy": "गोपनीयता नीति",
+    "cookiePolicy": "कुकी नीति",
+    "cookieSettings": "कुकी सेटिंग्स",
+    "privacyRequest": "गोपनीयता अनुरोध",
+    "legalComplianceTitle": "कानूनी और अनुपालन",
     "termsOfService": "सेवा की शर्तें",
     "copyrightPolicy": "कॉपीराइट नीति",
     "careers": "करियर",
@@ -284,6 +288,55 @@
     "apiAccess": "API एक्सेस",
     "licensing": "लाइसेंसिंग",
     "copyright": "© 2025–2026 News Pulse Media. All Rights Reserved. | Powered by Innovation"
+  },
+  "cookieConsent": {
+    "links": {
+      "cookiePolicy": "कुकी नीति",
+      "privacyPolicy": "गोपनीयता नीति"
+    },
+    "actions": {
+      "acceptAll": "सभी स्वीकार करें",
+      "rejectNonEssential": "गैर-आवश्यक अस्वीकार करें",
+      "managePreferences": "पसंद प्रबंधित करें",
+      "savePreferences": "पसंद सहेजें",
+      "close": "कुकी पसंद बंद करें"
+    },
+    "banner": {
+      "title": "आपकी गोपनीयता पसंद",
+      "text": "News Pulse वेबसाइट को सुरक्षित और चालू रखने के लिए आवश्यक तकनीकों का उपयोग करता है। आपकी अनुमति से हम analytics, preference, advertising और embedded-media तकनीकों का भी उपयोग कर सकते हैं। आप सभी स्वीकार कर सकते हैं, गैर-आवश्यक तकनीकों को अस्वीकार कर सकते हैं, या हर श्रेणी अलग से चुन सकते हैं।"
+    },
+    "modal": {
+      "eyebrow": "गोपनीयता नियंत्रण",
+      "title": "कुकी पसंद",
+      "text": "इस डिवाइस पर News Pulse कौन-सी वैकल्पिक तकनीकें उपयोग कर सकता है, यह चुनें। Strictly necessary तकनीकें हमेशा सक्रिय रहती हैं क्योंकि वेबसाइट को काम करने के लिए उनकी जरूरत होती है।"
+    },
+    "categories": {
+      "necessary": {
+        "title": "सख्ती से आवश्यक",
+        "description": "सुरक्षा, consent storage, session continuity और भरोसेमंद वेबसाइट संचालन के लिए आवश्यक। यह श्रेणी हमेशा सक्षम रहती है।"
+      },
+      "preferences": {
+        "title": "पसंद",
+        "description": "News Pulse को इस डिवाइस पर वैकल्पिक भाषा और display preferences याद रखने की अनुमति देता है।"
+      },
+      "analytics": {
+        "title": "एनालिटिक्स",
+        "description": "सहमति के बाद aggregate traffic, article performance और technical measurement की अनुमति देता है।"
+      },
+      "advertising": {
+        "title": "विज्ञापन",
+        "description": "जहाँ advertising enabled है, वहाँ ad delivery और measurement की अनुमति देता है।"
+      },
+      "embeddedMedia": {
+        "title": "एम्बेडेड मीडिया",
+        "description": "YouTube, YouTube Live और अन्य third-party media embeds लोड करने की अनुमति देता है।"
+      }
+    },
+    "embeddedMediaPlaceholder": {
+      "title": "एम्बेडेड मीडिया रोका गया है",
+      "text": "YouTube, YouTube Live या social embeds को third-party providers से लोड करने के लिए embedded media की अनुमति दें।",
+      "action": "Embedded Media अनुमति दें"
+    }
   },
   "categoryPage": {
     "unableToLoadTitle": "लेख लोड नहीं हो सके",

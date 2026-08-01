@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { hasStoredConsentForCategory } from '../src/consent/cookieConsent';
 
 interface BookmarkedArticle {
   id: string;
@@ -20,6 +21,10 @@ export const useBookmarks = () => {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
+        if (!hasStoredConsentForCategory('preferences')) {
+          localStorage.removeItem('news-pulse-bookmarks');
+          return;
+        }
         const savedBookmarks = localStorage.getItem('news-pulse-bookmarks');
         if (savedBookmarks) {
           setBookmarks(JSON.parse(savedBookmarks));
@@ -36,7 +41,8 @@ export const useBookmarks = () => {
   useEffect(() => {
     if (typeof window !== 'undefined' && !loading) {
       try {
-        localStorage.setItem('news-pulse-bookmarks', JSON.stringify(bookmarks));
+        if (hasStoredConsentForCategory('preferences')) localStorage.setItem('news-pulse-bookmarks', JSON.stringify(bookmarks));
+        else localStorage.removeItem('news-pulse-bookmarks');
       } catch (error) {
         console.error('Error saving bookmarks:', error);
       }

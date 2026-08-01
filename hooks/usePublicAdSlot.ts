@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 
 import { subscribePublicDataRefresh } from '../lib/publicDataRefresh';
+import { useOptionalCookieConsent } from '../src/consent/CookieConsentProvider';
+import { hasStoredConsentForCategory } from '../src/consent/cookieConsent';
 
 export type PublicAd = {
   id?: string | number;
@@ -206,6 +208,8 @@ export function usePublicAdSlot({
   allowWithoutImage = false,
   refreshIntervalMs = 15_000,
 }: UsePublicAdSlotOptions): UsePublicAdSlotResult {
+  const consentContext = useOptionalCookieConsent();
+  const hasAdvertisingConsent = consentContext ? consentContext.categories.advertising : hasStoredConsentForCategory('advertising');
   const normalizedSlot = String(slot || '').trim();
   const normalizedLang = normalizeLanguage(language);
   void refreshIntervalMs;
@@ -217,6 +221,14 @@ export function usePublicAdSlot({
   const [hasResolved, setHasResolved] = useState(normalizedSlot ? Boolean(initialCache) : true);
 
   useEffect(() => {
+    if (!hasAdvertisingConsent) {
+      setEnabled(false);
+      setAd(null);
+      setIsLoading(false);
+      setHasResolved(true);
+      return;
+    }
+
     if (!normalizedSlot) {
       setEnabled(true);
       setAd(null);
@@ -257,7 +269,7 @@ export function usePublicAdSlot({
       cancelled = true;
       unsubscribe();
     };
-  }, [normalizedSlot, normalizedLang, allowWithoutImage]);
+  }, [normalizedSlot, normalizedLang, allowWithoutImage, hasAdvertisingConsent]);
 
   return { enabled, ad, isLoading, hasResolved };
 }
