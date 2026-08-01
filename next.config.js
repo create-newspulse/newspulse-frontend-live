@@ -172,6 +172,14 @@ const nextConfig = {
     // These hit our Next API routes under /pages/api/public/broadcast/*.
     const localAliases = [
       {
+        source: '/sitemap.xml',
+        destination: '/api/sitemap',
+      },
+      {
+        source: '/news-sitemap.xml',
+        destination: '/api/news-sitemap',
+      },
+      {
         source: '/public/broadcast/:path*',
         destination: '/api/public/broadcast/:path*',
       },

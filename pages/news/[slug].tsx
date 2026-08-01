@@ -34,6 +34,13 @@ import {
   getStoredSeoValue,
   isEditorialArticle,
 } from '../../lib/editorialDisplay';
+import {
+  buildArticleSeoMetadata,
+  getArticleAlternates,
+  getArticleCanonicalUrl,
+  resolvePublicSiteUrl,
+  safeJsonLd,
+} from '../../lib/seo';
 
 type ArticleDisplayAdProps = {
   slotId: 'ARTICLE_INLINE' | 'ARTICLE_END';
@@ -146,6 +153,11 @@ type Props = {
   error?: string | null;
   pending?: boolean;
   pendingSourceLang?: 'en' | 'hi' | 'gu' | null;
+  siteUrl: string;
+  seo?: {
+    canonicalUrl?: string;
+    alternates?: Array<{ hrefLang: string; href: string }>;
+  };
 };
 
 const LANG_LABELS: Record<'en' | 'hi' | 'gu', string> = {
@@ -195,7 +207,7 @@ function debugNewsDetailResolution(stage: string, payload: Record<string, unknow
   console.info('[pages/news/[slug]]', { stage, ...payload });
 }
 
-export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topStories, relatedStories, error, pending, pendingSourceLang = null }: Props) {
+export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topStories, relatedStories, error, pending, pendingSourceLang = null, siteUrl }: Props) {
   const { t } = useI18n();
   const router = useRouter();
 
@@ -485,19 +497,14 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
   }, [categoryHeaderTitle, categoryKey, tx]);
 
   const canonicalUrl = React.useMemo(() => {
-    const storedCanonical = getStoredSeoValue(resolvedArticle, 'canonicalUrl', 'canonical', 'url');
-    if (storedCanonical) return storedCanonical;
-    if (!resolvedArticle?._id) return '';
-    const id = String(resolvedArticle._id || '').trim();
-    const path = buildNewsUrl({ id, slug: localized.slug || id, lang });
-    const base = typeof window !== 'undefined' ? window.location.origin : '';
-    return base ? `${base}${path}` : path;
-  }, [resolvedArticle, lang, localized.slug]);
+    return getArticleCanonicalUrl(resolvedArticle, lang, siteUrl);
+  }, [lang, resolvedArticle, siteUrl]);
   const seoTitle = React.useMemo(() => getLocalizedSeoValue(resolvedArticle, lang, 'pageTitle', 'seoTitle', 'metaTitle', 'ogTitle', 'openGraphTitle', 'title') || displayTitle, [displayTitle, lang, resolvedArticle]);
   const seoDescription = React.useMemo(() => getLocalizedSeoValue(resolvedArticle, lang, 'metaDescription', 'seoDescription', 'ogDescription', 'openGraphDescription', 'socialDescription', 'description') || displaySummary, [displaySummary, lang, resolvedArticle]);
   const ogTitle = React.useMemo(() => getLocalizedSeoValue(resolvedArticle, lang, 'ogTitle', 'openGraphTitle') || seoTitle || displayTitle, [displayTitle, lang, resolvedArticle, seoTitle]);
   const ogDescription = React.useMemo(() => getLocalizedSeoValue(resolvedArticle, lang, 'ogDescription', 'openGraphDescription', 'socialDescription') || seoDescription, [lang, resolvedArticle, seoDescription]);
   const ogImage = React.useMemo(() => getLocalizedSeoValue(resolvedArticle, lang, 'ogImage', 'openGraphImage', 'image') || heroSrc || '', [heroSrc, lang, resolvedArticle]);
+  const articleSeo = React.useMemo(() => buildArticleSeoMetadata(resolvedArticle, lang, siteUrl), [lang, resolvedArticle, siteUrl]);
 
   const shareThis = async () => {
     const url = canonicalUrl || (typeof window !== 'undefined' ? stripQueryHash(window.location.href) : '');
@@ -532,15 +539,23 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
   return (
     <>
       <Head>
-        <title>{`${(pendingTranslate && !displayTitle) ? 'Translating…' : (seoTitle || displayTitle || 'News')} | News Pulse`}</title>
-        {seoDescription ? <meta name="description" content={seoDescription} /> : null}
-        {canonicalUrl ? <link rel="canonical" href={canonicalUrl} /> : null}
-        {ogTitle ? <meta property="og:title" content={ogTitle} /> : null}
-        {ogDescription ? <meta property="og:description" content={ogDescription} /> : null}
-        {ogImage ? <meta property="og:image" content={ogImage} /> : null}
+        <title>{`${(pendingTranslate && !displayTitle) ? 'Translating…' : (articleSeo?.title || seoTitle || displayTitle || 'News')} | News Pulse`}</title>
+        {articleSeo?.description || seoDescription ? <meta name="description" content={articleSeo?.description || seoDescription} /> : null}
+        {articleSeo?.robots ? <meta name="robots" content={articleSeo.robots} /> : null}
+        <meta property="og:type" content="article" />
+        {articleSeo?.ogTitle || ogTitle ? <meta property="og:title" content={articleSeo?.ogTitle || ogTitle} /> : null}
+        {articleSeo?.ogDescription || ogDescription ? <meta property="og:description" content={articleSeo?.ogDescription || ogDescription} /> : null}
+        {articleSeo?.ogUrl || canonicalUrl ? <meta property="og:url" content={articleSeo?.ogUrl || canonicalUrl} /> : null}
+        {articleSeo?.ogImage || ogImage ? <meta property="og:image" content={articleSeo?.ogImage || ogImage} /> : null}
+        <meta name="twitter:card" content="summary_large_image" />
+        {articleSeo?.twitterTitle ? <meta name="twitter:title" content={articleSeo.twitterTitle} /> : null}
+        {articleSeo?.twitterDescription ? <meta name="twitter:description" content={articleSeo.twitterDescription} /> : null}
+        {articleSeo?.twitterImage ? <meta name="twitter:image" content={articleSeo.twitterImage} /> : null}
         {publishedDate ? <meta property="article:published_time" content={publishedDate} /> : null}
         {updatedDate ? <meta property="article:modified_time" content={updatedDate} /> : null}
         {authorName ? <meta name="author" content={authorName} /> : null}
+        {articleSeo?.newsArticleJsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(articleSeo.newsArticleJsonLd) }} /> : null}
+        {articleSeo?.breadcrumbJsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(articleSeo.breadcrumbJsonLd) }} /> : null}
       </Head>
 
       <main className="min-h-screen bg-white">
@@ -907,6 +922,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
 export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   const lang = normalizeLang(ctx.locale);
   const locale = String(ctx.locale || lang);
+  const siteUrl = resolvePublicSiteUrl(ctx.req);
   ctx.res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   ctx.res.setHeader('Pragma', 'no-cache');
   ctx.res.setHeader('Expires', '0');
@@ -930,7 +946,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
       translationFound: false,
     });
     return {
-      props: { messages, locale, lang, slug: '', article: null, safeHtml: '', topStories: [], relatedStories: [], error: 'Not found', pending: false },
+      props: { messages, locale, lang, slug: '', article: null, safeHtml: '', topStories: [], relatedStories: [], error: 'Not found', pending: false, siteUrl },
     };
   }
 
@@ -1000,6 +1016,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
           error: null,
           pending: true,
           pendingSourceLang: getPendingSourceLang(data),
+          siteUrl,
         },
       };
     }
@@ -1125,6 +1142,11 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
         relatedStories: extra.relatedStories,
         error: null,
         pending: false,
+        siteUrl,
+        seo: {
+          canonicalUrl: getArticleCanonicalUrl(resolvedArticle, lang, siteUrl),
+          alternates: getArticleAlternates(resolvedArticle, siteUrl),
+        },
       },
     };
   } catch {

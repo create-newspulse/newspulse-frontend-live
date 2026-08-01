@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from "react";
+import Head from "next/head";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { usePublicMode } from "../utils/PublicModeProvider";
@@ -33,6 +34,7 @@ import { formatEditorialDateTime, getStoryDateTimeValue, resolveStoryDateIso } f
 import { getStoryTitleHookColor, splitStoryTitleHook } from "../lib/storyTitleHook";
 import StoryImage, { TopStoryImage } from "../src/components/story/StoryImage";
 import { getTickerMarqueeText, mergeTickerItemsWithAds, type TickerMarqueeItem } from "../lib/publicTickerAds";
+import { absolutePublicUrl, NEWS_PULSE_BRAND_NAME, NEWS_PULSE_LOGO_PATH, NEWS_PULSE_PUBLISHER_NAME, NEWS_PULSE_SITE_URL, safeJsonLd } from "../lib/seo";
 import InspirationHubHomepageSection from "../components/home/InspirationHubHomepageSection";
 import LiveTvOfflineSequence from "../components/LiveTvOfflineSequence";
 import HeaderLogo from "../src/components/layout/HeaderLogo";
@@ -514,6 +516,37 @@ const UI_LANG_LABEL: Record<UiLangCode, string> = {
   gu: 'Gujarati',
 };
 
+const HOMEPAGE_TITLE = 'News Pulse | Latest News in English, Hindi and Gujarati';
+const HOMEPAGE_DESCRIPTION = 'Read the latest regional, national, international, business, technology, sports and editorial news from News Pulse.';
+const HOMEPAGE_CANONICAL_URL = `${NEWS_PULSE_SITE_URL}/`;
+const HOMEPAGE_JSON_LD = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'NewsMediaOrganization',
+      '@id': `${NEWS_PULSE_SITE_URL}/#organization`,
+      name: NEWS_PULSE_PUBLISHER_NAME,
+      url: NEWS_PULSE_SITE_URL,
+      logo: {
+        '@type': 'ImageObject',
+        url: absolutePublicUrl(NEWS_PULSE_LOGO_PATH, NEWS_PULSE_SITE_URL),
+      },
+    },
+    {
+      '@type': 'WebSite',
+      '@id': `${NEWS_PULSE_SITE_URL}/#website`,
+      name: NEWS_PULSE_BRAND_NAME,
+      url: NEWS_PULSE_SITE_URL,
+      publisher: { '@id': `${NEWS_PULSE_SITE_URL}/#organization` },
+      potentialAction: {
+        '@type': 'SearchAction',
+        target: `${NEWS_PULSE_SITE_URL}/search?q={search_term_string}`,
+        'query-input': 'required name=search_term_string',
+      },
+    },
+  ],
+};
+
 function toUiLangCode(value: unknown): UiLangCode {
   const v = String(value || '').trim().toLowerCase();
   if (v === 'hi' || v === 'hindi') return 'hi';
@@ -537,6 +570,9 @@ function clampNum(n: any, min: number, max: number, fallback: number) {
 
 type HomePageStaticProps = {
   messages: any;
+  seo: {
+    canonicalUrl: string;
+  };
   initialHomepageSponsoredFeature: HomepageSponsoredFeature | null;
   initialTopStory: Article | null;
   initialFreshStories: any[] | null;
@@ -571,6 +607,9 @@ export const getStaticProps: GetStaticProps<HomePageStaticProps> = async ({ loca
   return {
     props: {
       messages: await getMessages(locale as string),
+      seo: {
+        canonicalUrl: HOMEPAGE_CANONICAL_URL,
+      },
       initialHomepageSponsoredFeature: normalizeHomepageSponsoredFeatureProps(sponsoredFeatureResult.feature),
       initialTopStory,
       initialFreshStories,
@@ -4827,6 +4866,18 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
 
   return (
     <div className="relative min-h-screen w-full overflow-x-hidden overflow-hidden bg-gray-50/30" style={{ background: theme.bg }}>
+      <Head>
+        <title>{HOMEPAGE_TITLE}</title>
+        <meta name="description" content={HOMEPAGE_DESCRIPTION} />
+        <meta property="og:type" content="website" />
+        <meta property="og:title" content={HOMEPAGE_TITLE} />
+        <meta property="og:description" content={HOMEPAGE_DESCRIPTION} />
+        <meta property="og:url" content={HOMEPAGE_CANONICAL_URL} />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={HOMEPAGE_TITLE} />
+        <meta name="twitter:description" content={HOMEPAGE_DESCRIPTION} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(HOMEPAGE_JSON_LD) }} />
+      </Head>
       <style jsx global>{`
         html, body { height: 100%; }
         body { overflow-x: hidden; scrollbar-gutter: stable; }

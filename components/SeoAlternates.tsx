@@ -2,6 +2,8 @@ import Head from 'next/head';
 import { useRouter } from 'next/router';
 import React from 'react';
 
+import type { SeoAlternate } from '../lib/seo';
+
 const LOCALES = ['en', 'hi', 'gu'] as const;
 
 type Locale = (typeof LOCALES)[number];
@@ -36,12 +38,31 @@ function stripTrackingParams(asPath: string): string {
   return rawHash ? `${rebuilt}#${rawHash}` : rebuilt;
 }
 
-export default function SeoAlternates() {
+type SeoAlternatesProps = {
+  canonicalUrl?: string;
+  alternates?: SeoAlternate[];
+  disabled?: boolean;
+};
+
+export default function SeoAlternates({ canonicalUrl: customCanonicalUrl, alternates: customAlternates, disabled = false }: SeoAlternatesProps) {
   const router = useRouter();
+
+  if (disabled) return null;
+
+  if (customCanonicalUrl) {
+    return (
+      <Head>
+        <link rel="canonical" href={customCanonicalUrl} />
+        {(customAlternates || []).map((alternate) => (
+          <link key={alternate.hrefLang} rel="alternate" hrefLang={alternate.hrefLang} href={alternate.href} />
+        ))}
+      </Head>
+    );
+  }
 
   const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || '').trim().replace(/\/+$/, '');
   const defaultLocale = (router.defaultLocale || 'en') as Locale;
-  const currentAsPath = stripTrackingParams(router.asPath || '/');
+  const currentAsPath = stripTrackingParams(router.asPath || '/').split('#')[0] || '/';
 
   // For SEO, prefer SSR-rendered absolute URLs.
   if (!siteUrl) return null;

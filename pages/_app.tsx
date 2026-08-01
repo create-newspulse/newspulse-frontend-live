@@ -214,7 +214,7 @@ function I18nBridge({ Component, pageProps }: { Component: any; pageProps: any }
   const showSimpleHeader = React.useMemo(() => isCategoryRoute(router.asPath) && !isViralVideosRoute(router.asPath), [router.asPath]);
   return (
     <SafeIntlProvider key={lang} messages={messages} locale={lang} onError={() => {}}>
-      <SeoAlternates />
+      <SeoAlternates canonicalUrl={pageProps?.seo?.canonicalUrl} alternates={pageProps?.seo?.alternates} disabled={pageProps?.seo?.disableAlternates} />
       <div className={`${inter.variable} ${gujarati.variable} ${devanagari.variable} np-appRoot ${langClass} relative overflow-x-hidden`}>
         {showSimpleHeader ? <BrandTopHeader /> : null}
         <SmartBackButton />

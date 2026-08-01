@@ -1,3 +1,11 @@
 User-agent: *
 Allow: /
+Disallow: /admin
+Disallow: /admin-api
+Disallow: /api
+Disallow: /reporter
+Disallow: /community-reporter-my-stories
+Disallow: /community-reporter/my-stories
+Disallow: /maintenance
 Sitemap: https://www.newspulse.co.in/sitemap.xml
+Sitemap: https://www.newspulse.co.in/news-sitemap.xml
