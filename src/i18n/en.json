@@ -118,6 +118,20 @@
     "name": "News Pulse",
     "tagline": "Your pulse on the world’s latest news"
   },
+  "legalPages": {
+    "about": {
+      "legalMatters": {
+        "title": "Legal Matters",
+        "body": "News Pulse obtains independent legal advice from external legal professionals where required. Such legal advice is provided exclusively to News Pulse and does not constitute legal advice to website users, readers, contributors or third parties."
+      }
+    },
+    "terms": {
+      "noLegalAdvice": {
+        "title": "No Legal Advice",
+        "body": "Content published by News Pulse is provided for news, journalism, general information and public-awareness purposes. It must not be treated as legal advice or as a substitute for advice from a qualified legal professional. Users should obtain independent professional advice for matters requiring legal guidance."
+      }
+    }
+  },
   "categories": {
     "breaking": "Breaking",
     "regional": "Regional",

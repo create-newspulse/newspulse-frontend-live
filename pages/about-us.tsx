@@ -2,6 +2,7 @@ import Link from 'next/link';
 import React from 'react';
 import { Globe2, HeartHandshake, Languages, ShieldCheck, Sparkles, Target, Users } from 'lucide-react';
 import PublicBusinessPageLayout, { PageEyebrow, SectionHeading, SurfacePanel } from '../components/public/PublicBusinessPageLayout';
+import { useI18n } from '../src/i18n/LanguageProvider';
 
 const contactEmail = 'Newspulse.team@gmail.com';
 
@@ -46,6 +47,8 @@ const coverageAreas = [
 const promisePoints = ['Accuracy', 'Fairness', 'Transparency', 'Corrections', 'Privacy', 'Responsible Journalism'] as const;
 
 export default function AboutUsPage() {
+  const { t } = useI18n();
+
   return (
     <PublicBusinessPageLayout
       title="About News Pulse"
@@ -170,6 +173,15 @@ export default function AboutUsPage() {
               We want readers to spend less time cutting through noise and more time understanding the stories that affect public life, daily decisions, and community conversations.
             </p>
           </div>
+        </SurfacePanel>
+      </section>
+
+      <section className="mt-8">
+        <SurfacePanel className="min-w-0">
+          <SectionHeading title={t('legalPages.about.legalMatters.title')} />
+          <p className="mt-5 text-sm leading-7 text-slate-600">
+            {t('legalPages.about.legalMatters.body')}
+          </p>
         </SurfacePanel>
       </section>
 

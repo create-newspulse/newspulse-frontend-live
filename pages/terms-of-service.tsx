@@ -2,6 +2,7 @@ import React from 'react';
 import Link from 'next/link';
 import { AlertTriangle, BadgeInfo, Copyright, FileText, Globe, Mail, Megaphone, RefreshCw, Scale, ShieldAlert } from 'lucide-react';
 import PublicBusinessPageLayout, { PageEyebrow, SectionHeading, SurfacePanel } from '../components/public/PublicBusinessPageLayout';
+import { useI18n } from '../src/i18n/LanguageProvider';
 
 const contactEmail = 'newspulse.admin@gmail.com';
 
@@ -20,11 +21,20 @@ const termsSections = [
     body: [
       'Content published on News Pulse is for news, information, awareness, and public-interest purposes.',
       'While News Pulse aims to publish accurate and responsible content, news may develop over time. Information may be updated, corrected, clarified, or removed where required.',
-      'News Pulse content should not be treated as professional legal, medical, financial, investment, or emergency advice.',
+      'News Pulse content should not be treated as professional medical, financial, investment, emergency, or other specialist advice.',
     ],
   },
   {
     number: '3',
+    title: 'No Legal Advice',
+    titleKey: 'legalPages.terms.noLegalAdvice.title',
+    body: [
+      'Content published by News Pulse is provided for news, journalism, general information and public-awareness purposes. It must not be treated as legal advice or as a substitute for advice from a qualified legal professional. Users should obtain independent professional advice for matters requiring legal guidance.',
+    ],
+    bodyKeys: ['legalPages.terms.noLegalAdvice.body'],
+  },
+  {
+    number: '4',
     title: 'Prohibited Use',
     body: [
       'Users must not hack, damage, overload, disrupt, or interfere with the website or attempt unauthorised access to systems, accounts, admin areas, databases, or servers.',
@@ -34,7 +44,7 @@ const termsSections = [
     ],
   },
   {
-    number: '4',
+    number: '5',
     title: 'User Submissions',
     body: [
       'Users may submit news tips, photos, videos, local updates, story ideas, complaints, feedback, or community reports through available channels.',
@@ -43,7 +53,7 @@ const termsSections = [
     ],
   },
   {
-    number: '5',
+    number: '6',
     title: 'Content Ownership',
     body: [
       'Original content, design, logo, articles, graphics, visuals, layout, and editorial work published by News Pulse are protected by applicable intellectual property rights.',
@@ -51,7 +61,7 @@ const termsSections = [
     ],
   },
   {
-    number: '6',
+    number: '7',
     title: 'Third-Party Links and Services',
     body: [
       'News Pulse may include links to third-party websites, embedded content, advertisements, social media platforms, or external services.',
@@ -59,7 +69,7 @@ const termsSections = [
     ],
   },
   {
-    number: '7',
+    number: '8',
     title: 'Advertising and Sponsored Content',
     body: [
       'News Pulse may display advertisements, sponsored content, brand promotions, affiliate links, or partner content where applicable.',
@@ -67,7 +77,7 @@ const termsSections = [
     ],
   },
   {
-    number: '8',
+    number: '9',
     title: 'Updates, Corrections, and Changes',
     body: [
       'News Pulse may update, correct, clarify, modify, remove, or archive website content at any time where required for accuracy, safety, legal, editorial, or technical reasons.',
@@ -75,7 +85,7 @@ const termsSections = [
     ],
   },
   {
-    number: '9',
+    number: '10',
     title: 'Limitation of Liability',
     body: [
       'News Pulse aims to keep the website available, secure, and accurate, but does not guarantee that the website will always be uninterrupted, error-free, fully secure, or free from technical issues.',
@@ -83,7 +93,7 @@ const termsSections = [
     ],
   },
   {
-    number: '10',
+    number: '11',
     title: 'Contact',
     body: [
       'For questions related to these Terms of Service, users may contact News Pulse through the public contact page.',
@@ -111,9 +121,11 @@ const summaryCards = [
   },
 ] as const;
 
-const sectionIcons = [BadgeInfo, Globe, ShieldAlert, AlertTriangle, Copyright, Globe, Megaphone, RefreshCw, Scale, Mail] as const;
+const sectionIcons = [BadgeInfo, Globe, Scale, ShieldAlert, AlertTriangle, Copyright, Globe, Megaphone, RefreshCw, Scale, Mail] as const;
 
 export default function TermsOfServicePage() {
+  const { t } = useI18n();
+
   return (
     <PublicBusinessPageLayout
       title="Terms of Service"
@@ -177,6 +189,8 @@ export default function TermsOfServicePage() {
         {termsSections.map((section, index) => {
           const Icon = sectionIcons[index];
           const isContactSection = section.title === 'Contact';
+          const sectionTitle = 'titleKey' in section ? t(section.titleKey) : section.title;
+          const sectionBody = 'bodyKeys' in section ? section.bodyKeys.map((key) => t(key)) : section.body;
 
           return (
             <SurfacePanel key={section.number} className="min-w-0">
@@ -186,12 +200,12 @@ export default function TermsOfServicePage() {
                 </div>
                 <div className="min-w-0">
                   <div className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Section {section.number}</div>
-                  <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950">{section.title}</h2>
+                  <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-950">{sectionTitle}</h2>
                 </div>
               </div>
 
               <div className="mt-5 space-y-4 text-sm leading-7 text-slate-600">
-                {section.body.map((paragraph) => {
+                {sectionBody.map((paragraph) => {
                   if (paragraph === 'Website: www.newspulse.co.in') {
                     return (
                       <p key={paragraph}>
