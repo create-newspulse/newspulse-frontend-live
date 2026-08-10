@@ -67,6 +67,7 @@ export type AdSlotProps = {
   variant?: Variant;
   className?: string;
   renderMode?: 'default' | 'articleDisplay';
+  hideWhenEmpty?: boolean;
 };
 
 function defaultVariantForSlot(normalizedSlot: string): Variant {
@@ -564,7 +565,7 @@ function sizing(variant: Variant) {
   }
 }
 
-export default function AdSlot({ slot, variant, className = '', renderMode = 'default' }: AdSlotProps) {
+export default function AdSlot({ slot, variant, className = '', renderMode = 'default', hideWhenEmpty = false }: AdSlotProps) {
   const { t, language } = useLanguage();
 
   const normalizedSlot = React.useMemo(() => normalizeSlot(slot), [slot]);
@@ -599,6 +600,10 @@ export default function AdSlot({ slot, variant, className = '', renderMode = 'de
     return <ArticleAdSkeleton normalizedSlot={normalizedSlot} />;
   }
 
+  if (hideWhenEmpty && isLoading && !hasResolved) {
+    return null;
+  }
+
   if (homepageUnitConfig && isLoading && !hasResolved) {
     return <div className={className}><HomepageUnitSkeleton normalizedSlot={normalizedSlot} config={homepageUnitConfig} /></div>;
   }
@@ -616,6 +621,8 @@ export default function AdSlot({ slot, variant, className = '', renderMode = 'de
   };
 
   if (!ad || !imageUrl || imgError) {
+    if (hideWhenEmpty) return null;
+
     if (homepageUnitConfig) {
       return <div className={className}>{renderPlaceholder()}</div>;
     }

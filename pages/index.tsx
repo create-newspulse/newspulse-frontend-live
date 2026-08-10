@@ -5127,6 +5127,12 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
         <React.Fragment key={b.key}>{b.node}</React.Fragment>
       ))}
 
+      <AdSlot
+        slot="HOME_728x90"
+        variant="homeBanner"
+        className="home-shell mx-auto mt-3"
+      />
+
       {/* TRENDING */}
       {showTrendingStrip ? (
         <TrendingStrip theme={theme} onPick={(t: string) => onToast(`Trending: ${t}`)} />
@@ -5178,12 +5184,6 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
         </div>
 
         <div className="post-home-grid-ads grid gap-4">
-          <AdSlot
-            slot="HOME_728x90"
-            variant="homeBanner"
-            className="mx-auto"
-          />
-
           <AdSlot
             slot="HOME_BILLBOARD_970x250"
             variant="billboard970x250"
