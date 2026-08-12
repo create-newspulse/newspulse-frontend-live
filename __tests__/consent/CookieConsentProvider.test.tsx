@@ -5,15 +5,29 @@ import { CookieConsentProvider, useCookieConsent } from '../../src/consent/Cooki
 import EmbeddedMediaConsentGate from '../../src/consent/EmbeddedMediaConsentGate';
 import { COOKIE_CONSENT_NAME, createConsentRecord, parseConsentRecord, readCookieValue, writeConsentCookie } from '../../src/consent/cookieConsent';
 import { LanguageProvider } from '../../src/i18n/LanguageProvider';
+import { getFirebaseClientConfig } from '../../lib/firebaseClient';
+import { getCurrentNotificationPermission, isFirebaseMessagingSupported, registerBrowserForFcm } from '../../lib/firebaseMessaging';
+import { PUSH_NOTIFICATION_PREFERENCES_STORAGE_KEY, readPushNotificationPreferences } from '../../lib/pushNotificationPreferences';
+import { PUSH_BACKEND_REGISTRATION_STORAGE_KEY } from '../../lib/pushSubscriptionClient';
 
 jest.mock('next/script', () => function MockScript(props: any) {
   const { children, dangerouslySetInnerHTML, ...rest } = props;
   return <script data-testid="next-script" {...rest} dangerouslySetInnerHTML={dangerouslySetInnerHTML}>{children}</script>;
 });
 
-function renderWithProviders(children: React.ReactNode = <div />) {
+jest.mock('../../lib/firebaseClient', () => ({
+  getFirebaseClientConfig: jest.fn(),
+}));
+
+jest.mock('../../lib/firebaseMessaging', () => ({
+  getCurrentNotificationPermission: jest.fn(),
+  isFirebaseMessagingSupported: jest.fn(),
+  registerBrowserForFcm: jest.fn(),
+}));
+
+function renderWithProviders(children: React.ReactNode = <div />, initialLang: 'en' | 'hi' | 'gu' = 'en') {
   return render(
-    <LanguageProvider initialLang="en">
+    <LanguageProvider initialLang={initialLang}>
       <CookieConsentProvider>{children}</CookieConsentProvider>
     </LanguageProvider>
   );
@@ -24,9 +38,14 @@ function FooterSettingsProbe() {
   return <button type="button" onClick={openPreferences}>Cookie Settings</button>;
 }
 
+function getPushDiagnosticsText(): string {
+  return screen.getByTestId('push-diagnostics').textContent || '';
+}
+
 describe('CookieConsentProvider', () => {
   const originalGaId = process.env.NEXT_PUBLIC_GA_ID;
   const originalAdsenseId = process.env.NEXT_PUBLIC_ADSENSE_PUB_ID;
+  const originalFcmTestControl = process.env.NEXT_PUBLIC_ENABLE_FCM_TEST_CONTROL;
 
   beforeEach(() => {
     document.cookie = `${COOKIE_CONSENT_NAME}=; Path=/; Max-Age=0`;
@@ -35,12 +54,34 @@ describe('CookieConsentProvider', () => {
     jest.resetAllMocks();
     process.env.NEXT_PUBLIC_GA_ID = 'G-TEST123';
     process.env.NEXT_PUBLIC_ADSENSE_PUB_ID = 'pub-test123';
+    process.env.NEXT_PUBLIC_ENABLE_FCM_TEST_CONTROL = 'false';
     window.scrollTo = jest.fn();
+    window.localStorage.clear();
+    (global as any).fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ ok: true, message: 'ok' }),
+    });
+    (getFirebaseClientConfig as jest.Mock).mockReturnValue({
+      isConfigured: false,
+      config: {},
+      vapidKey: '',
+      missingEnv: ['NEXT_PUBLIC_FIREBASE_API_KEY'],
+    });
+    (getCurrentNotificationPermission as jest.Mock).mockReturnValue('unsupported');
+    (isFirebaseMessagingSupported as jest.Mock).mockResolvedValue(false);
+    (registerBrowserForFcm as jest.Mock).mockResolvedValue({
+      ok: false,
+      reason: 'not-configured',
+      permission: 'unsupported',
+      message: 'Firebase Cloud Messaging is not configured for this frontend build.',
+    });
   });
 
   afterAll(() => {
     process.env.NEXT_PUBLIC_GA_ID = originalGaId;
     process.env.NEXT_PUBLIC_ADSENSE_PUB_ID = originalAdsenseId;
+    process.env.NEXT_PUBLIC_ENABLE_FCM_TEST_CONTROL = originalFcmTestControl;
   });
 
   test('first visit shows banner and does not load optional Google scripts', async () => {
@@ -107,15 +148,22 @@ describe('CookieConsentProvider', () => {
     const scrollArea = screen.getByTestId('cookie-preferences-scroll-area');
     const footer = screen.getByTestId('cookie-preferences-footer');
 
-    expect(overlay.className).toContain('overflow-y-auto');
-    expect(overlay.className).toContain('overscroll-contain');
-    expect(dialog.className).toContain('max-h-[calc(100dvh-1rem)]');
+    expect(overlay.className).toContain('items-center');
+    expect(overlay.className).toContain('overflow-hidden');
+    expect(overlay.className).toContain('overscroll-none');
     expect(dialog.className).toContain('flex-col');
     expect(dialog.className).toContain('overflow-hidden');
+    expect(dialog.getAttribute('style')).toContain('height: min(90vh, calc(100dvh - 1rem))');
+    expect(dialog.getAttribute('style')).toContain('max-height: min(90vh, calc(100dvh - 1rem))');
     expect(scrollArea.className).toContain('min-h-0');
     expect(scrollArea.className).toContain('flex-1');
+    expect(scrollArea.className).toContain('touch-pan-y');
+    expect(scrollArea.className).toContain('overflow-x-hidden');
     expect(scrollArea.className).toContain('overflow-y-auto');
+    expect(scrollArea.getAttribute('style')).toContain('-webkit-overflow-scrolling: touch');
     expect(footer.className).toContain('flex-shrink-0');
+    expect(footer.className).toContain('sm:justify-end');
+    expect(footer.className).not.toContain('sm:grid-cols-3');
     expect(screen.getByRole('button', { name: 'Save Preferences' })).toBeTruthy();
   });
 
@@ -169,6 +217,436 @@ describe('CookieConsentProvider', () => {
       expect((switchButton as HTMLElement).style.backgroundColor).toBe('rgb(15, 23, 42)');
       expect((thumb as HTMLElement).style.transform).toBe('translateX(24px)');
     }
+  });
+
+  test('push notification card appears after preferences and before analytics without changing cookie categories', async () => {
+    renderWithProviders();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage Preferences' }));
+
+    const scrollAreaText = screen.getByTestId('cookie-preferences-scroll-area').textContent || '';
+    expect(scrollAreaText.indexOf('Strictly Necessary')).toBeLessThan(scrollAreaText.indexOf('Preferences'));
+    expect(scrollAreaText.indexOf('Preferences')).toBeLessThan(scrollAreaText.indexOf('Push Notifications'));
+    expect(scrollAreaText.indexOf('Push Notifications')).toBeLessThan(scrollAreaText.indexOf('Analytics'));
+    expect(screen.getByText('Receive News Pulse news alerts and article updates on this device.')).toBeTruthy();
+    expect(screen.queryByTestId('push-diagnostics')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Check Push Status' })).toBeNull();
+    expect(scrollAreaText).not.toContain('Browser permission');
+    expect(scrollAreaText).not.toContain('Service worker');
+    expect(scrollAreaText).not.toContain('Firebase registration');
+    expect(scrollAreaText).not.toContain('News Pulse server sync');
+    expect(scrollAreaText).not.toContain('Preferences sync');
+    expect(scrollAreaText).not.toContain('Backend reachable');
+    expect(scrollAreaText).not.toContain('Firebase backend');
+    expect(scrollAreaText).not.toContain('Messaging available');
+    expect(scrollAreaText).not.toContain('Last updated');
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Preferences' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save Preferences' }));
+
+    const stored = parseConsentRecord(readCookieValue(COOKIE_CONSENT_NAME));
+    expect(stored?.categories).toMatchObject({ preferences: true, analytics: false, advertising: false, embeddedMedia: false });
+    expect(stored?.categories as any).not.toHaveProperty('pushNotifications');
+  });
+
+  test('enable notifications requests permission through FCM only after clicking the push toggle', async () => {
+    (getFirebaseClientConfig as jest.Mock).mockReturnValue({ isConfigured: true, config: {}, vapidKey: 'vapid', missingEnv: [] });
+    (isFirebaseMessagingSupported as jest.Mock).mockResolvedValue(true);
+    (getCurrentNotificationPermission as jest.Mock).mockReturnValue('default');
+    (registerBrowserForFcm as jest.Mock).mockResolvedValue({
+      ok: true,
+      permission: 'granted',
+      registrationId: 'test-fid',
+      registrationType: 'fid',
+      serviceWorkerScope: 'http://localhost/',
+      backendSync: { ok: false, reason: 'not-requested', message: 'Backend subscription sync is disabled until the News Pulse backend phase adds an endpoint.' },
+    });
+
+    renderWithProviders();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage Preferences' }));
+    expect(registerBrowserForFcm).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByTestId('push-notifications-master-control').textContent).toContain('Notifications are off'));
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Enable Notifications' }));
+
+    await waitFor(() => expect(registerBrowserForFcm).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect((global as any).fetch).toHaveBeenCalledWith('/api/public/push/register', expect.any(Object)));
+    expect(await screen.findByText('Enabled')).toBeTruthy();
+    expect(screen.getByTestId('push-notification-types')).toBeTruthy();
+    expect(screen.getByText('Notifications enabled and synced')).toBeTruthy();
+    expect(screen.queryByTestId('push-diagnostics')).toBeNull();
+
+    const [, registerInit] = (global as any).fetch.mock.calls.find(([url]: any[]) => url === '/api/public/push/register');
+    expect(registerInit.method).toBe('POST');
+    expect(JSON.parse(registerInit.body)).toMatchObject({
+      registrationId: 'test-fid',
+      registrationType: 'fid',
+      platform: 'web',
+      language: 'en',
+      preferences: {
+        breakingNews: true,
+        topStories: true,
+        newArticleAlerts: true,
+        categoryAlerts: true,
+        allArticles: false,
+      },
+      categories: [],
+    });
+    expect(JSON.parse(registerInit.body).categories).not.toContain('gujaratRegional');
+    expect(JSON.parse(registerInit.body).categories).not.toContain('Gujarat/Regional');
+
+    const preferences = readPushNotificationPreferences();
+    expect(preferences.enabled).toBe(true);
+    expect(preferences.types).toMatchObject({
+      breakingNews: true,
+      topStories: true,
+      newArticleAlerts: true,
+      categoryAlerts: true,
+      allArticles: false,
+    });
+  });
+
+  test('denied browser permission shows blocked state and does not request permission again', async () => {
+    (getFirebaseClientConfig as jest.Mock).mockReturnValue({ isConfigured: true, config: {}, vapidKey: 'vapid', missingEnv: [] });
+    (isFirebaseMessagingSupported as jest.Mock).mockResolvedValue(true);
+    (getCurrentNotificationPermission as jest.Mock).mockReturnValue('denied');
+
+    renderWithProviders();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage Preferences' }));
+
+    expect(await screen.findByText('Notifications are blocked in your browser settings')).toBeTruthy();
+    expect(screen.getByText("Notifications are blocked in your browser. Allow notifications in your browser's site settings to receive News Pulse alerts.")).toBeTruthy();
+    expect(screen.queryByTestId('push-diagnostics')).toBeNull();
+    expect(screen.queryByText('Firebase Cloud Messaging registration failed.')).toBeNull();
+    fireEvent.click(screen.getByRole('switch', { name: 'Enable Notifications' }));
+    expect(registerBrowserForFcm).not.toHaveBeenCalled();
+    expect((global as any).fetch).not.toHaveBeenCalled();
+  });
+
+  test('window focus refresh clears stale blocked state after browser permission is granted', async () => {
+    window.localStorage.setItem(
+      PUSH_NOTIFICATION_PREFERENCES_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        enabled: true,
+        types: { breakingNews: true, topStories: true, newArticleAlerts: true, categoryAlerts: true, allArticles: false },
+        categoryAlerts: { selected: ['national'] },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      })
+    );
+    window.localStorage.setItem(
+      PUSH_BACKEND_REGISTRATION_STORAGE_KEY,
+      JSON.stringify({ registrationId: 'stored-fid', registrationType: 'fid', updatedAt: '2026-01-01T00:00:00.000Z' })
+    );
+    (getFirebaseClientConfig as jest.Mock).mockReturnValue({ isConfigured: true, config: {}, vapidKey: 'vapid', missingEnv: [] });
+    (isFirebaseMessagingSupported as jest.Mock).mockResolvedValue(true);
+    (getCurrentNotificationPermission as jest.Mock).mockReturnValueOnce('denied').mockReturnValue('granted');
+
+    renderWithProviders();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage Preferences' }));
+    expect(await screen.findByText('Notifications are blocked in your browser settings')).toBeTruthy();
+
+    fireEvent.focus(window);
+
+    expect(await screen.findByText('Enabled')).toBeTruthy();
+    expect(screen.getByText('Notifications enabled and synced')).toBeTruthy();
+    expect(screen.queryByText('Notifications are blocked in your browser settings')).toBeNull();
+    expect(screen.queryByTestId('push-diagnostics')).toBeNull();
+    expect(registerBrowserForFcm).not.toHaveBeenCalled();
+  });
+
+  test('granted state with a stored backend registration does not duplicate registration', async () => {
+    window.localStorage.setItem(
+      PUSH_NOTIFICATION_PREFERENCES_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        enabled: true,
+        types: { breakingNews: true, topStories: true, newArticleAlerts: true, categoryAlerts: true, allArticles: false },
+        categoryAlerts: { selected: ['national'] },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      })
+    );
+    window.localStorage.setItem(
+      PUSH_BACKEND_REGISTRATION_STORAGE_KEY,
+      JSON.stringify({ registrationId: 'stored-fid', registrationType: 'fid', updatedAt: '2026-01-01T00:00:00.000Z' })
+    );
+    (getFirebaseClientConfig as jest.Mock).mockReturnValue({ isConfigured: true, config: {}, vapidKey: 'vapid', missingEnv: [] });
+    (isFirebaseMessagingSupported as jest.Mock).mockResolvedValue(true);
+    (getCurrentNotificationPermission as jest.Mock).mockReturnValue('granted');
+
+    renderWithProviders();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage Preferences' }));
+
+    expect(await screen.findByText('Enabled')).toBeTruthy();
+    expect(registerBrowserForFcm).not.toHaveBeenCalled();
+    expect((global as any).fetch).not.toHaveBeenCalled();
+    expect(screen.getByText('Notifications enabled and synced')).toBeTruthy();
+    expect(screen.queryByTestId('push-diagnostics')).toBeNull();
+  });
+
+  test('granted notification state registers FCM, syncs language, and preserves local notification type preferences', async () => {
+    window.localStorage.setItem(
+      PUSH_NOTIFICATION_PREFERENCES_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        enabled: true,
+        types: { breakingNews: false, topStories: true, newArticleAlerts: true, categoryAlerts: true, allArticles: false },
+        categoryAlerts: { selected: ['national', 'sports'] },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      })
+    );
+    (getFirebaseClientConfig as jest.Mock).mockReturnValue({ isConfigured: true, config: {}, vapidKey: 'vapid', missingEnv: [] });
+    (isFirebaseMessagingSupported as jest.Mock).mockResolvedValue(true);
+    (getCurrentNotificationPermission as jest.Mock).mockReturnValue('granted');
+    (registerBrowserForFcm as jest.Mock).mockResolvedValue({
+      ok: true,
+      permission: 'granted',
+      registrationId: 'test-fid',
+      registrationType: 'fid',
+      serviceWorkerScope: 'http://localhost/',
+      backendSync: { ok: false, reason: 'not-requested', message: 'Backend subscription sync is disabled until the News Pulse backend phase adds an endpoint.' },
+    });
+
+    renderWithProviders(<FooterSettingsProbe />, 'hi');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Cookie Settings' }));
+
+    await waitFor(() => expect(registerBrowserForFcm).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect((global as any).fetch).toHaveBeenCalledWith('/api/public/push/register', expect.any(Object)));
+    expect(await screen.findByText('Enabled')).toBeTruthy();
+    expect(screen.getByText('Notifications enabled and synced')).toBeTruthy();
+    expect(screen.getByRole('switch', { name: 'Breaking News' }).getAttribute('aria-checked')).toBe('false');
+
+    const [, registerInit] = (global as any).fetch.mock.calls.find(([url]: any[]) => url === '/api/public/push/register');
+    expect(JSON.parse(registerInit.body)).toMatchObject({
+      registrationId: 'test-fid',
+      registrationType: 'fid',
+      language: 'hi',
+      categories: ['national', 'sports'],
+    });
+
+    fireEvent.click(screen.getByRole('switch', { name: 'All Articles' }));
+
+    await waitFor(() => expect((global as any).fetch).toHaveBeenCalledWith('/api/public/push/preferences', expect.any(Object)));
+    const [, updateInit] = (global as any).fetch.mock.calls.find(([url]: any[]) => url === '/api/public/push/preferences');
+    expect(updateInit.method).toBe('PUT');
+    expect(JSON.parse(updateInit.body)).toMatchObject({
+      registrationId: 'test-fid',
+      registrationType: 'fid',
+      language: 'hi',
+      preferences: { allArticles: true },
+      categories: ['national', 'sports'],
+    });
+
+    const preferences = readPushNotificationPreferences();
+    expect(preferences.types.breakingNews).toBe(false);
+    expect(preferences.types.allArticles).toBe(true);
+    expect(preferences.categoryAlerts.selected).toEqual(['national', 'sports']);
+  });
+
+  test('turning the master switch off unregisters backend delivery without clearing other preferences', async () => {
+    window.localStorage.setItem(
+      PUSH_NOTIFICATION_PREFERENCES_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        enabled: true,
+        types: { breakingNews: true, topStories: true, newArticleAlerts: true, categoryAlerts: true, allArticles: false },
+        categoryAlerts: { selected: ['business'] },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      })
+    );
+    window.localStorage.setItem(
+      PUSH_BACKEND_REGISTRATION_STORAGE_KEY,
+      JSON.stringify({ registrationId: 'stored-fid', registrationType: 'fid', updatedAt: '2026-01-01T00:00:00.000Z' })
+    );
+    (getFirebaseClientConfig as jest.Mock).mockReturnValue({ isConfigured: true, config: {}, vapidKey: 'vapid', missingEnv: [] });
+    (isFirebaseMessagingSupported as jest.Mock).mockResolvedValue(true);
+    (getCurrentNotificationPermission as jest.Mock).mockReturnValue('granted');
+
+    renderWithProviders();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage Preferences' }));
+    expect(await screen.findByText('Enabled')).toBeTruthy();
+    fireEvent.click(screen.getByRole('switch', { name: 'Enable Notifications' }));
+
+    await waitFor(() => expect((global as any).fetch).toHaveBeenCalledWith('/api/public/push/unregister', expect.any(Object)));
+    const [, unregisterInit] = (global as any).fetch.mock.calls.find(([url]: any[]) => url === '/api/public/push/unregister');
+    expect(unregisterInit.method).toBe('DELETE');
+    expect(JSON.parse(unregisterInit.body)).toEqual({
+      registrationId: 'stored-fid',
+      registrationType: 'fid',
+    });
+
+    const preferences = readPushNotificationPreferences();
+    expect(preferences.enabled).toBe(false);
+    expect(preferences.types.breakingNews).toBe(true);
+    expect(preferences.categoryAlerts.selected).toEqual(['business']);
+  });
+
+  test('backend registration failure keeps the settings panel usable', async () => {
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+    (global as any).fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      text: async () => JSON.stringify({ ok: false, message: 'Push backend unavailable' }),
+    });
+    (getFirebaseClientConfig as jest.Mock).mockReturnValue({ isConfigured: true, config: {}, vapidKey: 'vapid', missingEnv: [] });
+    (isFirebaseMessagingSupported as jest.Mock).mockResolvedValue(true);
+    (getCurrentNotificationPermission as jest.Mock).mockReturnValue('default');
+    (registerBrowserForFcm as jest.Mock).mockResolvedValue({
+      ok: true,
+      permission: 'granted',
+      registrationId: 'test-fid',
+      registrationType: 'fid',
+      serviceWorkerScope: 'http://localhost/',
+      backendSync: { ok: false, reason: 'not-requested', message: 'Backend sync handled by settings.' },
+    });
+
+    renderWithProviders();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage Preferences' }));
+    await waitFor(() => expect(screen.getByTestId('push-notifications-master-control').textContent).toContain('Notifications are off'));
+    fireEvent.click(screen.getByRole('switch', { name: 'Enable Notifications' }));
+
+    expect(await screen.findByText('News Pulse alerts are temporarily unavailable on this browser.')).toBeTruthy();
+    expect(screen.queryByText('Firebase Cloud Messaging registration failed.')).toBeNull();
+    expect(screen.getByTestId('push-notifications-master-control').textContent).toContain('Enabled');
+    expect(screen.getByRole('button', { name: 'Save Preferences' })).toBeTruthy();
+    expect(screen.queryByTestId('push-diagnostics')).toBeNull();
+    expect(consoleError).toHaveBeenCalledWith('Push backend sync failed', {
+      status: 503,
+      message: 'Push backend unavailable',
+    });
+    consoleError.mockRestore();
+  });
+
+  test('backend sync failure can be retried by toggling push notifications off then on', async () => {
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+    let registerRequests = 0;
+    (global as any).fetch = jest.fn().mockImplementation(async (url: string) => {
+      if (url === '/api/public/push/register') {
+        registerRequests += 1;
+        if (registerRequests === 1) {
+          return {
+            ok: false,
+            status: 503,
+            text: async () => JSON.stringify({ ok: false, message: 'Push backend unavailable' }),
+          };
+        }
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ ok: true, message: 'ok' }),
+      };
+    });
+    (getFirebaseClientConfig as jest.Mock).mockReturnValue({ isConfigured: true, config: {}, vapidKey: 'vapid', missingEnv: [] });
+    (isFirebaseMessagingSupported as jest.Mock).mockResolvedValue(true);
+    (getCurrentNotificationPermission as jest.Mock).mockReturnValue('default');
+    (registerBrowserForFcm as jest.Mock).mockResolvedValue({
+      ok: true,
+      permission: 'granted',
+      registrationId: 'test-fid',
+      registrationType: 'fid',
+      serviceWorkerScope: 'http://localhost/',
+      backendSync: { ok: false, reason: 'not-requested', message: 'Backend sync handled by settings.' },
+    });
+
+    renderWithProviders();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage Preferences' }));
+    await waitFor(() => expect(screen.getByTestId('push-notifications-master-control').textContent).toContain('Notifications are off'));
+    fireEvent.click(screen.getByRole('switch', { name: 'Enable Notifications' }));
+
+    expect(await screen.findByText('News Pulse alerts are temporarily unavailable on this browser.')).toBeTruthy();
+    await waitFor(() => expect((global as any).fetch.mock.calls.filter(([url]: any[]) => url === '/api/public/push/register')).toHaveLength(1));
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Enable Notifications' }));
+    await waitFor(() => expect(screen.getByTestId('push-notifications-master-control').textContent).toContain('Notifications are off'));
+    fireEvent.click(screen.getByRole('switch', { name: 'Enable Notifications' }));
+
+    await waitFor(() => expect(registerBrowserForFcm).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect((global as any).fetch.mock.calls.filter(([url]: any[]) => url === '/api/public/push/register')).toHaveLength(2));
+    expect(screen.getByText('Notifications enabled and synced')).toBeTruthy();
+    expect(screen.queryByTestId('push-diagnostics')).toBeNull();
+    expect(consoleError).toHaveBeenCalledWith('Push backend sync failed', {
+      status: 503,
+      message: 'Push backend unavailable',
+    });
+    consoleError.mockRestore();
+  });
+
+  test('Firebase registration failure shows unavailable state without blocked-browser text', async () => {
+    (getFirebaseClientConfig as jest.Mock).mockReturnValue({ isConfigured: true, config: {}, vapidKey: 'vapid', missingEnv: [] });
+    (isFirebaseMessagingSupported as jest.Mock).mockResolvedValue(true);
+    (getCurrentNotificationPermission as jest.Mock).mockReturnValue('default');
+    (registerBrowserForFcm as jest.Mock).mockResolvedValue({
+      ok: false,
+      reason: 'registration-failed',
+      permission: 'granted',
+      message: 'Firebase Cloud Messaging registration failed.',
+      error: Object.assign(new Error('Sender ID mismatch'), { name: 'FirebaseError', code: 'messaging/mismatched-credential' }),
+    });
+
+    renderWithProviders();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage Preferences' }));
+    await waitFor(() => expect(screen.getByTestId('push-notifications-master-control').textContent).toContain('Notifications are off'));
+    fireEvent.click(screen.getByRole('switch', { name: 'Enable Notifications' }));
+
+    expect(await screen.findByText('News Pulse alerts are temporarily unavailable on this browser.')).toBeTruthy();
+    expect(screen.getByTestId('push-notifications-master-control').textContent).toContain('Notifications are temporarily unavailable');
+    expect(screen.queryByText('Notifications are blocked in your browser settings')).toBeNull();
+    expect(screen.queryByText("Notifications are blocked in your browser. Allow notifications in your browser's site settings to receive News Pulse alerts.")).toBeNull();
+    expect(screen.getByRole('switch', { name: 'Enable Notifications' }).getAttribute('aria-checked')).toBe('false');
+    expect(screen.queryByTestId('push-diagnostics')).toBeNull();
+    expect((global as any).fetch).not.toHaveBeenCalled();
+  });
+
+  test('development push status refresh shows optional backend diagnostics without exposing identifiers', async () => {
+    process.env.NEXT_PUBLIC_ENABLE_FCM_TEST_CONTROL = 'true';
+    (global as any).fetch = jest.fn().mockImplementation(async (url: string) => ({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(
+        url === '/api/public/push/diagnostics'
+          ? { ok: true, backendReachable: true, firebaseBackendConfigured: true, messagingAvailable: true }
+          : { ok: true, message: 'ok' }
+      ),
+    }));
+    window.localStorage.setItem(
+      PUSH_NOTIFICATION_PREFERENCES_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        enabled: true,
+        types: { breakingNews: true, topStories: true, newArticleAlerts: true, categoryAlerts: true, allArticles: false },
+        categoryAlerts: { selected: [] },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      })
+    );
+    window.localStorage.setItem(
+      PUSH_BACKEND_REGISTRATION_STORAGE_KEY,
+      JSON.stringify({ registrationId: 'stored-fid-secret', registrationType: 'fid', updatedAt: '2026-01-01T00:00:00.000Z' })
+    );
+    (getFirebaseClientConfig as jest.Mock).mockReturnValue({ isConfigured: true, config: {}, vapidKey: 'vapid', missingEnv: [] });
+    (isFirebaseMessagingSupported as jest.Mock).mockResolvedValue(true);
+    (getCurrentNotificationPermission as jest.Mock).mockReturnValue('granted');
+
+    renderWithProviders();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage Preferences' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Check Push Status' }));
+
+    await waitFor(() => expect((global as any).fetch).toHaveBeenCalledWith('/api/public/push/diagnostics', expect.objectContaining({ method: 'GET' })));
+    await waitFor(() => expect(getPushDiagnosticsText()).toContain('Backend reachableYes'));
+    expect(getPushDiagnosticsText()).toContain('Firebase backendConfigured');
+    expect(getPushDiagnosticsText()).toContain('Messaging availableYes');
+    expect(getPushDiagnosticsText()).not.toContain('stored-fid-secret');
+    expect(getPushDiagnosticsText()).not.toContain('vapid');
   });
 
   test('footer buttons work after scrolling and body scrolling is restored on close', async () => {

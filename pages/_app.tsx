@@ -16,6 +16,7 @@ import BrandTopHeader from '../src/components/layout/BrandTopHeader';
 import SmartBackButton from '../src/components/navigation/SmartBackButton';
 import { usePublicVersion } from '../hooks/usePublicVersion';
 import { CookieConsentProvider } from '../src/consent/CookieConsentProvider';
+import FirebaseForegroundMessaging from '../components/FirebaseForegroundMessaging';
 
 const CATEGORY_ROUTE_SEGMENTS = new Set([
   'breaking',
@@ -248,15 +249,30 @@ function MyApp({ Component, pageProps }) {
     router.events.on('routeChangeComplete', handleRouteChange);
 
     const enablePwa = process.env.NEXT_PUBLIC_ENABLE_PWA === 'true';
+    const unregisterNonFirebaseServiceWorkers = () => {
+      navigator.serviceWorker.getRegistrations?.().then((regs) =>
+        regs.forEach((registration) => {
+          const workerUrls = [
+            registration.active?.scriptURL,
+            registration.installing?.scriptURL,
+            registration.waiting?.scriptURL,
+          ].filter(Boolean);
+
+          if (workerUrls.some((url) => url?.endsWith('/firebase-messaging-sw.js'))) return;
+          registration.unregister();
+        })
+      );
+    };
+
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
       if (process.env.NODE_ENV === 'production') {
         if (enablePwa) {
           navigator.serviceWorker.register('/service-worker.js').catch(() => {});
         } else {
-          navigator.serviceWorker.getRegistrations?.().then((regs) => regs.forEach((r) => r.unregister()));
+          unregisterNonFirebaseServiceWorkers();
         }
       } else {
-        navigator.serviceWorker.getRegistrations?.().then((regs) => regs.forEach((r) => r.unregister()));
+        unregisterNonFirebaseServiceWorkers();
       }
     }
 
@@ -275,6 +291,7 @@ function MyApp({ Component, pageProps }) {
               <CookieConsentProvider>
                 <PublishedThemeApplier />
                 <RouteLanguageSync />
+                <FirebaseForegroundMessaging />
                 <I18nBridge Component={Component} pageProps={pageProps} />
               </CookieConsentProvider>
             </LanguageProvider>

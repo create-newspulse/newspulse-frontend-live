@@ -1,9 +1,34 @@
 import Link from 'next/link';
 import Script from 'next/script';
 import React from 'react';
-import { Cookie, LockKeyhole, Settings, ShieldCheck, X } from 'lucide-react';
+import { Bell, Cookie, LockKeyhole, Settings, ShieldCheck, X } from 'lucide-react';
 
 import { useI18n } from '../i18n/LanguageProvider';
+import { getFirebaseClientConfig } from '../../lib/firebaseClient';
+import {
+  FIREBASE_MESSAGING_SERVICE_WORKER_PATH,
+  getCurrentNotificationPermission,
+  isFirebaseMessagingSupported,
+  registerBrowserForFcm,
+  type FcmRegistrationResult,
+} from '../../lib/firebaseMessaging';
+import {
+  defaultPushNotificationPreferences,
+  hasStoredPushNotificationPreferences,
+  readPushNotificationPreferences,
+  supportedNewsPulsePushCategories,
+  writePushNotificationPreferences,
+  type PushNotificationPreferences,
+  type PushNotificationTypeKey,
+} from '../../lib/pushNotificationPreferences';
+import {
+  checkNewsPulsePushBackendDiagnostics,
+  readStoredPushRegistration,
+  registerNewsPulsePushSubscription,
+  unregisterNewsPulsePushSubscription,
+  updateNewsPulsePushPreferences,
+  type PushRegistrationIdentifier,
+} from '../../lib/pushSubscriptionClient';
 import {
   allAcceptedCategories,
   clearStorageKeys,
@@ -64,12 +89,21 @@ function cleanupOptionalTechnologies(categories: CookieConsentCategories) {
 
 function applyBodyScrollLock(isLocked: boolean) {
   if (typeof document === 'undefined') return undefined;
+  const root = document.documentElement;
+  const previousRootOverflow = root.style.overflow;
   const previousOverflow = document.body.style.overflow;
+  const previousOverscrollBehavior = document.body.style.overscrollBehavior;
   const previousScrollX = typeof window !== 'undefined' ? window.scrollX : 0;
   const previousScrollY = typeof window !== 'undefined' ? window.scrollY : 0;
-  if (isLocked) document.body.style.overflow = 'hidden';
+  if (isLocked) {
+    root.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    document.body.style.overscrollBehavior = 'none';
+  }
   return () => {
+    root.style.overflow = previousRootOverflow;
     document.body.style.overflow = previousOverflow;
+    document.body.style.overscrollBehavior = previousOverscrollBehavior;
     try {
       if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') window.scrollTo(previousScrollX, previousScrollY);
     } catch {
@@ -339,7 +373,7 @@ function CookiePreferencesModal() {
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex min-h-[100dvh] items-start justify-center overflow-y-auto overscroll-contain bg-slate-950/62 p-2 backdrop-blur-sm sm:items-center sm:p-4"
+      className="fixed inset-0 z-[9999] flex min-h-[100dvh] items-center justify-center overflow-hidden overscroll-none bg-slate-950/62 p-2 backdrop-blur-sm sm:p-4"
       data-testid="cookie-preferences-overlay"
       onMouseDown={(event) => { if (event.target === event.currentTarget) closePreferences(); }}
     >
@@ -348,7 +382,8 @@ function CookiePreferencesModal() {
         role="dialog"
         aria-modal="true"
         aria-labelledby="cookie-preferences-title"
-        className="my-auto flex max-h-[calc(100dvh-1rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white text-slate-950 shadow-[0_30px_90px_-38px_rgba(2,6,23,0.8)] outline-none sm:max-h-[calc(100dvh-2rem)]"
+        className="flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white text-slate-950 shadow-[0_30px_90px_-38px_rgba(2,6,23,0.8)] outline-none"
+        style={{ height: 'min(90vh, calc(100dvh - 1rem))', maxHeight: 'min(90vh, calc(100dvh - 1rem))' }}
         data-testid="cookie-preferences-dialog"
       >
         <div className="flex flex-shrink-0 items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 sm:px-6">
@@ -366,7 +401,8 @@ function CookiePreferencesModal() {
         </div>
 
         <div
-          className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-5 py-4 [-webkit-overflow-scrolling:touch] sm:px-6"
+          className="min-h-0 flex-1 touch-pan-y space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain px-5 py-4 [-webkit-overflow-scrolling:touch] sm:px-6"
+          style={{ touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' }}
           data-testid="cookie-preferences-scroll-area"
           tabIndex={0}
         >
@@ -377,17 +413,19 @@ function CookiePreferencesModal() {
             locked
           />
           {optionalCategoryKeys.map((key) => (
-            <CategoryRow
-              key={key}
-              title={t(`cookieConsent.categories.${key}.title`)}
-              description={t(`cookieConsent.categories.${key}.description`)}
-              checked={draft[key]}
-              onChange={(value) => setOptional(key, value)}
-            />
+            <React.Fragment key={key}>
+              <CategoryRow
+                title={t(`cookieConsent.categories.${key}.title`)}
+                description={t(`cookieConsent.categories.${key}.description`)}
+                checked={draft[key]}
+                onChange={(value) => setOptional(key, value)}
+              />
+              {key === 'preferences' ? <PushNotificationRow /> : null}
+            </React.Fragment>
           ))}
         </div>
 
-        <div className="grid flex-shrink-0 gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:grid-cols-3 sm:px-6" data-testid="cookie-preferences-footer">
+        <div className="flex flex-shrink-0 flex-col gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-end sm:px-6" data-testid="cookie-preferences-footer">
           <button type="button" onClick={rejectNonEssential} className="rounded-full border border-slate-300 bg-white px-4 py-3 text-sm font-black text-slate-900 outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2">
             {t('cookieConsent.actions.rejectNonEssential')}
           </button>
@@ -407,10 +445,12 @@ function CookieSwitch({
   label,
   checked,
   onChange,
+  disabled = false,
 }: {
   label: string;
   checked: boolean;
   onChange?: (checked: boolean) => void;
+  disabled?: boolean;
 }) {
   const thumbTransform = checked ? 'translateX(24px)' : 'translateX(0)';
 
@@ -420,8 +460,11 @@ function CookieSwitch({
       role="switch"
       aria-label={label}
       aria-checked={checked}
-      onClick={() => onChange?.(!checked)}
-      className="inline-flex shrink-0 items-center rounded-full border border-transparent p-1 outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2"
+      disabled={disabled}
+      onClick={() => {
+        if (!disabled) onChange?.(!checked);
+      }}
+      className="inline-flex shrink-0 items-center rounded-full border border-transparent p-1 outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
       data-testid={`cookie-switch-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
       style={{
         width: 56,
@@ -436,6 +479,410 @@ function CookieSwitch({
         style={{ width: 24, height: 24, transform: thumbTransform }}
       />
     </button>
+  );
+}
+
+type PushNotificationStatus = 'checking' | 'unavailable' | 'default' | 'granted' | 'denied' | 'registering';
+
+type PushDiagnosticStatus = 'Granted' | 'Blocked' | 'Not asked' | 'Unavailable' | 'Active' | 'Not active' | 'Registered' | 'Failed' | 'Not attempted' | 'Synced' | 'Yes' | 'No' | 'Configured' | 'Not Configured';
+
+type PushDiagnostics = {
+  browserPermission: PushDiagnosticStatus;
+  serviceWorker: PushDiagnosticStatus;
+  firebaseRegistration: PushDiagnosticStatus;
+  serverSync: PushDiagnosticStatus;
+  preferencesSync: PushDiagnosticStatus;
+  backendReachable: PushDiagnosticStatus;
+  firebaseBackend: PushDiagnosticStatus;
+  messagingAvailable: PushDiagnosticStatus;
+  lastUpdated: string;
+};
+
+const PUSH_BLOCKED_MESSAGE = "Notifications are blocked in your browser. Allow notifications in your browser's site settings to receive News Pulse alerts.";
+const PUSH_ENABLED_MESSAGE = 'Notifications enabled and synced';
+const PUSH_TEMPORARILY_UNAVAILABLE_MESSAGE = 'News Pulse alerts are temporarily unavailable on this browser.';
+const PUSH_BACKEND_SYNC_FAILED_MESSAGE = PUSH_TEMPORARILY_UNAVAILABLE_MESSAGE;
+
+const pushNotificationTypeLabels: Array<{ key: PushNotificationTypeKey; label: string }> = [
+  { key: 'breakingNews', label: 'Breaking News' },
+  { key: 'topStories', label: 'Top Stories' },
+  { key: 'newArticleAlerts', label: 'New Article Alerts' },
+  { key: 'categoryAlerts', label: 'Category Alerts' },
+  { key: 'allArticles', label: 'All Articles' },
+];
+
+function getPushStatusLabel(status: PushNotificationStatus): string {
+  if (status === 'granted') return 'Enabled';
+  if (status === 'denied') return 'Notifications are blocked in your browser settings';
+  if (status === 'unavailable') return 'Notifications are temporarily unavailable';
+  if (status === 'registering') return 'Enabling...';
+  if (status === 'checking') return 'Checking...';
+  return 'Notifications are off';
+}
+
+function getPushStatusDescription(status: PushNotificationStatus, detail: string): string {
+  if (status === 'denied') return PUSH_BLOCKED_MESSAGE;
+  if (detail) return detail;
+  if (status === 'unavailable') return PUSH_TEMPORARILY_UNAVAILABLE_MESSAGE;
+  if (status === 'default') return 'Turn this on to receive News Pulse news alerts on this device.';
+  if (status === 'granted') return PUSH_ENABLED_MESSAGE;
+  return '';
+}
+
+function isPushEnabled(status: PushNotificationStatus): boolean {
+  return status === 'granted' || status === 'registering';
+}
+
+function markPushPreferencesEnabled(preferences: PushNotificationPreferences): PushNotificationPreferences {
+  return writePushNotificationPreferences({ ...preferences, enabled: true });
+}
+
+function getStatusFromRegistrationResult(result: FcmRegistrationResult): PushNotificationStatus {
+  if (result.ok) return 'granted';
+  if (result.reason === 'permission-blocked') return 'denied';
+  if (result.reason === 'permission-dismissed') return 'default';
+  return 'unavailable';
+}
+
+function getBrowserPermissionDiagnostic(permission: ReturnType<typeof getCurrentNotificationPermission>): PushDiagnosticStatus {
+  if (permission === 'granted') return 'Granted';
+  if (permission === 'denied') return 'Blocked';
+  if (permission === 'default') return 'Not asked';
+  return 'Unavailable';
+}
+
+function getImmediateServiceWorkerDiagnostic(): PushDiagnosticStatus {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return 'Unavailable';
+  return navigator.serviceWorker.controller ? 'Active' : 'Not active';
+}
+
+function createPushDiagnosticsSnapshot(overrides: Partial<PushDiagnostics> = {}): PushDiagnostics {
+  return {
+    browserPermission: 'Not attempted',
+    serviceWorker: getImmediateServiceWorkerDiagnostic(),
+    firebaseRegistration: 'Not attempted',
+    serverSync: 'Not attempted',
+    preferencesSync: 'Not attempted',
+    backendReachable: 'Not attempted',
+    firebaseBackend: 'Not attempted',
+    messagingAvailable: 'Not attempted',
+    lastUpdated: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+async function getServiceWorkerDiagnostic(): Promise<PushDiagnosticStatus> {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return 'Unavailable';
+  try {
+    const registrations = typeof navigator.serviceWorker.getRegistrations === 'function'
+      ? await navigator.serviceWorker.getRegistrations()
+      : [];
+    if (navigator.serviceWorker.controller || registrations.some((registration) => {
+      const workerUrls = [registration.active?.scriptURL, registration.waiting?.scriptURL, registration.installing?.scriptURL].filter(Boolean);
+      return workerUrls.some((url) => String(url).endsWith(FIREBASE_MESSAGING_SERVICE_WORKER_PATH));
+    })) {
+      return 'Active';
+    }
+    return 'Not active';
+  } catch {
+    return 'Unavailable';
+  }
+}
+
+function PushDiagnosticsRows({ diagnostics, onRefresh }: { diagnostics: PushDiagnostics; onRefresh: () => void }) {
+  const rows: Array<{ label: string; value: PushDiagnosticStatus }> = [
+    { label: 'Browser permission', value: diagnostics.browserPermission },
+    { label: 'Service worker', value: diagnostics.serviceWorker },
+    { label: 'Firebase registration', value: diagnostics.firebaseRegistration },
+    { label: 'News Pulse server sync', value: diagnostics.serverSync },
+    { label: 'Preferences sync', value: diagnostics.preferencesSync },
+    { label: 'Backend reachable', value: diagnostics.backendReachable },
+    { label: 'Firebase backend', value: diagnostics.firebaseBackend },
+    { label: 'Messaging available', value: diagnostics.messagingAvailable },
+    { label: 'Last updated', value: diagnostics.lastUpdated as PushDiagnosticStatus },
+  ];
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3" data-testid="push-diagnostics">
+      <div className="grid gap-2 text-xs leading-5 text-slate-600 sm:grid-cols-2">
+        {rows.map((row) => (
+          <div key={row.label} className="flex min-w-0 items-center justify-between gap-3 rounded-lg bg-white px-3 py-2">
+            <span className="font-semibold text-slate-500">{row.label}</span>
+            <span className="truncate text-right font-black text-slate-800">{row.value}</span>
+          </div>
+        ))}
+      </div>
+      <button type="button" onClick={onRefresh} className="mt-3 rounded-full border border-slate-300 bg-white px-3 py-2 text-xs font-black text-slate-800 transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2">
+        Check Push Status
+      </button>
+    </div>
+  );
+}
+
+function isFcmTestControlEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_ENABLE_FCM_TEST_CONTROL === 'true';
+}
+
+function PushNotificationRow() {
+  const { lang } = useI18n();
+  const [status, setStatus] = React.useState<PushNotificationStatus>('checking');
+  const [detail, setDetail] = React.useState('');
+  const [preferences, setPreferences] = React.useState<PushNotificationPreferences>(defaultPushNotificationPreferences);
+  const [diagnostics, setDiagnostics] = React.useState<PushDiagnostics>(() => createPushDiagnosticsSnapshot());
+  const registrationRef = React.useRef<PushRegistrationIdentifier | null>(null);
+  const statusRef = React.useRef<PushNotificationStatus>('checking');
+
+  React.useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  const refreshDiagnostics = React.useCallback(async (includeBackend = false, overrides: Partial<PushDiagnostics> = {}) => {
+    const [serviceWorker, backend] = await Promise.all([
+      getServiceWorkerDiagnostic(),
+      includeBackend ? checkNewsPulsePushBackendDiagnostics() : Promise.resolve(null),
+    ]);
+    setDiagnostics((current) => createPushDiagnosticsSnapshot({
+      ...current,
+      serviceWorker,
+      ...(backend
+        ? {
+            backendReachable: backend.backendReachable ? 'Yes' : 'No',
+            firebaseBackend: backend.firebaseBackendConfigured ? 'Configured' : 'Not Configured',
+            messagingAvailable: backend.messagingAvailable ? 'Yes' : 'No',
+          }
+        : {}),
+      ...overrides,
+    }));
+  }, []);
+
+  const registerGrantedBrowser = React.useCallback(async (currentPreferences: PushNotificationPreferences) => {
+    setStatus('registering');
+    setDetail('');
+    setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, firebaseRegistration: 'Not attempted', serverSync: 'Not attempted', preferencesSync: 'Not attempted' }));
+    const result = await registerBrowserForFcm();
+    const nextStatus = getStatusFromRegistrationResult(result);
+    setStatus(nextStatus);
+    setDetail(result.ok ? result.backendSync.message : result.reason === 'registration-failed' ? PUSH_TEMPORARILY_UNAVAILABLE_MESSAGE : result.message);
+    setDiagnostics((current) => createPushDiagnosticsSnapshot({
+      ...current,
+      browserPermission: result.permission === 'granted' ? 'Granted' : current.browserPermission,
+      serviceWorker: result.ok ? 'Active' : current.serviceWorker,
+      firebaseRegistration: result.ok ? 'Registered' : 'Failed',
+      serverSync: 'Not attempted',
+      preferencesSync: 'Not attempted',
+    }));
+
+    if (result.ok) {
+      const enabledPreferences = markPushPreferencesEnabled(currentPreferences);
+      setPreferences(enabledPreferences);
+      const backendResult = await registerNewsPulsePushSubscription({
+        registrationId: result.registrationId,
+        permission: result.permission,
+        language: lang,
+        preferences: enabledPreferences,
+      });
+      if (backendResult.ok) {
+        registrationRef.current = {
+          registrationId: backendResult.registrationId,
+          registrationType: backendResult.registrationType,
+        };
+        setDetail(PUSH_ENABLED_MESSAGE);
+        setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, serverSync: 'Synced', preferencesSync: 'Synced' }));
+      } else {
+        setDetail(PUSH_BACKEND_SYNC_FAILED_MESSAGE);
+        setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, serverSync: 'Failed', preferencesSync: 'Not attempted' }));
+      }
+    }
+  }, [lang]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    async function inspectPushAvailability() {
+      const storedPreferences = readPushNotificationPreferences();
+      const hasStoredPreferences = hasStoredPushNotificationPreferences();
+      const storedRegistration = readStoredPushRegistration();
+      if (!cancelled) {
+        setPreferences(storedPreferences);
+        registrationRef.current = storedRegistration || registrationRef.current;
+      }
+
+      const permission = getCurrentNotificationPermission();
+      if (permission === 'denied') {
+        if (!cancelled) {
+          registrationRef.current = null;
+          setStatus('denied');
+          setDetail('');
+          setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, browserPermission: 'Blocked', firebaseRegistration: 'Not attempted', serverSync: 'Not attempted', preferencesSync: 'Not attempted' }));
+        }
+        return;
+      }
+
+      if (permission === 'default') {
+        if (!cancelled) {
+          setStatus('default');
+          setDetail('');
+          setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, browserPermission: 'Not asked', firebaseRegistration: 'Not attempted', serverSync: 'Not attempted', preferencesSync: 'Not attempted' }));
+        }
+        return;
+      }
+
+      if (permission === 'unsupported') {
+        if (!cancelled) {
+          setStatus('unavailable');
+          setDetail(PUSH_TEMPORARILY_UNAVAILABLE_MESSAGE);
+          setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, browserPermission: 'Unavailable', serviceWorker: 'Unavailable', firebaseRegistration: 'Failed' }));
+        }
+        return;
+      }
+
+      const configStatus = getFirebaseClientConfig();
+      if (!configStatus.isConfigured) {
+        if (!cancelled) {
+          setStatus('unavailable');
+          setDetail(PUSH_TEMPORARILY_UNAVAILABLE_MESSAGE);
+          setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, firebaseRegistration: 'Failed' }));
+        }
+        return;
+      }
+
+      const supported = await isFirebaseMessagingSupported();
+      if (cancelled) return;
+      if (!supported) {
+        setStatus('unavailable');
+        setDetail(PUSH_TEMPORARILY_UNAVAILABLE_MESSAGE);
+        setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, firebaseRegistration: 'Failed' }));
+        return;
+      }
+
+      if (permission === 'granted') {
+        if (hasStoredPreferences && !storedPreferences.enabled) {
+          setStatus('default');
+          setDetail('Notifications are off for this device.');
+          return;
+        }
+        if (storedRegistration) {
+          setStatus('granted');
+          setDetail(PUSH_ENABLED_MESSAGE);
+          setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, browserPermission: 'Granted', firebaseRegistration: 'Registered', serverSync: 'Synced', preferencesSync: 'Synced' }));
+          return;
+        }
+        if (statusRef.current === 'granted' && registrationRef.current) {
+          setStatus('granted');
+          return;
+        }
+        await registerGrantedBrowser(storedPreferences);
+        return;
+      }
+    }
+
+    inspectPushAvailability();
+    const onFocus = () => {
+      inspectPushAvailability();
+    };
+    window.addEventListener('focus', onFocus);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [refreshDiagnostics, registerGrantedBrowser]);
+
+  const updateTypePreference = (key: PushNotificationTypeKey, checked: boolean) => {
+    setPreferences((current) => {
+      const next = writePushNotificationPreferences({
+        ...current,
+        enabled: true,
+        types: { ...current.types, [key]: checked },
+      });
+      const registration = registrationRef.current;
+      if (registration) {
+        updateNewsPulsePushPreferences({ ...registration, language: lang, preferences: next }).then((result) => {
+          if (!result.ok) setDetail(result.message);
+          setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, preferencesSync: result.ok ? 'Synced' : 'Failed' }));
+        });
+      }
+      return next;
+    });
+  };
+
+  const handleMasterChange = async (checked: boolean) => {
+    if (status === 'denied' || status === 'unavailable' || status === 'registering') return;
+
+    if (checked) {
+      const permission = getCurrentNotificationPermission();
+      if (permission === 'denied') {
+        registrationRef.current = null;
+        setStatus('denied');
+        setDetail('');
+        setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, browserPermission: 'Blocked', firebaseRegistration: 'Not attempted', serverSync: 'Not attempted', preferencesSync: 'Not attempted' }));
+        return;
+      }
+      await registerGrantedBrowser(preferences);
+      return;
+    }
+
+    const nextPreferences = writePushNotificationPreferences({ ...preferences, enabled: false });
+    setPreferences(nextPreferences);
+    setStatus('default');
+    setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, serverSync: 'Not attempted', preferencesSync: 'Not attempted' }));
+    const registration = registrationRef.current || readStoredPushRegistration();
+    if (!registration) {
+      setDetail('Notifications are off for this device.');
+      return;
+    }
+    const result = await unregisterNewsPulsePushSubscription({ ...registration, language: lang });
+    if (result.ok) {
+      registrationRef.current = null;
+      setDetail('Notifications are off for this device.');
+      setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, firebaseRegistration: 'Not attempted', serverSync: 'Not attempted', preferencesSync: 'Not attempted' }));
+    } else {
+      setDetail(result.message);
+      setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, serverSync: 'Failed' }));
+    }
+  };
+
+  const checked = isPushEnabled(status);
+  const disabled = status === 'checking' || status === 'registering' || status === 'unavailable' || status === 'denied';
+  const description = getPushStatusDescription(status, detail);
+  const showDiagnostics = isFcmTestControlEnabled();
+
+  return (
+    <div className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-4" data-testid="push-notifications-card">
+      <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-center">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-base font-black tracking-tight text-slate-950">
+            <Bell className="h-4 w-4 text-slate-500" aria-hidden="true" />
+            Push Notifications
+          </div>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Receive News Pulse news alerts and article updates on this device.</p>
+          {description ? <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">{description}</p> : null}
+        </div>
+        <div className="flex min-h-10 w-full max-w-full shrink-0 items-center justify-end gap-3 justify-self-end text-sm font-bold text-slate-700 sm:w-auto" data-testid="push-notifications-master-control">
+          <span className="whitespace-nowrap text-slate-700">{getPushStatusLabel(status)}</span>
+          <CookieSwitch label="Enable Notifications" checked={checked} disabled={disabled} onChange={handleMasterChange} />
+        </div>
+      </div>
+
+      {showDiagnostics ? <PushDiagnosticsRows diagnostics={diagnostics} onRefresh={() => refreshDiagnostics(true)} /> : null}
+
+      {status === 'granted' ? (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3" data-testid="push-notification-types">
+          <div className="grid gap-3 sm:grid-cols-2">
+            {pushNotificationTypeLabels.map((item) => (
+              <div key={item.key} className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 text-sm font-bold text-slate-700">
+                <span>{item.label}</span>
+                <CookieSwitch label={item.label} checked={preferences.types[item.key]} onChange={(value) => updateTypePreference(item.key, value)} />
+              </div>
+            ))}
+          </div>
+          {preferences.types.categoryAlerts ? (
+            <p className="mt-3 text-xs leading-5 text-slate-500">
+              Category Alerts are ready for future News Pulse sections: {supportedNewsPulsePushCategories.map((category) => category.label).join(', ')}.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
