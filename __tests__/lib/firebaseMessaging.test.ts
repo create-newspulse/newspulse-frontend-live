@@ -1,5 +1,5 @@
 import { getApps, initializeApp } from 'firebase/app';
-import { getMessaging, getToken, isSupported, onRegistered, register } from 'firebase/messaging';
+import { getMessaging, getToken, isSupported } from 'firebase/messaging';
 import {
   getCurrentNotificationPermission,
   isFirebaseMessagingSupported,
@@ -104,102 +104,77 @@ describe('lib/firebaseMessaging', () => {
     expect(getToken).not.toHaveBeenCalled();
   });
 
-  it('registers FCM with Firebase 12 FID flow after permission has already been granted', async () => {
+  it('registers FCM with getToken after permission has already been granted', async () => {
     applyFirebaseEnv();
     setNotificationPermission('granted');
     const { activeWorker, registration } = setWebPushSupport();
     const app = { name: '[DEFAULT]' };
     const messaging = { app };
-    let registeredHandler: ((registrationId: string) => void) | null = null;
-    const unsubscribeRegistered = jest.fn();
     (isSupported as jest.Mock).mockResolvedValue(true);
     (getApps as jest.Mock).mockReturnValue([]);
     (initializeApp as jest.Mock).mockReturnValue(app);
     (getMessaging as jest.Mock).mockReturnValue(messaging);
-    (onRegistered as jest.Mock).mockImplementation((_messaging, handler) => {
-      registeredHandler = handler;
-      return unsubscribeRegistered;
-    });
-    (register as jest.Mock).mockImplementation(async () => {
-      registeredHandler?.('firebase-installation-id');
-      return undefined;
-    });
+    (getToken as jest.Mock).mockResolvedValue('fcm-registration-token');
 
     const result = await registerBrowserForFcm();
 
     expect(result).toMatchObject({
       ok: true,
       permission: 'granted',
-      registrationId: 'firebase-installation-id',
-      registrationType: 'fid',
+      registrationId: 'fcm-registration-token',
+      registrationType: 'token',
       serviceWorkerScope: registration.scope,
     });
-    expect(onRegistered).toHaveBeenCalledWith(messaging, expect.any(Function));
-    expect(onRegistered.mock.invocationCallOrder[0]).toBeLessThan(register.mock.invocationCallOrder[0]);
     expect(navigator.serviceWorker.register).toHaveBeenCalledWith('/firebase-messaging-sw.js', { scope: '/' });
     expect(activeWorker.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'NEWS_PULSE_FIREBASE_CONFIG' })
     );
-    expect(register).toHaveBeenCalledWith(messaging, {
+    expect(getToken).toHaveBeenCalledWith(messaging, {
       vapidKey: firebaseEnv.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
       serviceWorkerRegistration: registration,
     });
-    expect(getToken).not.toHaveBeenCalled();
-    expect(unsubscribeRegistered).toHaveBeenCalled();
     expect(window.Notification.requestPermission).not.toHaveBeenCalled();
   });
 
-  it('requests browser permission from the default state before Firebase 12 FID registration', async () => {
+  it('requests browser permission from the default state before FCM token registration', async () => {
     applyFirebaseEnv();
     setNotificationPermission('default', 'granted');
     setWebPushSupport();
     const app = { name: '[DEFAULT]' };
     const messaging = { app };
-    let registeredHandler: ((registrationId: string) => void) | null = null;
     (isSupported as jest.Mock).mockResolvedValue(true);
     (getApps as jest.Mock).mockReturnValue([]);
     (initializeApp as jest.Mock).mockReturnValue(app);
     (getMessaging as jest.Mock).mockReturnValue(messaging);
-    (onRegistered as jest.Mock).mockImplementation((_messaging, handler) => {
-      registeredHandler = handler;
-      return jest.fn();
-    });
-    (register as jest.Mock).mockImplementation(async () => {
-      registeredHandler?.('fid-after-permission-prompt');
-      return undefined;
-    });
+    (getToken as jest.Mock).mockResolvedValue('fcm-token-after-permission-prompt');
 
     const result = await registerBrowserForFcm();
 
     expect(window.Notification.requestPermission).toHaveBeenCalledTimes(1);
-    expect(result).toMatchObject({ ok: true, permission: 'granted', registrationId: 'fid-after-permission-prompt', registrationType: 'fid' });
-    expect(onRegistered.mock.invocationCallOrder[0]).toBeLessThan(register.mock.invocationCallOrder[0]);
-    expect(getToken).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ ok: true, permission: 'granted', registrationId: 'fcm-token-after-permission-prompt', registrationType: 'token' });
+    expect(getToken).toHaveBeenCalledWith(messaging, expect.objectContaining({ vapidKey: firebaseEnv.NEXT_PUBLIC_FIREBASE_VAPID_KEY }));
   });
 
-  it('does not interpret the register() return value as the FID', async () => {
+  it('does not treat an empty FCM token as a successful registration', async () => {
     applyFirebaseEnv();
     setNotificationPermission('granted');
     setWebPushSupport();
     const app = { name: '[DEFAULT]' };
     const messaging = { app };
-    let registeredHandler: ((registrationId: string) => void) | null = null;
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     (isSupported as jest.Mock).mockResolvedValue(true);
     (getApps as jest.Mock).mockReturnValue([]);
     (initializeApp as jest.Mock).mockReturnValue(app);
     (getMessaging as jest.Mock).mockReturnValue(messaging);
-    (onRegistered as jest.Mock).mockImplementation((_messaging, handler) => {
-      registeredHandler = handler;
-      return jest.fn();
-    });
-    (register as jest.Mock).mockImplementation(async () => {
-      registeredHandler?.('fid-from-on-registered');
-      return 'do-not-use-this-return-value';
-    });
+    (getToken as jest.Mock).mockResolvedValue('');
 
     const result = await registerBrowserForFcm();
 
-    expect(result).toMatchObject({ ok: true, registrationId: 'fid-from-on-registered', registrationType: 'fid' });
+    expect(result).toMatchObject({ ok: false, reason: 'registration-failed', permission: 'granted' });
+    expect(errorSpy).toHaveBeenCalledWith('FCM registration failed', expect.objectContaining({
+      message: 'Firebase Messaging did not provide an FCM registration token.',
+    }));
+    errorSpy.mockRestore();
   });
 
   it('returns an accurate Firebase registration failure and logs safe development details', async () => {
@@ -217,8 +192,7 @@ describe('lib/firebaseMessaging', () => {
     (getApps as jest.Mock).mockReturnValue([]);
     (initializeApp as jest.Mock).mockReturnValue(app);
     (getMessaging as jest.Mock).mockReturnValue(messaging);
-    (onRegistered as jest.Mock).mockReturnValue(jest.fn());
-    (register as jest.Mock).mockRejectedValue(firebaseError);
+    (getToken as jest.Mock).mockRejectedValue(firebaseError);
 
     const result = await registerBrowserForFcm();
 

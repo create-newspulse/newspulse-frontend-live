@@ -12,7 +12,7 @@ export type FcmRegistrationResult =
       ok: true;
       permission: 'granted';
       registrationId: string;
-      registrationType: 'fid';
+      registrationType: 'token';
       serviceWorkerScope: string;
       backendSync: PushSubscriptionRegistrationResult | { ok: false; reason: 'not-requested'; message: string };
     }
@@ -174,53 +174,32 @@ export async function registerBrowserForFcm(): Promise<FcmRegistrationResult> {
   }
 
   try {
-    const { getMessaging, onRegistered, register: registerMessaging } = await import('firebase/messaging');
+    const { getMessaging, getToken } = await import('firebase/messaging');
     const serviceWorkerRegistration = await ensureFirebaseMessagingServiceWorker();
     const messaging = getMessaging(appResult.app);
+    const registrationId = String(await getToken(messaging, {
+      vapidKey: appResult.configStatus.vapidKey,
+      serviceWorkerRegistration,
+    }) || '').trim();
 
-    let unsubscribeRegistered: (() => void) | undefined;
-    let registrationTimeout: number | undefined;
-    const registeredIdPromise = new Promise<string>((resolve, reject) => {
-      registrationTimeout = window.setTimeout(() => {
-        reject(new Error('Firebase Messaging registration did not provide a Firebase Installation ID.'));
-      }, 15000);
-
-      unsubscribeRegistered = onRegistered(messaging, (registrationId) => {
-        const normalizedRegistrationId = String(registrationId || '').trim();
-        if (registrationTimeout) window.clearTimeout(registrationTimeout);
-        if (!normalizedRegistrationId) {
-          reject(new Error('Firebase Messaging registration provided an empty Firebase Installation ID.'));
-          return;
-        }
-        resolve(normalizedRegistrationId);
-      });
-    });
-    registeredIdPromise.catch(() => {});
-
-    try {
-      await registerMessaging(messaging, {
-        vapidKey: appResult.configStatus.vapidKey,
-        serviceWorkerRegistration,
-      });
-      const registrationId = await registeredIdPromise;
-      const backendSync = {
-        ok: false as const,
-        reason: 'not-requested' as const,
-        message: 'Backend subscription sync is handled by the News Pulse settings panel.',
-      };
-
-      return {
-        ok: true,
-        permission,
-        registrationId,
-        registrationType: 'fid',
-        serviceWorkerScope: serviceWorkerRegistration.scope,
-        backendSync,
-      };
-    } finally {
-      if (registrationTimeout) window.clearTimeout(registrationTimeout);
-      unsubscribeRegistered?.();
+    if (!registrationId) {
+      throw new Error('Firebase Messaging did not provide an FCM registration token.');
     }
+
+    const backendSync = {
+      ok: false as const,
+      reason: 'not-requested' as const,
+      message: 'Backend subscription sync is handled by the News Pulse settings panel.',
+    };
+
+    return {
+      ok: true,
+      permission,
+      registrationId,
+      registrationType: 'token',
+      serviceWorkerScope: serviceWorkerRegistration.scope,
+      backendSync,
+    };
   } catch (error) {
     logDevelopmentFirebaseRegistrationError(error);
     return {

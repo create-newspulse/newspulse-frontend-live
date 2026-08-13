@@ -5,7 +5,7 @@ import {
   type PushNotificationPreferences,
 } from './pushNotificationPreferences';
 
-export const PUSH_REGISTRATION_TYPE = 'fid' as const;
+export const PUSH_REGISTRATION_TYPE = 'token' as const;
 export const PUSH_BACKEND_REGISTRATION_STORAGE_KEY = 'np_push_backend_registration_v1';
 
 export type PushSubscriptionRegistrationInput = {
@@ -57,12 +57,17 @@ export type StoredPushRegistration = PushRegistrationIdentifier & {
 };
 
 type PushBackendPayload = {
-  registrationId: string;
+  token: string;
   registrationType: typeof PUSH_REGISTRATION_TYPE;
   platform: 'web';
   language: Lang;
   preferences: Record<string, boolean>;
   categories: NewsPulsePushCategoryKey[];
+};
+
+type PushBackendIdentifierPayload = {
+  token: string;
+  registrationType: typeof PUSH_REGISTRATION_TYPE;
 };
 
 function normalizeLanguage(language: Lang | undefined): Lang {
@@ -132,7 +137,7 @@ function buildPushBackendPayload(input: {
     : [];
 
   return {
-    registrationId: input.registrationId,
+    token: input.registrationId,
     registrationType: PUSH_REGISTRATION_TYPE,
     platform: 'web',
     language: normalizeLanguage(input.language),
@@ -164,6 +169,12 @@ function readBooleanLike(source: any, keys: string[]): boolean | undefined {
   return undefined;
 }
 
+function logDevelopmentPushRegisterRequest(path: string, payload: PushBackendPayload | PushBackendIdentifierPayload): void {
+  if (process.env.NEXT_PUBLIC_ENABLE_FCM_TEST_CONTROL !== 'true') return;
+  if (path !== '/api/public/push/register' || payload.registrationType !== 'token') return;
+  console.info('push register request sent', 'registrationType=token');
+}
+
 export async function checkNewsPulsePushBackendDiagnostics(): Promise<PushBackendDiagnosticsResult> {
   try {
     const response = await fetch('/api/public/push/diagnostics', {
@@ -193,9 +204,10 @@ export async function checkNewsPulsePushBackendDiagnostics(): Promise<PushBacken
 async function sendPushBackendRequest(
   path: '/api/public/push/register' | '/api/public/push/preferences' | '/api/public/push/unregister',
   method: 'POST' | 'PUT' | 'DELETE',
-  payload: PushBackendPayload | PushRegistrationIdentifier
+  payload: PushBackendPayload | PushBackendIdentifierPayload
 ): Promise<PushSubscriptionMutationResult> {
   try {
+    logDevelopmentPushRegisterRequest(path, payload);
     const response = await fetch(path, {
       method,
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -310,7 +322,7 @@ export async function unregisterNewsPulsePushSubscription(
     return { ok: false, reason: 'invalid-registration-id', message: 'Push registration identifier is missing.' };
   }
   const result = await sendPushBackendRequest('/api/public/push/unregister', 'DELETE', {
-    registrationId,
+    token: registrationId,
     registrationType: PUSH_REGISTRATION_TYPE,
   });
   if (result.ok) clearStoredPushRegistration();

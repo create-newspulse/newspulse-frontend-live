@@ -2,6 +2,7 @@ import { defaultPushNotificationPreferences } from '../../lib/pushNotificationPr
 import {
   PUSH_BACKEND_REGISTRATION_STORAGE_KEY,
   checkNewsPulsePushBackendDiagnostics,
+  readStoredPushRegistration,
   registerNewsPulsePushSubscription,
   unregisterNewsPulsePushSubscription,
   updateNewsPulsePushPreferences,
@@ -17,20 +18,20 @@ describe('lib/pushSubscriptionClient', () => {
     });
   });
 
-  it('registers the Firebase Installation ID with the backend payload contract', async () => {
+  it('registers the FCM token with the backend payload contract', async () => {
     const result = await registerNewsPulsePushSubscription({
-      registrationId: 'fid-123',
+      registrationId: 'fcm-token-123',
       permission: 'granted',
       language: 'gu',
       preferences: defaultPushNotificationPreferences,
     });
 
-    expect(result).toMatchObject({ ok: true, registrationId: 'fid-123', registrationType: 'fid' });
+    expect(result).toMatchObject({ ok: true, registrationId: 'fcm-token-123', registrationType: 'token' });
     expect((global as any).fetch).toHaveBeenCalledWith('/api/public/push/register', expect.objectContaining({ method: 'POST' }));
     const [, init] = (global as any).fetch.mock.calls[0];
     expect(JSON.parse(init.body)).toMatchObject({
-      registrationId: 'fid-123',
-      registrationType: 'fid',
+      token: 'fcm-token-123',
+      registrationType: 'token',
       platform: 'web',
       language: 'gu',
       preferences: {
@@ -45,9 +46,38 @@ describe('lib/pushSubscriptionClient', () => {
     expect(JSON.parse(init.body).categories).not.toContain('gujaratRegional');
     expect(JSON.parse(init.body).categories).not.toContain('Gujarat/Regional');
     expect(JSON.parse(window.localStorage.getItem(PUSH_BACKEND_REGISTRATION_STORAGE_KEY) || '{}')).toMatchObject({
-      registrationId: 'fid-123',
-      registrationType: 'fid',
+      registrationId: 'fcm-token-123',
+      registrationType: 'token',
     });
+  });
+
+  it('does not treat fid-only stored registrations as successful push sync', () => {
+    window.localStorage.setItem(
+      PUSH_BACKEND_REGISTRATION_STORAGE_KEY,
+      JSON.stringify({ registrationId: 'fid-123', registrationType: 'fid', updatedAt: '2026-01-01T00:00:00.000Z' })
+    );
+
+    expect(readStoredPushRegistration()).toBeNull();
+  });
+
+  it('logs safe register metadata only when FCM test control is enabled', async () => {
+    const originalFcmTestControl = process.env.NEXT_PUBLIC_ENABLE_FCM_TEST_CONTROL;
+    const consoleInfo = jest.spyOn(console, 'info').mockImplementation(() => {});
+    process.env.NEXT_PUBLIC_ENABLE_FCM_TEST_CONTROL = 'true';
+
+    try {
+      await registerNewsPulsePushSubscription({
+        registrationId: 'fcm-token-123',
+        permission: 'granted',
+        preferences: defaultPushNotificationPreferences,
+      });
+    } finally {
+      process.env.NEXT_PUBLIC_ENABLE_FCM_TEST_CONTROL = originalFcmTestControl;
+    }
+
+    expect(consoleInfo).toHaveBeenCalledWith('push register request sent', 'registrationType=token');
+    expect(consoleInfo.mock.calls.flat().join(' ')).not.toContain('fcm-token-123');
+    consoleInfo.mockRestore();
   });
 
   it('normalizes legacy and display category values before backend registration', async () => {
@@ -59,7 +89,7 @@ describe('lib/pushSubscriptionClient', () => {
     };
 
     const result = await registerNewsPulsePushSubscription({
-      registrationId: 'fid-123',
+      registrationId: 'fcm-token-123',
       permission: 'granted',
       preferences,
     });
@@ -82,8 +112,8 @@ describe('lib/pushSubscriptionClient', () => {
     };
 
     const result = await updateNewsPulsePushPreferences({
-      registrationId: 'fid-123',
-      registrationType: 'fid',
+      registrationId: 'fcm-token-123',
+      registrationType: 'token',
       language: 'hi',
       preferences,
     });
@@ -93,8 +123,8 @@ describe('lib/pushSubscriptionClient', () => {
     const [, init] = (global as any).fetch.mock.calls[0];
     const payload = JSON.parse(init.body);
     expect(payload).toMatchObject({
-      registrationId: 'fid-123',
-      registrationType: 'fid',
+      token: 'fcm-token-123',
+      registrationType: 'token',
       platform: 'web',
       language: 'hi',
       preferences: { allArticles: true, categoryAlerts: false },
@@ -113,8 +143,8 @@ describe('lib/pushSubscriptionClient', () => {
     };
 
     const result = await updateNewsPulsePushPreferences({
-      registrationId: 'fid-123',
-      registrationType: 'fid',
+      registrationId: 'fcm-token-123',
+      registrationType: 'token',
       preferences,
     });
 
@@ -131,12 +161,12 @@ describe('lib/pushSubscriptionClient', () => {
   it('unregisters backend delivery and clears the stored registration on success', async () => {
     window.localStorage.setItem(
       PUSH_BACKEND_REGISTRATION_STORAGE_KEY,
-      JSON.stringify({ registrationId: 'fid-123', registrationType: 'fid', updatedAt: '2026-01-01T00:00:00.000Z' })
+      JSON.stringify({ registrationId: 'fcm-token-123', registrationType: 'token', updatedAt: '2026-01-01T00:00:00.000Z' })
     );
 
     const result = await unregisterNewsPulsePushSubscription({
-      registrationId: 'fid-123',
-      registrationType: 'fid',
+      registrationId: 'fcm-token-123',
+      registrationType: 'token',
     });
 
     expect(result.ok).toBe(true);
@@ -153,7 +183,7 @@ describe('lib/pushSubscriptionClient', () => {
     });
 
     const result = await registerNewsPulsePushSubscription({
-      registrationId: 'fid-123',
+      registrationId: 'fcm-token-123',
       permission: 'granted',
       preferences: defaultPushNotificationPreferences,
     });

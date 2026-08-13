@@ -686,9 +686,12 @@ function PushNotificationRow() {
           registrationId: backendResult.registrationId,
           registrationType: backendResult.registrationType,
         };
+        setStatus('granted');
         setDetail(PUSH_ENABLED_MESSAGE);
         setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, serverSync: 'Synced', preferencesSync: 'Synced' }));
       } else {
+        registrationRef.current = null;
+        setStatus('unavailable');
         setDetail(PUSH_BACKEND_SYNC_FAILED_MESSAGE);
         setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, serverSync: 'Failed', preferencesSync: 'Not attempted' }));
       }
@@ -806,7 +809,7 @@ function PushNotificationRow() {
   };
 
   const handleMasterChange = async (checked: boolean) => {
-    if (status === 'denied' || status === 'unavailable' || status === 'registering') return;
+    if (status === 'denied' || status === 'registering') return;
 
     if (checked) {
       const permission = getCurrentNotificationPermission();
@@ -842,7 +845,7 @@ function PushNotificationRow() {
   };
 
   const checked = isPushEnabled(status);
-  const disabled = status === 'checking' || status === 'registering' || status === 'unavailable' || status === 'denied';
+  const disabled = status === 'checking' || status === 'registering' || status === 'denied';
   const description = getPushStatusDescription(status, detail);
   const showDiagnostics = isFcmTestControlEnabled();
 

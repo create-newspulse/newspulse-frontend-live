@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { CookieConsentProvider, useCookieConsent } from '../../src/consent/CookieConsentProvider';
 import EmbeddedMediaConsentGate from '../../src/consent/EmbeddedMediaConsentGate';
@@ -256,8 +256,8 @@ describe('CookieConsentProvider', () => {
     (registerBrowserForFcm as jest.Mock).mockResolvedValue({
       ok: true,
       permission: 'granted',
-      registrationId: 'test-fid',
-      registrationType: 'fid',
+      registrationId: 'test-fcm-token',
+      registrationType: 'token',
       serviceWorkerScope: 'http://localhost/',
       backendSync: { ok: false, reason: 'not-requested', message: 'Backend subscription sync is disabled until the News Pulse backend phase adds an endpoint.' },
     });
@@ -279,9 +279,11 @@ describe('CookieConsentProvider', () => {
 
     const [, registerInit] = (global as any).fetch.mock.calls.find(([url]: any[]) => url === '/api/public/push/register');
     expect(registerInit.method).toBe('POST');
-    expect(JSON.parse(registerInit.body)).toMatchObject({
-      registrationId: 'test-fid',
-      registrationType: 'fid',
+    const registerPayload = JSON.parse(registerInit.body);
+    expect(registerPayload.token).toBeTruthy();
+    expect(registerPayload).toMatchObject({
+      token: 'test-fcm-token',
+      registrationType: 'token',
       platform: 'web',
       language: 'en',
       preferences: {
@@ -305,6 +307,60 @@ describe('CookieConsentProvider', () => {
       categoryAlerts: true,
       allArticles: false,
     });
+  });
+
+  test('save preferences after turning push on waits for token registration before synced state', async () => {
+    let resolveRegistration: (value: Awaited<ReturnType<typeof registerBrowserForFcm>>) => void = () => {};
+    const registrationPromise = new Promise<Awaited<ReturnType<typeof registerBrowserForFcm>>>((resolve) => {
+      resolveRegistration = resolve;
+    });
+    (getFirebaseClientConfig as jest.Mock).mockReturnValue({ isConfigured: true, config: {}, vapidKey: 'vapid', missingEnv: [] });
+    (isFirebaseMessagingSupported as jest.Mock).mockResolvedValue(true);
+    (getCurrentNotificationPermission as jest.Mock).mockReturnValueOnce('default').mockReturnValue('granted');
+    (registerBrowserForFcm as jest.Mock).mockReturnValue(registrationPromise);
+
+    renderWithProviders(<FooterSettingsProbe />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage Preferences' }));
+    await waitFor(() => expect(screen.getByTestId('push-notifications-master-control').textContent).toContain('Notifications are off'));
+    fireEvent.click(screen.getByRole('switch', { name: 'Enable Notifications' }));
+    await waitFor(() => expect(registerBrowserForFcm).toHaveBeenCalledTimes(1));
+    expect((global as any).fetch).not.toHaveBeenCalledWith('/api/public/push/register', expect.any(Object));
+    expect(screen.queryByText('Notifications enabled and synced')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save Preferences' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect((global as any).fetch).not.toHaveBeenCalledWith('/api/public/push/register', expect.any(Object));
+
+    await act(async () => {
+      resolveRegistration({
+        ok: true,
+        permission: 'granted',
+        registrationId: 'save-flow-fcm-token',
+        registrationType: 'token',
+        serviceWorkerScope: 'http://localhost/',
+        backendSync: { ok: false, reason: 'not-requested', message: 'Backend sync handled by settings.' },
+      });
+      await registrationPromise;
+    });
+
+    await waitFor(() => expect((global as any).fetch).toHaveBeenCalledWith('/api/public/push/register', expect.any(Object)));
+    const [, registerInit] = (global as any).fetch.mock.calls.find(([url]: any[]) => url === '/api/public/push/register');
+    expect(JSON.parse(registerInit.body)).toMatchObject({
+      token: 'save-flow-fcm-token',
+      registrationType: 'token',
+      preferences: {
+        breakingNews: true,
+        topStories: true,
+        newArticleAlerts: true,
+        categoryAlerts: true,
+        allArticles: false,
+      },
+      categories: [],
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cookie Settings' }));
+    expect(await screen.findByText('Notifications enabled and synced')).toBeTruthy();
   });
 
   test('denied browser permission shows blocked state and does not request permission again', async () => {
@@ -338,7 +394,7 @@ describe('CookieConsentProvider', () => {
     );
     window.localStorage.setItem(
       PUSH_BACKEND_REGISTRATION_STORAGE_KEY,
-      JSON.stringify({ registrationId: 'stored-fid', registrationType: 'fid', updatedAt: '2026-01-01T00:00:00.000Z' })
+      JSON.stringify({ registrationId: 'stored-fcm-token', registrationType: 'token', updatedAt: '2026-01-01T00:00:00.000Z' })
     );
     (getFirebaseClientConfig as jest.Mock).mockReturnValue({ isConfigured: true, config: {}, vapidKey: 'vapid', missingEnv: [] });
     (isFirebaseMessagingSupported as jest.Mock).mockResolvedValue(true);
@@ -371,7 +427,7 @@ describe('CookieConsentProvider', () => {
     );
     window.localStorage.setItem(
       PUSH_BACKEND_REGISTRATION_STORAGE_KEY,
-      JSON.stringify({ registrationId: 'stored-fid', registrationType: 'fid', updatedAt: '2026-01-01T00:00:00.000Z' })
+      JSON.stringify({ registrationId: 'stored-fcm-token', registrationType: 'token', updatedAt: '2026-01-01T00:00:00.000Z' })
     );
     (getFirebaseClientConfig as jest.Mock).mockReturnValue({ isConfigured: true, config: {}, vapidKey: 'vapid', missingEnv: [] });
     (isFirebaseMessagingSupported as jest.Mock).mockResolvedValue(true);
@@ -405,8 +461,8 @@ describe('CookieConsentProvider', () => {
     (registerBrowserForFcm as jest.Mock).mockResolvedValue({
       ok: true,
       permission: 'granted',
-      registrationId: 'test-fid',
-      registrationType: 'fid',
+      registrationId: 'test-fcm-token',
+      registrationType: 'token',
       serviceWorkerScope: 'http://localhost/',
       backendSync: { ok: false, reason: 'not-requested', message: 'Backend subscription sync is disabled until the News Pulse backend phase adds an endpoint.' },
     });
@@ -423,8 +479,8 @@ describe('CookieConsentProvider', () => {
 
     const [, registerInit] = (global as any).fetch.mock.calls.find(([url]: any[]) => url === '/api/public/push/register');
     expect(JSON.parse(registerInit.body)).toMatchObject({
-      registrationId: 'test-fid',
-      registrationType: 'fid',
+      token: 'test-fcm-token',
+      registrationType: 'token',
       language: 'hi',
       categories: ['national', 'sports'],
     });
@@ -435,8 +491,8 @@ describe('CookieConsentProvider', () => {
     const [, updateInit] = (global as any).fetch.mock.calls.find(([url]: any[]) => url === '/api/public/push/preferences');
     expect(updateInit.method).toBe('PUT');
     expect(JSON.parse(updateInit.body)).toMatchObject({
-      registrationId: 'test-fid',
-      registrationType: 'fid',
+      token: 'test-fcm-token',
+      registrationType: 'token',
       language: 'hi',
       preferences: { allArticles: true },
       categories: ['national', 'sports'],
@@ -461,7 +517,7 @@ describe('CookieConsentProvider', () => {
     );
     window.localStorage.setItem(
       PUSH_BACKEND_REGISTRATION_STORAGE_KEY,
-      JSON.stringify({ registrationId: 'stored-fid', registrationType: 'fid', updatedAt: '2026-01-01T00:00:00.000Z' })
+      JSON.stringify({ registrationId: 'stored-fcm-token', registrationType: 'token', updatedAt: '2026-01-01T00:00:00.000Z' })
     );
     (getFirebaseClientConfig as jest.Mock).mockReturnValue({ isConfigured: true, config: {}, vapidKey: 'vapid', missingEnv: [] });
     (isFirebaseMessagingSupported as jest.Mock).mockResolvedValue(true);
@@ -477,8 +533,8 @@ describe('CookieConsentProvider', () => {
     const [, unregisterInit] = (global as any).fetch.mock.calls.find(([url]: any[]) => url === '/api/public/push/unregister');
     expect(unregisterInit.method).toBe('DELETE');
     expect(JSON.parse(unregisterInit.body)).toEqual({
-      registrationId: 'stored-fid',
-      registrationType: 'fid',
+      token: 'stored-fcm-token',
+      registrationType: 'token',
     });
 
     const preferences = readPushNotificationPreferences();
@@ -500,8 +556,8 @@ describe('CookieConsentProvider', () => {
     (registerBrowserForFcm as jest.Mock).mockResolvedValue({
       ok: true,
       permission: 'granted',
-      registrationId: 'test-fid',
-      registrationType: 'fid',
+      registrationId: 'test-fcm-token',
+      registrationType: 'token',
       serviceWorkerScope: 'http://localhost/',
       backendSync: { ok: false, reason: 'not-requested', message: 'Backend sync handled by settings.' },
     });
@@ -514,7 +570,7 @@ describe('CookieConsentProvider', () => {
 
     expect(await screen.findByText('News Pulse alerts are temporarily unavailable on this browser.')).toBeTruthy();
     expect(screen.queryByText('Firebase Cloud Messaging registration failed.')).toBeNull();
-    expect(screen.getByTestId('push-notifications-master-control').textContent).toContain('Enabled');
+    expect(screen.getByTestId('push-notifications-master-control').textContent).toContain('Notifications are temporarily unavailable');
     expect(screen.getByRole('button', { name: 'Save Preferences' })).toBeTruthy();
     expect(screen.queryByTestId('push-diagnostics')).toBeNull();
     expect(consoleError).toHaveBeenCalledWith('Push backend sync failed', {
@@ -550,8 +606,8 @@ describe('CookieConsentProvider', () => {
     (registerBrowserForFcm as jest.Mock).mockResolvedValue({
       ok: true,
       permission: 'granted',
-      registrationId: 'test-fid',
-      registrationType: 'fid',
+      registrationId: 'test-fcm-token',
+      registrationType: 'token',
       serviceWorkerScope: 'http://localhost/',
       backendSync: { ok: false, reason: 'not-requested', message: 'Backend sync handled by settings.' },
     });
@@ -565,8 +621,6 @@ describe('CookieConsentProvider', () => {
     expect(await screen.findByText('News Pulse alerts are temporarily unavailable on this browser.')).toBeTruthy();
     await waitFor(() => expect((global as any).fetch.mock.calls.filter(([url]: any[]) => url === '/api/public/push/register')).toHaveLength(1));
 
-    fireEvent.click(screen.getByRole('switch', { name: 'Enable Notifications' }));
-    await waitFor(() => expect(screen.getByTestId('push-notifications-master-control').textContent).toContain('Notifications are off'));
     fireEvent.click(screen.getByRole('switch', { name: 'Enable Notifications' }));
 
     await waitFor(() => expect(registerBrowserForFcm).toHaveBeenCalledTimes(2));

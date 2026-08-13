@@ -52,14 +52,14 @@ function normalizePushPreferences(value: unknown): Record<string, boolean> | und
 }
 
 function buildSupportedPayload(body: Record<string, unknown>) {
-  const registrationId = cleanString(body.registrationId);
+  const token = cleanString(body.token || body.registrationId);
   const registrationType = cleanString(body.registrationType);
   const platform = cleanString(body.platform) || 'web';
   const preferences = normalizePushPreferences(body.preferences);
   const categories = normalizeNewsPulsePushCategoryIds(body.categories);
 
   return {
-    registrationId,
+    token,
     registrationType,
     platform,
     language: normalizeLanguage(body.language),
@@ -89,7 +89,7 @@ export async function proxyPublicPushRequest(
   }
 
   const payload = buildSupportedPayload(readJsonBody(req));
-  if (!payload.registrationId || !payload.registrationType) {
+  if (!payload.token || payload.registrationType !== 'token') {
     return res.status(400).json({ ok: false, message: 'Invalid push registration details' });
   }
 

@@ -20,8 +20,8 @@ describe('pages/api/public/push/*', () => {
     const req = {
       method: 'POST',
       body: {
-        registrationId: 'fid-123',
-        registrationType: 'fid',
+        token: 'fcm-token-123',
+        registrationType: 'token',
         platform: 'web',
         language: 'gu',
         preferences: { breakingNews: true, analytics: true },
@@ -39,8 +39,8 @@ describe('pages/api/public/push/*', () => {
     );
     const [, init] = (global as any).fetch.mock.calls[0];
     expect(JSON.parse(init.body)).toEqual({
-      registrationId: 'fid-123',
-      registrationType: 'fid',
+      token: 'fcm-token-123',
+      registrationType: 'token',
       platform: 'web',
       language: 'gu',
       preferences: { breakingNews: true },
@@ -57,8 +57,8 @@ describe('pages/api/public/push/*', () => {
     const req = {
       method: 'PUT',
       body: {
-        registrationId: 'fid-123',
-        registrationType: 'fid',
+        token: 'fcm-token-123',
+        registrationType: 'token',
         platform: 'web',
         language: 'hi',
         preferences: { allArticles: true },
@@ -79,7 +79,7 @@ describe('pages/api/public/push/*', () => {
   it('proxies unregister requests with DELETE and accepts POST too', async () => {
     const deleteReq = {
       method: 'DELETE',
-      body: { registrationId: 'fid-123', registrationType: 'fid' },
+      body: { token: 'fcm-token-123', registrationType: 'token' },
     } as any;
     const deleteRes = createMockResponse();
 
@@ -92,7 +92,7 @@ describe('pages/api/public/push/*', () => {
 
     const postReq = {
       method: 'POST',
-      body: { registrationId: 'fid-123', registrationType: 'fid' },
+      body: { token: 'fcm-token-123', registrationType: 'token' },
     } as any;
     const postRes = createMockResponse();
 
@@ -106,6 +106,17 @@ describe('pages/api/public/push/*', () => {
 
   it('rejects missing registration details before proxying upstream', async () => {
     const req = { method: 'POST', body: { registrationId: '' } } as any;
+    const res = createMockResponse();
+
+    await registerHandler(req, res as any);
+
+    expect((global as any).fetch).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ ok: false, message: 'Invalid push registration details' });
+  });
+
+  it('rejects fid-only registration details before proxying upstream', async () => {
+    const req = { method: 'POST', body: { registrationId: 'fid-123', registrationType: 'fid' } } as any;
     const res = createMockResponse();
 
     await registerHandler(req, res as any);
