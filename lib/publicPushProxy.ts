@@ -4,6 +4,7 @@ import { getPublicApiBaseUrl } from './publicApiBase';
 import { normalizeNewsPulsePushCategoryIds } from './pushNotificationPreferences';
 
 type PushProxyMethod = 'POST' | 'PUT' | 'DELETE';
+type PushReceiptEvent = 'received' | 'clicked';
 const SUPPORTED_PUSH_PREFERENCE_KEYS = [
   'breakingNews',
   'topStories',
@@ -96,6 +97,61 @@ export async function proxyPublicPushRequest(
   try {
     const upstream = await fetch(`${origin}${path}`, {
       method: req.method,
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const text = await upstream.text().catch(() => '');
+    const json = text
+      ? (() => {
+          try {
+            return JSON.parse(text);
+          } catch {
+            return null;
+          }
+        })()
+      : null;
+
+    if (!upstream.ok || json?.ok === false) {
+      return res.status(upstream.status || 500).json(json || { ok: false, message: text || 'Upstream Error' });
+    }
+
+    return res.status(upstream.status || 200).json(json || { ok: true });
+  } catch {
+    return res.status(500).json({ ok: false, message: 'Internal Server Error' });
+  }
+}
+
+function normalizePushReceiptEvent(value: unknown): PushReceiptEvent | null {
+  const event = cleanString(value).toLowerCase();
+  return event === 'received' || event === 'clicked' ? event : null;
+}
+
+function buildSupportedReceiptPayload(body: Record<string, unknown>) {
+  return {
+    deliveryLogId: cleanString(body.deliveryLogId),
+    event: normalizePushReceiptEvent(body.event),
+  };
+}
+
+export async function proxyPublicPushReceiptRequest(req: NextApiRequest, res: NextApiResponse) {
+  if (!methodAllowed(req, ['POST'])) {
+    res.setHeader('Allow', 'POST');
+    return res.status(405).json({ ok: false, message: 'Method Not Allowed' });
+  }
+
+  const origin = normalizeLoopbackBase(normalizeOrigin(getPublicApiBaseUrl()));
+  if (!origin) {
+    return res.status(500).json({ ok: false, message: 'Backend URL not configured' });
+  }
+
+  const payload = buildSupportedReceiptPayload(readJsonBody(req));
+  if (!payload.deliveryLogId || !payload.event) {
+    return res.status(400).json({ ok: false, message: 'Invalid push receipt details' });
+  }
+
+  try {
+    const upstream = await fetch(`${origin}/api/public/push/receipt`, {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(payload),
     });

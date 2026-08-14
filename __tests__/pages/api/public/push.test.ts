@@ -5,6 +5,7 @@ jest.mock('../../../../lib/publicApiBase', () => ({
 import registerHandler from '../../../../pages/api/public/push/register';
 import diagnosticsHandler from '../../../../pages/api/public/push/diagnostics';
 import preferencesHandler from '../../../../pages/api/public/push/preferences';
+import receiptHandler from '../../../../pages/api/public/push/receipt';
 import unregisterHandler from '../../../../pages/api/public/push/unregister';
 
 describe('pages/api/public/push/*', () => {
@@ -143,6 +144,43 @@ describe('pages/api/public/push/*', () => {
     );
     expect(res.statusCode).toBe(200);
     expect(res.body).toEqual({ ok: true, firebaseBackendConfigured: true, messagingAvailable: true });
+  });
+
+  it('proxies push receipts without forwarding token or fid identifiers', async () => {
+    const req = {
+      method: 'POST',
+      body: {
+        deliveryLogId: 'delivery-log-123',
+        event: 'received',
+        token: 'not-forwarded-token',
+        fid: 'not-forwarded-fid',
+        registrationId: 'not-forwarded-registration-id',
+      },
+    } as any;
+    const res = createMockResponse();
+
+    await receiptHandler(req, res as any);
+
+    expect((global as any).fetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:5000/api/public/push/receipt',
+      expect.objectContaining({ method: 'POST' })
+    );
+    const [, init] = (global as any).fetch.mock.calls[0];
+    expect(JSON.parse(init.body)).toEqual({ deliveryLogId: 'delivery-log-123', event: 'received' });
+    expect(JSON.stringify(JSON.parse(init.body))).not.toContain('not-forwarded-token');
+    expect(JSON.stringify(JSON.parse(init.body))).not.toContain('not-forwarded-fid');
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('rejects invalid push receipt details before proxying upstream', async () => {
+    const req = { method: 'POST', body: { deliveryLogId: 'delivery-log-123', event: 'opened' } } as any;
+    const res = createMockResponse();
+
+    await receiptHandler(req, res as any);
+
+    expect((global as any).fetch).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ ok: false, message: 'Invalid push receipt details' });
   });
 });
 
