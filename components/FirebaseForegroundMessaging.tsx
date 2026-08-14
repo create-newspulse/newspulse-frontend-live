@@ -4,9 +4,13 @@ import { listenForForegroundFcmMessages, summarizeForegroundFcmMessage } from '.
 import { sendPushReceipt } from '../lib/pushReceiptClient';
 
 const DEFAULT_FOREGROUND_BODY = 'Tap to read the full story on News Pulse.';
+const NEWS_PULSE_NOTIFICATION_TITLE = 'News Pulse';
+const BREAKING_NOTIFICATION_TITLE = '🔴 Breaking News';
 const NEWS_PULSE_ORIGIN = 'https://www.newspulse.co.in';
 const NEWS_PULSE_HOME_URL = `${NEWS_PULSE_ORIGIN}/`;
 const ALLOWED_NEWS_PULSE_HOSTS = new Set(['www.newspulse.co.in', 'newspulse.co.in']);
+const NOTIFICATION_ICON = '/icons/news-pulse-icon-192.png';
+const NOTIFICATION_BADGE = '/icons/news-pulse-badge-72.png';
 
 type ForegroundAlert = {
   title: string;
@@ -29,9 +33,13 @@ function getSafeForegroundUrl(value: unknown): string {
 
 function getForegroundAlert(payload: MessagePayload): ForegroundAlert {
   const data = payload.data || {};
+  const type = String(data.type || '').trim();
+  const articleBody = data.title || payload.notification?.title || data.summary || data.body || payload.notification?.body || DEFAULT_FOREGROUND_BODY;
+  const breakingBody = data.message || data.body || payload.notification?.body || data.text || data.summary || DEFAULT_FOREGROUND_BODY;
+  const defaultBody = payload.notification?.body || data.body || data.message || data.text || data.summary || DEFAULT_FOREGROUND_BODY;
   return {
-    title: payload.notification?.title || data.title || 'News Pulse',
-    body: payload.notification?.body || data.body || data.summary || DEFAULT_FOREGROUND_BODY,
+    title: type === 'breaking' ? BREAKING_NOTIFICATION_TITLE : NEWS_PULSE_NOTIFICATION_TITLE,
+    body: type === 'breaking' ? breakingBody : type === 'article' ? articleBody : defaultBody,
     url: getSafeForegroundUrl(payload.fcmOptions?.link || data.link || data.url),
     deliveryLogId: String(data.deliveryLogId || '').trim(),
   };
@@ -50,8 +58,8 @@ async function showForegroundBrowserNotification(alert: ForegroundAlert, payload
     if (typeof registration.showNotification !== 'function') return false;
     await registration.showNotification(alert.title, {
       body: alert.body,
-      icon: '/icons/icon-192x192.png',
-      badge: '/icons/icon-96x96.png',
+      icon: NOTIFICATION_ICON,
+      badge: NOTIFICATION_BADGE,
       data: {
         url: alert.url,
         deliveryLogId: alert.deliveryLogId,

@@ -83,6 +83,40 @@ async function initializeFirebaseMessaging(harness) {
 }
 
 describe('public/firebase-messaging-sw.js', () => {
+  it('sends a received receipt and shows a breaking background notification alert', async () => {
+    const harness = createServiceWorkerHarness();
+    await initializeFirebaseMessaging(harness);
+
+    await harness.getBackgroundHandler()({
+      data: {
+        deliveryLogId: 'breaking-delivery-log-123',
+        type: 'breaking',
+        url: '/breaking/live-update',
+        message: 'breaking message',
+        token: 'must-not-send-token',
+        fid: 'must-not-send-fid',
+        registrationId: 'must-not-send-registration-id',
+      },
+    });
+
+    expect(harness.fetchMock).toHaveBeenCalledWith('/api/public/push/receipt', expect.objectContaining({ method: 'POST' }));
+    const [, receiptInit] = harness.fetchMock.mock.calls[0];
+    expect(JSON.parse(receiptInit.body)).toEqual({ deliveryLogId: 'breaking-delivery-log-123', event: 'received' });
+    expect(receiptInit.body).not.toContain('must-not-send-token');
+    expect(receiptInit.body).not.toContain('must-not-send-fid');
+    expect(receiptInit.body).not.toContain('must-not-send-registration-id');
+    expect(harness.showNotification).toHaveBeenCalledWith('🔴 Breaking News', expect.objectContaining({
+      body: 'breaking message',
+      icon: '/icons/news-pulse-icon-192.png',
+      badge: '/icons/news-pulse-badge-72.png',
+      data: {
+        url: 'https://www.newspulse.co.in/breaking/live-update',
+        deliveryLogId: 'breaking-delivery-log-123',
+        type: 'breaking',
+      },
+    }));
+  });
+
   it('sends a received receipt and shows a background notification alert', async () => {
     const harness = createServiceWorkerHarness();
     await initializeFirebaseMessaging(harness);
@@ -103,9 +137,10 @@ describe('public/firebase-messaging-sw.js', () => {
     expect(JSON.parse(receiptInit.body)).toEqual({ deliveryLogId: 'delivery-log-123', event: 'received' });
     expect(receiptInit.body).not.toContain('must-not-send-token');
     expect(receiptInit.body).not.toContain('must-not-send-fid');
-    expect(harness.showNotification).toHaveBeenCalledWith('Article title', expect.objectContaining({
-      body: 'Article summary',
-      icon: '/icons/icon-192x192.png',
+    expect(harness.showNotification).toHaveBeenCalledWith('News Pulse', expect.objectContaining({
+      body: 'Article title',
+      icon: '/icons/news-pulse-icon-192.png',
+      badge: '/icons/news-pulse-badge-72.png',
       data: {
         url: 'https://www.newspulse.co.in/news/article-slug',
         deliveryLogId: 'delivery-log-123',

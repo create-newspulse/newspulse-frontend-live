@@ -3,7 +3,12 @@ const FIREBASE_SDK_VERSION = '12.17.1';
 const CONFIG_CACHE_NAME = 'news-pulse-firebase-messaging-config-v1';
 const CONFIG_CACHE_KEY = '/firebase-messaging-config';
 const NEWS_PULSE_ORIGIN = 'https://www.newspulse.co.in';
+const NEWS_PULSE_NOTIFICATION_TITLE = 'News Pulse';
+const BREAKING_NOTIFICATION_TITLE = '🔴 Breaking News';
 const DEFAULT_NOTIFICATION_BODY = 'Tap to read the latest update on News Pulse.';
+const ARTICLE_NOTIFICATION_FALLBACK_BODY = 'Tap to read the full story on News Pulse.';
+const NOTIFICATION_ICON = '/icons/news-pulse-icon-192.png';
+const NOTIFICATION_BADGE = '/icons/news-pulse-badge-72.png';
 
 try {
   importScripts(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-app-compat.js`);
@@ -71,12 +76,16 @@ function sendPushReceipt(deliveryLogId, event) {
 function getNotificationDetails(payload) {
   const data = payload?.data || {};
   const notification = payload?.notification || {};
+  const type = String(data.type || '').trim();
+  const articleBody = data.title || notification.title || data.summary || data.body || notification.body || ARTICLE_NOTIFICATION_FALLBACK_BODY;
+  const breakingBody = data.message || data.body || notification.body || data.text || data.summary || DEFAULT_NOTIFICATION_BODY;
+  const defaultBody = notification.body || data.body || data.message || data.text || data.summary || DEFAULT_NOTIFICATION_BODY;
   return {
-    title: notification.title || data.title || 'News Pulse',
-    body: notification.body || data.body || data.summary || DEFAULT_NOTIFICATION_BODY,
+    title: type === 'breaking' ? BREAKING_NOTIFICATION_TITLE : NEWS_PULSE_NOTIFICATION_TITLE,
+    body: type === 'breaking' ? breakingBody : type === 'article' ? articleBody : defaultBody,
     url: getSafeNewsPulseUrl(getNotificationLink(payload)),
     deliveryLogId: String(data.deliveryLogId || '').trim(),
-    type: String(data.type || '').trim(),
+    type,
   };
 }
 
@@ -93,8 +102,8 @@ function initializeFirebaseMessaging(config) {
       const details = getNotificationDetails(payload);
       const options = {
         body: details.body,
-        icon: payload?.notification?.icon || '/icons/icon-192x192.png',
-        badge: '/icons/icon-96x96.png',
+        icon: NOTIFICATION_ICON,
+        badge: NOTIFICATION_BADGE,
         data: {
           url: details.url,
           deliveryLogId: details.deliveryLogId,

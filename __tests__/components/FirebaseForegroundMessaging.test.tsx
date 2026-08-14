@@ -71,8 +71,10 @@ describe('FirebaseForegroundMessaging', () => {
     });
 
     expect(sendPushReceipt).toHaveBeenCalledWith({ deliveryLogId: 'foreground-delivery-log', event: 'received' });
-    expect(showNotification).toHaveBeenCalledWith('Foreground title', expect.objectContaining({
-      body: 'Foreground body',
+    expect(showNotification).toHaveBeenCalledWith('News Pulse', expect.objectContaining({
+      body: 'Foreground title',
+      icon: '/icons/news-pulse-icon-192.png',
+      badge: '/icons/news-pulse-badge-72.png',
       data: {
         url: 'https://www.newspulse.co.in/news/foreground-story',
         deliveryLogId: 'foreground-delivery-log',
@@ -83,6 +85,41 @@ describe('FirebaseForegroundMessaging', () => {
     expect(consoleInfo).not.toHaveBeenCalled();
     expect(consoleInfo.mock.calls.flat().join(' ')).not.toContain('must-not-log-token');
     expect(consoleInfo.mock.calls.flat().join(' ')).not.toContain('must-not-log-fid');
+  });
+
+  it('sends a received receipt and shows a foreground breaking browser notification', async () => {
+    render(<FirebaseForegroundMessaging />);
+    await waitFor(() => expect(listenForForegroundFcmMessages).toHaveBeenCalled());
+
+    await act(async () => {
+      await foregroundHandler?.({
+        data: {
+          deliveryLogId: 'foreground-breaking-delivery-log',
+          type: 'breaking',
+          url: '/breaking/foreground-live',
+          message: 'breaking message',
+          token: 'must-not-log-token',
+          fid: 'must-not-log-fid',
+          registrationId: 'must-not-log-registration-id',
+        },
+      });
+    });
+
+    expect(sendPushReceipt).toHaveBeenCalledWith({ deliveryLogId: 'foreground-breaking-delivery-log', event: 'received' });
+    expect(showNotification).toHaveBeenCalledWith('🔴 Breaking News', expect.objectContaining({
+      body: 'breaking message',
+      icon: '/icons/news-pulse-icon-192.png',
+      badge: '/icons/news-pulse-badge-72.png',
+      data: {
+        url: 'https://www.newspulse.co.in/breaking/foreground-live',
+        deliveryLogId: 'foreground-breaking-delivery-log',
+        type: 'breaking',
+      },
+    }));
+    expect(consoleInfo).not.toHaveBeenCalled();
+    expect(consoleInfo.mock.calls.flat().join(' ')).not.toContain('must-not-log-token');
+    expect(consoleInfo.mock.calls.flat().join(' ')).not.toContain('must-not-log-fid');
+    expect(consoleInfo.mock.calls.flat().join(' ')).not.toContain('must-not-log-registration-id');
   });
 
   it('shows an in-page foreground alert when browser notification cannot be shown', async () => {
@@ -101,7 +138,7 @@ describe('FirebaseForegroundMessaging', () => {
     });
 
     const alert = await screen.findByTestId('foreground-push-alert');
-    expect(alert.textContent).toContain('Toast title');
+  expect(alert.textContent).toContain('News Pulse');
     expect(alert.textContent).toContain('Toast body');
     expect(sendPushReceipt).toHaveBeenCalledWith({ deliveryLogId: 'toast-delivery-log', event: 'received' });
 
