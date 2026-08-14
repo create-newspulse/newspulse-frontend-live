@@ -500,6 +500,7 @@ type PushDiagnostics = {
 
 const PUSH_BLOCKED_MESSAGE = "Notifications are blocked in your browser. Allow notifications in your browser's site settings to receive News Pulse alerts.";
 const PUSH_ENABLED_MESSAGE = 'Notifications enabled and synced';
+const PUSH_OFF_MESSAGE = 'Notifications are off';
 const PUSH_TEMPORARILY_UNAVAILABLE_MESSAGE = 'News Pulse alerts are temporarily unavailable on this browser.';
 const PUSH_BACKEND_SYNC_FAILED_MESSAGE = PUSH_TEMPORARILY_UNAVAILABLE_MESSAGE;
 
@@ -517,7 +518,7 @@ function getPushStatusLabel(status: PushNotificationStatus): string {
   if (status === 'unavailable') return 'Notifications are temporarily unavailable';
   if (status === 'registering') return 'Enabling...';
   if (status === 'checking') return 'Checking...';
-  return 'Notifications are off';
+  return PUSH_OFF_MESSAGE;
 }
 
 function getPushStatusDescription(status: PushNotificationStatus, detail: string): string {
@@ -713,10 +714,23 @@ function PushNotificationRow() {
       const permission = getCurrentNotificationPermission();
       if (permission === 'denied') {
         if (!cancelled) {
-          registrationRef.current = null;
+          const disabledPreferences = storedPreferences.enabled
+            ? writePushNotificationPreferences({ ...storedPreferences, enabled: false })
+            : storedPreferences;
+          setPreferences(disabledPreferences);
           setStatus('denied');
           setDetail('');
           setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, browserPermission: 'Blocked', firebaseRegistration: 'Not attempted', serverSync: 'Not attempted', preferencesSync: 'Not attempted' }));
+        }
+        if (storedRegistration) {
+          const result = await unregisterNewsPulsePushSubscription({ ...storedRegistration, language: lang });
+          if (cancelled) return;
+          if (result.ok) {
+            registrationRef.current = null;
+            setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, serverSync: 'Synced', preferencesSync: 'Synced' }));
+          } else {
+            setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, serverSync: 'Failed' }));
+          }
         }
         return;
       }
@@ -761,7 +775,17 @@ function PushNotificationRow() {
       if (permission === 'granted') {
         if (hasStoredPreferences && !storedPreferences.enabled) {
           setStatus('default');
-          setDetail('Notifications are off for this device.');
+          setDetail(PUSH_OFF_MESSAGE);
+          if (storedRegistration) {
+            const result = await unregisterNewsPulsePushSubscription({ ...storedRegistration, language: lang });
+            if (cancelled) return;
+            if (result.ok) {
+              registrationRef.current = null;
+              setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, serverSync: 'Synced', preferencesSync: 'Synced' }));
+            } else {
+              setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, serverSync: 'Failed' }));
+            }
+          }
           return;
         }
         if (storedRegistration) {
@@ -827,19 +851,17 @@ function PushNotificationRow() {
     const nextPreferences = writePushNotificationPreferences({ ...preferences, enabled: false });
     setPreferences(nextPreferences);
     setStatus('default');
+    setDetail(PUSH_OFF_MESSAGE);
     setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, serverSync: 'Not attempted', preferencesSync: 'Not attempted' }));
     const registration = registrationRef.current || readStoredPushRegistration();
     if (!registration) {
-      setDetail('Notifications are off for this device.');
       return;
     }
     const result = await unregisterNewsPulsePushSubscription({ ...registration, language: lang });
     if (result.ok) {
       registrationRef.current = null;
-      setDetail('Notifications are off for this device.');
       setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, firebaseRegistration: 'Not attempted', serverSync: 'Not attempted', preferencesSync: 'Not attempted' }));
     } else {
-      setDetail(result.message);
       setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, serverSync: 'Failed' }));
     }
   };

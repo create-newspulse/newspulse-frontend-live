@@ -381,7 +381,7 @@ describe('CookieConsentProvider', () => {
     expect((global as any).fetch).not.toHaveBeenCalled();
   });
 
-  test('window focus refresh clears stale blocked state after browser permission is granted', async () => {
+  test('permission denied syncs disabled backend state and stays off after browser permission is granted', async () => {
     window.localStorage.setItem(
       PUSH_NOTIFICATION_PREFERENCES_STORAGE_KEY,
       JSON.stringify({
@@ -405,10 +405,19 @@ describe('CookieConsentProvider', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Manage Preferences' }));
     expect(await screen.findByText('Notifications are blocked in your browser settings')).toBeTruthy();
 
+    await waitFor(() => expect((global as any).fetch).toHaveBeenCalledWith('/api/public/push/unregister', expect.any(Object)));
+    const [, unregisterInit] = (global as any).fetch.mock.calls.find(([url]: any[]) => url === '/api/public/push/unregister');
+    expect(unregisterInit.method).toBe('DELETE');
+    expect(JSON.parse(unregisterInit.body)).toEqual({
+      token: 'stored-fcm-token',
+      registrationType: 'token',
+    });
+    expect(readPushNotificationPreferences().enabled).toBe(false);
+
     fireEvent.focus(window);
 
-    expect(await screen.findByText('Enabled')).toBeTruthy();
-    expect(screen.getByText('Notifications enabled and synced')).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId('push-notifications-master-control').textContent).toContain('Notifications are off'));
+    expect(screen.queryByText('Notifications enabled and synced')).toBeNull();
     expect(screen.queryByText('Notifications are blocked in your browser settings')).toBeNull();
     expect(screen.queryByTestId('push-diagnostics')).toBeNull();
     expect(registerBrowserForFcm).not.toHaveBeenCalled();
@@ -536,6 +545,9 @@ describe('CookieConsentProvider', () => {
       token: 'stored-fcm-token',
       registrationType: 'token',
     });
+    await waitFor(() => expect(screen.getByTestId('push-notifications-master-control').textContent).toContain('Notifications are off'));
+    expect(screen.getAllByText('Notifications are off').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Notifications enabled and synced')).toBeNull();
 
     const preferences = readPushNotificationPreferences();
     expect(preferences.enabled).toBe(false);

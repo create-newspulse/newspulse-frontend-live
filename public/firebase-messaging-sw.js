@@ -130,13 +130,14 @@ self.addEventListener('notificationclick', (event) => {
   const url = getSafeNewsPulseUrl(data.url);
   const deliveryLogId = data.deliveryLogId;
   event.waitUntil(
-    sendPushReceipt(deliveryLogId, 'clicked').then(() =>
+    Promise.all([
+      sendPushReceipt(deliveryLogId, 'clicked'),
       self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
         const existingClient = clients.find((client) => client.url === url);
         if (existingClient) return existingClient.focus();
         return self.clients.openWindow(url);
-      })
-    )
+      }),
+    ])
   );
 });
 

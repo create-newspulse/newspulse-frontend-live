@@ -4,6 +4,9 @@ import { listenForForegroundFcmMessages, summarizeForegroundFcmMessage } from '.
 import { sendPushReceipt } from '../lib/pushReceiptClient';
 
 const DEFAULT_FOREGROUND_BODY = 'Tap to read the full story on News Pulse.';
+const NEWS_PULSE_ORIGIN = 'https://www.newspulse.co.in';
+const NEWS_PULSE_HOME_URL = `${NEWS_PULSE_ORIGIN}/`;
+const ALLOWED_NEWS_PULSE_HOSTS = new Set(['www.newspulse.co.in', 'newspulse.co.in']);
 
 type ForegroundAlert = {
   title: string;
@@ -13,18 +16,15 @@ type ForegroundAlert = {
 };
 
 function getSafeForegroundUrl(value: unknown): string {
-  const fallback = '/';
-  const raw = String(value || fallback).trim();
+  const raw = String(value || NEWS_PULSE_HOME_URL).trim();
   try {
-    const base = typeof window !== 'undefined' ? window.location.origin : 'https://www.newspulse.co.in';
-    const url = new URL(raw || fallback, base);
+    const url = new URL(raw || NEWS_PULSE_HOME_URL, NEWS_PULSE_ORIGIN);
     const hostname = url.hostname.toLowerCase();
-    const currentHostname = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : '';
-    if (!url.host || hostname === currentHostname || hostname === 'www.newspulse.co.in' || hostname === 'newspulse.co.in') {
-      return url.pathname + url.search + url.hash;
+    if (ALLOWED_NEWS_PULSE_HOSTS.has(hostname)) {
+      return url.href;
     }
   } catch {}
-  return fallback;
+  return NEWS_PULSE_HOME_URL;
 }
 
 function getForegroundAlert(payload: MessagePayload): ForegroundAlert {
@@ -33,8 +33,12 @@ function getForegroundAlert(payload: MessagePayload): ForegroundAlert {
     title: payload.notification?.title || data.title || 'News Pulse',
     body: payload.notification?.body || data.body || data.summary || DEFAULT_FOREGROUND_BODY,
     url: getSafeForegroundUrl(payload.fcmOptions?.link || data.link || data.url),
-    deliveryLogId: data.deliveryLogId || '',
+    deliveryLogId: String(data.deliveryLogId || '').trim(),
   };
+}
+
+function isFcmTestControlEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_ENABLE_FCM_TEST_CONTROL === 'true';
 }
 
 async function showForegroundBrowserNotification(alert: ForegroundAlert, payload: MessagePayload): Promise<boolean> {
@@ -50,8 +54,8 @@ async function showForegroundBrowserNotification(alert: ForegroundAlert, payload
       badge: '/icons/icon-96x96.png',
       data: {
         url: alert.url,
-        deliveryLogId: payload.data?.deliveryLogId || '',
-        type: payload.data?.type || '',
+        deliveryLogId: alert.deliveryLogId,
+        type: String(payload.data?.type || '').trim(),
       },
     });
     return true;
@@ -70,15 +74,15 @@ export default function FirebaseForegroundMessaging() {
     listenForForegroundFcmMessages(
       async (payload) => {
         const nextAlert = getForegroundAlert(payload);
-        sendPushReceipt({ deliveryLogId: payload.data?.deliveryLogId, event: 'received' });
+        void sendPushReceipt({ deliveryLogId: nextAlert.deliveryLogId, event: 'received' }).catch(() => undefined);
         const shown = await showForegroundBrowserNotification(nextAlert, payload);
         if (!shown && mounted) setAlert(nextAlert);
-        if (process.env.NODE_ENV !== 'production') {
+        if (isFcmTestControlEnabled()) {
           console.info('[FCM] Foreground message received', summarizeForegroundFcmMessage(payload));
         }
       },
       (error) => {
-        if (process.env.NODE_ENV !== 'production') {
+        if (isFcmTestControlEnabled()) {
           console.warn('[FCM] Foreground messaging unavailable', error instanceof Error ? error.message : error);
         }
       }
@@ -102,7 +106,7 @@ export default function FirebaseForegroundMessaging() {
     <button
       type="button"
       onClick={() => {
-        sendPushReceipt({ deliveryLogId: alert.deliveryLogId, event: 'clicked' });
+        void sendPushReceipt({ deliveryLogId: alert.deliveryLogId, event: 'clicked' }).catch(() => undefined);
         window.open(alert.url, '_self', 'noopener,noreferrer');
         setAlert(null);
       }}

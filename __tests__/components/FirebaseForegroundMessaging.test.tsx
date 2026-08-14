@@ -15,6 +15,7 @@ jest.mock('../../lib/pushReceiptClient', () => ({
 }));
 
 describe('FirebaseForegroundMessaging', () => {
+  const originalFcmTestControl = process.env.NEXT_PUBLIC_ENABLE_FCM_TEST_CONTROL;
   let foregroundHandler: ((payload: any) => void | Promise<void>) | null = null;
   let showNotification: jest.Mock;
   let windowOpen: jest.SpyInstance;
@@ -23,6 +24,7 @@ describe('FirebaseForegroundMessaging', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     foregroundHandler = null;
+    process.env.NEXT_PUBLIC_ENABLE_FCM_TEST_CONTROL = 'false';
     showNotification = jest.fn().mockResolvedValue(undefined);
     windowOpen = jest.spyOn(window, 'open').mockImplementation(() => null);
     consoleInfo = jest.spyOn(console, 'info').mockImplementation(() => {});
@@ -47,6 +49,10 @@ describe('FirebaseForegroundMessaging', () => {
     delete (navigator as any).serviceWorker;
   });
 
+  afterAll(() => {
+    process.env.NEXT_PUBLIC_ENABLE_FCM_TEST_CONTROL = originalFcmTestControl;
+  });
+
   it('sends a received receipt and shows a foreground browser notification', async () => {
     render(<FirebaseForegroundMessaging />);
     await waitFor(() => expect(listenForForegroundFcmMessages).toHaveBeenCalled());
@@ -68,12 +74,13 @@ describe('FirebaseForegroundMessaging', () => {
     expect(showNotification).toHaveBeenCalledWith('Foreground title', expect.objectContaining({
       body: 'Foreground body',
       data: {
-        url: '/news/foreground-story',
+        url: 'https://www.newspulse.co.in/news/foreground-story',
         deliveryLogId: 'foreground-delivery-log',
         type: 'article',
       },
     }));
     expect(screen.queryByTestId('foreground-push-alert')).toBeNull();
+    expect(consoleInfo).not.toHaveBeenCalled();
     expect(consoleInfo.mock.calls.flat().join(' ')).not.toContain('must-not-log-token');
     expect(consoleInfo.mock.calls.flat().join(' ')).not.toContain('must-not-log-fid');
   });
@@ -100,6 +107,40 @@ describe('FirebaseForegroundMessaging', () => {
 
     fireEvent.click(alert);
     expect(sendPushReceipt).toHaveBeenCalledWith({ deliveryLogId: 'toast-delivery-log', event: 'clicked' });
-    expect(windowOpen).toHaveBeenCalledWith('/breaking/toast-story', '_self', 'noopener,noreferrer');
+    expect(windowOpen).toHaveBeenCalledWith('https://www.newspulse.co.in/breaking/toast-story', '_self', 'noopener,noreferrer');
+  });
+
+  it('hides foreground diagnostics when FCM test control is disabled', async () => {
+    render(<FirebaseForegroundMessaging />);
+    await waitFor(() => expect(listenForForegroundFcmMessages).toHaveBeenCalled());
+
+    await act(async () => {
+      await foregroundHandler?.({
+        notification: { title: 'No diagnostics title', body: 'No diagnostics body' },
+        data: { deliveryLogId: 'no-diagnostics-log', url: '/news/no-diagnostics' },
+      });
+    });
+
+    expect(consoleInfo).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the News Pulse home page for unsafe foreground alert URLs', async () => {
+    Object.defineProperty(window, 'Notification', {
+      configurable: true,
+      value: { permission: 'default' },
+    });
+    render(<FirebaseForegroundMessaging />);
+    await waitFor(() => expect(listenForForegroundFcmMessages).toHaveBeenCalled());
+
+    await act(async () => {
+      await foregroundHandler?.({
+        notification: { title: 'Unsafe title', body: 'Unsafe body' },
+        data: { deliveryLogId: 'unsafe-delivery-log', url: 'https://example.com/phishing' },
+      });
+    });
+
+    fireEvent.click(await screen.findByTestId('foreground-push-alert'));
+    expect(sendPushReceipt).toHaveBeenCalledWith({ deliveryLogId: 'unsafe-delivery-log', event: 'clicked' });
+    expect(windowOpen).toHaveBeenCalledWith('https://www.newspulse.co.in/', '_self', 'noopener,noreferrer');
   });
 });
