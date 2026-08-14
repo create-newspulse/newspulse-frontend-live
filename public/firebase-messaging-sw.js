@@ -17,6 +17,14 @@ try {
   console.warn('[FCM SW] Firebase scripts could not be loaded.', error);
 }
 
+self.addEventListener('install', (event) => {
+  event.waitUntil(self.skipWaiting());
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
 function hasFirebaseConfig(config) {
   return Boolean(
     config &&

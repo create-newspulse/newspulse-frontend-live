@@ -11,6 +11,8 @@ function createServiceWorkerHarness() {
   const showNotification = jest.fn().mockResolvedValue(undefined);
   const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 200 });
   const openWindow = jest.fn().mockResolvedValue({});
+  const skipWaiting = jest.fn().mockResolvedValue(undefined);
+  const claim = jest.fn().mockResolvedValue(undefined);
   let backgroundHandler = null;
 
   const firebase = {
@@ -39,7 +41,9 @@ function createServiceWorkerHarness() {
     self: {
       firebase,
       registration: { showNotification },
+      skipWaiting,
       clients: {
+        claim,
         matchAll: jest.fn().mockResolvedValue([]),
         openWindow,
       },
@@ -57,6 +61,7 @@ function createServiceWorkerHarness() {
     fetchMock,
     showNotification,
     openWindow,
+    skipWaiting,
     clients: sandbox.self.clients,
     getBackgroundHandler: () => backgroundHandler,
   };
@@ -83,6 +88,28 @@ async function initializeFirebaseMessaging(harness) {
 }
 
 describe('public/firebase-messaging-sw.js', () => {
+  it('activates updated service worker versions promptly', async () => {
+    const harness = createServiceWorkerHarness();
+    let installPromise = Promise.resolve();
+    let activatePromise = Promise.resolve();
+
+    harness.listeners.install({
+      waitUntil: (promise) => {
+        installPromise = promise;
+      },
+    });
+    harness.listeners.activate({
+      waitUntil: (promise) => {
+        activatePromise = promise;
+      },
+    });
+    await installPromise;
+    await activatePromise;
+
+    expect(harness.skipWaiting).toHaveBeenCalled();
+    expect(harness.clients.claim).toHaveBeenCalled();
+  });
+
   it('sends a received receipt and shows a breaking background notification alert', async () => {
     const harness = createServiceWorkerHarness();
     await initializeFirebaseMessaging(harness);
