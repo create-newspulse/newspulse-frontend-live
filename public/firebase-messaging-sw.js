@@ -9,6 +9,7 @@ const DEFAULT_NOTIFICATION_BODY = 'Tap to read the latest update on News Pulse.'
 const ARTICLE_NOTIFICATION_FALLBACK_BODY = 'Tap to read the full story on News Pulse.';
 const NOTIFICATION_ICON = '/icons/news-pulse-icon-192.png';
 const NOTIFICATION_BADGE = '/icons/news-pulse-badge-72.png';
+const handledBackgroundPayloadKeys = new Set();
 
 try {
   importScripts(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-app-compat.js`);
@@ -62,11 +63,24 @@ function getSafeNewsPulseUrl(value) {
   try {
     const url = new URL(String(value || '/'), NEWS_PULSE_ORIGIN);
     const hostname = url.hostname.toLowerCase();
-    if (hostname === 'www.newspulse.co.in' || hostname === 'newspulse.co.in') {
+    if (url.protocol === 'https:' && (hostname === 'www.newspulse.co.in' || hostname === 'newspulse.co.in')) {
       return url.href;
     }
   } catch {}
   return `${NEWS_PULSE_ORIGIN}/`;
+}
+
+function getPayloadDedupeKey(payload) {
+  const data = payload?.data || {};
+  return String(data.deliveryLogId || payload?.messageId || payload?.message_id || '').trim();
+}
+
+function shouldHandleBackgroundPayload(payload) {
+  const key = getPayloadDedupeKey(payload);
+  if (!key) return true;
+  if (handledBackgroundPayloadKeys.has(key)) return false;
+  handledBackgroundPayloadKeys.add(key);
+  return true;
 }
 
 function sendPushReceipt(deliveryLogId, event) {
@@ -85,8 +99,8 @@ function getNotificationDetails(payload) {
   const data = payload?.data || {};
   const notification = payload?.notification || {};
   const type = String(data.type || '').trim();
-  const articleBody = data.title || notification.title || data.summary || data.body || notification.body || ARTICLE_NOTIFICATION_FALLBACK_BODY;
-  const breakingBody = data.message || data.body || notification.body || data.text || data.summary || DEFAULT_NOTIFICATION_BODY;
+  const articleBody = data.title || data.body || notification.title || notification.body || data.summary || ARTICLE_NOTIFICATION_FALLBACK_BODY;
+  const breakingBody = data.body || data.title || data.message || notification.body || data.text || data.summary || DEFAULT_NOTIFICATION_BODY;
   const defaultBody = notification.body || data.body || data.message || data.text || data.summary || DEFAULT_NOTIFICATION_BODY;
   return {
     title: type === 'breaking' ? BREAKING_NOTIFICATION_TITLE : NEWS_PULSE_NOTIFICATION_TITLE,
@@ -95,6 +109,36 @@ function getNotificationDetails(payload) {
     deliveryLogId: String(data.deliveryLogId || '').trim(),
     type,
   };
+}
+
+function handleBackgroundPushPayload(payload) {
+  if (!shouldHandleBackgroundPayload(payload)) return Promise.resolve();
+  const details = getNotificationDetails(payload);
+  const options = {
+    body: details.body,
+    icon: NOTIFICATION_ICON,
+    badge: NOTIFICATION_BADGE,
+    data: {
+      deliveryLogId: details.deliveryLogId,
+      type: details.type,
+      url: details.url,
+    },
+  };
+
+  return Promise.all([
+    sendPushReceipt(details.deliveryLogId, 'received'),
+    self.registration.showNotification(details.title, options),
+  ]);
+}
+
+function readPushEventPayload(event) {
+  try {
+    if (typeof event.data?.json === 'function') return event.data.json();
+  } catch {}
+  try {
+    if (typeof event.data?.text === 'function') return JSON.parse(event.data.text());
+  } catch {}
+  return null;
 }
 
 function initializeFirebaseMessaging(config) {
@@ -106,28 +150,17 @@ function initializeFirebaseMessaging(config) {
     }
 
     const messaging = firebase.messaging();
-    messaging.onBackgroundMessage((payload) => {
-      const details = getNotificationDetails(payload);
-      const options = {
-        body: details.body,
-        icon: NOTIFICATION_ICON,
-        badge: NOTIFICATION_BADGE,
-        data: {
-          url: details.url,
-          deliveryLogId: details.deliveryLogId,
-          type: details.type,
-        },
-      };
-
-      return Promise.all([
-        sendPushReceipt(details.deliveryLogId, 'received'),
-        self.registration.showNotification(details.title, options),
-      ]);
-    });
+    messaging.onBackgroundMessage(handleBackgroundPushPayload);
   } catch (error) {
     console.warn('[FCM SW] Firebase Messaging could not be initialized.', error);
   }
 }
+
+self.addEventListener('push', (event) => {
+  const payload = readPushEventPayload(event);
+  if (!payload) return;
+  event.waitUntil(handleBackgroundPushPayload(payload));
+});
 
 self.addEventListener('message', (event) => {
   if (event.data?.type !== 'NEWS_PULSE_FIREBASE_CONFIG') return;

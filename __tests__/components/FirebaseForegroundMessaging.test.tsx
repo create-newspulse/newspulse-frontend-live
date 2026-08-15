@@ -180,4 +180,24 @@ describe('FirebaseForegroundMessaging', () => {
     expect(sendPushReceipt).toHaveBeenCalledWith({ deliveryLogId: 'unsafe-delivery-log', event: 'clicked' });
     expect(windowOpen).toHaveBeenCalledWith('https://www.newspulse.co.in/', '_self', 'noopener,noreferrer');
   });
+
+  it('falls back to the News Pulse home page for non-HTTPS News Pulse foreground URLs', async () => {
+    Object.defineProperty(window, 'Notification', {
+      configurable: true,
+      value: { permission: 'default' },
+    });
+    render(<FirebaseForegroundMessaging />);
+    await waitFor(() => expect(listenForForegroundFcmMessages).toHaveBeenCalled());
+
+    await act(async () => {
+      await foregroundHandler?.({
+        notification: { title: 'Unsafe protocol title', body: 'Unsafe protocol body' },
+        data: { deliveryLogId: 'unsafe-protocol-delivery-log', url: 'http://newspulse.co.in/news/insecure' },
+      });
+    });
+
+    fireEvent.click(await screen.findByTestId('foreground-push-alert'));
+    expect(sendPushReceipt).toHaveBeenCalledWith({ deliveryLogId: 'unsafe-protocol-delivery-log', event: 'clicked' });
+    expect(windowOpen).toHaveBeenCalledWith('https://www.newspulse.co.in/', '_self', 'noopener,noreferrer');
+  });
 });

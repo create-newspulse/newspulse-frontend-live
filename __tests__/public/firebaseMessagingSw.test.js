@@ -176,6 +176,40 @@ describe('public/firebase-messaging-sw.js', () => {
     }));
   });
 
+  it('handles a raw background push event when Firebase config has not been posted yet', async () => {
+    const harness = createServiceWorkerHarness();
+    let pushPromise = Promise.resolve();
+
+    harness.listeners.push({
+      data: {
+        json: () => ({
+          data: {
+            deliveryLogId: 'raw-push-delivery-log-123',
+            type: 'article',
+            title: 'Raw article title',
+            body: 'Raw article body',
+            url: '/news/raw-push-story',
+          },
+        }),
+      },
+      waitUntil: (promise) => {
+        pushPromise = promise;
+      },
+    });
+    await pushPromise;
+
+    const [, receiptInit] = harness.fetchMock.mock.calls[0];
+    expect(JSON.parse(receiptInit.body)).toEqual({ deliveryLogId: 'raw-push-delivery-log-123', event: 'received' });
+    expect(harness.showNotification).toHaveBeenCalledWith('News Pulse', expect.objectContaining({
+      body: 'Raw article title',
+      data: {
+        deliveryLogId: 'raw-push-delivery-log-123',
+        type: 'article',
+        url: 'https://www.newspulse.co.in/news/raw-push-story',
+      },
+    }));
+  });
+
   it('sends a clicked receipt and opens only a safe News Pulse URL', async () => {
     const harness = createServiceWorkerHarness();
     let clickPromise = Promise.resolve();
@@ -204,6 +238,24 @@ describe('public/firebase-messaging-sw.js', () => {
       notification: {
         close: jest.fn(),
         data: { url: 'https://example.com/phishing', deliveryLogId: 'delivery-log-click' },
+      },
+      waitUntil: (promise) => {
+        clickPromise = promise;
+      },
+    });
+    await clickPromise;
+
+    expect(harness.openWindow).toHaveBeenCalledWith('https://www.newspulse.co.in/');
+  });
+
+  it('falls back to the News Pulse home page for non-HTTPS News Pulse click URLs', async () => {
+    const harness = createServiceWorkerHarness();
+    let clickPromise = Promise.resolve();
+
+    harness.listeners.notificationclick({
+      notification: {
+        close: jest.fn(),
+        data: { url: 'http://newspulse.co.in/breaking/story', deliveryLogId: 'delivery-log-click' },
       },
       waitUntil: (promise) => {
         clickPromise = promise;

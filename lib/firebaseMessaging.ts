@@ -108,6 +108,9 @@ export async function ensureFirebaseMessagingServiceWorker(): Promise<ServiceWor
   const registration = await navigator.serviceWorker.register(FIREBASE_MESSAGING_SERVICE_WORKER_PATH, {
     scope: '/',
   });
+  if (typeof registration.update === 'function') {
+    void registration.update().catch(() => undefined);
+  }
   const readyRegistration = registration.active
     ? registration
     : await navigator.serviceWorker.ready.catch(() => registration);

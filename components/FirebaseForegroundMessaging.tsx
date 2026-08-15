@@ -24,7 +24,7 @@ function getSafeForegroundUrl(value: unknown): string {
   try {
     const url = new URL(raw || NEWS_PULSE_HOME_URL, NEWS_PULSE_ORIGIN);
     const hostname = url.hostname.toLowerCase();
-    if (ALLOWED_NEWS_PULSE_HOSTS.has(hostname)) {
+    if (url.protocol === 'https:' && ALLOWED_NEWS_PULSE_HOSTS.has(hostname)) {
       return url.href;
     }
   } catch {}
