@@ -127,7 +127,11 @@ describe('CookieConsentProvider', () => {
     fireEvent.click(screen.getByRole('switch', { name: 'Preferences' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save Preferences' }));
 
-    let stored = parseConsentRecord(readCookieValue(COOKIE_CONSENT_NAME));
+    let stored;
+    await waitFor(() => {
+      stored = parseConsentRecord(readCookieValue(COOKIE_CONSENT_NAME));
+      expect(stored?.categories).toMatchObject({ preferences: true, analytics: false, advertising: false, embeddedMedia: false });
+    });
     expect(stored?.categories).toMatchObject({ preferences: true, analytics: false, advertising: false, embeddedMedia: false });
 
     fireEvent.click(screen.getByRole('button', { name: 'Cookie Settings' }));
@@ -244,8 +248,12 @@ describe('CookieConsentProvider', () => {
     fireEvent.click(screen.getByRole('switch', { name: 'Preferences' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save Preferences' }));
 
+    await waitFor(() => {
+      const stored = parseConsentRecord(readCookieValue(COOKIE_CONSENT_NAME));
+      expect(stored?.categories).toMatchObject({ preferences: true, analytics: false, advertising: false, embeddedMedia: false });
+      expect(stored?.categories as any).not.toHaveProperty('pushNotifications');
+    });
     const stored = parseConsentRecord(readCookieValue(COOKIE_CONSENT_NAME));
-    expect(stored?.categories).toMatchObject({ preferences: true, analytics: false, advertising: false, embeddedMedia: false });
     expect(stored?.categories as any).not.toHaveProperty('pushNotifications');
   });
 
@@ -497,7 +505,8 @@ describe('CookieConsentProvider', () => {
     fireEvent.click(screen.getByRole('switch', { name: 'All Articles' }));
 
     await waitFor(() => expect((global as any).fetch).toHaveBeenCalledWith('/api/public/push/preferences', expect.any(Object)));
-    const [, updateInit] = (global as any).fetch.mock.calls.find(([url]: any[]) => url === '/api/public/push/preferences');
+    const preferenceCalls = (global as any).fetch.mock.calls.filter(([url]: any[]) => url === '/api/public/push/preferences');
+    const [, updateInit] = preferenceCalls[preferenceCalls.length - 1];
     expect(updateInit.method).toBe('PUT');
     expect(JSON.parse(updateInit.body)).toMatchObject({
       token: 'test-fcm-token',
@@ -511,6 +520,97 @@ describe('CookieConsentProvider', () => {
     expect(preferences.types.breakingNews).toBe(false);
     expect(preferences.types.allArticles).toBe(true);
     expect(preferences.categoryAlerts.selected).toEqual(['national', 'sports']);
+  });
+
+  test('saving push preferences syncs updated breaking and article toggles for the current token', async () => {
+    window.localStorage.setItem(
+      PUSH_NOTIFICATION_PREFERENCES_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        enabled: true,
+        types: { breakingNews: true, topStories: true, newArticleAlerts: true, categoryAlerts: true, allArticles: false },
+        categoryAlerts: { selected: ['business'] },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      })
+    );
+    window.localStorage.setItem(
+      PUSH_BACKEND_REGISTRATION_STORAGE_KEY,
+      JSON.stringify({ registrationId: 'stored-fcm-token', registrationType: 'token', updatedAt: '2026-01-01T00:00:00.000Z' })
+    );
+    (getFirebaseClientConfig as jest.Mock).mockReturnValue({ isConfigured: true, config: {}, vapidKey: 'vapid', missingEnv: [] });
+    (isFirebaseMessagingSupported as jest.Mock).mockResolvedValue(true);
+    (getCurrentNotificationPermission as jest.Mock).mockReturnValue('granted');
+
+    renderWithProviders(<FooterSettingsProbe />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Cookie Settings' }));
+    expect(await screen.findByText('Enabled')).toBeTruthy();
+    fireEvent.click(screen.getByRole('switch', { name: 'Breaking News' }));
+    fireEvent.click(screen.getByRole('switch', { name: 'New Article Alerts' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save Preferences' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    const preferenceCalls = (global as any).fetch.mock.calls.filter(([url]: any[]) => url === '/api/public/push/preferences');
+    const [, updateInit] = preferenceCalls[preferenceCalls.length - 1];
+    expect(updateInit.method).toBe('PUT');
+    expect(JSON.parse(updateInit.body)).toMatchObject({
+      token: 'stored-fcm-token',
+      registrationType: 'token',
+      platform: 'web',
+      language: 'en',
+      preferences: {
+        breakingNews: false,
+        topStories: true,
+        newArticleAlerts: false,
+        categoryAlerts: true,
+        allArticles: false,
+      },
+      categories: ['business'],
+    });
+  });
+
+  test('preference save failure keeps Breaking News from appearing synced', async () => {
+    (global as any).fetch = jest.fn().mockImplementation(async (url: string) => ({
+      ok: url !== '/api/public/push/preferences',
+      status: url === '/api/public/push/preferences' ? 503 : 200,
+      text: async () => JSON.stringify(url === '/api/public/push/preferences'
+        ? { ok: false, message: 'backend failed' }
+        : { ok: true, message: 'ok' }),
+    }));
+    window.localStorage.setItem(
+      PUSH_NOTIFICATION_PREFERENCES_STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        enabled: true,
+        types: { breakingNews: false, topStories: true, newArticleAlerts: true, categoryAlerts: true, allArticles: false },
+        categoryAlerts: { selected: [] },
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      })
+    );
+    window.localStorage.setItem(
+      PUSH_BACKEND_REGISTRATION_STORAGE_KEY,
+      JSON.stringify({ registrationId: 'stored-fcm-token', registrationType: 'token', updatedAt: '2026-01-01T00:00:00.000Z' })
+    );
+    (getFirebaseClientConfig as jest.Mock).mockReturnValue({ isConfigured: true, config: {}, vapidKey: 'vapid', missingEnv: [] });
+    (isFirebaseMessagingSupported as jest.Mock).mockResolvedValue(true);
+    (getCurrentNotificationPermission as jest.Mock).mockReturnValue('granted');
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    renderWithProviders(<FooterSettingsProbe />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Cookie Settings' }));
+    expect(await screen.findByText('Enabled')).toBeTruthy();
+    fireEvent.click(screen.getByRole('switch', { name: 'Breaking News' }));
+
+    await waitFor(() => expect(screen.getByText('Notification preferences could not be saved. Please try again.')).toBeTruthy());
+    expect(screen.getByRole('switch', { name: 'Breaking News' }).getAttribute('aria-checked')).toBe('false');
+    expect(screen.queryByText('Notifications enabled and synced')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save Preferences' }));
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy());
+    expect(screen.getByText('Notification preferences could not be saved. Please try again.')).toBeTruthy();
+    expect(screen.queryByText('Notifications enabled and synced')).toBeNull();
+    consoleError.mockRestore();
   });
 
   test('turning the master switch off unregisters backend delivery without clearing other preferences', async () => {

@@ -60,7 +60,12 @@ type CookieConsentContextType = {
   hasCategoryConsent: (category: keyof CookieConsentCategories) => boolean;
 };
 
+type CookiePreferencesSaveHandler = () => boolean | Promise<boolean>;
+
 const CookieConsentContext = React.createContext<CookieConsentContextType | undefined>(undefined);
+const CookiePreferencesSaveHandlersContext = React.createContext<{
+  register: (handler: CookiePreferencesSaveHandler) => () => void;
+} | null>(null);
 
 function updateGoogleConsent(categories: CookieConsentCategories) {
   if (typeof window === 'undefined') return;
@@ -320,7 +325,9 @@ function CookiePreferencesModal() {
   const { t } = useI18n();
   const { categories, acceptAll, rejectNonEssential, savePreferences, closePreferences } = useCookieConsent();
   const dialogRef = React.useRef<HTMLElement | null>(null);
+  const saveHandlersRef = React.useRef(new Set<CookiePreferencesSaveHandler>());
   const [draft, setDraft] = React.useState(() => categories);
+  const [isSaving, setIsSaving] = React.useState(false);
 
   React.useEffect(() => setDraft(categories), [categories]);
 
@@ -362,13 +369,36 @@ function CookiePreferencesModal() {
     setDraft((current) => ({ ...current, necessary: true, [key]: value }));
   };
 
-  const save = () => {
-    savePreferences({
-      preferences: draft.preferences,
-      analytics: draft.analytics,
-      advertising: draft.advertising,
-      embeddedMedia: draft.embeddedMedia,
-    });
+  const registerSaveHandler = React.useCallback((handler: CookiePreferencesSaveHandler) => {
+    saveHandlersRef.current.add(handler);
+    return () => {
+      saveHandlersRef.current.delete(handler);
+    };
+  }, []);
+
+  const saveHandlerContext = React.useMemo(() => ({ register: registerSaveHandler }), [registerSaveHandler]);
+
+  const save = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+      const results = await Promise.all(Array.from(saveHandlersRef.current).map(async (handler) => {
+        try {
+          return await handler();
+        } catch {
+          return false;
+        }
+      }));
+      if (results.some((result) => result === false)) return;
+      savePreferences({
+        preferences: draft.preferences,
+        analytics: draft.analytics,
+        advertising: draft.advertising,
+        embeddedMedia: draft.embeddedMedia,
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -377,15 +407,16 @@ function CookiePreferencesModal() {
       data-testid="cookie-preferences-overlay"
       onMouseDown={(event) => { if (event.target === event.currentTarget) closePreferences(); }}
     >
-      <section
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="cookie-preferences-title"
-        className="flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white text-slate-950 shadow-[0_30px_90px_-38px_rgba(2,6,23,0.8)] outline-none"
-        style={{ height: 'min(90vh, calc(100dvh - 1rem))', maxHeight: 'min(90vh, calc(100dvh - 1rem))' }}
-        data-testid="cookie-preferences-dialog"
-      >
+      <CookiePreferencesSaveHandlersContext.Provider value={saveHandlerContext}>
+        <section
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="cookie-preferences-title"
+          className="flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white text-slate-950 shadow-[0_30px_90px_-38px_rgba(2,6,23,0.8)] outline-none"
+          style={{ height: 'min(90vh, calc(100dvh - 1rem))', maxHeight: 'min(90vh, calc(100dvh - 1rem))' }}
+          data-testid="cookie-preferences-dialog"
+        >
         <div className="flex flex-shrink-0 items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 sm:px-6">
           <div>
             <div className="inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">
@@ -429,14 +460,15 @@ function CookiePreferencesModal() {
           <button type="button" onClick={rejectNonEssential} className="rounded-full border border-slate-300 bg-white px-4 py-3 text-sm font-black text-slate-900 outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2">
             {t('cookieConsent.actions.rejectNonEssential')}
           </button>
-          <button type="button" onClick={save} className="rounded-full bg-slate-950 px-4 py-3 text-sm font-black text-white outline-none transition hover:bg-slate-800 focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2">
+          <button type="button" onClick={save} disabled={isSaving} className="rounded-full bg-slate-950 px-4 py-3 text-sm font-black text-white outline-none transition hover:bg-slate-800 focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-75">
             {t('cookieConsent.actions.savePreferences')}
           </button>
           <button type="button" onClick={acceptAll} className="rounded-full border border-slate-300 bg-white px-4 py-3 text-sm font-black text-slate-900 outline-none transition hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2">
             {t('cookieConsent.actions.acceptAll')}
           </button>
         </div>
-      </section>
+        </section>
+      </CookiePreferencesSaveHandlersContext.Provider>
     </div>
   );
 }
@@ -503,6 +535,7 @@ const PUSH_ENABLED_MESSAGE = 'Notifications enabled and synced';
 const PUSH_OFF_MESSAGE = 'Notifications are off';
 const PUSH_TEMPORARILY_UNAVAILABLE_MESSAGE = 'News Pulse alerts are temporarily unavailable on this browser.';
 const PUSH_BACKEND_SYNC_FAILED_MESSAGE = PUSH_TEMPORARILY_UNAVAILABLE_MESSAGE;
+const PUSH_PREFERENCES_SYNC_FAILED_MESSAGE = 'Notification preferences could not be saved. Please try again.';
 
 const pushNotificationTypeLabels: Array<{ key: PushNotificationTypeKey; label: string }> = [
   { key: 'breakingNews', label: 'Breaking News' },
@@ -535,7 +568,7 @@ function isPushEnabled(status: PushNotificationStatus): boolean {
 }
 
 function markPushPreferencesEnabled(preferences: PushNotificationPreferences): PushNotificationPreferences {
-  return writePushNotificationPreferences({ ...preferences, enabled: true });
+  return { ...preferences, enabled: true };
 }
 
 function getStatusFromRegistrationResult(result: FcmRegistrationResult): PushNotificationStatus {
@@ -626,16 +659,23 @@ function isFcmTestControlEnabled(): boolean {
 
 function PushNotificationRow() {
   const { lang } = useI18n();
+  const saveHandlers = React.useContext(CookiePreferencesSaveHandlersContext);
   const [status, setStatus] = React.useState<PushNotificationStatus>('checking');
   const [detail, setDetail] = React.useState('');
   const [preferences, setPreferences] = React.useState<PushNotificationPreferences>(defaultPushNotificationPreferences);
   const [diagnostics, setDiagnostics] = React.useState<PushDiagnostics>(() => createPushDiagnosticsSnapshot());
   const registrationRef = React.useRef<PushRegistrationIdentifier | null>(null);
   const statusRef = React.useRef<PushNotificationStatus>('checking');
+  const preferencesRef = React.useRef<PushNotificationPreferences>(defaultPushNotificationPreferences);
+  const lastSyncedPreferencesRef = React.useRef<PushNotificationPreferences | null>(null);
 
   React.useEffect(() => {
     statusRef.current = status;
   }, [status]);
+
+  React.useEffect(() => {
+    preferencesRef.current = preferences;
+  }, [preferences]);
 
   const refreshDiagnostics = React.useCallback(async (includeBackend = false, overrides: Partial<PushDiagnostics> = {}) => {
     const [serviceWorker, backend] = await Promise.all([
@@ -675,7 +715,6 @@ function PushNotificationRow() {
 
     if (result.ok) {
       const enabledPreferences = markPushPreferencesEnabled(currentPreferences);
-      setPreferences(enabledPreferences);
       const backendResult = await registerNewsPulsePushSubscription({
         registrationId: result.registrationId,
         permission: result.permission,
@@ -687,9 +726,24 @@ function PushNotificationRow() {
           registrationId: backendResult.registrationId,
           registrationType: backendResult.registrationType,
         };
-        setStatus('granted');
-        setDetail(PUSH_ENABLED_MESSAGE);
-        setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, serverSync: 'Synced', preferencesSync: 'Synced' }));
+        const preferencesResult = await updateNewsPulsePushPreferences({
+          ...registrationRef.current,
+          language: lang,
+          preferences: enabledPreferences,
+        });
+        if (preferencesResult.ok) {
+          const syncedPreferences = writePushNotificationPreferences(enabledPreferences);
+          preferencesRef.current = syncedPreferences;
+          lastSyncedPreferencesRef.current = syncedPreferences;
+          setPreferences(syncedPreferences);
+          setStatus('granted');
+          setDetail(PUSH_ENABLED_MESSAGE);
+          setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, serverSync: 'Synced', preferencesSync: 'Synced' }));
+        } else {
+          setStatus('unavailable');
+          setDetail(PUSH_PREFERENCES_SYNC_FAILED_MESSAGE);
+          setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, serverSync: 'Synced', preferencesSync: 'Failed' }));
+        }
       } else {
         registrationRef.current = null;
         setStatus('unavailable');
@@ -708,6 +762,7 @@ function PushNotificationRow() {
       const storedRegistration = readStoredPushRegistration();
       if (!cancelled) {
         setPreferences(storedPreferences);
+        preferencesRef.current = storedPreferences;
         registrationRef.current = storedRegistration || registrationRef.current;
       }
 
@@ -791,6 +846,7 @@ function PushNotificationRow() {
         if (storedRegistration) {
           setStatus('granted');
           setDetail(PUSH_ENABLED_MESSAGE);
+          lastSyncedPreferencesRef.current = storedPreferences;
           setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, browserPermission: 'Granted', firebaseRegistration: 'Registered', serverSync: 'Synced', preferencesSync: 'Synced' }));
           return;
         }
@@ -814,6 +870,35 @@ function PushNotificationRow() {
     };
   }, [refreshDiagnostics, registerGrantedBrowser]);
 
+  const syncPushPreferences = React.useCallback(async (nextPreferences: PushNotificationPreferences): Promise<boolean> => {
+    if (statusRef.current !== 'granted') return true;
+    const registration = registrationRef.current || readStoredPushRegistration();
+    if (!registration) return true;
+    registrationRef.current = registration;
+    const result = await updateNewsPulsePushPreferences({ ...registration, language: lang, preferences: nextPreferences });
+    if (result.ok) {
+      lastSyncedPreferencesRef.current = nextPreferences;
+      setDetail(PUSH_ENABLED_MESSAGE);
+      setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, preferencesSync: 'Synced' }));
+      return true;
+    }
+
+    const fallbackPreferences = lastSyncedPreferencesRef.current;
+    if (fallbackPreferences) {
+      const restoredPreferences = writePushNotificationPreferences(fallbackPreferences);
+      preferencesRef.current = restoredPreferences;
+      setPreferences(restoredPreferences);
+    }
+    setDetail(PUSH_PREFERENCES_SYNC_FAILED_MESSAGE);
+    setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, preferencesSync: 'Failed' }));
+    return false;
+  }, [lang]);
+
+  React.useEffect(() => {
+    if (!saveHandlers) return undefined;
+    return saveHandlers.register(() => syncPushPreferences(preferencesRef.current));
+  }, [saveHandlers, syncPushPreferences]);
+
   const updateTypePreference = (key: PushNotificationTypeKey, checked: boolean) => {
     setPreferences((current) => {
       const next = writePushNotificationPreferences({
@@ -821,13 +906,8 @@ function PushNotificationRow() {
         enabled: true,
         types: { ...current.types, [key]: checked },
       });
-      const registration = registrationRef.current;
-      if (registration) {
-        updateNewsPulsePushPreferences({ ...registration, language: lang, preferences: next }).then((result) => {
-          if (!result.ok) setDetail(result.message);
-          setDiagnostics((current) => createPushDiagnosticsSnapshot({ ...current, preferencesSync: result.ok ? 'Synced' : 'Failed' }));
-        });
-      }
+      preferencesRef.current = next;
+      void syncPushPreferences(next);
       return next;
     });
   };
