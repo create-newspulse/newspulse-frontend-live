@@ -15,7 +15,7 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "incremental": true,
     "esModuleInterop": true,
     "plugins": [
@@ -23,7 +23,10 @@
         "name": "next"
       }
     ],
-    "types": ["jest", "node"],
+    "types": [
+      "jest",
+      "node"
+    ],
     "strictNullChecks": true
   },
   "include": [
@@ -52,7 +55,6 @@
     "**/Microsoft/**",
     "**/Office/**",
     "components/_backup/**",
-
     "**/*.stories.ts",
     "**/*.stories.tsx",
     "**/*.stories.js",

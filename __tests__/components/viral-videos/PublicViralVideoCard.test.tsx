@@ -9,6 +9,7 @@ function makeVideo(overrides: Partial<PublicViralVideo> = {}): PublicViralVideo 
     id: 'viral-video-1',
     title: 'Viral source clip',
     summary: 'Clip summary for the public card.',
+    highlightColor: '#2563eb',
     posterImageUrl: 'https://cdn.example.com/poster.jpg',
     thumbnailUrl: 'https://cdn.example.com/thumb.jpg',
     videoFileUrl: '',

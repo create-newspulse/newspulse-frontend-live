@@ -55,6 +55,16 @@ jest.mock('../../../components/reporter-portal/ReporterPortalLayout', () => ({
   default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
+function createDeferred<T = any>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: any) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 describe('pages/reporter/login', () => {
   beforeEach(() => {
     fetchPublicSettingsMock.mockResolvedValue({
@@ -239,10 +249,8 @@ describe('pages/reporter/login', () => {
   });
 
   it('prevents duplicate request-code submissions while loading', async () => {
-    let resolveRequest: ((value: any) => void) | null = null;
-    (global as any).fetch.mockImplementationOnce(() => new Promise((resolve) => {
-      resolveRequest = resolve;
-    }));
+    const requestDeferred = createDeferred<any>();
+    (global as any).fetch.mockImplementationOnce(() => requestDeferred.promise);
 
     render(<ReporterLoginPage communityReporterClosed={false} reporterPortalClosed={false} />);
 
@@ -258,7 +266,7 @@ describe('pages/reporter/login', () => {
       expect((global as any).fetch).toHaveBeenCalledTimes(1);
     });
 
-    resolveRequest?.({
+    requestDeferred.resolve({
       ok: true,
       status: 200,
       json: async () => ({
@@ -703,10 +711,8 @@ describe('pages/reporter/login', () => {
   });
 
   it('prevents duplicate request-code submissions while a send is pending', async () => {
-    let resolveRequestCode: ((value: any) => void) | null = null;
-    (global as any).fetch.mockImplementationOnce(() => new Promise((resolve) => {
-      resolveRequestCode = resolve;
-    }));
+    const requestCodeDeferred = createDeferred<any>();
+    (global as any).fetch.mockImplementationOnce(() => requestCodeDeferred.promise);
 
     render(<ReporterLoginPage communityReporterClosed={false} reporterPortalClosed={false} />);
 
@@ -722,7 +728,7 @@ describe('pages/reporter/login', () => {
       expect((global as any).fetch).toHaveBeenCalledTimes(1);
     });
 
-    resolveRequestCode?.({
+    requestCodeDeferred.resolve({
       ok: false,
       status: 503,
       json: async () => ({ ok: false, code: 'REPORTER_PORTAL_EMAIL_SEND_FAILED' }),
@@ -732,7 +738,7 @@ describe('pages/reporter/login', () => {
   });
 
   it('prevents duplicate verify submissions while verification is pending', async () => {
-    let resolveVerifyCode: ((value: any) => void) | null = null;
+    const verifyCodeDeferred = createDeferred<any>();
     (global as any).fetch
       .mockResolvedValueOnce({
         ok: true,
@@ -744,9 +750,7 @@ describe('pages/reporter/login', () => {
         status: 200,
         json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:30:00.000Z' } }),
       })
-      .mockImplementationOnce(() => new Promise((resolve) => {
-        resolveVerifyCode = resolve;
-      }));
+      .mockImplementationOnce(() => verifyCodeDeferred.promise);
 
     render(<ReporterLoginPage communityReporterClosed={false} reporterPortalClosed={false} />);
 
@@ -765,7 +769,7 @@ describe('pages/reporter/login', () => {
       expect((global as any).fetch).toHaveBeenCalledTimes(3);
     });
 
-    resolveVerifyCode?.({
+    verifyCodeDeferred.resolve({
       ok: false,
       status: 503,
       json: async () => ({ ok: false, code: 'REPORTER_VERIFY_CODE_FAILED' }),

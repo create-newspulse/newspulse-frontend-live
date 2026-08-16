@@ -1,4 +1,4 @@
-import { middleware } from '../middleware';
+import { proxy as middleware } from '../proxy';
 
 function request(url: string) {
   const nextUrl = new URL(url) as URL & { locale?: string; defaultLocale?: string };

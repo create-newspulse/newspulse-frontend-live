@@ -109,6 +109,7 @@ describe('pages/news/[slug] editorial detail', () => {
         locale="en"
         lang="en"
         slug="special-story"
+        siteUrl="https://www.newspulse.co.in"
         article={editorialArticle() as any}
         safeHtml="<p>Complete article content</p>"
         topStories={[]}
@@ -140,6 +141,7 @@ describe('pages/news/[slug] editorial detail', () => {
         locale="gu"
         lang="gu"
         slug="javabdar-digital-patrakarita"
+        siteUrl="https://www.newspulse.co.in"
         article={editorialArticle({
           _id: 'article-gu',
           language: 'gu',
@@ -197,6 +199,7 @@ describe('pages/news/[slug] editorial detail', () => {
         locale="hi"
         lang="hi"
         slug="jimmedar-digital-patrakarita"
+        siteUrl="https://www.newspulse.co.in"
         article={editorialArticle({
           _id: 'article-hi',
           language: 'hi',
@@ -227,6 +230,7 @@ describe('pages/news/[slug] editorial detail', () => {
         locale="gu"
         lang="gu"
         slug="pending-story"
+        siteUrl="https://www.newspulse.co.in"
         article={null}
         safeHtml=""
         topStories={[]}
@@ -270,6 +274,7 @@ describe('pages/news/[slug] editorial detail', () => {
         locale="en"
         lang="en"
         slug="special-story"
+        siteUrl="https://www.newspulse.co.in"
         article={editorialArticle() as any}
         safeHtml="<p>Complete article content</p>"
         topStories={[]}

@@ -2,10 +2,10 @@
 import { useEffect, useState } from "react";
 import { fetchRssNews } from "../lib/fetchRssNews";
 import type { GetStaticProps } from 'next';
-import { useTranslations } from 'next-intl';
+import { useI18n } from '../src/i18n/LanguageProvider';
 
 export default function WorldNews() {
-  const t = useTranslations('categories');
+  const { t } = useI18n();
   const [news, setNews] = useState<any[]>([]);
 
   useEffect(() => {
@@ -14,7 +14,7 @@ export default function WorldNews() {
 
   return (
     <div className="p-6">
-      <h1 className="text-3xl font-bold mb-4">🌍 {t('international')}</h1>
+      <h1 className="text-3xl font-bold mb-4">🌍 {t('categories.international')}</h1>
       <ul className="space-y-3">
         {news.map((item, index) => (
           <li key={index}>

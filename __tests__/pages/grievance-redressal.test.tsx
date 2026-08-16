@@ -49,7 +49,8 @@ describe('pages/grievance-redressal', () => {
 
   it('shows the official grievance details and CTA while keeping the form hidden on initial load', async () => {
     render(<GrievanceRedressalPage />);
-    expect(await screen.findByText('Asha Singh')).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Grievance Redressal' })).toBeTruthy();
+    expect(screen.getAllByText('grievance@newspulse.co.in').length).toBeGreaterThan(0);
 
     expect(screen.getByRole('heading', { name: 'Grievance Redressal' })).toBeTruthy();
     expect(
@@ -58,24 +59,22 @@ describe('pages/grievance-redressal', () => {
 
     expect(screen.getAllByText('News Pulse Media').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Kiran Parmar').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Asha Singh').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Official grievance contact').length).toBeGreaterThan(0);
     expect(screen.queryByText('Senior Grievance Officer')).toBeNull();
     expect(screen.getAllByText('India').length).toBeGreaterThan(0);
-    expect(screen.getByText('Official Grievance Email')).toBeTruthy();
+    expect(screen.getAllByText('grievance@newspulse.co.in').length).toBeGreaterThan(0);
     expect(screen.getByText('Chief Editor')).toBeTruthy();
-    expect(screen.getAllByText('Shailesh Rathod').length).toBeGreaterThan(0);
     expect(screen.queryByText('Response Timeline')).toBeNull();
     expect(screen.queryByText('Designation')).toBeNull();
 
     const cardTitles = screen.getAllByText(
-      /^(Publisher \/ Entity|Founder \/ Publisher|Chief Editor|Grievance Officer|Official Grievance Email|Location)$/
+      /^(Publisher \/ Entity|Founder \/ Publisher|Chief Editor|Grievance Officer|Location)$/
     ).map((node) => node.textContent);
-    expect(cardTitles.slice(0, 6)).toEqual([
+    expect(cardTitles.slice(0, 5)).toEqual([
       'Publisher / Entity',
       'Founder / Publisher',
       'Chief Editor',
       'Grievance Officer',
-      'Official Grievance Email',
       'Location',
     ]);
 
@@ -102,7 +101,8 @@ describe('pages/grievance-redressal', () => {
 
   it('opens, smooth-scrolls to, and focuses the grievance form when the CTA is clicked', async () => {
     render(<GrievanceRedressalPage />);
-    expect(await screen.findByText('Asha Singh')).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Grievance Redressal' })).toBeTruthy();
+    expect(screen.getAllByText('grievance@newspulse.co.in').length).toBeGreaterThan(0);
 
     const scrollIntoView = window.HTMLElement.prototype.scrollIntoView as jest.Mock;
     fireEvent.click(screen.getAllByRole('link', { name: 'grievance@newspulse.co.in' })[0]);
