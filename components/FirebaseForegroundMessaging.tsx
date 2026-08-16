@@ -17,6 +17,8 @@ type ForegroundAlert = {
   body: string;
   url: string;
   deliveryLogId: string;
+  type: string;
+  tag: string;
 };
 
 function getSafeForegroundUrl(value: unknown): string {
@@ -31,17 +33,51 @@ function getSafeForegroundUrl(value: unknown): string {
   return NEWS_PULSE_HOME_URL;
 }
 
+function getForegroundTagSegment(value: unknown): string {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+}
+
+function getForegroundSlugFromUrl(value: unknown): string {
+  try {
+    const url = new URL(String(value || NEWS_PULSE_HOME_URL), NEWS_PULSE_ORIGIN);
+    const parts = url.pathname.split('/').filter(Boolean);
+    return getForegroundTagSegment(parts[parts.length - 1]);
+  } catch {}
+  return '';
+}
+
+function getForegroundNotificationTag(payload: MessagePayload, url: string): string {
+  const data = payload.data || {};
+  const type = String(data.type || '').trim();
+  if (type === 'breaking') return 'news-pulse-breaking-latest';
+
+  const articleSegment =
+    getForegroundTagSegment(data.articleId || data.article_id || data.articleID || data.id || data.newsId || data.slug || data.articleSlug || data.article_slug) ||
+    getForegroundSlugFromUrl(url) ||
+    getForegroundTagSegment(data.deliveryLogId) ||
+    'latest-article';
+  return `news-pulse-article-${articleSegment}`;
+}
+
 function getForegroundAlert(payload: MessagePayload): ForegroundAlert {
   const data = payload.data || {};
   const type = String(data.type || '').trim();
   const articleBody = data.title || payload.notification?.title || data.summary || data.body || payload.notification?.body || DEFAULT_FOREGROUND_BODY;
   const breakingBody = data.message || data.body || payload.notification?.body || data.text || data.summary || DEFAULT_FOREGROUND_BODY;
   const defaultBody = payload.notification?.body || data.body || data.message || data.text || data.summary || DEFAULT_FOREGROUND_BODY;
+  const url = getSafeForegroundUrl(payload.fcmOptions?.link || data.link || data.url);
   return {
     title: type === 'breaking' ? BREAKING_NOTIFICATION_TITLE : NEWS_PULSE_NOTIFICATION_TITLE,
     body: type === 'breaking' ? breakingBody : type === 'article' ? articleBody : defaultBody,
-    url: getSafeForegroundUrl(payload.fcmOptions?.link || data.link || data.url),
+    url,
     deliveryLogId: String(data.deliveryLogId || '').trim(),
+    type,
+    tag: getForegroundNotificationTag(payload, url),
   };
 }
 
@@ -56,16 +92,19 @@ async function showForegroundBrowserNotification(alert: ForegroundAlert, payload
   try {
     const registration = await navigator.serviceWorker.ready;
     if (typeof registration.showNotification !== 'function') return false;
-    await registration.showNotification(alert.title, {
+    const options: NotificationOptions & { renotify: boolean } = {
       body: alert.body,
       icon: NOTIFICATION_ICON,
       badge: NOTIFICATION_BADGE,
+      tag: alert.tag,
+      renotify: false,
       data: {
         url: alert.url,
         deliveryLogId: alert.deliveryLogId,
-        type: String(payload.data?.type || '').trim(),
+        type: alert.type,
       },
-    });
+    };
+    await registration.showNotification(alert.title, options);
     return true;
   } catch {
     return false;
@@ -84,7 +123,11 @@ export default function FirebaseForegroundMessaging() {
         const nextAlert = getForegroundAlert(payload);
         void sendPushReceipt({ deliveryLogId: nextAlert.deliveryLogId, event: 'received' }).catch(() => undefined);
         const shown = await showForegroundBrowserNotification(nextAlert, payload);
-        if (!shown && mounted) setAlert(nextAlert);
+        if (shown) {
+          void sendPushReceipt({ deliveryLogId: nextAlert.deliveryLogId, event: 'shown' }).catch(() => undefined);
+        } else if (mounted) {
+          setAlert(nextAlert);
+        }
         if (isFcmTestControlEnabled()) {
           console.info('[FCM] Foreground message received', summarizeForegroundFcmMessage(payload));
         }
@@ -107,6 +150,11 @@ export default function FirebaseForegroundMessaging() {
       unsubscribe();
     };
   }, []);
+
+  React.useEffect(() => {
+    if (!alert) return;
+    void sendPushReceipt({ deliveryLogId: alert.deliveryLogId, event: 'shown' }).catch(() => undefined);
+  }, [alert]);
 
   if (!alert) return null;
 

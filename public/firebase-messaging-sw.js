@@ -70,6 +70,49 @@ function getSafeNewsPulseUrl(value) {
   return `${NEWS_PULSE_ORIGIN}/`;
 }
 
+function getTagSegment(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+}
+
+function getSlugFromUrl(value) {
+  try {
+    const url = new URL(String(value || '/'), NEWS_PULSE_ORIGIN);
+    const parts = url.pathname.split('/').filter(Boolean);
+    return getTagSegment(parts[parts.length - 1]);
+  } catch {}
+  return '';
+}
+
+function getContentHash(value) {
+  const source = String(value || '').trim();
+  if (!source) return '';
+  let hash = 0;
+  for (let index = 0; index < source.length; index += 1) {
+    hash = ((hash << 5) - hash + source.charCodeAt(index)) | 0;
+  }
+  return Math.abs(hash).toString(36);
+}
+
+function getNotificationTag(payload, safeUrl, body) {
+  const data = payload?.data || {};
+  const type = String(data.type || '').trim();
+  if (type === 'breaking') {
+    return 'news-pulse-breaking-latest';
+  }
+
+  const articleSegment =
+    getTagSegment(data.articleId || data.article_id || data.articleID || data.id || data.newsId || data.slug || data.articleSlug || data.article_slug) ||
+    getSlugFromUrl(safeUrl) ||
+    getTagSegment(data.deliveryLogId) ||
+    'latest-article';
+  return `news-pulse-article-${articleSegment}`;
+}
+
 function getPayloadDedupeKey(payload) {
   const data = payload?.data || {};
   return String(data.deliveryLogId || payload?.messageId || payload?.message_id || '').trim();
@@ -85,7 +128,7 @@ function shouldHandleBackgroundPayload(payload) {
 
 function sendPushReceipt(deliveryLogId, event) {
   const safeDeliveryLogId = String(deliveryLogId || '').trim();
-  const safeEvent = event === 'clicked' ? 'clicked' : 'received';
+  const safeEvent = ['received', 'shown', 'display_failed', 'clicked'].includes(event) ? event : 'received';
   if (!safeDeliveryLogId) return Promise.resolve();
 
   return fetch('/api/public/push/receipt', {
@@ -102,10 +145,13 @@ function getNotificationDetails(payload) {
   const articleBody = data.title || data.body || notification.title || notification.body || data.summary || ARTICLE_NOTIFICATION_FALLBACK_BODY;
   const breakingBody = data.body || data.title || data.message || notification.body || data.text || data.summary || DEFAULT_NOTIFICATION_BODY;
   const defaultBody = notification.body || data.body || data.message || data.text || data.summary || DEFAULT_NOTIFICATION_BODY;
+  const body = type === 'breaking' ? breakingBody : type === 'article' ? articleBody : defaultBody;
+  const url = getSafeNewsPulseUrl(getNotificationLink(payload));
   return {
     title: type === 'breaking' ? BREAKING_NOTIFICATION_TITLE : NEWS_PULSE_NOTIFICATION_TITLE,
-    body: type === 'breaking' ? breakingBody : type === 'article' ? articleBody : defaultBody,
-    url: getSafeNewsPulseUrl(getNotificationLink(payload)),
+    body,
+    url,
+    tag: getNotificationTag(payload, url, body),
     deliveryLogId: String(data.deliveryLogId || '').trim(),
     type,
   };
@@ -118,6 +164,8 @@ function handleBackgroundPushPayload(payload) {
     body: details.body,
     icon: NOTIFICATION_ICON,
     badge: NOTIFICATION_BADGE,
+    tag: details.tag,
+    renotify: false,
     data: {
       deliveryLogId: details.deliveryLogId,
       type: details.type,
@@ -125,10 +173,14 @@ function handleBackgroundPushPayload(payload) {
     },
   };
 
-  return Promise.all([
-    sendPushReceipt(details.deliveryLogId, 'received'),
-    self.registration.showNotification(details.title, options),
-  ]);
+  return sendPushReceipt(details.deliveryLogId, 'received').then(async () => {
+    try {
+      await self.registration.showNotification(details.title, options);
+      await sendPushReceipt(details.deliveryLogId, 'shown');
+    } catch {
+      await sendPushReceipt(details.deliveryLogId, 'display_failed');
+    }
+  });
 }
 
 function readPushEventPayload(event) {

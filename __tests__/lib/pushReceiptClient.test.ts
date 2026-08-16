@@ -6,12 +6,12 @@ describe('lib/pushReceiptClient', () => {
   });
 
   it('sends only deliveryLogId and event in push receipt payloads', async () => {
-    const result = await sendPushReceipt({ deliveryLogId: 'delivery-log-123', event: 'received' });
+    const result = await sendPushReceipt({ deliveryLogId: 'delivery-log-123', event: 'shown' });
 
     expect(result).toMatchObject({ ok: true, status: 200 });
     expect((global as any).fetch).toHaveBeenCalledWith('/api/public/push/receipt', expect.objectContaining({ method: 'POST' }));
     const [, init] = (global as any).fetch.mock.calls[0];
-    expect(JSON.parse(init.body)).toEqual({ deliveryLogId: 'delivery-log-123', event: 'received' });
+    expect(JSON.parse(init.body)).toEqual({ deliveryLogId: 'delivery-log-123', event: 'shown' });
     expect(init.body).not.toContain('token');
     expect(init.body).not.toContain('fid');
     expect(init.body).not.toContain('registrationId');
@@ -20,7 +20,7 @@ describe('lib/pushReceiptClient', () => {
   it('does not throw when receipt delivery fails', async () => {
     (global as any).fetch = jest.fn().mockRejectedValue(new Error('network down'));
 
-    await expect(sendPushReceipt({ deliveryLogId: 'delivery-log-123', event: 'clicked' })).resolves.toMatchObject({ ok: false });
+    await expect(sendPushReceipt({ deliveryLogId: 'delivery-log-123', event: 'display_failed' })).resolves.toMatchObject({ ok: false });
   });
 
   it('skips receipt calls when deliveryLogId is missing', async () => {

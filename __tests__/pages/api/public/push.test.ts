@@ -151,7 +151,7 @@ describe('pages/api/public/push/*', () => {
       method: 'POST',
       body: {
         deliveryLogId: 'delivery-log-123',
-        event: 'received',
+        event: 'shown',
         token: 'not-forwarded-token',
         fid: 'not-forwarded-fid',
         registrationId: 'not-forwarded-registration-id',
@@ -166,7 +166,7 @@ describe('pages/api/public/push/*', () => {
       expect.objectContaining({ method: 'POST' })
     );
     const [, init] = (global as any).fetch.mock.calls[0];
-    expect(JSON.parse(init.body)).toEqual({ deliveryLogId: 'delivery-log-123', event: 'received' });
+    expect(JSON.parse(init.body)).toEqual({ deliveryLogId: 'delivery-log-123', event: 'shown' });
     expect(JSON.stringify(JSON.parse(init.body))).not.toContain('not-forwarded-token');
     expect(JSON.stringify(JSON.parse(init.body))).not.toContain('not-forwarded-fid');
     expect(res.statusCode).toBe(200);

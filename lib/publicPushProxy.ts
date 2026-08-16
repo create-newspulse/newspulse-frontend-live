@@ -4,7 +4,7 @@ import { getPublicApiBaseUrl } from './publicApiBase';
 import { normalizeNewsPulsePushCategoryIds } from './pushNotificationPreferences';
 
 type PushProxyMethod = 'POST' | 'PUT' | 'DELETE';
-type PushReceiptEvent = 'received' | 'clicked';
+type PushReceiptEvent = 'received' | 'shown' | 'display_failed' | 'clicked';
 const SUPPORTED_PUSH_PREFERENCE_KEYS = [
   'breakingNews',
   'topStories',
@@ -123,7 +123,7 @@ export async function proxyPublicPushRequest(
 
 function normalizePushReceiptEvent(value: unknown): PushReceiptEvent | null {
   const event = cleanString(value).toLowerCase();
-  return event === 'received' || event === 'clicked' ? event : null;
+  return event === 'received' || event === 'shown' || event === 'display_failed' || event === 'clicked' ? event : null;
 }
 
 function buildSupportedReceiptPayload(body: Record<string, unknown>) {

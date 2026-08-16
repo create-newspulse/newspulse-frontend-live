@@ -1,4 +1,4 @@
-export type PushReceiptEvent = 'received' | 'clicked';
+export type PushReceiptEvent = 'received' | 'shown' | 'display_failed' | 'clicked';
 
 export type PushReceiptInput = {
   deliveryLogId?: string | null;
@@ -17,7 +17,7 @@ function cleanString(value: unknown): string {
 
 export async function sendPushReceipt(input: PushReceiptInput): Promise<PushReceiptResult> {
   const deliveryLogId = cleanString(input.deliveryLogId);
-  const event = input.event === 'clicked' ? 'clicked' : 'received';
+  const event = ['received', 'shown', 'display_failed', 'clicked'].includes(input.event) ? input.event : 'received';
 
   if (!deliveryLogId) {
     return { ok: false, message: 'Push receipt delivery log id is missing.' };

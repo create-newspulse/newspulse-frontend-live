@@ -2,14 +2,14 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-function createServiceWorkerHarness() {
+function createServiceWorkerHarness(options = {}) {
   const listeners = {};
   const cache = {
     match: jest.fn().mockResolvedValue(null),
     put: jest.fn().mockResolvedValue(undefined),
   };
-  const showNotification = jest.fn().mockResolvedValue(undefined);
-  const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 200 });
+  const showNotification = jest.fn(options.showNotificationImplementation || (() => Promise.resolve(undefined)));
+  const fetchMock = jest.fn(options.fetchImplementation || (() => Promise.resolve({ ok: true, status: 200 })));
   const openWindow = jest.fn().mockResolvedValue({});
   const skipWaiting = jest.fn().mockResolvedValue(undefined);
   const claim = jest.fn().mockResolvedValue(undefined);
@@ -67,6 +67,10 @@ function createServiceWorkerHarness() {
   };
 }
 
+function getReceiptBodies(fetchMock) {
+  return fetchMock.mock.calls.map(([, init]) => JSON.parse(init.body));
+}
+
 async function initializeFirebaseMessaging(harness) {
   let waitUntilPromise = Promise.resolve();
   harness.listeners.message({
@@ -110,7 +114,7 @@ describe('public/firebase-messaging-sw.js', () => {
     expect(harness.clients.claim).toHaveBeenCalled();
   });
 
-  it('sends a received receipt and shows a breaking background notification alert', async () => {
+  it('sends received and shown receipts and shows a breaking background notification alert', async () => {
     const harness = createServiceWorkerHarness();
     await initializeFirebaseMessaging(harness);
 
@@ -127,15 +131,20 @@ describe('public/firebase-messaging-sw.js', () => {
     });
 
     expect(harness.fetchMock).toHaveBeenCalledWith('/api/public/push/receipt', expect.objectContaining({ method: 'POST' }));
-    const [, receiptInit] = harness.fetchMock.mock.calls[0];
-    expect(JSON.parse(receiptInit.body)).toEqual({ deliveryLogId: 'breaking-delivery-log-123', event: 'received' });
-    expect(receiptInit.body).not.toContain('must-not-send-token');
-    expect(receiptInit.body).not.toContain('must-not-send-fid');
-    expect(receiptInit.body).not.toContain('must-not-send-registration-id');
+    const receipts = getReceiptBodies(harness.fetchMock);
+    expect(receipts).toEqual([
+      { deliveryLogId: 'breaking-delivery-log-123', event: 'received' },
+      { deliveryLogId: 'breaking-delivery-log-123', event: 'shown' },
+    ]);
+    expect(JSON.stringify(receipts)).not.toContain('must-not-send-token');
+    expect(JSON.stringify(receipts)).not.toContain('must-not-send-fid');
+    expect(JSON.stringify(receipts)).not.toContain('must-not-send-registration-id');
     expect(harness.showNotification).toHaveBeenCalledWith('🔴 Breaking News', expect.objectContaining({
       body: 'breaking message',
       icon: '/icons/news-pulse-icon-192.png',
       badge: '/icons/news-pulse-badge-72.png',
+      tag: 'news-pulse-breaking-latest',
+      renotify: false,
       data: {
         url: 'https://www.newspulse.co.in/breaking/live-update',
         deliveryLogId: 'breaking-delivery-log-123',
@@ -144,7 +153,7 @@ describe('public/firebase-messaging-sw.js', () => {
     }));
   });
 
-  it('sends a received receipt and shows a background notification alert', async () => {
+  it('sends received and shown receipts and shows a background notification alert', async () => {
     const harness = createServiceWorkerHarness();
     await initializeFirebaseMessaging(harness);
 
@@ -154,20 +163,26 @@ describe('public/firebase-messaging-sw.js', () => {
         deliveryLogId: 'delivery-log-123',
         type: 'article',
         url: '/news/article-slug',
+        slug: 'article-slug',
         token: 'must-not-send-token',
         fid: 'must-not-send-fid',
       },
     });
 
     expect(harness.fetchMock).toHaveBeenCalledWith('/api/public/push/receipt', expect.objectContaining({ method: 'POST' }));
-    const [, receiptInit] = harness.fetchMock.mock.calls[0];
-    expect(JSON.parse(receiptInit.body)).toEqual({ deliveryLogId: 'delivery-log-123', event: 'received' });
-    expect(receiptInit.body).not.toContain('must-not-send-token');
-    expect(receiptInit.body).not.toContain('must-not-send-fid');
+    const receipts = getReceiptBodies(harness.fetchMock);
+    expect(receipts).toEqual([
+      { deliveryLogId: 'delivery-log-123', event: 'received' },
+      { deliveryLogId: 'delivery-log-123', event: 'shown' },
+    ]);
+    expect(JSON.stringify(receipts)).not.toContain('must-not-send-token');
+    expect(JSON.stringify(receipts)).not.toContain('must-not-send-fid');
     expect(harness.showNotification).toHaveBeenCalledWith('News Pulse', expect.objectContaining({
       body: 'Article title',
       icon: '/icons/news-pulse-icon-192.png',
       badge: '/icons/news-pulse-badge-72.png',
+      tag: 'news-pulse-article-article-slug',
+      renotify: false,
       data: {
         url: 'https://www.newspulse.co.in/news/article-slug',
         deliveryLogId: 'delivery-log-123',
@@ -198,16 +213,95 @@ describe('public/firebase-messaging-sw.js', () => {
     });
     await pushPromise;
 
-    const [, receiptInit] = harness.fetchMock.mock.calls[0];
-    expect(JSON.parse(receiptInit.body)).toEqual({ deliveryLogId: 'raw-push-delivery-log-123', event: 'received' });
+    expect(getReceiptBodies(harness.fetchMock)).toEqual([
+      { deliveryLogId: 'raw-push-delivery-log-123', event: 'received' },
+      { deliveryLogId: 'raw-push-delivery-log-123', event: 'shown' },
+    ]);
     expect(harness.showNotification).toHaveBeenCalledWith('News Pulse', expect.objectContaining({
       body: 'Raw article title',
+      tag: 'news-pulse-article-raw-push-story',
+      renotify: false,
       data: {
         deliveryLogId: 'raw-push-delivery-log-123',
         type: 'article',
         url: 'https://www.newspulse.co.in/news/raw-push-story',
       },
     }));
+  });
+
+  it('sends the shown receipt only after showNotification resolves', async () => {
+    const sequence = [];
+    const harness = createServiceWorkerHarness({
+      fetchImplementation: (_url, init) => {
+        sequence.push(JSON.parse(init.body).event);
+        return Promise.resolve({ ok: true, status: 200 });
+      },
+      showNotificationImplementation: () => Promise.resolve().then(() => {
+        sequence.push('showNotification resolved');
+      }),
+    });
+    await initializeFirebaseMessaging(harness);
+
+    await harness.getBackgroundHandler()({
+      data: {
+        deliveryLogId: 'ordered-delivery-log-123',
+        type: 'article',
+        title: 'Ordered article title',
+        url: '/news/ordered-story',
+      },
+    });
+
+    expect(sequence).toEqual(['received', 'showNotification resolved', 'shown']);
+  });
+
+  it('sends display_failed when showNotification rejects', async () => {
+    const harness = createServiceWorkerHarness({
+      showNotificationImplementation: () => Promise.reject(new Error('display failed')),
+    });
+    await initializeFirebaseMessaging(harness);
+
+    await harness.getBackgroundHandler()({
+      data: {
+        deliveryLogId: 'failed-display-delivery-log-123',
+        type: 'article',
+        title: 'Failed display article',
+        url: '/news/failed-display-story',
+      },
+    });
+
+    expect(getReceiptBodies(harness.fetchMock)).toEqual([
+      { deliveryLogId: 'failed-display-delivery-log-123', event: 'received' },
+      { deliveryLogId: 'failed-display-delivery-log-123', event: 'display_failed' },
+    ]);
+  });
+
+  it('uses a stable breaking tag so duplicate breaking notifications replace instead of stacking', async () => {
+    const harness = createServiceWorkerHarness();
+    await initializeFirebaseMessaging(harness);
+
+    await harness.getBackgroundHandler()({
+      data: {
+        deliveryLogId: 'breaking-delivery-log-1',
+        type: 'breaking',
+        url: '/breaking/live-update',
+        message: 'same breaking message',
+      },
+    });
+    await harness.getBackgroundHandler()({
+      data: {
+        deliveryLogId: 'breaking-delivery-log-2',
+        type: 'breaking',
+        url: '/breaking/live-update',
+        message: 'same breaking message',
+      },
+    });
+
+    const firstOptions = harness.showNotification.mock.calls[0][1];
+    const secondOptions = harness.showNotification.mock.calls[1][1];
+    expect(firstOptions.tag).toBe('news-pulse-breaking-latest');
+    expect(secondOptions.tag).toBe('news-pulse-breaking-latest');
+    expect(firstOptions.renotify).toBe(false);
+    expect(secondOptions.renotify).toBe(false);
   });
 
   it('sends a clicked receipt and opens only a safe News Pulse URL', async () => {

@@ -71,10 +71,13 @@ describe('FirebaseForegroundMessaging', () => {
     });
 
     expect(sendPushReceipt).toHaveBeenCalledWith({ deliveryLogId: 'foreground-delivery-log', event: 'received' });
+    expect(sendPushReceipt).toHaveBeenCalledWith({ deliveryLogId: 'foreground-delivery-log', event: 'shown' });
     expect(showNotification).toHaveBeenCalledWith('News Pulse', expect.objectContaining({
       body: 'Foreground title',
       icon: '/icons/news-pulse-icon-192.png',
       badge: '/icons/news-pulse-badge-72.png',
+      tag: 'news-pulse-article-foreground-story',
+      renotify: false,
       data: {
         url: 'https://www.newspulse.co.in/news/foreground-story',
         deliveryLogId: 'foreground-delivery-log',
@@ -85,6 +88,8 @@ describe('FirebaseForegroundMessaging', () => {
     expect(consoleInfo).not.toHaveBeenCalled();
     expect(consoleInfo.mock.calls.flat().join(' ')).not.toContain('must-not-log-token');
     expect(consoleInfo.mock.calls.flat().join(' ')).not.toContain('must-not-log-fid');
+    expect(JSON.stringify((sendPushReceipt as jest.Mock).mock.calls)).not.toContain('must-not-log-token');
+    expect(JSON.stringify((sendPushReceipt as jest.Mock).mock.calls)).not.toContain('must-not-log-fid');
   });
 
   it('sends a received receipt and shows a foreground breaking browser notification', async () => {
@@ -106,10 +111,13 @@ describe('FirebaseForegroundMessaging', () => {
     });
 
     expect(sendPushReceipt).toHaveBeenCalledWith({ deliveryLogId: 'foreground-breaking-delivery-log', event: 'received' });
+    expect(sendPushReceipt).toHaveBeenCalledWith({ deliveryLogId: 'foreground-breaking-delivery-log', event: 'shown' });
     expect(showNotification).toHaveBeenCalledWith('🔴 Breaking News', expect.objectContaining({
       body: 'breaking message',
       icon: '/icons/news-pulse-icon-192.png',
       badge: '/icons/news-pulse-badge-72.png',
+      tag: 'news-pulse-breaking-latest',
+      renotify: false,
       data: {
         url: 'https://www.newspulse.co.in/breaking/foreground-live',
         deliveryLogId: 'foreground-breaking-delivery-log',
@@ -120,6 +128,9 @@ describe('FirebaseForegroundMessaging', () => {
     expect(consoleInfo.mock.calls.flat().join(' ')).not.toContain('must-not-log-token');
     expect(consoleInfo.mock.calls.flat().join(' ')).not.toContain('must-not-log-fid');
     expect(consoleInfo.mock.calls.flat().join(' ')).not.toContain('must-not-log-registration-id');
+    expect(JSON.stringify((sendPushReceipt as jest.Mock).mock.calls)).not.toContain('must-not-log-token');
+    expect(JSON.stringify((sendPushReceipt as jest.Mock).mock.calls)).not.toContain('must-not-log-fid');
+    expect(JSON.stringify((sendPushReceipt as jest.Mock).mock.calls)).not.toContain('must-not-log-registration-id');
   });
 
   it('shows an in-page foreground alert when browser notification cannot be shown', async () => {
@@ -138,9 +149,10 @@ describe('FirebaseForegroundMessaging', () => {
     });
 
     const alert = await screen.findByTestId('foreground-push-alert');
-  expect(alert.textContent).toContain('News Pulse');
+    expect(alert.textContent).toContain('News Pulse');
     expect(alert.textContent).toContain('Toast body');
     expect(sendPushReceipt).toHaveBeenCalledWith({ deliveryLogId: 'toast-delivery-log', event: 'received' });
+    await waitFor(() => expect(sendPushReceipt).toHaveBeenCalledWith({ deliveryLogId: 'toast-delivery-log', event: 'shown' }));
 
     fireEvent.click(alert);
     expect(sendPushReceipt).toHaveBeenCalledWith({ deliveryLogId: 'toast-delivery-log', event: 'clicked' });
