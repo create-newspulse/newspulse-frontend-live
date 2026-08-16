@@ -8,7 +8,7 @@ import { ThemeProvider } from '../utils/ThemeContext';
 import { FeatureFlagProvider } from '../utils/FeatureFlagProvider';
 import { PublicModeProvider } from '../utils/PublicModeProvider';
 import '../styles/globals.css';
-import { Inter, Noto_Sans_Gujarati, Noto_Sans_Devanagari } from 'next/font/google';
+import { Inter, Noto_Sans_Devanagari, Noto_Sans_Gujarati } from 'next/font/google';
 import SafeIntlProvider from '../lib/SafeIntlProvider';
 import { usePublicSettings } from '../src/context/PublicSettingsContext';
 import { useTheme, type ThemeMode } from '../utils/ThemeContext';
@@ -18,6 +18,27 @@ import SmartBackButton from '../src/components/navigation/SmartBackButton';
 import { usePublicVersion } from '../hooks/usePublicVersion';
 import { CookieConsentProvider } from '../src/consent/CookieConsentProvider';
 import FirebaseForegroundMessaging from '../components/FirebaseForegroundMessaging';
+
+const inter = Inter({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-inter',
+  display: 'swap',
+});
+
+const gujarati = Noto_Sans_Gujarati({
+  subsets: ['gujarati'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-gujarati',
+  display: 'swap',
+});
+
+const devanagari = Noto_Sans_Devanagari({
+  subsets: ['devanagari'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-devanagari',
+  display: 'swap',
+});
 
 const CATEGORY_ROUTE_SEGMENTS = new Set([
   'breaking',
@@ -64,27 +85,6 @@ function isViralVideosRoute(asPath: string): boolean {
   const parts = normalized.split('/').filter(Boolean);
   return parts[0] === 'viral-videos';
 }
-
-const inter = Inter({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-inter',
-  display: 'swap',
-});
-
-const gujarati = Noto_Sans_Gujarati({
-  subsets: ['gujarati'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-gujarati',
-  display: 'swap',
-});
-
-const devanagari = Noto_Sans_Devanagari({
-  subsets: ['devanagari'],
-  weight: ['400', '500', '600', '700'],
-  variable: '--font-devanagari',
-  display: 'swap',
-});
 
 function normalizeThemePreset(raw: unknown): ThemeMode | null {
   const v = String(raw || '').toLowerCase().trim();

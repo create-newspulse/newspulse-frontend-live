@@ -52,22 +52,22 @@ body {
 }
 
 .np-lang-hi {
-  font-family: var(--font-devanagari), var(--font-inter), system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-family: var(--font-devanagari, "Noto Sans Devanagari"), var(--font-inter), system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   font-weight: 400;
 }
 
 .np-lang-gu {
-  font-family: var(--font-gujarati), var(--font-inter), system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-family: var(--font-gujarati, "Noto Sans Gujarati"), var(--font-inter), system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   font-weight: 400;
 }
 
 /* Language-specific fallback */
 :lang(gu) {
-  font-family: var(--font-gujarati), var(--font-inter), system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-family: var(--font-gujarati, "Noto Sans Gujarati"), var(--font-inter), system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
 }
 
 :lang(hi) {
-  font-family: var(--font-devanagari), var(--font-inter), system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-family: var(--font-devanagari, "Noto Sans Devanagari"), var(--font-inter), system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
 }
 
 /* Premium ticker typography (English included) */
