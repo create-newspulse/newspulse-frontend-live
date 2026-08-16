@@ -257,6 +257,18 @@ describe('CookieConsentProvider', () => {
     expect(stored?.categories as any).not.toHaveProperty('pushNotifications');
   });
 
+  test('keeps FCM diagnostics hidden when NEXT_PUBLIC_ENABLE_FCM_TEST_CONTROL=false', async () => {
+    process.env.NEXT_PUBLIC_ENABLE_FCM_TEST_CONTROL = 'false';
+
+    renderWithProviders();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage Preferences' }));
+
+    expect(screen.queryByTestId('push-diagnostics')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Check Push Status' })).toBeNull();
+    expect(screen.getByTestId('cookie-preferences-scroll-area').textContent).not.toContain('Firebase backend');
+  });
+
   test('enable notifications requests permission through FCM only after clicking the push toggle', async () => {
     (getFirebaseClientConfig as jest.Mock).mockReturnValue({ isConfigured: true, config: {}, vapidKey: 'vapid', missingEnv: [] });
     (isFirebaseMessagingSupported as jest.Mock).mockResolvedValue(true);

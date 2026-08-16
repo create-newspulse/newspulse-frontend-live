@@ -102,11 +102,12 @@ function getNotificationTag(payload, safeUrl, body) {
   const data = payload?.data || {};
   const type = String(data.type || '').trim();
   if (type === 'breaking') {
-    return 'news-pulse-breaking-latest';
+    const breakingSegment = getContentHash(`${safeUrl}|${body}`) || getTagSegment(data.deliveryLogId) || 'latest';
+    return `news-pulse-breaking-${breakingSegment}`;
   }
 
   const articleSegment =
-    getTagSegment(data.articleId || data.article_id || data.articleID || data.id || data.newsId || data.slug || data.articleSlug || data.article_slug) ||
+    getTagSegment(data.articleSlug || data.article_slug || data.slug) ||
     getSlugFromUrl(safeUrl) ||
     getTagSegment(data.deliveryLogId) ||
     'latest-article';
@@ -173,13 +174,17 @@ function handleBackgroundPushPayload(payload) {
     },
   };
 
-  return sendPushReceipt(details.deliveryLogId, 'received').then(async () => {
+  const notificationPromise = self.registration.showNotification(details.title, options);
+  const receivedReceiptPromise = Promise.resolve().then(() => sendPushReceipt(details.deliveryLogId, 'received'));
+
+  return notificationPromise.then(async () => {
     try {
-      await self.registration.showNotification(details.title, options);
-      await sendPushReceipt(details.deliveryLogId, 'shown');
+      await Promise.all([receivedReceiptPromise, sendPushReceipt(details.deliveryLogId, 'shown')]);
     } catch {
-      await sendPushReceipt(details.deliveryLogId, 'display_failed');
+      await Promise.all([receivedReceiptPromise, sendPushReceipt(details.deliveryLogId, 'display_failed')]);
     }
+  }).catch(async () => {
+    await Promise.all([receivedReceiptPromise, sendPushReceipt(details.deliveryLogId, 'display_failed')]);
   });
 }
 

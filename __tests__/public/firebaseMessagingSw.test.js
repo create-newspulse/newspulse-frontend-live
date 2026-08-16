@@ -143,7 +143,7 @@ describe('public/firebase-messaging-sw.js', () => {
       body: 'breaking message',
       icon: '/icons/news-pulse-icon-192.png',
       badge: '/icons/news-pulse-badge-72.png',
-      tag: 'news-pulse-breaking-latest',
+      tag: expect.stringMatching(/^news-pulse-breaking-[a-z0-9]+$/),
       renotify: false,
       data: {
         url: 'https://www.newspulse.co.in/breaking/live-update',
@@ -229,7 +229,7 @@ describe('public/firebase-messaging-sw.js', () => {
     }));
   });
 
-  it('sends the shown receipt only after showNotification resolves', async () => {
+  it('starts notification display before receipt work and sends shown after display resolves', async () => {
     const sequence = [];
     const harness = createServiceWorkerHarness({
       fetchImplementation: (_url, init) => {
@@ -251,7 +251,38 @@ describe('public/firebase-messaging-sw.js', () => {
       },
     });
 
-    expect(sequence).toEqual(['received', 'showNotification resolved', 'shown']);
+    expect(sequence).toEqual(['showNotification resolved', 'received', 'shown']);
+  });
+
+  it('does not let a slow received receipt block visible notification display', async () => {
+    let resolveReceivedReceipt;
+    const receivedReceiptPromise = new Promise((resolve) => {
+      resolveReceivedReceipt = () => resolve({ ok: true, status: 200 });
+    });
+    const harness = createServiceWorkerHarness({
+      fetchImplementation: (_url, init) => {
+        const event = JSON.parse(init.body).event;
+        if (event === 'received') return receivedReceiptPromise;
+        return Promise.resolve({ ok: true, status: 200 });
+      },
+    });
+    await initializeFirebaseMessaging(harness);
+
+    const handlerPromise = harness.getBackgroundHandler()({
+      data: {
+        deliveryLogId: 'slow-receipt-delivery-log-123',
+        type: 'article',
+        title: 'Slow receipt article title',
+        url: '/news/slow-receipt-story',
+      },
+    });
+
+    await Promise.resolve();
+    expect(harness.showNotification).toHaveBeenCalledWith('News Pulse', expect.objectContaining({
+      body: 'Slow receipt article title',
+    }));
+    resolveReceivedReceipt();
+    await handlerPromise;
   });
 
   it('sends display_failed when showNotification rejects', async () => {
@@ -275,7 +306,7 @@ describe('public/firebase-messaging-sw.js', () => {
     ]);
   });
 
-  it('uses a stable breaking tag so duplicate breaking notifications replace instead of stacking', async () => {
+  it('uses a stable hashed breaking tag so duplicate breaking notifications replace instead of stacking', async () => {
     const harness = createServiceWorkerHarness();
     await initializeFirebaseMessaging(harness);
 
@@ -298,8 +329,8 @@ describe('public/firebase-messaging-sw.js', () => {
 
     const firstOptions = harness.showNotification.mock.calls[0][1];
     const secondOptions = harness.showNotification.mock.calls[1][1];
-    expect(firstOptions.tag).toBe('news-pulse-breaking-latest');
-    expect(secondOptions.tag).toBe('news-pulse-breaking-latest');
+    expect(firstOptions.tag).toMatch(/^news-pulse-breaking-[a-z0-9]+$/);
+    expect(secondOptions.tag).toBe(firstOptions.tag);
     expect(firstOptions.renotify).toBe(false);
     expect(secondOptions.renotify).toBe(false);
   });
