@@ -1,3 +1,5 @@
+export type CommunityReporterAgeGroup = 'under_18' | '18_24' | '25_40' | '41_plus';
+
 export interface SubmitCommunityStoryPayload {
   reporterAccountId?: string;
   reporterProfileId?: string;
@@ -9,11 +11,17 @@ export interface SubmitCommunityStoryPayload {
   district?: string;
   state?: string;
   country?: string;
-  ageGroup: string;
+  ageGroup: CommunityReporterAgeGroup;
   category: string;
   coverageScope?: '' | 'regional' | 'national' | 'international';
   headline: string;
   story: string;
+  mediaLink?: string;
+  priority?: 'normal' | 'high';
+  storyCity?: string;
+  storyDistrict?: string;
+  storyState?: string;
+  storyCountry?: string;
   reporterType: 'community' | 'journalist';
   preferredLanguages?: string[];
   consentToContact?: boolean;
@@ -26,6 +34,8 @@ export interface SubmitCommunityStoryPayload {
   positionTitle?: string;
   beatsProfessional?: string[];
   yearsExperience?: string;
+  professionalJournalistId?: string;
+  journalistIdFileId?: string;
   websiteOrPortfolio?: string;
   socialLinks?: { linkedin?: string; twitter?: string };
   heardAbout?: string;
@@ -36,6 +46,7 @@ export interface SubmitCommunityStoryResult {
   referenceId: string;
   status: string;
   reporterType: 'community' | 'journalist';
+  message?: string;
 }
 
 export type YouthPulseTrackSlug =
@@ -121,58 +132,83 @@ function getYouthPulseBackendCategory(track: YouthPulseTrackSlug): string {
   }
 }
 
+function cleanString(value: unknown): string {
+  return String(value || '').trim();
+}
+
+function cleanStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.map((item) => cleanString(item)).filter(Boolean)
+    : [];
+}
+
+function resolveSubmitErrorMessage(status: number, data: any): string {
+  if (status === 400) {
+    const message = cleanString(data?.message);
+    if (message && !/^submit_failed$/i.test(message)) return message;
+    return 'Please check the highlighted details and try submitting again.';
+  }
+
+  return "We couldn't submit your story right now. Please try again.";
+}
+
 export async function submitCommunityStory(
   payload: SubmitCommunityStoryPayload,
 ): Promise<SubmitCommunityStoryResult> {
-  const requestUrl = `/api/community-reporter/submit`;
+  const requestUrl = `/api/community/submissions`;
+  const beats = cleanStringArray(payload.beats?.length ? payload.beats : payload.communityInterests?.length ? payload.communityInterests : payload.beatsProfessional);
+
+  const requestBody = {
+    reporterAccountId: cleanString(payload.reporterAccountId) || undefined,
+    reporterProfileId: cleanString(payload.reporterProfileId) || undefined,
+    reporterType: payload.reporterType,
+    reporterName: cleanString(payload.reporterName),
+    reporterEmail: cleanString(payload.reporterEmail).toLowerCase(),
+    reporterPhone: cleanString(payload.reporterPhone),
+    reporterWhatsApp: cleanString(payload.reporterWhatsApp),
+    city: cleanString(payload.city),
+    district: cleanString(payload.district),
+    state: cleanString(payload.state),
+    country: cleanString(payload.country),
+    ageGroup: cleanString(payload.ageGroup),
+    category: cleanString(payload.category),
+    coverageScope: cleanString(payload.coverageScope),
+    headline: cleanString(payload.headline),
+    story: cleanString(payload.story),
+    mediaLink: cleanString(payload.mediaLink) || undefined,
+    priority: payload.priority || 'normal',
+    storyCity: cleanString(payload.storyCity) || undefined,
+    storyDistrict: cleanString(payload.storyDistrict) || undefined,
+    storyState: cleanString(payload.storyState) || undefined,
+    storyCountry: cleanString(payload.storyCountry) || undefined,
+    preferredLanguages: cleanStringArray(payload.preferredLanguages),
+    consentToContact: Boolean(payload.consentToContact),
+    beats,
+    communityInterests: payload.reporterType === 'community' ? cleanStringArray(payload.communityInterests || beats) : undefined,
+    journalistCharterAccepted: Boolean(payload.journalistCharterAccepted),
+    generalEthicsAccepted: Boolean(payload.generalEthicsAccepted),
+    organisationName: cleanString(payload.organisationName) || undefined,
+    organisationType: payload.organisationType || undefined,
+    positionTitle: cleanString(payload.positionTitle) || undefined,
+    beatsProfessional: payload.reporterType === 'journalist' ? cleanStringArray(payload.beatsProfessional || beats) : undefined,
+    yearsExperience: cleanString(payload.yearsExperience) || undefined,
+    professionalJournalistId: cleanString(payload.professionalJournalistId) || undefined,
+    journalistIdFileId: cleanString(payload.journalistIdFileId) || undefined,
+    heardAbout: cleanString(payload.heardAbout) || undefined,
+  };
+
+  if (process.env.NODE_ENV !== 'production') {
+    console.info('[community-reporter][submit]', {
+      ageGroup: requestBody.ageGroup,
+      category: requestBody.category,
+      coverageScope: requestBody.coverageScope,
+    });
+  }
 
   const res = await fetch(requestUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({
-      reporterAccountId: payload.reporterAccountId,
-      reporterProfileId: payload.reporterProfileId,
-      reporterName: payload.reporterName,
-      fullName: payload.reporterName,
-      reporterEmail: payload.reporterEmail || '',
-      reporterPhone: payload.reporterPhone || '',
-      reporterWhatsApp: payload.reporterWhatsApp || '',
-      phone: payload.reporterPhone || '',
-      whatsapp: payload.reporterWhatsApp || '',
-      reporterCity: payload.city || '',
-      reporterDistrict: payload.district || '',
-      reporterState: payload.state || '',
-      reporterCountry: payload.country || '',
-      city: payload.city || '',
-      district: payload.district || '',
-      state: payload.state || '',
-      country: payload.country || '',
-      reporterType: payload.reporterType,
-      category: payload.category,
-      coverageScope: payload.coverageScope || '',
-      coverageType: payload.coverageScope || '',
-      headline: payload.headline,
-      storyText: payload.story,
-      ageGroup: payload.ageGroup,
-      preferredLanguages: payload.preferredLanguages || [],
-      consentToContact: Boolean(payload.consentToContact),
-      beats: payload.beats || payload.communityInterests || payload.beatsProfessional || [],
-      beat: (payload.beats || payload.communityInterests || payload.beatsProfessional || [])[0] || '',
-      reporterProfile: {
-        fullName: payload.reporterName,
-        email: payload.reporterEmail || '',
-        phone: payload.reporterPhone || '',
-        whatsapp: payload.reporterWhatsApp || '',
-        city: payload.city || '',
-        district: payload.district || '',
-        state: payload.state || '',
-        country: payload.country || '',
-        preferredLanguages: payload.preferredLanguages || [],
-        beats: payload.beats || payload.communityInterests || payload.beatsProfessional || [],
-        consentToContact: Boolean(payload.consentToContact),
-        reporterType: payload.reporterType,
-      },
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   let data: any = null;
@@ -184,7 +220,7 @@ export async function submitCommunityStory(
     const ref = data?.referenceId || '';
     const status = data?.status || 'under_review';
     const type = (payload.reporterType as 'community' | 'journalist') || 'community';
-    return { ok: false, referenceId: ref, status, reporterType: type };
+    return { ok: false, referenceId: ref, status, reporterType: type, message: resolveSubmitErrorMessage(res.status, data) };
   }
 
   const referenceId = data?.referenceId || data?.id || '';
@@ -221,7 +257,7 @@ export async function submitYouthPulseStory(
     consentToContact: false,
     beats: [categoryLabel],
     communityInterests: [categoryLabel],
-    ageGroup: '18-24',
+    ageGroup: '18_24',
     category: backendCategory,
     coverageScope: '',
     headline: payload.headline,

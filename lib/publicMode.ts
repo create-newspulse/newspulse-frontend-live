@@ -1,5 +1,6 @@
 // lib/publicMode.ts
 // Fetches global system mode from backend with TTL caching
+import { getPublicApiBaseUrl } from './publicApiBase';
 
 export type PublicMode = 'NORMAL' | 'READONLY' | 'LOCKDOWN';
 
@@ -12,8 +13,7 @@ export type PublicModeResponse = {
 };
 
 function getApiBase(): string {
-  const raw = (process.env.NEXT_PUBLIC_API_BASE || '').toString().trim();
-  return raw.replace(/\/+$/, '');
+  return String(getPublicApiBaseUrl() || '').trim().replace(/\/+$/, '');
 }
 const CACHE_TTL_MS = 60_000; // 60 seconds
 

@@ -20,6 +20,7 @@ const STATIC_PUBLIC_PATHS = [
   '/youth-pulse',
   '/inspiration-hub',
   '/community-reporter',
+  '/community-reporter/guidelines',
   '/regional/gujarat',
   '/about-us',
   '/contact',

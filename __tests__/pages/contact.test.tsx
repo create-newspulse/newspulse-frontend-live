@@ -21,12 +21,15 @@ describe('pages/contact', () => {
     expect(screen.getAllByText('Grievance Redressal').length).toBeGreaterThan(0);
     expect(screen.getByText('Advertising and Business')).toBeTruthy();
 
-    expect(screen.getAllByText('newspulse.admin@gmail.com').length).toBeGreaterThan(0);
     expect(screen.getAllByText('newspulse.team@gmail.com').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('community@newspulse.co.in').length).toBeGreaterThan(0);
     expect(screen.getAllByText('grievance@newspulse.co.in').length).toBeGreaterThan(0);
     expect(screen.getAllByText(/newspulse\.ads@gmail\.com/i).length).toBeGreaterThan(0);
 
+    expect(screen.getByRole('link', { name: 'newspulse.team@gmail.com' }).getAttribute('href')).toBe('mailto:newspulse.team@gmail.com');
+    expect(screen.getAllByRole('link', { name: 'community@newspulse.co.in' })[0]?.getAttribute('href')).toBe('mailto:community@newspulse.co.in');
     expect(screen.getByRole('link', { name: 'newspulse.ads@gmail.com' }).getAttribute('href')).toBe('mailto:newspulse.ads@gmail.com');
+    expect(screen.queryByText('newspulse.admin@gmail.com')).toBeNull();
     expect(screen.queryByRole('option', { name: 'Business Promotion' })).toBeNull();
     expect(screen.getByText(/business or promotional enquiries/i)).toBeTruthy();
   });

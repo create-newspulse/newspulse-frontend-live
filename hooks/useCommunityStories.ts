@@ -1,4 +1,4 @@
-import { useContext, createContext, useEffect, useMemo, useState } from 'react';
+import { useContext, createContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import type { CommunitySettingsPublic, CommunityStorySummary, CommunitySubmissionCounts } from '../types/community-reporter';
 import { fetchMyStoriesByEmail, fetchPublicSettings, isCommunityReporterHttpError, withdrawStoryById } from '../lib/communityReporterApi';
@@ -40,6 +40,7 @@ export type UseCommunityStoriesValue = {
 type UseCommunityStoriesOptions = {
   reporterEmail?: string | null;
   reporterAuth?: boolean;
+  enabled?: boolean;
   debugContexts?: string[];
 };
 
@@ -62,6 +63,7 @@ export function useCommunityStories(opts?: UseCommunityStoriesOptions): UseCommu
   const router = useRouter();
   const { t } = useI18n();
   const hasExplicitReporterEmail = Object.prototype.hasOwnProperty.call(opts || {}, 'reporterEmail');
+  const enabled = opts?.enabled !== false;
 
   const [settings, setSettings] = useState<CommunitySettingsPublic | null>(null);
   const [settingsLoading, setSettingsLoading] = useState<boolean>(true);
@@ -77,6 +79,7 @@ export function useCommunityStories(opts?: UseCommunityStoriesOptions): UseCommu
   const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  const storyLoadGenerationRef = useRef(0);
 
   // Load settings on mount
   useEffect(() => {
@@ -102,6 +105,16 @@ export function useCommunityStories(opts?: UseCommunityStoriesOptions): UseCommu
 
   // Resolve reporter email from query/localStorage/profile
   useEffect(() => {
+    if (!enabled) {
+      setReporterEmail(null);
+      setStories([]);
+      setError(null);
+      setErrorCode(null);
+      setErrorStatus(null);
+      setProfileWarning(null);
+      setHasLoadedOnce(false);
+      return;
+    }
     const preferredEmail = normalizeReporterEmail(opts?.reporterEmail);
     if (hasExplicitReporterEmail) {
       setReporterEmail(preferredEmail || null);
@@ -135,7 +148,7 @@ export function useCommunityStories(opts?: UseCommunityStoriesOptions): UseCommu
         } catch {}
       }
     } catch {}
-  }, [hasExplicitReporterEmail, opts?.reporterEmail, router.isReady, router.query.email]);
+  }, [enabled, hasExplicitReporterEmail, opts?.reporterEmail, router.isReady, router.query.email]);
 
   // Resolve reporter profile/contact details from localStorage (safe fallback)
   useEffect(() => {
@@ -162,7 +175,20 @@ export function useCommunityStories(opts?: UseCommunityStoriesOptions): UseCommu
 
   const counts = useMemo(() => getSubmissionCounts(stories), [stories]);
 
-  const loadStories = async () => {
+  const loadStories = async (signal?: AbortSignal) => {
+    if (!enabled) {
+      storyLoadGenerationRef.current += 1;
+      setStories([]);
+      setError(null);
+      setErrorCode(null);
+      setErrorStatus(null);
+      setProfileWarning(null);
+      setHasLoadedOnce(false);
+      setIsLoading(false);
+      return;
+    }
+    const storyLoadGeneration = storyLoadGenerationRef.current + 1;
+    storyLoadGenerationRef.current = storyLoadGeneration;
     const em = normalizeReporterEmail(reporterEmail);
     setIsLoading(true);
     setHasLoadedOnce(false);
@@ -184,7 +210,11 @@ export function useCommunityStories(opts?: UseCommunityStoriesOptions): UseCommu
         reporterAuth: Boolean(opts?.reporterAuth),
         useProxy: Boolean(opts?.reporterAuth),
         debugContexts: opts?.debugContexts,
+        signal,
       });
+      if (signal?.aborted || storyLoadGenerationRef.current !== storyLoadGeneration) {
+        return;
+      }
       const reporterIdentity = items.reduce<Partial<ReporterProfileSummary>>((resolved, item) => {
         if (resolved.fullName || resolved.name || resolved.firstName) {
           return resolved;
@@ -207,6 +237,9 @@ export function useCommunityStories(opts?: UseCommunityStoriesOptions): UseCommu
         if (em) window.localStorage.setItem('np_cr_email', em.toLowerCase());
       } catch {}
     } catch (err: any) {
+      if (signal?.aborted || err?.name === 'AbortError' || storyLoadGenerationRef.current !== storyLoadGeneration) {
+        return;
+      }
       if (isCommunityReporterHttpError(err)) {
         setErrorCode(String(err.code || err.message || 'STORIES_FETCH_FAILED'));
         setErrorStatus(err.status);
@@ -222,7 +255,9 @@ export function useCommunityStories(opts?: UseCommunityStoriesOptions): UseCommu
       setStories([]);
       setHasLoadedOnce(true);
     } finally {
-      setIsLoading(false);
+      if (!signal?.aborted && storyLoadGenerationRef.current === storyLoadGeneration) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -244,8 +279,26 @@ export function useCommunityStories(opts?: UseCommunityStoriesOptions): UseCommu
 
   // Auto-load on reporterEmail change
   useEffect(() => {
-    if (reporterEmail) loadStories();
+    if (!enabled) {
+      storyLoadGenerationRef.current += 1;
+      setStories([]);
+      setError(null);
+      setErrorCode(null);
+      setErrorStatus(null);
+      setProfileWarning(null);
+      setHasLoadedOnce(false);
+      setIsLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    if (reporterEmail) {
+      void loadStories(controller.signal);
+      return () => {
+        controller.abort();
+      };
+    }
     else {
+      storyLoadGenerationRef.current += 1;
       setStories([]);
       setError(null);
       setErrorCode(null);
@@ -254,7 +307,7 @@ export function useCommunityStories(opts?: UseCommunityStoriesOptions): UseCommu
       setHasLoadedOnce(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [opts?.reporterAuth, reporterEmail]);
+  }, [enabled, opts?.reporterAuth, reporterEmail]);
 
   return {
     settings,

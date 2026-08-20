@@ -3,7 +3,7 @@ import React from 'react';
 import { CheckCircle2, Scale, SearchCheck, ShieldCheck } from 'lucide-react';
 import PublicBusinessPageLayout, { PageEyebrow, SectionHeading, SurfacePanel } from '../components/public/PublicBusinessPageLayout';
 
-const contactEmail = 'Newspulse.team@gmail.com';
+const contactEmail = 'community@newspulse.co.in';
 
 const trustCards = [
   {

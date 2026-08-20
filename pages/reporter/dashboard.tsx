@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import type { GetServerSideProps } from 'next';
 import ReporterPortalLayout from '../../components/reporter-portal/ReporterPortalLayout';
@@ -10,29 +11,36 @@ import { getRecentStories, formatSubmissionDate, getStoryIdentity, getStoryStatu
 import { getReporterPortalPageServerProps } from '../../lib/reporterPortalPage';
 import type { FeatureToggleProps } from '../../types/community-reporter';
 
+const EMPTY_REPORTER_SUBMISSIONS_MESSAGE = 'No submissions linked to this Reporter Portal account yet.';
+
 export default function ReporterDashboardPage({ communityReporterClosed, reporterPortalClosed }: FeatureToggleProps) {
   const router = useRouter();
   const { toggles } = usePublicFounderToggles({ communityReporterClosed, reporterPortalClosed, youthPulseSubmissionsClosed: false, updatedAt: null });
-  const { session, profile, isReady, logout, reason } = useReporterPortalSession({ reportUnauthorizedReason: true });
-  const { settings, settingsLoading, stories, counts, isLoading, error, errorStatus, hasLoadedOnce, reporterProfile } = useCommunityStories({ reporterEmail: session?.email, reporterAuth: true, debugContexts: ['dashboard stats fetch', 'recent submissions fetch'] });
+  const { session, profile, status, logout, reason } = useReporterPortalSession({ reportUnauthorizedReason: true });
+  const isAuthenticated = status === 'authenticated' && Boolean(session?.email);
+  const { settings, settingsLoading, stories, counts, isLoading, error, errorStatus, hasLoadedOnce, reporterProfile } = useCommunityStories({ reporterEmail: isAuthenticated ? session?.email : null, reporterAuth: true, enabled: isAuthenticated, debugContexts: ['dashboard stats fetch', 'recent submissions fetch'] });
   const hasSessionIssue = errorStatus === 401 || errorStatus === 403;
   const showStats = hasLoadedOnce && !isLoading && !error;
   const portalProfile = reporterProfile || profile;
+  const currentPath = typeof router.asPath === 'string' && router.asPath.startsWith('/reporter/') ? router.asPath : '/reporter/dashboard';
+  const loginHref = `/reporter/login?next=${encodeURIComponent(currentPath)}`;
+  const shouldRedirectToLogin = !toggles.communityReporterClosed && !toggles.reporterPortalClosed && status === 'anonymous';
+
+  useEffect(() => {
+    if (!shouldRedirectToLogin) return;
+    void router.replace(loginHref).catch(() => {});
+  }, [loginHref, router, shouldRedirectToLogin]);
 
   if (toggles.communityReporterClosed || toggles.reporterPortalClosed) {
     return <ReporterPortalLayout title="Reporter Dashboard" description="Reporter Portal access is blocked by toggle." active="dashboard"><PortalRouteState title="Reporter Portal is closed" description="The Reporter Portal toggle is off, so dashboard access is blocked." actionHref="/community-reporter" actionLabel="Back to Community Reporter" /></ReporterPortalLayout>;
   }
 
-  if (!isReady) {
-    return <ReporterPortalLayout title="Reporter Dashboard" description="Loading session." active="dashboard"><div className="rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-600">Loading reporter session…</div></ReporterPortalLayout>;
+  if (status === 'checking') {
+    return <ReporterPortalLayout title="Reporter Dashboard" description="Checking session." active="dashboard"><div className="rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-600">Checking reporter session…</div></ReporterPortalLayout>;
   }
 
-  if (!session?.email) {
-    return <ReporterPortalLayout title="Reporter Dashboard" description="A reporter login is required." active="dashboard"><PortalRouteState title={reason === 'SESSION_EXPIRED' ? 'Session expired' : 'Login required'} description={reason === 'SESSION_EXPIRED' ? 'Your verified reporter session expired. Sign in again with email verification to reopen the portal.' : 'Sign in with the reporter email used for your community reporter submissions to view your dashboard.'} actionHref="/reporter/login" actionLabel="Login to Reporter Portal" /></ReporterPortalLayout>;
-  }
-
-  if (hasLoadedOnce && !isLoading && hasSessionIssue) {
-    return <ReporterPortalLayout title="Reporter Dashboard" description="Reporter authentication could not be confirmed for dashboard activity." active="dashboard"><PortalRouteState title="Session expired" description="Your reporter session could not be confirmed for dashboard activity. Sign in again and retry." actionHref="/reporter/login" actionLabel="Login to Reporter Portal" /></ReporterPortalLayout>;
+  if (!isAuthenticated) {
+    return <ReporterPortalLayout title="Reporter Dashboard" description="Redirecting to reporter login." active="dashboard"><div className="rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-600">Checking reporter session…</div></ReporterPortalLayout>;
   }
 
   if (!settingsLoading && settings && (!settings.communityReporterEnabled || !settings.allowMyStoriesPortal)) {
@@ -53,7 +61,7 @@ export default function ReporterDashboardPage({ communityReporterClosed, reporte
         </div>
       ) : (
         <div className="rounded-3xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
-          {!hasLoadedOnce || isLoading ? 'Loading dashboard activity…' : hasSessionIssue ? 'Your reporter session could not be confirmed for dashboard activity. Sign in again and retry.' : 'Dashboard activity is temporarily unavailable for this verified reporter email. Please try again shortly.'}
+          {!hasLoadedOnce || isLoading ? 'Loading dashboard activity…' : 'Dashboard activity is temporarily unavailable for this verified reporter email. Please try again shortly.'}
         </div>
       )}
 
@@ -69,7 +77,7 @@ export default function ReporterDashboardPage({ communityReporterClosed, reporte
 
           {!hasLoadedOnce || (isLoading && stories.length === 0) ? <div className="mt-4 text-sm text-slate-600">Loading submission activity…</div> : null}
           {hasLoadedOnce && !isLoading && error ? <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-6 text-sm text-amber-900">Submission records are temporarily unavailable for this verified reporter email. Please try again shortly.</div> : null}
-          {hasLoadedOnce && !isLoading && !error && recentStories.length === 0 ? <div className="mt-4 rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-600">No submissions yet.</div> : null}
+          {hasLoadedOnce && !isLoading && !error && recentStories.length === 0 ? <div className="mt-4 rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-sm text-slate-600">{EMPTY_REPORTER_SUBMISSIONS_MESSAGE}</div> : null}
 
           <div className="mt-4 space-y-3">
             {recentStories.map((story) => (

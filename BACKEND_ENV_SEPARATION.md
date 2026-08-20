@@ -43,13 +43,17 @@ NEXT_PUBLIC_API_BASE_PROD=https://YOUR_PROD_BACKEND_DOMAIN
 ```
 
 ### Safety guard
-In local/dev, the frontend refuses to talk to a `*.newspulse.co.in` backend unless you explicitly override:
+In local/dev, the frontend refuses to talk to `*.newspulse.co.in` or the known production Render backend unless you explicitly override:
 
 ```dotenv
 NEXT_PUBLIC_ALLOW_PROD_BACKEND_IN_DEV=true
 ```
 
 (Keep this unset/false for normal development.)
+
+If no local backend is configured, local development returns no backend base and API proxy routes fail clearly instead of silently falling back to production.
+
+Reporter Portal localhost login may generate a local/dev OTP for signing in on localhost. This must stay isolated from production OTP/email services unless production delivery is being tested explicitly.
 
 ## Backend configuration (what to implement in backend repo)
 The backend must select the database based on its deployment environment.

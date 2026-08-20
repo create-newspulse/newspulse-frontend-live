@@ -4,6 +4,8 @@ import { BadgeCheck, Briefcase, FileText, HeartHandshake, Languages, Mail, Penci
 import PublicBusinessPageLayout, { PageEyebrow, SectionHeading, SurfacePanel } from '../components/public/PublicBusinessPageLayout';
 
 const contactEmail = 'newspulse.team@gmail.com';
+const applicationSubject = 'Career Application - [Position] - [Applicant Name]';
+const contactHref = `mailto:${contactEmail}?subject=${encodeURIComponent(applicationSubject)}`;
 
 const roleCards = [
   { title: 'Writers', Icon: PencilLine },
@@ -58,7 +60,7 @@ export default function CareersPage() {
       title="Careers at News Pulse"
       description="Build the future of responsible digital journalism. News Pulse welcomes interest from writers, editors, interns, translators, and contributors who believe in responsible journalism."
       contactEmail={contactEmail}
-      contactHref={`mailto:${contactEmail}`}
+      contactHref={contactHref}
       contactAriaLabel="Contact News Pulse about careers"
       contactTitle="Contact News Pulse about careers"
       tone="slate"
@@ -77,7 +79,7 @@ export default function CareersPage() {
             At this stage, opportunities may open from time to time based on editorial, technical, regional, and content requirements. This page is meant to guide future interest, not to imply that all roles are open now.
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
-            <a href={`mailto:${contactEmail}`} className="inline-flex items-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
+            <a href={contactHref} className="inline-flex items-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
               Apply / Contact
             </a>
             <Link href="/journalist-desk" className="inline-flex items-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
@@ -98,7 +100,7 @@ export default function CareersPage() {
             <div className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-4">All contributors and applicants are expected to follow editorial standards, ethical practices, and responsible reporting rules.</div>
           </div>
           <div className="mt-6 flex flex-wrap gap-3">
-            <a href={`mailto:${contactEmail}`} className="inline-flex items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100">
+            <a href={contactHref} className="inline-flex items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100">
               Email News Pulse
             </a>
           </div>
@@ -194,7 +196,7 @@ export default function CareersPage() {
           </div>
           <div className="mt-5 rounded-[24px] border border-slate-200/80 bg-slate-50/90 p-5 shadow-[0_16px_36px_-30px_rgba(15,23,42,0.24)]">
             <div className="text-sm font-semibold text-slate-800">Email</div>
-            <a href={`mailto:${contactEmail}`} className="mt-2 inline-flex break-all text-sm font-semibold text-sky-700 underline">
+            <a href={contactHref} className="mt-2 inline-flex break-all text-sm font-semibold text-sky-700 underline">
               {contactEmail}
             </a>
           </div>
@@ -211,7 +213,7 @@ export default function CareersPage() {
                 <p>News Pulse does not support plagiarism, fake news, hate speech, unlawful content, copied material, or irresponsible reporting.</p>
               </div>
               <div className="mt-6 flex flex-wrap gap-3">
-                <a href={`mailto:${contactEmail}`} className="inline-flex items-center justify-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
+                <a href={contactHref} className="inline-flex items-center justify-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
                   Apply / Contact
                 </a>
                 <Link href="/digital-code-of-ethics" className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
@@ -228,7 +230,7 @@ export default function CareersPage() {
               <p className="mt-2 text-sm leading-7 text-slate-600">
                 If your background aligns with responsible journalism, clear communication, and public-interest reporting, you may contact News Pulse with your interest and relevant materials.
               </p>
-              <a href={`mailto:${contactEmail}`} className="mt-4 inline-flex break-all text-sm font-semibold text-sky-700 underline">
+              <a href={contactHref} className="mt-4 inline-flex break-all text-sm font-semibold text-sky-700 underline">
                 {contactEmail}
               </a>
               <p className="mt-4 text-sm leading-7 text-slate-600">

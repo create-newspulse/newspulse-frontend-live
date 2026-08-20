@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { forwardReporterProxyCookies, getReporterForwardCookieHeader, readReporterProxyBody, resolveReporterAuthProxyUrl } from '../../../lib/reporterAuthProxy';
+import { forwardReporterProxyCookies, getReporterForwardCookieHeader, getSanitizedReporterProxySetCookies, readReporterProxyBody, resolveReporterAuthProxyUrl } from '../../../lib/reporterAuthProxy';
 import {
   clearChallengeCookie,
   clearOtpCookie,
@@ -12,8 +12,31 @@ import {
   hasOtpAttemptsRemaining,
   hashOtp,
   normalizeReporterAuthEmail,
+  REPORTER_OTP_COOKIE,
   updateOtpAttempts,
 } from '../../../lib/reporterPortalAuth';
+
+function resolveVerifiedReporterEmail(data: any, fallbackEmail: string): string {
+  return normalizeReporterAuthEmail(
+    data?.session?.email ||
+    data?.reporter?.email ||
+    data?.user?.email ||
+    data?.email ||
+    fallbackEmail
+  );
+}
+
+function sanitizeVerifySuccessBody(data: any, email: string) {
+  const { sessionToken, reporterSessionToken, token, ...safeData } = data || {};
+  const safeSession = safeData?.session && typeof safeData.session === 'object'
+    ? (() => {
+        const { token: sessionRawToken, sessionToken: sessionRawSessionToken, ...session } = safeData.session;
+        return session;
+      })()
+    : safeData?.session;
+
+  return { ...safeData, session: safeSession, ok: data?.ok !== false, email };
+}
 
 function isSessionExpiredVerifyFailure(code: string | null, status: number, data: any): boolean {
   if (status === 401) {
@@ -101,15 +124,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(normalizedFailure.status).json(normalizedFailure.body);
       }
 
-      forwardReporterProxyCookies(res, upstream.headers, [clearChallengeCookie()]);
+      const verifiedEmail = resolveVerifiedReporterEmail(data, email);
+      const sessionToken = createSessionToken(verifiedEmail);
+      res.setHeader('Set-Cookie', [
+        createSessionCookie(sessionToken),
+        ...getSanitizedReporterProxySetCookies(upstream.headers),
+        clearOtpCookie(),
+        clearChallengeCookie(),
+      ]);
 
-      return res.status(200).json({ ...(data || {}), ok: data?.ok !== false, email: data?.email || email });
+      return res.status(200).json(sanitizeVerifySuccessBody(data, verifiedEmail));
     } catch {
       return res.status(503).json({ ok: false, code: 'REPORTER_VERIFY_CODE_FAILED', message: 'REPORTER_VERIFY_CODE_FAILED' });
     }
   }
 
-  const otpCookie = String(req.cookies?.np_reporter_portal_otp || '');
+  const otpCookie = String(req.cookies?.[REPORTER_OTP_COOKIE] || '');
   const otpPayload = getOtpFromCookie(otpCookie);
 
   if (!otpPayload || otpPayload.email !== email) {
@@ -134,5 +164,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const sessionToken = createSessionToken(email);
   res.setHeader('Set-Cookie', [createSessionCookie(sessionToken), clearOtpCookie(), clearChallengeCookie()]);
-  return res.status(200).json({ ok: true, email, sessionToken });
+  return res.status(200).json({ ok: true, email });
 }

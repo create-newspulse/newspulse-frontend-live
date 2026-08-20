@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getChallengeFromCookie, getOtpFromCookie, getSessionFromCookie } from '../../../lib/reporterPortalAuth';
+import { REPORTER_CHALLENGE_COOKIE, REPORTER_OTP_COOKIE, REPORTER_SESSION_COOKIE, getChallengeFromCookie, getOtpFromCookie, getSessionFromCookie } from '../../../lib/reporterPortalAuth';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -11,7 +11,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ ok: false, code: 'METHOD_NOT_ALLOWED', message: 'METHOD_NOT_ALLOWED' });
   }
 
-  const challengeToken = String(req.cookies?.np_reporter_portal_challenge || '').trim();
+  const challengeToken = String(req.cookies?.[REPORTER_CHALLENGE_COOKIE] || '').trim();
   const challengePayload = getChallengeFromCookie(challengeToken);
   if (challengePayload) {
     return res.status(200).json({
@@ -23,7 +23,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   }
 
-  const otpToken = String(req.cookies?.np_reporter_portal_otp || '').trim();
+  const otpToken = String(req.cookies?.[REPORTER_OTP_COOKIE] || '').trim();
   const otpPayload = getOtpFromCookie(otpToken);
   if (otpPayload) {
     return res.status(200).json({
@@ -36,7 +36,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   }
 
-  const sessionToken = String(req.cookies?.np_reporter_portal_session || '').trim();
+  const sessionToken = String(req.cookies?.[REPORTER_SESSION_COOKIE] || '').trim();
   const sessionPayload = getSessionFromCookie(sessionToken);
   if (sessionPayload) {
     return res.status(200).json({

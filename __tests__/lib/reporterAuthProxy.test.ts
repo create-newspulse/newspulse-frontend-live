@@ -128,6 +128,37 @@ describe('lib/reporterAuthProxy', () => {
     ).toBeNull();
   });
 
+  it('allows localhost backends on a different port than the frontend dev server', () => {
+    process.env.NEXT_PUBLIC_API_BASE = 'http://localhost:5000';
+
+    const { resolveReporterAuthProxyUrl } = require('../../lib/reporterAuthProxy');
+
+    expect(
+      resolveReporterAuthProxyUrl('/api/reporter-auth/session', {
+        headers: { host: 'localhost:3000' },
+      })
+    ).toBe('http://localhost:5000/api/reporter-auth/session');
+  });
+
+  it('does not silently fall back to the production reporter backend in local dev', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    process.env.NEXT_PUBLIC_API_BASE = 'https://newspulse-backend-real.onrender.com';
+
+    const { resolveReporterAuthProxyTarget } = require('../../lib/reporterAuthProxy');
+
+    expect(
+      resolveReporterAuthProxyTarget('/api/reporter-auth/session', {
+        headers: { host: 'localhost:3000' },
+      })
+    ).toEqual({
+      url: null,
+      base: null,
+      source: 'unavailable',
+      reason: 'missing_base',
+    });
+    warnSpy.mockRestore();
+  });
+
   it('falls back to the Render backend on the live host even when runtime production env is absent', () => {
     const { resolveReporterAuthProxyUrl } = require('../../lib/reporterAuthProxy');
 

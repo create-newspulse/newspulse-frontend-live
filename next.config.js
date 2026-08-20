@@ -14,6 +14,16 @@ function isProdDeployment() {
   return explicit === 'production' || explicit === 'prod';
 }
 
+function isLikelyProdBackend(base) {
+  const value = String(base || '').toLowerCase();
+  return value.includes('newspulse.co.in') || value.includes('admin.newspulse.co.in') || value.includes('newspulse-backend-real.onrender.com');
+}
+
+function envBool(name) {
+  const value = String(process.env[name] || '').trim().toLowerCase();
+  return value === '1' || value === 'true' || value === 'yes' || value === 'on';
+}
+
 function resolveBackendBase() {
   const explicit = normalizeBase(process.env.NEXT_PUBLIC_API_BASE);
   if (explicit) return explicit;
@@ -34,12 +44,25 @@ function resolveBackendBase() {
       ''
   );
 
-  // Keep parity with rewrites() default so image hosts work out-of-the-box.
-  return legacy || normalizeBase('https://newspulse-backend-real.onrender.com');
+  if (legacy) return legacy;
+  return isProdDeployment() ? normalizeBase('https://newspulse-backend-real.onrender.com') : '';
+}
+
+function resolveSafeBackendBase() {
+  const backend = resolveBackendBase();
+  if (!backend) return '';
+  if (!isProdDeployment() && isLikelyProdBackend(backend) && !envBool('NEXT_PUBLIC_ALLOW_PROD_BACKEND_IN_DEV')) {
+    console.warn(
+      `[newspulse] Refusing to use production backend in dev: backend resolved to '${backend}'. ` +
+        'Set NEXT_PUBLIC_API_BASE_DEV to your local backend.'
+    );
+    return '';
+  }
+  return backend;
 }
 
 function getBackendHostname() {
-  const base = resolveBackendBase();
+  const base = resolveSafeBackendBase();
   if (!base) return '';
   try {
     return new URL(base).hostname;
@@ -141,16 +164,7 @@ const nextConfig = {
       ['prod', 'production'].includes(
         String(process.env.NEWS_PULSE_DEPLOYMENT || process.env.NEWS_PULSE_ENV || '').toLowerCase()
       );
-    const backendRaw =
-      (process.env.NEXT_PUBLIC_API_BASE ||
-        (isProdDeployment ? process.env.NEXT_PUBLIC_API_BASE_PROD : process.env.NEXT_PUBLIC_API_BASE_DEV) ||
-        process.env.NEXT_PUBLIC_API_URL ||
-        process.env.NEXT_PUBLIC_BACKEND_URL ||
-        process.env.NEXT_PUBLIC_API_BASE_URL ||
-        'https://newspulse-backend-real.onrender.com')
-        .toString()
-        .trim();
-    const backend = backendRaw.replace(/\/+$/, '').replace(/\/api\/?$/, '');
+    const backend = resolveSafeBackendBase();
 
     // Locale-stable regional routes:
     // Some deployments have intermittently failed to resolve locale-prefixed regional routes.
@@ -214,16 +228,7 @@ const nextConfig = {
     const isProdDeployment =
       String(process.env.VERCEL_ENV || '').toLowerCase() === 'production' ||
       ['prod', 'production'].includes(String(process.env.NEWS_PULSE_DEPLOYMENT || process.env.NEWS_PULSE_ENV || '').toLowerCase());
-    const backendRaw =
-      (process.env.NEXT_PUBLIC_API_BASE ||
-        (isProdDeployment ? process.env.NEXT_PUBLIC_API_BASE_PROD : process.env.NEXT_PUBLIC_API_BASE_DEV) ||
-        process.env.NEXT_PUBLIC_API_URL ||
-        process.env.NEXT_PUBLIC_BACKEND_URL ||
-        process.env.NEXT_PUBLIC_API_BASE_URL ||
-        '')
-        .toString()
-        .trim();
-    const backend = backendRaw.replace(/\/+$/, '').replace(/\/api\/?$/, '');
+    const backend = resolveSafeBackendBase();
 
     // Content Security Policy
     const csp = [

@@ -6,7 +6,7 @@ jest.mock('../../../../lib/reporterPortalAuth', () => {
   const actual = jest.requireActual('../../../../lib/reporterPortalAuth');
   return {
     ...actual,
-    sendReporterPortalLoginEmail: jest.fn(async () => ({ delivered: true, provider: 'resend', debugCode: '123456' })),
+    sendReporterPortalLoginEmail: jest.fn(async () => ({ delivered: false, provider: 'resend', debugCode: '123456' })),
   };
 });
 
@@ -97,6 +97,34 @@ describe('pages/api/reporter-auth/request-code', () => {
       message: 'connect ETIMEDOUT',
     });
     expect(sendReporterPortalLoginEmail).not.toHaveBeenCalled();
+  });
+
+  it('returns development delivery fields for local fallback OTP without using email wording', async () => {
+    jest.doMock('../../../../lib/publicApiBase', () => ({
+      getPublicApiBaseUrl: () => '',
+    }));
+    jest.resetModules();
+    const localHandler = (await import('../../../../pages/api/reporter-auth/request-code')).default;
+    const { sendReporterPortalLoginEmail: localSendReporterPortalLoginEmail } = await import('../../../../lib/reporterPortalAuth');
+
+    const req = {
+      method: 'POST',
+      body: { email: 'reporter@example.com' },
+      headers: { host: 'localhost:3000' },
+    } as any;
+
+    const res = createMockResponse();
+    await localHandler(req, res as any);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      email: 'reporter@example.com',
+      delivery: 'development',
+      developmentCode: '123456',
+    });
+    expect(res.body.debugCode).toBeUndefined();
+    expect(localSendReporterPortalLoginEmail).toHaveBeenCalled();
   });
 });
 

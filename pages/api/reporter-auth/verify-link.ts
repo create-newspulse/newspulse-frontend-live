@@ -15,5 +15,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const sessionToken = createSessionToken(payload.email);
   res.setHeader('Set-Cookie', createSessionCookie(sessionToken));
-  return res.status(200).json({ ok: true, email: payload.email, sessionToken });
+  return res.status(200).json({ ok: true, email: payload.email });
 }

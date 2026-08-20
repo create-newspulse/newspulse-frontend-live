@@ -29,13 +29,16 @@ const navItemClass = (active: boolean) => (
 );
 
 export default function ReporterPortalLayout({ title, description, active, session, profile, onLogout, children }: Props) {
-  const displayName = getReporterDisplayName({
-    fullName: profile?.fullName || session?.fullName,
-    name: profile?.name || session?.name,
-    firstName: profile?.firstName || session?.firstName,
-    email: profile?.email || session?.email,
-  });
-  const displayEmail = profile?.email || session?.email || 'Not signed in';
+  const hasReporterIdentity = Boolean(profile?.email || session?.email);
+  const displayName = hasReporterIdentity
+    ? getReporterDisplayName({
+      fullName: profile?.fullName || session?.fullName,
+      name: profile?.name || session?.name,
+      firstName: profile?.firstName || session?.firstName,
+      email: profile?.email || session?.email,
+    })
+    : active === 'login' ? 'Reporter Portal' : 'Checking session';
+  const displayEmail = profile?.email || session?.email || (active === 'login' ? 'Not signed in' : 'Checking reporter session…');
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">

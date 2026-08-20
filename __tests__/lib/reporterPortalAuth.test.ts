@@ -1,9 +1,12 @@
 import {
   createMagicLinkToken,
+  createSessionCookie,
   createOtpToken,
   createSessionToken,
+  clearSessionCookie,
   getMagicLinkFromToken,
   getOtpFromCookie,
+  getReporterSessionFromRequest,
   getSessionFromCookie,
   hashOtp,
   verifySignedToken,
@@ -31,6 +34,16 @@ describe('reporterPortalAuth', () => {
     expect(payload?.email).toBe('reporter@example.com');
   });
 
+  it('validates reporter session requests through the canonical cookie helper', () => {
+    const token = createSessionToken('Reporter@Example.com');
+    const valid = getReporterSessionFromRequest({ cookies: { np_reporter_portal_session: token } });
+    expect(valid.ok).toBe(true);
+    if (valid.ok) expect(valid.session.email).toBe('reporter@example.com');
+
+    expect(getReporterSessionFromRequest({ cookies: {} })).toMatchObject({ ok: false, code: 'REPORTER_SESSION_MISSING', shouldClearCookie: false });
+    expect(getReporterSessionFromRequest({ cookies: { np_reporter_portal_session: 'bad-token' } })).toMatchObject({ ok: false, code: 'REPORTER_SESSION_MISSING', shouldClearCookie: true });
+  });
+
   it('creates and verifies magic link payloads', () => {
     const token = createMagicLinkToken('reporter@example.com');
     const payload = getMagicLinkFromToken(token);
@@ -44,5 +57,29 @@ describe('reporterPortalAuth', () => {
     const tampered = `${token}tampered`;
 
     expect(verifySignedToken(tampered)).toBeNull();
+  });
+
+  it('serializes the canonical session cookie with environment-safe options', () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    const nodeEnvKey = ['NODE', 'ENV'].join('_');
+    (process.env as Record<string, string | undefined>)[nodeEnvKey] = 'development';
+    const devCookie = createSessionCookie('signed-token');
+
+    expect(devCookie).toContain('np_reporter_portal_session=signed-token');
+    expect(devCookie).toContain('Path=/');
+    expect(devCookie).toContain('SameSite=Lax');
+    expect(devCookie).toContain('HttpOnly');
+    expect(devCookie).not.toContain('Domain=');
+    expect(devCookie).not.toContain('Secure');
+
+    (process.env as Record<string, string | undefined>)[nodeEnvKey] = 'production';
+    const prodCookie = createSessionCookie('signed-token');
+    const clearCookie = clearSessionCookie();
+
+    expect(prodCookie).toContain('Secure');
+    expect(clearCookie).toContain('Max-Age=0');
+    expect(clearCookie).toContain('Path=/');
+
+    (process.env as Record<string, string | undefined>)[nodeEnvKey] = originalNodeEnv;
   });
 });

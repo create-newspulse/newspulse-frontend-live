@@ -1,3 +1,5 @@
+import { getPublicApiBaseUrl } from './publicApiBase';
+
 export type CurrentWeather = {
   tempC: number;
   condition: string;
@@ -8,15 +10,25 @@ function normalizeBaseUrl(raw: string): string {
   return v.replace(/\/+$/g, '');
 }
 
+function normalizeCity(raw: string): string {
+  return String(raw || '').trim().replace(/\s+/g, ' ');
+}
+
+function isValidCity(value: string): boolean {
+  return /^[A-Za-z][A-Za-z .'-]{1,79}$/.test(value);
+}
+
 export async function fetchCurrentWeather(options: {
   city: string;
   signal?: AbortSignal;
 }): Promise<CurrentWeather> {
-  const base =
-    normalizeBaseUrl(process.env.NEXT_PUBLIC_API_BASE || '') ||
-    normalizeBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL || '');
+  const base = typeof window === 'undefined' ? normalizeBaseUrl(getPublicApiBaseUrl()) : '';
 
-  const city = String(options.city || '').trim() || 'Ahmedabad';
+  const city = normalizeCity(options.city);
+  if (!city || !isValidCity(city)) {
+    throw new Error('Invalid weather city');
+  }
+
   const qs = new URLSearchParams({ city });
   const url = `${base || ''}/api/public/weather/current?${qs.toString()}`;
 

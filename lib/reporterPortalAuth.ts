@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
+import { getReporterForwardCookieHeader, readReporterProxyBody, resolveReporterAuthProxyUrl } from './reporterAuthProxy';
 
 export const REPORTER_SESSION_COOKIE = 'np_reporter_portal_session';
 export const REPORTER_OTP_COOKIE = 'np_reporter_portal_otp';
@@ -260,7 +261,8 @@ function serializeCookie(name: string, value: string, options: { maxAge?: number
   const parts = [`${name}=${encodeURIComponent(value)}`, 'Path=/', 'SameSite=Lax'];
   if (options.maxAge != null) parts.push(`Max-Age=${Math.max(0, Math.floor(options.maxAge))}`);
   if (options.httpOnly !== false) parts.push('HttpOnly');
-  if (process.env.NODE_ENV === 'production') parts.push('Secure');
+  const nodeEnvKey = ['NODE', 'ENV'].join('_');
+  if (process.env[nodeEnvKey] === 'production') parts.push('Secure');
   return parts.join('; ');
 }
 
@@ -292,6 +294,109 @@ export function getSessionFromCookie(cookieValue: string | null | undefined): Re
   const payload = verifySignedToken<ReporterSessionPayload>(cookieValue);
   if (!payload || payload.kind !== 'session' || isExpired(payload.exp)) return null;
   return payload;
+}
+
+export function getReporterSessionFromRequest(req: { cookies?: Partial<Record<string, string | string[]>> }): {
+  ok: true;
+  session: ReporterSessionPayload;
+} | {
+  ok: false;
+  code: 'REPORTER_SESSION_MISSING';
+  message: string;
+  shouldClearCookie: boolean;
+} {
+  const rawCookie = req.cookies?.[REPORTER_SESSION_COOKIE];
+  const token = String(Array.isArray(rawCookie) ? rawCookie[0] : rawCookie || '').trim();
+  if (!token) {
+    return { ok: false, code: 'REPORTER_SESSION_MISSING', message: 'Reporter session missing or expired.', shouldClearCookie: false };
+  }
+
+  const session = getSessionFromCookie(token);
+  if (!session) {
+    return { ok: false, code: 'REPORTER_SESSION_MISSING', message: 'Reporter session missing or expired.', shouldClearCookie: true };
+  }
+
+  return { ok: true, session };
+}
+
+export function getAuthenticatedReporter(req: { cookies?: Partial<Record<string, string | string[]>> }, options?: { route?: string }): {
+  ok: true;
+  reporter: { email: string; expiresAt: string };
+  session: ReporterSessionPayload;
+} | {
+  ok: false;
+  code: 'REPORTER_SESSION_MISSING';
+  message: string;
+  shouldClearCookie: boolean;
+} {
+  const rawCookie = req.cookies?.[REPORTER_SESSION_COOKIE];
+  const cookiePresent = Boolean(String(Array.isArray(rawCookie) ? rawCookie[0] : rawCookie || '').trim());
+  const validation = getReporterSessionFromRequest(req);
+
+  if (process.env.NODE_ENV === 'development') {
+    const isJest = Boolean((globalThis as any)?.jest) || Boolean((process.env as any)?.JEST_WORKER_ID);
+    if (!isJest) {
+      // eslint-disable-next-line no-console
+      console.info('[reporter-session]', {
+        route: options?.route || null,
+        cookiePresent,
+        authenticated: validation.ok,
+      });
+    }
+  }
+
+  if (!validation.ok) {
+    return validation;
+  }
+
+  return {
+    ok: true,
+    reporter: {
+      email: validation.session.email,
+      expiresAt: new Date(validation.session.exp).toISOString(),
+    },
+    session: validation.session,
+  };
+}
+
+export async function requireReporterSession(req: { cookies?: Partial<Record<string, string | string[]>>; headers?: Record<string, string | string[] | undefined> }, options?: { route?: string }): Promise<ReturnType<typeof getAuthenticatedReporter>> {
+  const localValidation = getAuthenticatedReporter(req, options);
+  if (!localValidation.ok) {
+    return localValidation;
+  }
+
+  const backendUrl = resolveReporterAuthProxyUrl('/api/reporter-auth/session', req as any);
+  if (!backendUrl) {
+    return localValidation;
+  }
+
+  try {
+    const forwardedCookie = getReporterForwardCookieHeader(req as any);
+    const upstream = await fetch(backendUrl, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        ...(forwardedCookie ? { cookie: forwardedCookie } : {}),
+      },
+      cache: 'no-store',
+    });
+    const { data } = await readReporterProxyBody(upstream);
+    const upstreamEmail = normalizeReporterAuthEmail(data?.session?.email || data?.reporter?.email || data?.user?.email || data?.email);
+
+    if (!upstream.ok || (upstreamEmail && upstreamEmail !== localValidation.reporter.email)) {
+      return { ok: false, code: 'REPORTER_SESSION_MISSING', message: 'Reporter session missing or expired.', shouldClearCookie: upstream.status === 401 || upstream.status === 403 };
+    }
+
+    return {
+      ...localValidation,
+      reporter: {
+        ...localValidation.reporter,
+        ...(upstreamEmail ? { email: upstreamEmail } : {}),
+      },
+    };
+  } catch {
+    return { ok: false, code: 'REPORTER_SESSION_MISSING', message: 'Reporter session missing or expired.', shouldClearCookie: false };
+  }
 }
 
 export function getOtpFromCookie(cookieValue: string | null | undefined): ReporterOtpPayload | null {

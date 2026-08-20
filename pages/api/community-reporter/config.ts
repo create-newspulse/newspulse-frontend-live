@@ -1,6 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE || ''
+import { getPublicApiBaseUrl } from '../../../lib/publicApiBase'
 
 export default async function handler(
   req: NextApiRequest,
@@ -11,7 +10,10 @@ export default async function handler(
     return res.status(405).json({ ok: false, message: 'METHOD_NOT_ALLOWED' })
   }
 
-  const base = (API_BASE_URL || '').replace(/\/+$/, '')
+  const base = getPublicApiBaseUrl().trim().replace(/\/+$/, '')
+  if (!base) {
+    return res.status(500).json({ ok: false, message: 'BACKEND_NOT_CONFIGURED' })
+  }
   const targetUrl = `${base}/api/community-reporter/config`
 
   try {

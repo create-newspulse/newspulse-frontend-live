@@ -1,8 +1,114 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
+import { getPublicApiBaseUrl } from '../../../lib/publicApiBase'
 
-// Server-side proxy to avoid browser CORS. Forwards POST to backend with a
-// minimal, backend-compatible payload (headline, story, category only).
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE || '').toString().trim()
+function cleanString(value: unknown): string {
+  return String(value || '').trim()
+}
+
+function cleanStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.map((item) => cleanString(item)).filter(Boolean)
+    : []
+}
+
+function readJsonBody(req: NextApiRequest): Record<string, any> {
+  if (req.body && typeof req.body === 'object') return req.body as Record<string, any>
+  if (typeof req.body === 'string' && req.body.trim()) {
+    try {
+      return JSON.parse(req.body) as Record<string, any>
+    } catch {
+      return {}
+    }
+  }
+  return {}
+}
+
+function isPublicSafeMessage(value: string): boolean {
+  if (!value || /^submit_failed$/i.test(value)) return false
+  if (/axios|stack|trace|pages\/api|internal|exception|error:/i.test(value)) return false
+  return true
+}
+
+function resolveValidationMessage(status: number, data: any): string {
+  const message = cleanString(data?.message)
+  if (status === 400) {
+    if (isPublicSafeMessage(message)) return message
+
+    const errors = data?.errors
+    if (Array.isArray(errors)) {
+      const first = errors.map((item) => cleanString(item?.message || item)).find(isPublicSafeMessage)
+      if (first) return first
+    }
+    if (errors && typeof errors === 'object') {
+      const first = Object.values(errors).map((item: any) => cleanString(Array.isArray(item) ? item[0] : item)).find(isPublicSafeMessage)
+      if (first) return first
+    }
+
+    return 'Please check the required story details and try submitting again.'
+  }
+
+  return isPublicSafeMessage(message) ? message : "We couldn't submit your story right now. Please try again."
+}
+
+function resolveBackendAgeGroup(value: unknown): string {
+  const ageGroup = cleanString(value)
+  switch (ageGroup) {
+    case 'under_18':
+      return 'Under 18'
+    case '18_24':
+      return '18-24'
+    case '25_40':
+      return '25-40'
+    case '41_plus':
+      return '41+'
+    default:
+      return ageGroup
+  }
+}
+
+function buildBackendPayload(body: Record<string, any>) {
+  const reporterType = cleanString(body.reporterType) === 'journalist' ? 'journalist' : 'community'
+  const beats = cleanStringArray(body.beats)
+
+  return {
+    reporterAccountId: cleanString(body.reporterAccountId) || undefined,
+    reporterProfileId: cleanString(body.reporterProfileId) || undefined,
+    reporterType,
+    reporterName: cleanString(body.reporterName),
+    reporterEmail: cleanString(body.reporterEmail).toLowerCase(),
+    reporterPhone: cleanString(body.reporterPhone),
+    reporterWhatsApp: cleanString(body.reporterWhatsApp),
+    city: cleanString(body.city),
+    district: cleanString(body.district),
+    state: cleanString(body.state),
+    country: cleanString(body.country),
+    ageGroup: resolveBackendAgeGroup(body.ageGroup),
+    category: cleanString(body.category),
+    coverageScope: cleanString(body.coverageScope),
+    headline: cleanString(body.headline),
+    story: cleanString(body.story),
+    mediaLink: cleanString(body.mediaLink) || undefined,
+    priority: cleanString(body.priority) === 'high' ? 'high' : 'normal',
+    storyCity: cleanString(body.storyCity) || undefined,
+    storyDistrict: cleanString(body.storyDistrict) || undefined,
+    storyState: cleanString(body.storyState) || undefined,
+    storyCountry: cleanString(body.storyCountry) || undefined,
+    preferredLanguages: cleanStringArray(body.preferredLanguages),
+    consentToContact: Boolean(body.consentToContact),
+    beats,
+    communityInterests: reporterType === 'community' ? cleanStringArray(body.communityInterests || beats) : undefined,
+    journalistCharterAccepted: Boolean(body.journalistCharterAccepted),
+    generalEthicsAccepted: Boolean(body.generalEthicsAccepted),
+    organisationName: cleanString(body.organisationName) || undefined,
+    organisationType: cleanString(body.organisationType) || undefined,
+    positionTitle: cleanString(body.positionTitle) || undefined,
+    beatsProfessional: reporterType === 'journalist' ? cleanStringArray(body.beatsProfessional || beats) : undefined,
+    yearsExperience: cleanString(body.yearsExperience) || undefined,
+    professionalJournalistId: cleanString(body.professionalJournalistId) || undefined,
+    journalistIdFileId: cleanString(body.journalistIdFileId) || undefined,
+    heardAbout: cleanString(body.heardAbout) || undefined,
+  }
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -10,7 +116,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ code: 'method_not_allowed' })
   }
 
-  const base = API_BASE_URL.replace(/\/+$/, '')
+  const base = getPublicApiBaseUrl().replace(/\/+$/, '')
   if (!base) {
     return res.status(500).json({ error: 'missing_api_base', message: 'Missing env var: NEXT_PUBLIC_API_BASE' })
   }
@@ -18,32 +124,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const targetUrl = `${base}/api/community/submissions`
 
   try {
-    const body = (req.body && typeof req.body === 'object') ? req.body as Record<string, any> : {}
-
-    // Map from our form keys to backend expectations (be lenient with aliases)
-    const name = (body.reporterName || body.fullName || body.name || body.userName || '').toString().trim()
-    const email = (body.reporterEmail || body.email || '').toString().trim()
-    const phone = (body.reporterPhone || body.phone || '').toString().trim()
-    const city = (body.city || body.location || '').toString().trim()
-    const headline = (body.headline || body.title || '').toString().trim()
-    const story = (body.story || body.body || body.content || '').toString().trim()
-    const category = (body.category || '').toString()
-    const consent = typeof body.acceptPolicy === 'boolean' ? body.acceptPolicy : (typeof body.confirm === 'boolean' ? body.confirm : undefined)
-    const ageGroup = (body.ageGroup ?? '').toString()
-
-    const backendPayload: Record<string, any> = {
-      name,
-      email,
-      phone,
-      city,
-      headline,
-      body: story,
-      category,
-    }
-    if (typeof consent === 'boolean') backendPayload.consent = consent
-    if (ageGroup) backendPayload.ageGroup = ageGroup
-    // Send the original payload as `meta` for non-breaking backend visibility if useful
-    backendPayload.meta = { ...(body || {}) }
+    const body = readJsonBody(req)
+    const backendPayload = buildBackendPayload(body)
 
     const upstream = await fetch(targetUrl, {
       method: 'POST',
@@ -51,23 +133,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       body: JSON.stringify(backendPayload),
     })
 
+    const text = await upstream.text().catch(() => '')
+
     if (!upstream.ok) {
-      const errorText = await upstream.text().catch(() => '')
-      console.error('[community-submit] upstream', upstream.status, upstream.statusText, errorText)
-      // Forward upstream status if possible for easier debugging
-      return res.status(upstream.status || 500).json({ error: 'submit_failed', upstream: errorText || upstream.statusText })
+      let data: any = null
+      try {
+        data = text ? JSON.parse(text) : null
+      } catch {}
+      return res.status(upstream.status || 500).json({ ok: false, message: resolveValidationMessage(upstream.status, data), code: upstream.status === 400 ? 'VALIDATION_ERROR' : 'SUBMISSION_FAILED' })
     }
 
-    // Forward upstream JSON if available
-    const text = await upstream.text()
     try {
       const json = text ? JSON.parse(text) : { success: true }
-      return res.status(200).json(json)
+      return res.status(upstream.status || 200).json(json)
     } catch {
-      return res.status(200).json({ success: true })
+      return res.status(upstream.status || 200).json({ success: true })
     }
-  } catch (err: any) {
-    console.error('[community-submit] exception', err?.message)
-    return res.status(500).json({ error: 'submit_failed' })
+  } catch {
+    console.error('[community-reporter][submit] proxy exception')
+    return res.status(500).json({ ok: false, message: "We couldn't submit your story right now. Please try again." })
   }
 }

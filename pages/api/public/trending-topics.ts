@@ -1,8 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
 
 function getApiBase(): string {
-  const raw = process.env.NEXT_PUBLIC_API_BASE || '';
-  return String(raw).trim().replace(/\/+$/, '');
+  return getPublicApiBaseUrl().trim().replace(/\/+$/, '');
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

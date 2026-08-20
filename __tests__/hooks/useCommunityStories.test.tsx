@@ -155,4 +155,60 @@ describe('useCommunityStories', () => {
     expect(result.current.errorCode).toBe('REPORTER_EMAIL_MISMATCH');
     expect(result.current.profileWarning).toBeNull();
   });
+
+  it('does not continually retry a failing reporter story request', async () => {
+    (global as any).fetch
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ ok: true, settings: { communityReporterEnabled: true, allowNewSubmissions: true, allowMyStoriesPortal: true, allowJournalistApplications: false } }) })
+      .mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({ ok: false, code: 'UPSTREAM_ERROR', message: 'UPSTREAM_ERROR' }) });
+
+    const { result } = renderHook(
+      () => useCommunityStories({ reporterEmail: 'verified@example.com', reporterAuth: true }),
+      {
+        wrapper: ({ children }) => <LanguageProvider>{children}</LanguageProvider>,
+      }
+    );
+
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => { await Promise.resolve(); });
+
+    expect(result.current.errorStatus).toBe(500);
+    expect((global as any).fetch).toHaveBeenCalledTimes(2);
+
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => { await Promise.resolve(); });
+
+    expect((global as any).fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('aborts a reporter story fetch when reporter auth becomes disabled', async () => {
+    const abortError = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    (global as any).fetch
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ ok: true, settings: { communityReporterEnabled: true, allowNewSubmissions: true, allowMyStoriesPortal: true, allowJournalistApplications: false } }) })
+      .mockImplementationOnce((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
+        init.signal?.addEventListener('abort', () => reject(abortError));
+      }));
+
+    const { result, rerender } = renderHook(
+      ({ enabled }) => useCommunityStories({ reporterEmail: 'verified@example.com', reporterAuth: true, enabled }),
+      {
+        initialProps: { enabled: true },
+        wrapper: ({ children }) => <LanguageProvider>{children}</LanguageProvider>,
+      }
+    );
+
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => { await Promise.resolve(); });
+
+    expect((global as any).fetch).toHaveBeenCalledTimes(2);
+    expect((global as any).fetch.mock.calls[1][1].signal.aborted).toBe(false);
+
+    rerender({ enabled: false });
+    await act(async () => { await Promise.resolve(); });
+
+    expect((global as any).fetch.mock.calls[1][1].signal.aborted).toBe(true);
+    expect(result.current.stories).toEqual([]);
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.errorStatus).toBeNull();
+  });
 });

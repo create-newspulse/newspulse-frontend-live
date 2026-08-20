@@ -3818,22 +3818,23 @@ function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
 
   const quickLinks = [
     { label: 'About News Pulse', href: localizePath('/about-us', lang) },
-    { label: t('footer.editorialPolicy'), href: localizePath('/editorial-policy', lang) },
-    { label: t('footer.digitalCodeOfEthics'), href: localizePath('/digital-code-of-ethics', lang) },
     { label: t('common.contact'), href: localizePath('/contact', lang) },
     { label: t('footer.careers'), href: localizePath('/careers', lang) },
     { label: t('common.communityReporter'), href: localizePath('/community-reporter', lang) },
+    { label: 'Community Reporter Guide', href: localizePath('/community-reporter/guidelines', lang) },
     { label: t('footer.journalistDesk'), href: localizePath('/journalist-desk', lang) },
   ];
 
   const legalComplianceLinks = [
+    { label: t('footer.editorialPolicy'), href: localizePath('/editorial-policy', lang) },
+    { label: t('footer.digitalCodeOfEthics'), href: localizePath('/digital-code-of-ethics', lang) },
     { label: t('footer.privacyPolicy'), href: localizePath('/privacy-policy', lang) },
     { label: t('footer.cookiePolicy'), href: localizePath('/cookie-policy', lang) },
     { label: t('footer.cookieSettings'), onClick: openPreferences },
-    { label: t('footer.privacyRequest'), href: localizePath('/privacy-request', lang) },
-    { label: t('footer.grievanceRedressal'), href: localizePath('/grievance-redressal', lang) },
     { label: t('footer.termsOfService'), href: localizePath('/terms-of-service', lang) },
     { label: t('footer.copyrightPolicy'), href: localizePath('/copyright-policy', lang) },
+    { label: t('footer.grievanceRedressal'), href: localizePath('/grievance-redressal', lang) },
+    { label: t('footer.privacyRequest'), href: localizePath('/privacy-request', lang) },
     { label: t('footer.monthlyCompliance'), href: localizePath('/monthly-compliance', lang) },
   ];
 
@@ -3875,7 +3876,7 @@ function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
             <div className="grid gap-8 sm:grid-cols-2">
               <div>
                 <div className="text-lg font-extrabold" style={{ color: theme.accent }}>
-                  {t('footer.quickLinksTitle')}
+                  News Pulse
                 </div>
                 <div className="mt-4 grid gap-3 text-sm text-white/85">
                   {quickLinks.map((item) => (

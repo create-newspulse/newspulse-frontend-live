@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
 
 type PublicMode = 'NORMAL' | 'READONLY' | 'LOCKDOWN';
 
@@ -11,8 +12,7 @@ type PublicModeResponse = {
 };
 
 function getApiBase(): string {
-  const raw = (process.env.NEXT_PUBLIC_API_BASE || '').toString().trim();
-  return raw.replace(/\/+$/, '');
+  return getPublicApiBaseUrl().trim().replace(/\/+$/, '');
 }
 const TTL_MS = 60_000;
 

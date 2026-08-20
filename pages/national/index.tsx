@@ -22,12 +22,9 @@ import type { PublicViralVideo } from '../../lib/publicViralVideos';
 import { normalizePublicViralVideosPayload } from '../../lib/publicViralVideos';
 import PublicViralVideoCard from '../../components/viral-videos/PublicViralVideoCard';
 import StoryImage, { TopStoryImage } from '../../src/components/story/StoryImage';
+import { getPublicApiBaseUrl } from '../../lib/publicApiBase';
 
 type AnyStory = any;
-
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL ||
-  'https://newspulse-backend-real.onrender.com';
 
 type NationalLiveTickerItem = {
   _id: string;
@@ -46,18 +43,7 @@ function resolveLangFromPathname(pathname: unknown): 'en' | 'hi' | 'gu' {
 }
 
 function getTickerBaseUrl(): string {
-  // Spec: use NEXT_PUBLIC_API_URL for ticker endpoints.
-  // Fallbacks keep local/dev working when only other vars are set.
-  return (
-    process.env.NEXT_PUBLIC_API_URL ||
-    process.env.NEXT_PUBLIC_API_BASE_URL ||
-    process.env.NEXT_PUBLIC_API_BASE ||
-    API_BASE ||
-    ''
-  )
-    .toString()
-    .trim()
-    .replace(/\/+$/, '');
+  return String(getPublicApiBaseUrl() || '').trim().replace(/\/+$/, '');
 }
 
 function unwrapTickerItems(payload: any): any[] {
@@ -1330,6 +1316,11 @@ export const getStaticProps: GetStaticProps = async ({ locale }) => {
   })();
 
   try {
+    const apiBase = String(getPublicApiBaseUrl() || '').trim().replace(/\/+$/, '');
+    if (!apiBase) {
+      return { props: { lang, data: [], breaking: [], messages } };
+    }
+
     const limit = 40;
     const params = new URLSearchParams();
     params.set('category', 'national');
@@ -1337,7 +1328,7 @@ export const getStaticProps: GetStaticProps = async ({ locale }) => {
     params.set('language', lang);
     params.set('limit', String(limit));
 
-    const endpoint = `${API_BASE}/api/public/news?${params.toString()}`;
+    const endpoint = `${apiBase}/api/public/news?${params.toString()}`;
     const res = await fetch(endpoint, { headers: { Accept: 'application/json' } });
     const json = await res.json().catch(() => null);
     const items = Array.isArray(json?.items) ? json.items : Array.isArray(json?.articles) ? json.articles : Array.isArray(json?.data) ? json.data : [];

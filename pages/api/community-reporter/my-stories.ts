@@ -1,84 +1,164 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
+import { getReporterForwardCookieHeader } from '../../../lib/reporterAuthProxy';
+import { clearSessionCookie, normalizeReporterAuthEmail, requireReporterSession } from '../../../lib/reporterPortalAuth';
+
+const UPSTREAM_PATH = '/api/public/community-reporter/my-stories';
+const UPSTREAM_TIMEOUT_MS = 10_000;
 
 function shouldLogReporterProxyDebug(): boolean {
   const isJest = Boolean((globalThis as any)?.jest) || (typeof process !== 'undefined' && Boolean((process.env as any)?.JEST_WORKER_ID));
   return process.env.NODE_ENV === 'development' && !isJest;
 }
 
-function logReporterProxyDebug(event: string, details: Record<string, unknown>) {
+function logReporterMyStoriesInfo(details: Record<string, unknown>) {
   if (!shouldLogReporterProxyDebug()) {
     return;
   }
   // eslint-disable-next-line no-console
-  console.info(`[api/community-reporter/my-stories] ${event}`, details);
+  console.info('[reporter-my-stories]', details);
+}
+
+function logReporterMyStoriesFetchError(error: any) {
+  if (!shouldLogReporterProxyDebug()) {
+    return;
+  }
+  // eslint-disable-next-line no-console
+  console.error('[reporter-my-stories]', {
+    stage: 'fetch-error',
+    errorName: error?.name,
+    errorCode: error?.cause?.code || error?.code || null,
+    message: error?.message,
+  });
+}
+
+function getFetchSignal(): AbortSignal | undefined {
+  const timeout = (globalThis as any)?.AbortSignal?.timeout;
+  return typeof timeout === 'function' ? timeout(UPSTREAM_TIMEOUT_MS) : undefined;
+}
+
+function getResponseCode(payload: any): string | null {
+  return String(payload?.code || payload?.message || '').trim() || null;
+}
+
+function getStoriesFromPayload(payload: any): any[] {
+  return Array.isArray(payload?.submissions)
+    ? payload.submissions
+    : Array.isArray(payload?.stories)
+    ? payload.stories
+    : Array.isArray(payload?.items)
+    ? payload.items
+    : Array.isArray(payload?.data?.submissions)
+    ? payload.data.submissions
+    : Array.isArray(payload?.data?.stories)
+    ? payload.data.stories
+    : [];
+}
+
+function hasStoriesCollection(payload: any): boolean {
+  return Array.isArray(payload?.submissions)
+    || Array.isArray(payload?.stories)
+    || Array.isArray(payload?.items)
+    || Array.isArray(payload?.data?.submissions)
+    || Array.isArray(payload?.data?.stories);
+}
+
+function getStoryReporterOwner(story: any): string {
+  return normalizeReporterAuthEmail(
+    story?.reporterAccountId ||
+    story?.reporterId ||
+    story?.reporterEmail ||
+    story?.email ||
+    story?.reporter?.accountId ||
+    story?.reporter?.email ||
+    story?.submittedBy?.accountId ||
+    story?.submittedBy?.email ||
+    story?.author?.accountId ||
+    story?.author?.email ||
+    ''
+  );
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
     return res.status(405).json({ ok: false, message: 'METHOD_NOT_ALLOWED' });
   }
 
-  const emailRaw = String(req.query.email ?? '').trim();
-  if (!emailRaw) {
-    return res.status(400).json({ ok: false, message: 'email is required' });
+  const validation = await requireReporterSession(req, { route: '/api/community-reporter/my-stories' });
+  if (!validation.ok) {
+    if (validation.shouldClearCookie) res.setHeader('Set-Cookie', clearSessionCookie());
+    return res.status(401).json({ ok: false, code: validation.code, message: validation.message });
   }
 
-  const email = emailRaw.toLowerCase();
+  const email = normalizeReporterAuthEmail(validation.reporter.email);
   const base = String(getPublicApiBaseUrl() || '').trim().replace(/\/+$/, '');
   if (!base) {
     console.error('[api/community-reporter/my-stories] backend base URL not configured');
     return res.status(500).json({ ok: false, message: 'BACKEND_URL_NOT_CONFIGURED' });
   }
-  const targetUrl = `${base}/api/community-reporter/my-stories?email=${encodeURIComponent(email)}`;
+  const targetUrl = `${base}${UPSTREAM_PATH}`;
+  const forwardedCookie = getReporterForwardCookieHeader(req);
+  const upstreamOrigin = (() => {
+    try { return new URL(base).origin; } catch { return base; }
+  })();
 
   try {
-    const forwardedCookie = String(req.headers.cookie || '').trim();
-    logReporterProxyDebug('proxy request', {
-      targetUrl,
-      hasCookie: Boolean(forwardedCookie),
-      credentialsEnabled: true,
+    logReporterMyStoriesInfo({
+      origin: upstreamOrigin,
+      path: UPSTREAM_PATH,
+      stage: 'before-fetch',
     });
+
     const upstream = await fetch(targetUrl, {
       method: 'GET',
       headers: {
         Accept: 'application/json',
         ...(forwardedCookie ? { cookie: forwardedCookie } : {}),
       },
+      signal: getFetchSignal(),
+    });
+
+    logReporterMyStoriesInfo({
+      stage: 'upstream-response',
+      status: upstream.status,
     });
 
     const text = await upstream.text().catch(() => '');
     let json: any = null;
-    try { json = text ? JSON.parse(text) : null; } catch {}
-    logReporterProxyDebug('proxy response', {
-      targetUrl,
-      status: upstream.status || 500,
-      responseCode: String(json?.code || '').trim() || null,
-      responseMessage: String(json?.message || '').trim() || null,
-    });
+    let invalidJson = false;
+    try { json = text ? JSON.parse(text) : null; } catch { invalidJson = true; }
+    const responseCode = getResponseCode(json);
+    const stories = getStoriesFromPayload(json);
 
     if (!upstream.ok) {
-      console.error('[api/community-reporter/my-stories] upstream error', upstream.status, text);
-      return res.status(upstream.status || 500).json(json || { ok: false, message: 'UPSTREAM_ERROR' });
+      const status = upstream.status || 500;
+      const code = responseCode || (invalidJson ? 'REPORTER_STORIES_UPSTREAM_ERROR' : 'UPSTREAM_ERROR');
+      return res.status(status).json(json || { ok: false, code, message: code });
+    }
+
+    if (invalidJson || !json || (stories.length === 0 && !hasStoriesCollection(json))) {
+      const code = 'REPORTER_STORIES_INVALID_UPSTREAM_RESPONSE';
+      return res.status(502).json({ ok: false, code });
     }
 
     try {
-      const raw = json ?? (text ? JSON.parse(text) : {});
-      const stories = Array.isArray((raw as any).stories)
-        ? (raw as any).stories
-        : Array.isArray((raw as any).items)
-        ? (raw as any).items
-        : Array.isArray((raw as any).data?.stories)
-        ? (raw as any).data.stories
-        : [];
-      return res.status(200).json({ ok: true, stories });
+      const ownedSubmissions = stories.filter((story: any) => {
+        const storyOwner = getStoryReporterOwner(story);
+        return storyOwner === email;
+      });
+      return res.status(200).json({ submissions: ownedSubmissions });
     } catch (parseErr) {
-      console.error('[api/community-reporter/my-stories] parse error', parseErr);
-      return res.status(500).json({ ok: false, message: 'PROXY_PARSE_ERROR' });
+      const code = 'REPORTER_STORIES_INVALID_UPSTREAM_RESPONSE';
+      return res.status(502).json({ ok: false, code });
     }
   } catch (err) {
-    console.error('[api/community-reporter/my-stories] exception', err);
-    return res.status(500).json({ ok: false, message: 'PROXY_ERROR' });
+    const code = 'REPORTER_STORIES_UPSTREAM_UNAVAILABLE';
+    logReporterMyStoriesFetchError(err);
+    return res.status(502).json({ ok: false, code });
   }
 }

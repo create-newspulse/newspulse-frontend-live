@@ -171,13 +171,16 @@ function normalizeBase(raw: string): string {
   return String(raw || '').trim().replace(/\/+$/, '').replace(/\/api\/?$/, '');
 }
 
-function getUploadBaseUrl(): string {
-  const serverBase = normalizeBase(getPublicApiBaseUrl());
-  if (serverBase) return serverBase;
+function isProductionBackendBase(raw: string): boolean {
+  const base = normalizeBase(raw).toLowerCase();
+  return base.includes('newspulse.co.in') || base.includes('admin.newspulse.co.in') || base.includes('newspulse-backend-real.onrender.com');
+}
 
-  return normalizeBase(
+function getBrowserUploadBaseUrl(): string {
+  const base = normalizeBase(
     String(
       process.env.NEXT_PUBLIC_API_BASE ||
+        process.env.NEXT_PUBLIC_API_BASE_DEV ||
         process.env.NEXT_PUBLIC_API_URL ||
         process.env.NEXT_PUBLIC_BACKEND_URL ||
         process.env.NEXT_PUBLIC_API_BASE_URL ||
@@ -185,6 +188,14 @@ function getUploadBaseUrl(): string {
         ''
     )
   );
+  if (process.env.NODE_ENV !== 'production' && isProductionBackendBase(base)) return '';
+  return base;
+}
+
+function getUploadBaseUrl(): string {
+  const serverBase = normalizeBase(getPublicApiBaseUrl());
+  if (serverBase) return serverBase;
+  return getBrowserUploadBaseUrl();
 }
 
 export function resolvePublicViralVideoMediaUrl(value: string): string {

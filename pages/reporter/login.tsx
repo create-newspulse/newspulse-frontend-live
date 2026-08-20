@@ -4,7 +4,7 @@ import type { GetServerSideProps } from 'next';
 import ReporterPortalLayout from '../../components/reporter-portal/ReporterPortalLayout';
 import { PortalRouteState } from '../../components/reporter-portal/PortalRouteState';
 import { usePublicFounderToggles } from '../../hooks/usePublicFounderToggles';
-import { useReporterPortalSession } from '../../hooks/useReporterPortalSession';
+import { bootstrapReporterSession, useReporterPortalSession } from '../../hooks/useReporterPortalSession';
 import { fetchPublicSettings } from '../../lib/communityReporterApi';
 import { getReporterPortalPageServerProps } from '../../lib/reporterPortalPage';
 import { extractReporterIdentityFields, loadReporterPortalProfile, normalizeReporterEmail, saveReporterPortalProfile } from '../../lib/reporterPortal';
@@ -16,7 +16,7 @@ type ReporterChallengeState = {
   requestId: number;
   email: string;
   expiresAt: string | null;
-  debugCode: string | null;
+  developmentCode: string | null;
   resendCount: number;
 };
 
@@ -168,6 +168,23 @@ function getRequestCodeUnavailableMessage() {
   return 'Verification email is temporarily unavailable. Please try again shortly.';
 }
 
+function canShowDevelopmentOtp() {
+  const nodeEnvKey = ['NODE', 'ENV'].join('_');
+  return process.env[nodeEnvKey] !== 'production';
+}
+
+function getDevelopmentOtpFromResponse(data: any): string | null {
+  if (!canShowDevelopmentOtp()) {
+    return null;
+  }
+  if (data?.delivery !== 'development') {
+    return null;
+  }
+
+  const developmentCode = String(data?.developmentCode || '').trim();
+  return /^\d{6}$/.test(developmentCode) ? developmentCode : null;
+}
+
 async function getActiveChallengeStatus() {
   const requestUrl = resolveReporterAuthUrl('/api/reporter-auth/challenge-session');
   const res = await fetch(requestUrl, {
@@ -182,6 +199,14 @@ async function getActiveChallengeStatus() {
     data,
     code: getReporterResponseCode(data),
   };
+}
+
+async function refreshVerifiedReporterSession() {
+  const result = await bootstrapReporterSession();
+  const data = result.status === 'authenticated'
+    ? { ok: true, session: result.session }
+    : { ok: false, code: result.reason, message: result.reason };
+  return { requestUrl: '/api/reporter-auth/session', result, data, code: getReporterResponseCode(data) };
 }
 
 export default function ReporterLoginPage({ communityReporterClosed, reporterPortalClosed }: FeatureToggleProps) {
@@ -336,7 +361,7 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
         requestId,
         email: normalizedEmail,
         expiresAt: typeof data?.expiresAt === 'string' ? data.expiresAt : null,
-        debugCode: typeof data?.debugCode === 'string' ? data.debugCode : null,
+        developmentCode: getDevelopmentOtpFromResponse(data),
         resendCount: options?.resend ? ((activeChallengeRef.current?.resendCount || 0) + 1) : 0,
       };
       activeChallengeRef.current = nextChallenge;
@@ -349,7 +374,9 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
         backendOk: data?.ok === true,
       });
       setStep('code');
-      setNotice(options?.resend ? 'A new verification code was sent. Use the most recent code only.' : 'Verification code sent. Check your email for the code or secure sign-in link.');
+      setNotice(nextChallenge.developmentCode
+        ? (options?.resend ? 'New development verification code generated. Use the most recent code only.' : 'Development verification code generated.')
+        : (options?.resend ? 'A new verification code was sent. Use the most recent code only.' : 'Verification code sent. Check your email for the code or secure sign-in link.'));
     } catch (requestError) {
       if (requestId !== latestRequestIdRef.current) {
         return;
@@ -399,9 +426,19 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
           return;
         }
 
+        const sessionStatus = await refreshVerifiedReporterSession();
+        if (cancelled) return;
+        if (sessionStatus.result.status !== 'authenticated') {
+          logReporterAuthFailure('verify-link session revalidation failed', { url: sessionStatus.requestUrl, status: 401, backendCode: sessionStatus.code });
+          setError('Your email was verified, but the reporter session was not established. Request a fresh code and try again.');
+          setNotice(null);
+          setStep('email');
+          return;
+        }
+
         logReporterAuthEvent('verify-link success', { url: requestUrl, status: res.status, backendCode: responseCode, nextTarget });
 
-        persistReporterIdentity(data, data.email);
+        persistReporterIdentity({ ...(data || {}), ...(sessionStatus.data?.session || {}) }, data.email);
         setStep('success');
         setNotice('Email verified. Opening Reporter Portal…');
         await router.replace(nextTarget);
@@ -534,9 +571,16 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
                 return;
               }
 
+              const sessionStatus = await refreshVerifiedReporterSession();
+              if (sessionStatus.result.status !== 'authenticated') {
+                logReporterAuthFailure('verify-code session revalidation failed', { url: sessionStatus.requestUrl, status: 401, backendCode: sessionStatus.code, credentialsIncluded: true, requestId: currentChallenge.requestId });
+                resetChallengeToEmailStep('Your email was verified, but the reporter session was not established. Request a fresh code and try again.');
+                return;
+              }
+
               logReporterAuthEvent('verify-code success', { url: requestUrl, status: res.status, backendCode: responseCode, credentialsIncluded: true, requestId: currentChallenge.requestId });
 
-              persistReporterIdentity(data, normalizedEmail);
+              persistReporterIdentity({ ...(data || {}), ...(sessionStatus.data?.session || {}) }, normalizedEmail);
               setStep('success');
               activeChallengeRef.current = null;
               setActiveChallenge(null);
@@ -551,7 +595,7 @@ export default function ReporterLoginPage({ communityReporterClosed, reporterPor
               <label htmlFor="reporterCode" className="mb-1 block text-sm font-semibold text-slate-900">Verification code</label>
               <input id="reporterCode" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value.replace(/\D+/g, '').slice(0, 6))} className="w-full rounded-2xl border border-slate-300 px-4 py-3 text-center text-lg font-semibold tracking-[0.35em] text-slate-900 outline-none ring-0 focus:border-blue-500" placeholder="123456" />
               <p className="mt-2 text-xs text-slate-500">Code sent to {activeChallenge?.email || email}.{activeChallenge?.expiresAt ? ` Expires ${new Date(activeChallenge.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.` : ''}</p>
-              {activeChallenge?.debugCode ? <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">Development code: {activeChallenge.debugCode}</p> : null}
+              {canShowDevelopmentOtp() && activeChallenge?.developmentCode ? <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">Development verification code: {activeChallenge.developmentCode}</p> : null}
             </div>
             {error ? <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
             <div className="flex gap-3">

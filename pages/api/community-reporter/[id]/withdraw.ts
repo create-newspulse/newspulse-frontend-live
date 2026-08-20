@@ -1,9 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-
-// Prefer same env logic as submit
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE ||
-  '';
+import { getPublicApiBaseUrl } from '../../../../lib/publicApiBase';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -16,9 +12,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ ok: false, message: 'MISSING_STORY_ID' });
   }
 
-  const base = (API_BASE_URL || '').toString().trim().replace(/\/+$/, '');
+  const base = getPublicApiBaseUrl().trim().replace(/\/+$/, '');
   if (!base) {
-    return res.status(500).json({ ok: false, message: 'NEXT_PUBLIC_API_BASE not set' });
+    return res.status(500).json({ ok: false, message: 'BACKEND_NOT_CONFIGURED' });
   }
   const targetUrl = `${base}/api/public/community-reporter/${encodeURIComponent(storyId)}/withdraw`;
 

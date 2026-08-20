@@ -12,9 +12,18 @@ import type { FeatureToggleProps } from '../../types/community-reporter';
 export default function ReporterProfilePage({ communityReporterClosed, reporterPortalClosed }: FeatureToggleProps) {
   const router = useRouter();
   const { toggles } = usePublicFounderToggles({ communityReporterClosed, reporterPortalClosed, youthPulseSubmissionsClosed: false, updatedAt: null });
-  const { session, profile, isReady, logout, reason } = useReporterPortalSession({ reportUnauthorizedReason: true });
+  const { session, profile, status, logout, reason } = useReporterPortalSession({ reportUnauthorizedReason: true });
+  const isAuthenticated = status === 'authenticated' && Boolean(session?.email);
   const [form, setForm] = useState({ fullName: '', email: '', phone: '', whatsapp: '', city: '', district: '', state: '', country: 'India' });
   const [saved, setSaved] = useState(false);
+  const currentPath = typeof router.asPath === 'string' && router.asPath.startsWith('/reporter/') ? router.asPath : '/reporter/profile';
+  const loginHref = `/reporter/login?next=${encodeURIComponent(currentPath)}`;
+  const shouldRedirectToLogin = !toggles.communityReporterClosed && !toggles.reporterPortalClosed && status === 'anonymous';
+
+  useEffect(() => {
+    if (!shouldRedirectToLogin) return;
+    void router.replace(loginHref).catch(() => {});
+  }, [loginHref, router, shouldRedirectToLogin]);
 
   useEffect(() => {
     const profile = loadReporterPortalProfile();
@@ -34,12 +43,12 @@ export default function ReporterProfilePage({ communityReporterClosed, reporterP
     return <ReporterPortalLayout title="Reporter Profile" description="Reporter profile access is blocked by toggle." active="profile"><PortalRouteState title="Reporter Portal is closed" description="The Reporter Portal toggle is off, so profile access is blocked." actionHref="/community-reporter" actionLabel="Back to Community Reporter" /></ReporterPortalLayout>;
   }
 
-  if (!isReady) {
-    return <ReporterPortalLayout title="Reporter Profile" description="Loading session." active="profile"><div className="rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-600">Loading reporter session…</div></ReporterPortalLayout>;
+  if (status === 'checking') {
+    return <ReporterPortalLayout title="Reporter Profile" description="Checking session." active="profile"><div className="rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-600">Checking reporter session…</div></ReporterPortalLayout>;
   }
 
-  if (!session?.email) {
-    return <ReporterPortalLayout title="Reporter Profile" description="A reporter login is required." active="profile"><PortalRouteState title={reason === 'SESSION_EXPIRED' ? 'Session expired' : 'Login required'} description={reason === 'SESSION_EXPIRED' ? 'Your verified reporter session expired. Sign in again before editing the reporter profile.' : 'Sign in before editing the reporter profile used by the portal and the shared submission form.'} actionHref="/reporter/login" actionLabel="Login to Reporter Portal" /></ReporterPortalLayout>;
+  if (!isAuthenticated) {
+    return <ReporterPortalLayout title="Reporter Profile" description="Redirecting to reporter login." active="profile"><div className="rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-600">Checking reporter session…</div></ReporterPortalLayout>;
   }
 
   return (

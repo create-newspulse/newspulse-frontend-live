@@ -5,8 +5,6 @@ import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
 import { filterVisibleArticlesForLocale, normalizeRouteLocale, STRICT_LOCALE_POLICY } from '../../../lib/localizedArticleFields';
 import { pickFreshestArticlesForLocale } from '../../../lib/translationGroupSync';
 
-const DEV_PUBLIC_NEWS_FALLBACK_BASE = 'https://www.newspulse.co.in';
-
 function asSingleQueryValue(value: string | string[] | undefined): string {
   return String(Array.isArray(value) ? value[0] : value || '').trim();
 }
@@ -57,22 +55,9 @@ function isDevRuntime(): boolean {
   return String(process.env.NODE_ENV || '').toLowerCase() !== 'production';
 }
 
-function isLoopbackBase(base: string): boolean {
-  try {
-    const { hostname } = new URL(base);
-    const normalized = String(hostname || '').trim().toLowerCase();
-    return normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '0.0.0.0';
-  } catch {
-    return false;
-  }
-}
-
 function getCandidateBases(base: string): string[] {
   const candidates = new Set<string>();
   if (base) candidates.add(base);
-  if (isDevRuntime() && (!base || isLoopbackBase(base))) {
-    candidates.add(DEV_PUBLIC_NEWS_FALLBACK_BASE);
-  }
   return Array.from(candidates);
 }
 

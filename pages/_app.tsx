@@ -18,6 +18,7 @@ import SmartBackButton from '../src/components/navigation/SmartBackButton';
 import { usePublicVersion } from '../hooks/usePublicVersion';
 import { CookieConsentProvider } from '../src/consent/CookieConsentProvider';
 import FirebaseForegroundMessaging from '../components/FirebaseForegroundMessaging';
+import { ReporterAuthProvider } from '../hooks/useReporterPortalSession';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -84,6 +85,12 @@ function isViralVideosRoute(asPath: string): boolean {
   const normalized = stripLocalePrefix(pathOnly).toLowerCase().replace(/\/+$/, '') || '/';
   const parts = normalized.split('/').filter(Boolean);
   return parts[0] === 'viral-videos';
+}
+
+function isProtectedReporterRoute(asPath: string): boolean {
+  const pathOnly = (String(asPath || '/').split('?')[0] || '/').split('#')[0] || '/';
+  const normalized = pathOnly.toLowerCase().replace(/\/+$/, '') || '/';
+  return normalized.startsWith('/reporter/') && normalized !== '/reporter/login';
 }
 
 function normalizeThemePreset(raw: unknown): ThemeMode | null {
@@ -214,13 +221,15 @@ function I18nBridge({ Component, pageProps }: { Component: any; pageProps: any }
   const messages = getMessagesForLang(lang);
   const langClass = lang === 'hi' ? 'np-lang-hi' : lang === 'gu' ? 'np-lang-gu' : 'np-lang-en';
   const showSimpleHeader = React.useMemo(() => isCategoryRoute(router.asPath) && !isViralVideosRoute(router.asPath), [router.asPath]);
+  const page = <Component {...pageProps} />;
+  const reporterPage = isProtectedReporterRoute(router.asPath) ? <ReporterAuthProvider>{page}</ReporterAuthProvider> : page;
   return (
     <SafeIntlProvider key={lang} messages={messages} locale={lang} onError={() => {}}>
       <SeoAlternates canonicalUrl={pageProps?.seo?.canonicalUrl} alternates={pageProps?.seo?.alternates} disabled={pageProps?.seo?.disableAlternates} />
       <div className={`${inter.variable} ${gujarati.variable} ${devanagari.variable} np-appRoot ${langClass} relative overflow-x-hidden`}>
         {showSimpleHeader ? <BrandTopHeader /> : null}
         <SmartBackButton />
-        <Component {...pageProps} />
+        {reporterPage}
       </div>
     </SafeIntlProvider>
   );

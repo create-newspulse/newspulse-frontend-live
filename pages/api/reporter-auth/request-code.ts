@@ -235,10 +235,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       requestId,
     });
     const delivery = await sendReporterPortalLoginEmail({ email, code, magicLink });
+    const isDevelopmentDelivery = process.env.NODE_ENV !== 'production' && !delivery.delivered && 'debugCode' in delivery;
     authRouteLog('mail send completed', {
       email: maskReporterEmail(email),
       delivered: Boolean(delivery && 'delivered' in delivery && delivery.delivered),
-      usedDebugCode: Boolean(delivery && 'debugCode' in delivery),
+      usedDevelopmentCode: isDevelopmentDelivery,
       provider: delivery.provider,
       requestId,
     });
@@ -264,7 +265,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       ok: true,
       email,
       expiresAt: getOtpExpiryIso(),
-      debugCode: 'debugCode' in delivery ? delivery.debugCode : undefined,
+      delivery: isDevelopmentDelivery ? 'development' : 'email',
+      developmentCode: isDevelopmentDelivery ? delivery.debugCode : undefined,
     });
   } catch (error: any) {
     const classifiedError = error instanceof ReporterPortalMailError ? error : new ReporterPortalMailError('REPORTER_PORTAL_EMAIL_SEND_FAILED', {

@@ -34,11 +34,43 @@ describe('lib/publicApiBase', () => {
     expect(getPublicApiBaseUrl()).toBe('https://newspulse-backend-real.onrender.com');
   });
 
+  it('uses the local development backend split env outside production', () => {
+    process.env.NEXT_PUBLIC_API_BASE_DEV = 'http://localhost:3010';
+    process.env.NEXT_PUBLIC_API_BASE_PROD = 'https://newspulse-backend-real.onrender.com';
+
+    const { getPublicApiBaseUrl } = require('../../lib/publicApiBase');
+
+    expect(getPublicApiBaseUrl()).toBe('http://localhost:3010');
+  });
+
+  it('uses the configured production backend split env on production deployments', () => {
+    process.env.VERCEL_ENV = 'production';
+    process.env.NEXT_PUBLIC_API_BASE_DEV = 'http://localhost:3010';
+    process.env.NEXT_PUBLIC_API_BASE_PROD = 'https://newspulse-backend-real.onrender.com';
+
+    const { getPublicApiBaseUrl } = require('../../lib/publicApiBase');
+
+    expect(getPublicApiBaseUrl()).toBe('https://newspulse-backend-real.onrender.com');
+  });
+
   it('refuses the production backend in local dev unless explicitly allowed', () => {
-    process.env.NEXT_PUBLIC_API_BASE = 'https://www.newspulse.co.in';
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    process.env.NEXT_PUBLIC_API_BASE = 'https://newspulse-backend-real.onrender.com';
 
     const { getPublicApiBaseUrl } = require('../../lib/publicApiBase');
 
     expect(getPublicApiBaseUrl()).toBe('');
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Refusing to use production backend in dev'));
+    warnSpy.mockRestore();
+  });
+
+  it('warns and returns no backend when local development config is missing', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const { getPublicApiBaseUrl } = require('../../lib/publicApiBase');
+
+    expect(getPublicApiBaseUrl()).toBe('');
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Local backend is not configured for development'));
+    warnSpy.mockRestore();
   });
 });

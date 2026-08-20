@@ -1,4 +1,5 @@
 let warnedUnsafeDevBase = false;
+let warnedMissingDevBase = false;
 const DEFAULT_PROD_API_BASE = 'https://newspulse-backend-real.onrender.com';
 
 function normalizeBase(raw: string): string {
@@ -20,7 +21,7 @@ function isProdDeployment(): boolean {
 
 function isLikelyProdDomain(base: string): boolean {
   const b = base.toLowerCase();
-  return b.includes('newspulse.co.in') || b.includes('admin.newspulse.co.in');
+  return b.includes('newspulse.co.in') || b.includes('admin.newspulse.co.in') || b.includes('newspulse-backend-real.onrender.com');
 }
 
 function envBool(name: string): boolean {
@@ -63,8 +64,20 @@ export function getPublicApiBaseUrl(): string {
 
   const base = resolveConfiguredBase();
 
-  if (!base && isProdDeployment()) {
-    return DEFAULT_PROD_API_BASE;
+  if (!base) {
+    if (isProdDeployment()) {
+      return DEFAULT_PROD_API_BASE;
+    }
+
+    if (!warnedMissingDevBase) {
+      warnedMissingDevBase = true;
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[newspulse] Local backend is not configured for development. ' +
+          'Set NEXT_PUBLIC_API_BASE_DEV=http://localhost:<backend-port> in .env.local.'
+      );
+    }
+    return '';
   }
 
   // Safety: local dev should not silently hit production.

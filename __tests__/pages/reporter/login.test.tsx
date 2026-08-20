@@ -26,6 +26,11 @@ jest.mock('next/router', () => ({
 }));
 
 jest.mock('../../../hooks/useReporterPortalSession', () => ({
+  bootstrapReporterSession: jest.fn(async () => ({
+    status: 'authenticated',
+    session: { email: 'reporter@example.com' },
+    data: { ok: true, session: { email: 'reporter@example.com' } },
+  })),
   useReporterPortalSession: () => ({
     session: null,
     reason: null,
@@ -94,8 +99,9 @@ describe('pages/reporter/login', () => {
       status: 200,
       json: async () => ({
         ok: true,
+        delivery: 'development',
+        developmentCode: '123456',
         expiresAt: '2025-01-01T10:30:00.000Z',
-        debugCode: '123456',
       }),
     });
 
@@ -117,10 +123,56 @@ describe('pages/reporter/login', () => {
     });
 
     expect(await screen.findByLabelText('Verification code')).toBeTruthy();
-    expect(screen.getByText('Verification code sent. Check your email for the code or secure sign-in link.')).toBeTruthy();
-    expect(screen.getByText('Development code: 123456')).toBeTruthy();
+    expect(screen.getByText('Development verification code generated.')).toBeTruthy();
+    expect(screen.queryByText('Verification code sent. Check your email for the code or secure sign-in link.')).toBeNull();
+    expect(screen.getByText('Development verification code: 123456')).toBeTruthy();
     expect(saveReporterPortalProfileMock).toHaveBeenCalledWith({ email: 'reporter@example.com' });
     expect((global as any).fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('never renders developmentCode in production even when a malformed response includes it', async () => {
+    const originalEnv = process.env;
+    Object.defineProperty(process, 'env', { value: { ...originalEnv, NODE_ENV: 'production' }, configurable: true });
+    try {
+      (global as any).fetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, delivery: 'development', developmentCode: '123456', expiresAt: '2025-01-01T10:30:00.000Z' }),
+      });
+
+      render(<ReporterLoginPage communityReporterClosed={false} reporterPortalClosed={false} />);
+
+      fireEvent.change(await screen.findByLabelText('Reporter email'), {
+        target: { value: 'Reporter@Example.com ' },
+      });
+      fireEvent.click(screen.getByText('Send verification code'));
+
+      expect(await screen.findByLabelText('Verification code')).toBeTruthy();
+      expect(screen.getByText('Verification code sent. Check your email for the code or secure sign-in link.')).toBeTruthy();
+      expect(screen.queryByText('Development verification code: 123456')).toBeNull();
+      expect(screen.queryByText('Development verification code generated.')).toBeNull();
+    } finally {
+      Object.defineProperty(process, 'env', { value: originalEnv, configurable: true });
+    }
+  });
+
+  it('uses normal production email wording when delivery is not development', async () => {
+    (global as any).fetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, delivery: 'email', expiresAt: '2025-01-01T10:30:00.000Z' }),
+    });
+
+    render(<ReporterLoginPage communityReporterClosed={false} reporterPortalClosed={false} />);
+
+    fireEvent.change(await screen.findByLabelText('Reporter email'), {
+      target: { value: 'Reporter@Example.com ' },
+    });
+    fireEvent.click(screen.getByText('Send verification code'));
+
+    expect(await screen.findByLabelText('Verification code')).toBeTruthy();
+    expect(screen.getByText('Verification code sent. Check your email for the code or secure sign-in link.')).toBeTruthy();
+    expect(screen.queryByText(/Development verification code:/)).toBeNull();
   });
 
   it('does not fire a second bootstrap request after request-code succeeds', async () => {
@@ -284,12 +336,12 @@ describe('pages/reporter/login', () => {
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => ({ ok: true, expiresAt: '2025-01-01T10:30:00.000Z', debugCode: '111111' }),
+        json: async () => ({ ok: true, delivery: 'development', developmentCode: '111111', expiresAt: '2025-01-01T10:30:00.000Z' }),
       })
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => ({ ok: true, expiresAt: '2025-01-01T10:35:00.000Z', debugCode: '222222' }),
+        json: async () => ({ ok: true, delivery: 'development', developmentCode: '222222', expiresAt: '2025-01-01T10:35:00.000Z' }),
       });
 
     render(<ReporterLoginPage communityReporterClosed={false} reporterPortalClosed={false} />);
@@ -305,9 +357,9 @@ describe('pages/reporter/login', () => {
 
     fireEvent.click(screen.getByText('Resend'));
 
-    await screen.findByText('A new verification code was sent. Use the most recent code only.');
+  await screen.findByText('New development verification code generated. Use the most recent code only.');
     expect((screen.getByLabelText('Verification code') as HTMLInputElement).value).toBe('');
-    expect(screen.getByText('Development code: 222222')).toBeTruthy();
+  expect(screen.getByText('Development verification code: 222222')).toBeTruthy();
 
     expect((global as any).fetch).toHaveBeenNthCalledWith(
       2,
@@ -457,6 +509,11 @@ describe('pages/reporter/login', () => {
         ok: true,
         status: 200,
         json: async () => ({ ok: true, email: 'reporter@example.com', fullName: 'Kiran Parmar', firstName: 'Kiran' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, session: { email: 'reporter@example.com', fullName: 'Kiran Parmar', firstName: 'Kiran' } }),
       });
 
     render(<ReporterLoginPage communityReporterClosed={false} reporterPortalClosed={false} />);
@@ -479,6 +536,88 @@ describe('pages/reporter/login', () => {
       email: 'reporter@example.com',
       fullName: 'Kiran Parmar',
       firstName: 'Kiran',
+    });
+  });
+
+  it('returns to the validated next reporter route after successful verification', async () => {
+    routerState.query = { next: '/reporter/submissions' };
+    (global as any).fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, expiresAt: '2025-01-01T10:30:00.000Z', debugCode: '123456' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:30:00.000Z' } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, email: 'reporter@example.com' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, session: { email: 'reporter@example.com' } }),
+      });
+
+    render(<ReporterLoginPage communityReporterClosed={false} reporterPortalClosed={false} />);
+
+    fireEvent.change(await screen.findByLabelText('Reporter email'), {
+      target: { value: 'reporter@example.com' },
+    });
+    fireEvent.click(screen.getByText('Send verification code'));
+
+    fireEvent.change(await screen.findByLabelText('Verification code'), {
+      target: { value: '123456' },
+    });
+    fireEvent.click(screen.getByText('Verify code'));
+
+    await waitFor(() => {
+      expect(routerState.push).toHaveBeenCalledWith('/reporter/submissions');
+    });
+  });
+
+  it('does not redirect to an external next URL after successful verification', async () => {
+    routerState.query = { next: 'https://evil.example/reporter/submissions' };
+    (global as any).fetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, expiresAt: '2025-01-01T10:30:00.000Z', debugCode: '123456' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, challenge: { email: 'reporter@example.com', expiresAt: '2025-01-01T10:30:00.000Z' } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, email: 'reporter@example.com' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, session: { email: 'reporter@example.com' } }),
+      });
+
+    render(<ReporterLoginPage communityReporterClosed={false} reporterPortalClosed={false} />);
+
+    fireEvent.change(await screen.findByLabelText('Reporter email'), {
+      target: { value: 'reporter@example.com' },
+    });
+    fireEvent.click(screen.getByText('Send verification code'));
+
+    fireEvent.change(await screen.findByLabelText('Verification code'), {
+      target: { value: '123456' },
+    });
+    fireEvent.click(screen.getByText('Verify code'));
+
+    await waitFor(() => {
+      expect(routerState.push).toHaveBeenCalledWith('/reporter/dashboard');
     });
   });
 

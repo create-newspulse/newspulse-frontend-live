@@ -17,10 +17,6 @@ import { formatEditorialDateTime, resolveStoryDateIso } from '../../lib/storyDat
 import { getStoryTitleHookColor, splitStoryTitleHook } from '../../lib/storyTitleHook';
 import StoryImage from '../../src/components/story/StoryImage';
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL ||
-  'https://newspulse-backend-real.onrender.com';
-
 function normalizeLang(locale: unknown): 'en' | 'hi' | 'gu' {
   const v = String(locale || '').toLowerCase().trim();
   if (v === 'hi' || v === 'hindi' || v === 'in') return 'hi';

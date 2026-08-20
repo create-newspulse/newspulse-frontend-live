@@ -38,6 +38,18 @@ function getHostname(value: string): string {
   }
 }
 
+function getHostWithPort(value: string): string {
+  try {
+    return new URL(value).host.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+function isLocalhostHostname(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]';
+}
+
 function getRequestHost(req?: NextApiRequest): string {
   return String(req?.headers['x-forwarded-host'] || req?.headers.host || '')
     .split(',')[0]
@@ -77,6 +89,11 @@ function isLikelyFrontendHostname(hostname: string, req?: NextApiRequest): boole
 function isFrontendProxyBase(base: string, req?: NextApiRequest): boolean {
   const hostname = getHostname(base);
   if (!hostname) return false;
+
+  const requestHost = getRequestHost(req);
+  if (requestHost && isLocalhostHostname(hostname) && getHostWithPort(base) !== requestHost) {
+    return false;
+  }
 
   if (isLikelyFrontendHostname(hostname, req)) {
     return true;
@@ -169,6 +186,31 @@ export function getReporterProxySetCookies(headers: Headers): string[] {
 
   const single = headers.get('set-cookie');
   return single ? [single] : [];
+}
+
+export function sanitizeReporterProxySetCookie(cookie: string): string | null {
+  const [nameValue, ...attributes] = String(cookie || '').split(';').map((part) => part.trim()).filter(Boolean);
+  if (!nameValue || !nameValue.includes('=')) return null;
+
+  const preserved = attributes.filter((attribute) => {
+    const key = attribute.split('=')[0]?.trim().toLowerCase();
+    return key === 'max-age' || key === 'expires';
+  });
+  const nodeEnvKey = ['NODE', 'ENV'].join('_');
+  return [
+    nameValue,
+    ...preserved,
+    'Path=/',
+    'SameSite=Lax',
+    'HttpOnly',
+    ...(process.env[nodeEnvKey] === 'production' ? ['Secure'] : []),
+  ].join('; ');
+}
+
+export function getSanitizedReporterProxySetCookies(headers: Headers): string[] {
+  return getReporterProxySetCookies(headers)
+    .map((cookie) => sanitizeReporterProxySetCookie(cookie))
+    .filter((cookie): cookie is string => Boolean(cookie));
 }
 
 export function forwardReporterProxyCookies(res: NextApiResponse, headers: Headers, extraCookies: string[] = []) {

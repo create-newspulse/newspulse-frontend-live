@@ -6,6 +6,7 @@ type FetchMyStoriesOptions = {
   reporterAuth?: boolean;
   useProxy?: boolean;
   debugContexts?: string[];
+  signal?: AbortSignal;
 };
 
 function shouldLogReporterDebug(): boolean {
@@ -19,6 +20,12 @@ function logReporterDebug(event: string, details: Record<string, unknown>) {
   }
   // eslint-disable-next-line no-console
   console.info(`[Reporter Portal] ${event}`, details);
+}
+
+function logMyStoriesDiagnostics(contexts: string[], details: { status: number; errorCode: string | null; recordCount: number }) {
+  for (const context of contexts) {
+    logReporterDebug(`${context} response`, details);
+  }
 }
 
 export class CommunityReporterHttpError extends Error {
@@ -73,46 +80,42 @@ export async function fetchMyStoriesByEmail(email: string, options?: FetchMyStor
   const base = getApiBase();
   const normalizedEmail = normalizeReporterEmail(email);
   const useProxy = Boolean(options?.useProxy);
-  const url = useProxy
-    ? `/api/community-reporter/my-stories?email=${encodeURIComponent(normalizedEmail)}`
-    : `${base}/api/community-reporter/my-stories?email=${encodeURIComponent(normalizedEmail)}`;
   const credentialsEnabled = Boolean(options?.reporterAuth);
+  const url = useProxy
+    ? (credentialsEnabled ? '/api/community-reporter/my-stories' : `/api/community-reporter/my-stories?email=${encodeURIComponent(normalizedEmail)}`)
+    : `${base}/api/community-reporter/my-stories?email=${encodeURIComponent(normalizedEmail)}`;
   const debugContexts = options?.debugContexts?.length ? options.debugContexts : ['reporter submissions fetch'];
-  for (const context of debugContexts) {
-    logReporterDebug(`${context} request`, {
-      url,
-      credentialsIncluded: credentialsEnabled,
+  let res: any;
+  try {
+    res = await fetch(url, {
+      headers: {
+        Accept: 'application/json',
+      },
+      credentials: credentialsEnabled ? 'include' : undefined,
+      cache: credentialsEnabled ? 'no-store' : undefined,
+      signal: options?.signal,
     });
+  } catch (err) {
+    logMyStoriesDiagnostics(debugContexts, { status: 0, errorCode: 'NETWORK_ERROR', recordCount: 0 });
+    throw err;
   }
-  const res: any = await fetch(url, {
-    headers: {
-      Accept: 'application/json',
-    },
-    credentials: credentialsEnabled ? 'include' : undefined,
-  });
   const status: number = typeof res?.status === 'number' ? res.status : (res?.ok ? 200 : 500);
 
   const data = await res.json().catch(() => null as any);
   const responseCode = String(data?.code || '').trim() || null;
-  const responseMessage = String(data?.message || '').trim() || null;
-  for (const context of debugContexts) {
-    logReporterDebug(`${context} response`, {
-      url,
-      status,
-      responseCode,
-      responseMessage,
-      credentialsIncluded: credentialsEnabled,
-    });
-  }
-
-  const items = Array.isArray(data?.stories)
+  const items = Array.isArray(data?.submissions)
+    ? data.submissions
+    : Array.isArray(data?.stories)
     ? data.stories
     : Array.isArray(data?.items)
     ? data.items
+    : Array.isArray(data?.data?.submissions)
+    ? data.data.submissions
     : Array.isArray(data?.data?.stories)
     ? data.data.stories
     : [];
-  const hasCollectionShape = Array.isArray(data?.stories) || Array.isArray(data?.items) || Array.isArray(data?.data?.stories);
+  const hasCollectionShape = Array.isArray(data?.submissions) || Array.isArray(data?.stories) || Array.isArray(data?.items) || Array.isArray(data?.data?.submissions) || Array.isArray(data?.data?.stories);
+  logMyStoriesDiagnostics(debugContexts, { status, errorCode: responseCode, recordCount: items.length });
 
   // Prefer returning stories if present, even if upstream returns a non-2xx.
   if (items.length) return items as CommunityStorySummary[];
@@ -124,7 +127,7 @@ export async function fetchMyStoriesByEmail(email: string, options?: FetchMyStor
   throw new CommunityReporterHttpError({
     status,
     url,
-    message: responseMessage || responseCode || 'STORIES_FETCH_FAILED',
+    message: responseCode || 'STORIES_FETCH_FAILED',
     code: responseCode || undefined,
   });
 }

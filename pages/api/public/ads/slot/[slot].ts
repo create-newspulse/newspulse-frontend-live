@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { getPublicApiBaseUrl } from '../../../../../lib/publicApiBase';
 
 type SlotName = 'HOME_728x90' | 'HOME_RIGHT_300x250' | string;
 
@@ -14,7 +15,9 @@ type PublicAd = {
 
 type PublicAdResponse = { ok: boolean; ad: PublicAd | null };
 
-const BACKEND_URL = (process.env.NEXT_PUBLIC_API_BASE || '').trim().replace(/\/+$/, '');
+function getBackendUrl(): string {
+  return getPublicApiBaseUrl().trim().replace(/\/+$/, '');
+}
 
 function pickAd(payload: any): PublicAd | null {
   if (!payload) return null;
@@ -37,13 +40,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
   const slot = String(req.query.slot || '').trim() as SlotName;
   if (!slot) return res.status(400).json({ ok: false, ad: null });
 
-  if (!BACKEND_URL) {
+  const backendUrl = getBackendUrl();
+  if (!backendUrl) {
     return res.status(200).json({ ok: false, ad: null });
   }
 
   try {
     // Preferred upstream path
-    const preferred = await fetch(`${BACKEND_URL}/api/public/ads/slot/${encodeURIComponent(slot)}`, {
+    const preferred = await fetch(`${backendUrl}/api/public/ads/slot/${encodeURIComponent(slot)}`, {
       method: 'GET',
       headers: { Accept: 'application/json' },
     });
@@ -56,7 +60,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     }
 
     // Backward-compatible fallback
-    const fallback = await fetch(`${BACKEND_URL}/api/public/ads?slot=${encodeURIComponent(slot)}`, {
+    const fallback = await fetch(`${backendUrl}/api/public/ads?slot=${encodeURIComponent(slot)}`, {
       method: 'GET',
       headers: { Accept: 'application/json' },
     });

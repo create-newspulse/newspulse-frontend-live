@@ -1,4 +1,17 @@
-import { submitCommunityStory, submitYouthPulseStory } from '../../src/lib/communityReporterApi';
+import { submitCommunityStory, submitYouthPulseStory, type CommunityReporterAgeGroup } from '../../src/lib/communityReporterApi';
+
+function createCommunityPayload(ageGroup: CommunityReporterAgeGroup = '18_24') {
+  return {
+    reporterName: 'Test User',
+    reporterEmail: 'test@example.com',
+    ageGroup,
+    category: 'regional',
+    coverageScope: 'regional' as const,
+    headline: 'Hello',
+    story: 'This is a sufficiently long story text to pass validation.',
+    reporterType: 'community' as const,
+  };
+}
 
 describe('submitCommunityStory (identity anchors)', () => {
   beforeEach(() => {
@@ -8,12 +21,12 @@ describe('submitCommunityStory (identity anchors)', () => {
     });
   });
 
-  it('posts extended profile + anchors in the request body', async () => {
+  it('posts one backend-compatible community submission payload', async () => {
     await submitCommunityStory({
       reporterAccountId: 'acct-1',
       reporterProfileId: 'prof-1',
       reporterName: 'Test User',
-      reporterEmail: 'test@example.com',
+      reporterEmail: ' TEST@Example.com ',
       reporterPhone: '999',
       reporterWhatsApp: '888',
       city: 'Ahmedabad',
@@ -22,36 +35,81 @@ describe('submitCommunityStory (identity anchors)', () => {
       country: 'India',
       consentToContact: true,
       beats: ['Civic', 'Education'],
-      ageGroup: '18–24',
+      ageGroup: '18_24',
       category: 'regional',
       coverageScope: 'regional',
       headline: 'Hello',
       story: 'This is a sufficiently long story text to pass validation.',
       reporterType: 'community',
       preferredLanguages: ['en'],
+      communityInterests: ['Civic', 'Education'],
+      mediaLink: 'https://example.com/photo.jpg',
     });
 
     expect((global as any).fetch).toHaveBeenCalledTimes(1);
-    const [, init] = (global as any).fetch.mock.calls[0];
+    const [url, init] = (global as any).fetch.mock.calls[0];
     const body = JSON.parse(init.body);
 
-    expect(body.reporterAccountId).toBe('acct-1');
-    expect(body.reporterProfileId).toBe('prof-1');
-    expect(body.reporterEmail).toBe('test@example.com');
-    expect(body.reporterPhone).toBe('999');
-    expect(body.phone).toBe('999');
-    expect(body.reporterWhatsApp).toBe('888');
-    expect(body.whatsapp).toBe('888');
-    expect(body.city).toBe('Ahmedabad');
-    expect(body.state).toBe('Gujarat');
-    expect(body.country).toBe('India');
-    expect(body.coverageType).toBe('regional');
-    expect(body.reporterDistrict).toBe('Ahmedabad');
-    expect(body.reporterProfile.phone).toBe('999');
-    expect(body.reporterProfile.city).toBe('Ahmedabad');
-    expect(body.consentToContact).toBe(true);
-    expect(body.coverageScope).toBe('regional');
-    expect(Array.isArray(body.beats)).toBe(true);
+    expect(url).toBe('/api/community/submissions');
+    expect(body).toEqual({
+      reporterAccountId: 'acct-1',
+      reporterProfileId: 'prof-1',
+      reporterType: 'community',
+      reporterName: 'Test User',
+      reporterEmail: 'test@example.com',
+      reporterPhone: '999',
+      reporterWhatsApp: '888',
+      city: 'Ahmedabad',
+      district: 'Ahmedabad',
+      state: 'Gujarat',
+      country: 'India',
+      ageGroup: '18_24',
+      category: 'regional',
+      coverageScope: 'regional',
+      headline: 'Hello',
+      story: 'This is a sufficiently long story text to pass validation.',
+      mediaLink: 'https://example.com/photo.jpg',
+      priority: 'normal',
+      preferredLanguages: ['en'],
+      consentToContact: true,
+      beats: ['Civic', 'Education'],
+      communityInterests: ['Civic', 'Education'],
+      journalistCharterAccepted: false,
+      generalEthicsAccepted: false,
+    });
+    expect(body.fullName).toBeUndefined();
+    expect(body.phone).toBeUndefined();
+    expect(body.storyText).toBeUndefined();
+    expect(body.reporterProfile).toBeUndefined();
+    expect(body.meta).toBeUndefined();
+  });
+
+  it.each([
+    ['Under 18', 'under_18'],
+    ['18–24', '18_24'],
+    ['25–40', '25_40'],
+    ['41+', '41_plus'],
+  ] as Array<[string, CommunityReporterAgeGroup]>)('posts %s as %s', async (_label, ageGroup) => {
+    await submitCommunityStory(createCommunityPayload(ageGroup));
+
+    const [, init] = (global as any).fetch.mock.calls[0];
+    expect(JSON.parse(init.body).ageGroup).toBe(ageGroup);
+  });
+
+  it('returns public-safe validation messages for HTTP 400 without throwing', async () => {
+    (global as any).fetch = jest.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      json: async () => ({ error: 'submit_failed', stack: 'Error: internal stack' }),
+    });
+
+    const result = await submitCommunityStory({
+      ...createCommunityPayload('18_24'),
+    });
+
+    expect((global as any).fetch).toHaveBeenCalledTimes(1);
+    expect(result.ok).toBe(false);
+    expect(result.message).toBe('Please check the highlighted details and try submitting again.');
   });
 
   it('tags Youth Pulse submissions for the Youth Pulse Desk workflow', async () => {

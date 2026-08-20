@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
+import { getPublicApiBaseUrl } from '../../../lib/publicApiBase'
 
 // Important: keep raw stream for multipart/form-data
 export const config = {
@@ -8,12 +9,7 @@ export const config = {
 }
 
 function getBackendBaseUrl(): string {
-  const raw =
-    process.env.NEXT_PUBLIC_API_BASE ||
-    process.env.NEWS_PULSE_BACKEND_URL ||
-    process.env.API_BASE_URL ||
-    ''
-  return raw.toString().trim().replace(/\/+$/, '')
+  return getPublicApiBaseUrl().trim().replace(/\/+$/, '')
 }
 
 export default async function uploadIdHandler(
@@ -29,11 +25,11 @@ export default async function uploadIdHandler(
   if (!base) {
     console.error(
       '[community-reporter/upload-id]',
-      new Error('Missing env var: NEXT_PUBLIC_API_BASE'),
+      new Error('Backend base URL not configured'),
     )
     return res
       .status(500)
-      .json({ ok: false, message: 'Missing env var: NEXT_PUBLIC_API_BASE' })
+      .json({ ok: false, message: 'BACKEND_NOT_CONFIGURED' })
   }
 
   const targetUrl = `${base}/api/community-reporter/upload-id`

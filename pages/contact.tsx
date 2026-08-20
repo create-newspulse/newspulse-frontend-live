@@ -4,8 +4,8 @@ import React from 'react';
 import { Briefcase, Clock3, Globe, GraduationCap, Mail, Newspaper, ShieldAlert, Users } from 'lucide-react';
 import PublicBusinessPageLayout, { PageEyebrow, SectionHeading, SurfacePanel } from '../components/public/PublicBusinessPageLayout';
 
-const generalEmail = 'newspulse.admin@gmail.com';
-const contactEmail = 'newspulse.team@gmail.com';
+const generalEmail = 'newspulse.team@gmail.com';
+const contactEmail = 'community@newspulse.co.in';
 const grievanceEmail = 'grievance@newspulse.co.in';
 const adsEmail = 'newspulse.ads@gmail.com';
 

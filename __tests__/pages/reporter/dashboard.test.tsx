@@ -3,7 +3,9 @@ import { render, screen } from '@testing-library/react';
 import ReporterDashboardPage from '../../../pages/reporter/dashboard';
 
 const routerState = {
+  asPath: '/reporter/dashboard',
   push: jest.fn().mockResolvedValue(true),
+  replace: jest.fn().mockResolvedValue(true),
 };
 
 const useCommunityStoriesMock = jest.fn();
@@ -42,15 +44,21 @@ jest.mock('../../../components/reporter-portal/PortalRouteState', () => ({
 describe('pages/reporter/dashboard', () => {
   beforeEach(() => {
     routerState.push.mockClear();
+    routerState.replace.mockClear();
+    routerState.asPath = '/reporter/dashboard';
     useReporterPortalSessionMock.mockReturnValue({
       session: { email: 'newspulse.team@gmail.com' },
+      reporter: { email: 'newspulse.team@gmail.com' },
+      authenticated: true,
+      status: 'authenticated',
       isReady: true,
+      loading: false,
       logout: jest.fn(),
       reason: null,
     });
   });
 
-  it('shows a session error instead of zero stat cards when reporter records fail auth', () => {
+  it('keeps an authenticated reporter in the dashboard when records fail auth upstream', () => {
     useCommunityStoriesMock.mockReturnValue({
       settings: { communityReporterEnabled: true, allowMyStoriesPortal: true },
       settingsLoading: false,
@@ -64,8 +72,73 @@ describe('pages/reporter/dashboard', () => {
 
     render(<ReporterDashboardPage communityReporterClosed={false} reporterPortalClosed={false} />);
 
-    expect(screen.getByText('Session expired')).toBeTruthy();
-    expect(screen.getByText('Your reporter session could not be confirmed for dashboard activity. Sign in again and retry.')).toBeTruthy();
+    expect(routerState.replace).not.toHaveBeenCalled();
+    expect(screen.getByText('Dashboard activity is temporarily unavailable for this verified reporter email. Please try again shortly.')).toBeTruthy();
+    expect(screen.queryByText('Total')).toBeNull();
+  });
+
+  it('does not render authenticated dashboard or start story loading while session is checking', () => {
+    useReporterPortalSessionMock.mockReturnValue({
+      session: { email: 'cached@example.com' },
+      reporter: null,
+      authenticated: false,
+      profile: null,
+      status: 'checking',
+      isReady: false,
+      loading: true,
+      logout: jest.fn(),
+      reason: null,
+    });
+    useCommunityStoriesMock.mockReturnValue({
+      settings: null,
+      settingsLoading: true,
+      stories: [],
+      counts: { total: 0, pending: 0, approved: 0, rejected: 0, published: 0, withdrawn: 0 },
+      isLoading: false,
+      error: null,
+      errorStatus: null,
+      hasLoadedOnce: false,
+    });
+
+    render(<ReporterDashboardPage communityReporterClosed={false} reporterPortalClosed={false} />);
+
+    expect(screen.getByText('Checking reporter session…')).toBeTruthy();
+    expect(screen.queryByText('Total')).toBeNull();
+    expect(useCommunityStoriesMock).toHaveBeenCalledWith(expect.objectContaining({
+      reporterEmail: null,
+      reporterAuth: true,
+      enabled: false,
+    }));
+  });
+
+  it('redirects to login when the protected dashboard session is expired', () => {
+    useReporterPortalSessionMock.mockReturnValue({
+      session: null,
+      reporter: null,
+      authenticated: false,
+      profile: null,
+      status: 'anonymous',
+      isReady: true,
+      loading: false,
+      logout: jest.fn(),
+      reason: 'SESSION_EXPIRED',
+    });
+    useCommunityStoriesMock.mockReturnValue({
+      settings: { communityReporterEnabled: true, allowMyStoriesPortal: true },
+      settingsLoading: false,
+      stories: [],
+      counts: { total: 0, pending: 0, approved: 0, rejected: 0, published: 0, withdrawn: 0 },
+      isLoading: false,
+      error: null,
+      errorStatus: null,
+      hasLoadedOnce: false,
+    });
+
+    render(<ReporterDashboardPage communityReporterClosed={false} reporterPortalClosed={false} />);
+
+    expect(useReporterPortalSessionMock).toHaveBeenCalledWith({ reportUnauthorizedReason: true });
+    expect(routerState.replace).toHaveBeenCalledWith('/reporter/login?next=%2Freporter%2Fdashboard');
+    expect(screen.getByText('Checking reporter session…')).toBeTruthy();
     expect(screen.queryByText('Total')).toBeNull();
   });
 
@@ -90,5 +163,40 @@ describe('pages/reporter/dashboard', () => {
     expect(screen.getByText('2')).toBeTruthy();
     expect(screen.getByText('City update')).toBeTruthy();
     expect(screen.getByText('Campus bulletin')).toBeTruthy();
+  });
+
+  it('renders a valid empty reporter-owned result without the temporary unavailable message', () => {
+    useCommunityStoriesMock.mockReturnValue({
+      settings: { communityReporterEnabled: true, allowMyStoriesPortal: true },
+      settingsLoading: false,
+      stories: [],
+      counts: { total: 0, pending: 0, approved: 0, rejected: 0, published: 0, withdrawn: 0 },
+      isLoading: false,
+      error: null,
+      errorStatus: null,
+      hasLoadedOnce: true,
+    });
+
+    render(<ReporterDashboardPage communityReporterClosed={false} reporterPortalClosed={false} />);
+
+    expect(screen.getByText('No submissions linked to this Reporter Portal account yet.')).toBeTruthy();
+    expect(screen.queryByText('Submission records are temporarily unavailable for this verified reporter email. Please try again shortly.')).toBeNull();
+  });
+
+  it('renders temporary unavailable for reporter stories API failures', () => {
+    useCommunityStoriesMock.mockReturnValue({
+      settings: { communityReporterEnabled: true, allowMyStoriesPortal: true },
+      settingsLoading: false,
+      stories: [],
+      counts: { total: 0, pending: 0, approved: 0, rejected: 0, published: 0, withdrawn: 0 },
+      isLoading: false,
+      error: 'load failed',
+      errorStatus: 500,
+      hasLoadedOnce: true,
+    });
+
+    render(<ReporterDashboardPage communityReporterClosed={false} reporterPortalClosed={false} />);
+
+    expect(screen.getByText('Submission records are temporarily unavailable for this verified reporter email. Please try again shortly.')).toBeTruthy();
   });
 });

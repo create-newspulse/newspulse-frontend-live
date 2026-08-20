@@ -3,24 +3,36 @@ jest.mock('../../../../lib/publicApiBase', () => ({
 }));
 
 import handler from '../../../../pages/api/reporter-auth/session';
+import { REPORTER_SESSION_COOKIE, createSessionToken } from '../../../../lib/reporterPortalAuth';
 
 describe('pages/api/reporter-auth/session', () => {
   beforeEach(() => {
     (global as any).fetch = jest.fn();
   });
 
-  it('maps upstream 401 auth failures to the frontend session-expired state', async () => {
-    (global as any).fetch.mockResolvedValueOnce({
-      ok: false,
-      status: 401,
-      headers: new Headers(),
-      text: async () => JSON.stringify({ ok: false, code: 'REPORTER_SESSION_MISSING', message: 'Reporter session missing or expired.' }),
-    });
+  it('returns REPORTER_SESSION_MISSING when the canonical cookie is absent', async () => {
+    const req = {
+      method: 'GET',
+      cookies: {},
+      headers: {},
+    } as any;
 
+    const res = createMockResponse();
+    await handler(req, res as any);
+
+    expect(res.statusCode).toBe(401);
+    expect(res.body).toEqual({ ok: false, code: 'REPORTER_SESSION_MISSING', message: 'Reporter session missing or expired.' });
+    expect((global as any).fetch).not.toHaveBeenCalled();
+    expect(res.headers['Set-Cookie']).toBeUndefined();
+    expect(res.headers['Cache-Control']).toBe('private, no-store');
+    expect(res.headers.Pragma).toBe('no-cache');
+  });
+
+  it('expires the canonical cookie when it is invalid', async () => {
     const req = {
       method: 'GET',
       cookies: {
-        np_reporter_portal_session: 'stale-cookie-token',
+        [REPORTER_SESSION_COOKIE]: 'stale-cookie-token',
       },
       headers: {},
     } as any;
@@ -29,24 +41,26 @@ describe('pages/api/reporter-auth/session', () => {
     await handler(req, res as any);
 
     expect(res.statusCode).toBe(401);
-    expect(res.body).toMatchObject({ ok: false, code: 'SESSION_EXPIRED', message: 'SESSION_EXPIRED', backendCode: 'REPORTER_SESSION_MISSING' });
+    expect(res.body).toEqual({ ok: false, code: 'REPORTER_SESSION_MISSING', message: 'Reporter session missing or expired.' });
     expect(res.headers['Set-Cookie']).toBeTruthy();
   });
 
-  it('returns the active reporter session from the backend payload', async () => {
+  it('returns the active reporter session from the canonical cookie', async () => {
+    const sessionToken = createSessionToken('Reporter@Example.com');
     (global as any).fetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
-      headers: new Headers(),
-      text: async () => JSON.stringify({ ok: true, session: { email: 'reporter@example.com', expiresAt: '2026-04-06T05:20:19.019Z' } }),
+      text: async () => JSON.stringify({ ok: true, session: { email: 'reporter@example.com' } }),
     });
 
     const req = {
       method: 'GET',
       cookies: {
-        np_reporter_portal_session: 'backend-cookie-value',
+        [REPORTER_SESSION_COOKIE]: sessionToken,
       },
-      headers: {},
+      headers: {
+        cookie: `${REPORTER_SESSION_COOKIE}=${sessionToken}`,
+      },
     } as any;
 
     const res = createMockResponse();
@@ -55,10 +69,50 @@ describe('pages/api/reporter-auth/session', () => {
     expect(res.statusCode).toBe(200);
     expect(res.body).toMatchObject({
       ok: true,
+      reporter: {
+        email: 'reporter@example.com',
+      },
       session: {
         email: 'reporter@example.com',
       },
     });
+    expect((global as any).fetch).toHaveBeenCalledWith(
+      'http://localhost:3010/api/reporter-auth/session',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({
+          Accept: 'application/json',
+          cookie: `${REPORTER_SESSION_COOKIE}=${sessionToken}`,
+        }),
+        cache: 'no-store',
+      })
+    );
+  });
+
+  it('rejects a local-only reporter cookie when the backend reporter session is missing', async () => {
+    const sessionToken = createSessionToken('Reporter@Example.com');
+    (global as any).fetch.mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      text: async () => JSON.stringify({ ok: false, code: 'REPORTER_SESSION_MISSING', message: 'Reporter session missing or expired.' }),
+    });
+
+    const req = {
+      method: 'GET',
+      cookies: {
+        [REPORTER_SESSION_COOKIE]: sessionToken,
+      },
+      headers: {
+        cookie: `${REPORTER_SESSION_COOKIE}=${sessionToken}`,
+      },
+    } as any;
+
+    const res = createMockResponse();
+    await handler(req, res as any);
+
+    expect(res.statusCode).toBe(401);
+    expect(res.body).toEqual({ ok: false, code: 'REPORTER_SESSION_MISSING', message: 'Reporter session missing or expired.' });
+    expect(res.headers['Set-Cookie']).toBeTruthy();
   });
 });
 

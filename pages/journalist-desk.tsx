@@ -3,8 +3,9 @@ import React from 'react';
 import { CheckCircle2, ClipboardList, FilePenLine, Mail, Newspaper, SearchCheck, ShieldCheck, UserRoundCheck, Users, Video } from 'lucide-react';
 import PublicBusinessPageLayout, { PageEyebrow, SectionHeading, SurfacePanel } from '../components/public/PublicBusinessPageLayout';
 
-const contactEmail = 'newspulse.team@gmail.com';
-const suggestedSubject = 'Journalist Pitch - [Topic] - [Your Name]';
+const contactEmail = 'community@newspulse.co.in';
+const suggestedSubject = 'Journalist Desk - [Pitch / Proposal] - [Name]';
+const contactHref = `mailto:${contactEmail}?subject=${encodeURIComponent(suggestedSubject)}`;
 
 const contributorCards = [
   {
@@ -93,7 +94,7 @@ export default function JournalistDeskPage() {
       title="Journalist Desk"
       description="For professional story pitches, contributor submissions, and editorial collaboration with News Pulse."
       contactEmail={contactEmail}
-      contactHref={`mailto:${contactEmail}`}
+      contactHref={contactHref}
       contactAriaLabel="Email News Pulse journalist desk"
       contactTitle="Email News Pulse journalist desk"
       tone="slate"
@@ -114,7 +115,7 @@ export default function JournalistDeskPage() {
             All submissions are subject to editorial review, verification, and approval before publication.
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
-            <a href={`mailto:${contactEmail}`} className="inline-flex items-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
+            <a href={contactHref} className="inline-flex items-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
               Submit a Pitch
             </a>
             <Link href="/editorial-policy" className="inline-flex items-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
@@ -196,7 +197,7 @@ export default function JournalistDeskPage() {
           <SectionHeading title="Submit by Email" kicker="Suggested format" />
           <div className="mt-5 rounded-[24px] border border-slate-200/80 bg-slate-50/90 p-5 shadow-[0_16px_36px_-30px_rgba(15,23,42,0.24)]">
             <div className="text-sm font-semibold text-slate-800">Email</div>
-            <a href={`mailto:${contactEmail}`} className="mt-2 inline-flex break-all text-sm font-semibold text-sky-700 underline">
+            <a href={contactHref} className="mt-2 inline-flex break-all text-sm font-semibold text-sky-700 underline">
               {contactEmail}
             </a>
             <p className="mt-4 text-sm leading-7 text-slate-600">
@@ -272,7 +273,7 @@ export default function JournalistDeskPage() {
           <p className="mt-2 text-sm leading-7 text-slate-600">
             Submit serious story pitches, field reports, and contributor proposals for editorial review by News Pulse.
           </p>
-          <a href={`mailto:${contactEmail}`} className="mt-4 inline-flex break-all text-sm font-semibold text-sky-700 underline">
+          <a href={contactHref} className="mt-4 inline-flex break-all text-sm font-semibold text-sky-700 underline">
             {contactEmail}
           </a>
         </SurfacePanel>
@@ -287,7 +288,7 @@ export default function JournalistDeskPage() {
                 For journalist pitches, article submissions, contributor proposals, and editorial collaboration, use the contact details below.
               </p>
               <div className="mt-6 flex flex-wrap gap-3">
-                <a href={`mailto:${contactEmail}`} className="inline-flex items-center justify-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
+                <a href={contactHref} className="inline-flex items-center justify-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">
                   Email Journalist Desk
                 </a>
                 <Link href="/digital-code-of-ethics" className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
@@ -298,7 +299,7 @@ export default function JournalistDeskPage() {
 
             <div className="rounded-[26px] border border-slate-200/80 bg-white p-6 shadow-[0_22px_46px_-34px_rgba(15,23,42,0.26)]">
               <div className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Contact details</div>
-              <a href={`mailto:${contactEmail}`} className="mt-3 inline-flex break-all text-sm font-semibold text-sky-700 underline">
+              <a href={contactHref} className="mt-3 inline-flex break-all text-sm font-semibold text-sky-700 underline">
                 {contactEmail}
               </a>
               <a href="https://www.newspulse.co.in" className="mt-3 block text-sm font-semibold text-sky-700 underline">

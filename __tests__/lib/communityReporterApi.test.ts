@@ -20,6 +20,14 @@ describe('communityReporterApi', () => {
     (global as any).fetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
+      json: async () => ({ submissions: [{ id: '0', headline: 'Root', category: 'Cat', status: 'pending', createdAt: new Date().toISOString() }] })
+    });
+    const root = await fetchMyStoriesByEmail('x@y.com');
+    expect(root[0].id).toBe('0');
+
+    (global as any).fetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
       json: async () => ({ ok: true, stories: [{ id: '1', headline: 'A', category: 'Cat', status: 'pending', createdAt: new Date().toISOString() }] })
     });
     const a = await fetchMyStoriesByEmail('x@y.com');
@@ -42,17 +50,21 @@ describe('communityReporterApi', () => {
     expect(c[0].id).toBe('3');
   });
 
-  it('throws typed error on non-OK without stories', async () => {
+  it.each([
+    [401, 'REPORTER_SESSION_MISSING'],
+    [404, 'NOT_FOUND'],
+    [500, 'UPSTREAM_ERROR'],
+  ])('throws typed error on HTTP %s without stories', async (status, code) => {
     (global as any).fetch.mockResolvedValueOnce({
       ok: false,
-      status: 500,
-      json: async () => ({ code: 'UPSTREAM_ERROR', message: 'Internal error' }),
+      status,
+      json: async () => ({ code, message: code }),
     });
 
     await expect(fetchMyStoriesByEmail('x@y.com')).rejects.toMatchObject({
       name: 'CommunityReporterHttpError',
-      status: 500,
-      code: 'UPSTREAM_ERROR',
+      status,
+      code,
     });
   });
 
@@ -66,7 +78,7 @@ describe('communityReporterApi', () => {
     await expect(fetchMyStoriesByEmail('x@y.com')).resolves.toEqual([]);
   });
 
-  it('uses same-origin proxy auth when reporter auth is required', async () => {
+  it('uses same-origin proxy auth without a user-controlled email query when reporter auth is required', async () => {
     (global as any).fetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
@@ -76,14 +88,16 @@ describe('communityReporterApi', () => {
     await fetchMyStoriesByEmail('Reporter@Example.com', { reporterAuth: true, useProxy: true });
 
     expect((global as any).fetch).toHaveBeenCalledWith(
-      '/api/community-reporter/my-stories?email=reporter%40example.com',
+      '/api/community-reporter/my-stories',
       expect.objectContaining({
         credentials: 'include',
+        cache: 'no-store',
         headers: expect.objectContaining({
           Accept: 'application/json',
         }),
       })
     );
+    expect((global as any).fetch.mock.calls[0][0]).not.toContain('email=');
   });
 
   it('does not enable credentials for public my-stories requests', async () => {
