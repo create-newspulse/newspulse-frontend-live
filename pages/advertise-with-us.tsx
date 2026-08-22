@@ -102,12 +102,13 @@ export default function AdvertiseWithUsPage() {
                 <ArrowRight className="h-4 w-4" />
               </button>
               <ContactPill email={contactEmail} label="Email Ads Desk" href={`mailto:${contactEmail}?subject=${encodeURIComponent(suggestedSubject)}`} />
-              <a
-                href={`mailto:${contactEmail}?subject=${encodeURIComponent('Media Kit Request - News Pulse')}`}
+              <button
+                type="button"
+                onClick={openEnquiryForm}
                 className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
               >
-                Request Media Kit
-              </a>
+                Request Ad Proposal
+              </button>
             </div>
           </div>
 
@@ -463,7 +464,7 @@ export default function AdvertiseWithUsPage() {
             <div className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-500">Contact the Ads Desk</div>
             <div className="mt-2 text-2xl font-black tracking-tight text-slate-950">Contact the Ads Desk</div>
             <p className="mt-3 text-sm leading-7 text-slate-600">
-              For advertising, sponsorships, media kit requests, or brand partnership enquiries, contact the News Pulse ads desk.
+              For advertising, sponsorships, rate card requests, or brand partnership enquiries, contact the News Pulse ads desk.
             </p>
             <div className="mt-4 text-sm font-semibold text-slate-700">Suggested subject line: {suggestedSubject}</div>
             <div className="mt-2 text-sm text-slate-600">Example: Advertising Enquiry - ABC Brand - Homepage Campaign</div>
@@ -487,12 +488,13 @@ export default function AdvertiseWithUsPage() {
             >
               Email Ads Desk
             </a>
-            <a
-              href={`mailto:${contactEmail}?subject=${encodeURIComponent('Media Kit Request - News Pulse')}`}
+            <button
+              type="button"
+              onClick={openEnquiryForm}
               className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             >
-              Request Media Kit
-            </a>
+              Request Ad Proposal
+            </button>
           </div>
         </SurfacePanel>
       </section>

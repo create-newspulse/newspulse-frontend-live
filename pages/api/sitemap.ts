@@ -28,7 +28,6 @@ const STATIC_PUBLIC_PATHS = [
   '/cookie-policy',
   '/terms-of-service',
   '/advertise-with-us',
-  '/media-kit',
   '/digital-code-of-ethics',
   '/grievance-redressal',
 ];

@@ -3810,7 +3810,6 @@ function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
 
   const businessLinks = [
     { label: t('footer.advertiseWithUs'), href: localizePath('/advertise-with-us', lang) },
-    { label: t('footer.mediaKit'), href: localizePath('/media-kit', lang) },
     { label: t('footer.advertisingPolicy'), href: localizePath('/advertising-policy', lang) },
     { label: t('footer.partnerships'), href: localizePath('/contact', lang) },
     { label: t('footer.licensing'), href: localizePath('/contact', lang) },
