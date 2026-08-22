@@ -3,7 +3,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
 import { getPublicAdOpportunityLabel, normalizePublicAdInquiryValue } from '../../../src/lib/publicAdOpportunities';
 
-const CONTACT_EMAIL = 'newspulse.ads@gmail.com';
+const CONTACT_EMAIL = 'ads@newspulse.co.in';
 
 function normalizeOrigin(base: string): string {
   return String(base || '').trim().replace(/\/+$/, '').replace(/\/api\/?$/, '');

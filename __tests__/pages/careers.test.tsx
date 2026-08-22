@@ -4,7 +4,7 @@ import { render, screen } from '@testing-library/react';
 import CareersPage from '../../pages/careers';
 
 describe('pages/careers', () => {
-  const email = 'newspulse.team@gmail.com';
+  const email = 'contact@newspulse.co.in';
   const subject = 'Career Application - [Position] - [Applicant Name]';
   const mailtoHref = `mailto:${email}?subject=${encodeURIComponent(subject)}`;
 
@@ -13,7 +13,7 @@ describe('pages/careers', () => {
 
     expect(screen.getByRole('heading', { name: 'Careers at News Pulse' })).toBeTruthy();
     expect(screen.getAllByText(email).length).toBeGreaterThan(0);
-    expect(container.textContent).not.toContain('newspulse.admin@gmail.com');
+    expect(container.textContent).not.toContain('@gmail.com');
   });
 
   it('uses the career application subject on public career mailto links', () => {

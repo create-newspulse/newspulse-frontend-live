@@ -7,9 +7,9 @@ import {
   normalizePublicAdInquiryValue,
 } from "../src/lib/publicAdOpportunities";
 
-const CONTACT_EMAIL = "newspulse.ads@gmail.com";
+const CONTACT_EMAIL = "ads@newspulse.co.in";
 const SUBMIT_SUCCESS_MESSAGE = "Inquiry sent successfully. Our ads team will contact you shortly.";
-const SUBMIT_ERROR_MESSAGE = "Inquiry could not be sent right now. Please email newspulse.ads@gmail.com directly.";
+const SUBMIT_ERROR_MESSAGE = "Inquiry could not be sent right now. Please email ads@newspulse.co.in directly.";
 
 function normalizeAdSlotValue(value: string): string {
   return normalizePublicAdInquiryValue(value);

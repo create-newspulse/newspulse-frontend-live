@@ -18,19 +18,20 @@ describe('public email routing policy', () => {
     ];
 
     for (const source of publicPages) {
-      expect(source).not.toContain('newspulse.admin@gmail.com');
+      expect(source).not.toContain('@gmail.com');
     }
   });
 
   it('keeps the requested public email mapping in source', () => {
-    expect(readPage('contact.tsx')).toContain("const generalEmail = 'newspulse.team@gmail.com';");
+    expect(readPage('contact.tsx')).toContain("const generalEmail = 'contact@newspulse.co.in';");
     expect(readPage('contact.tsx')).toContain("const contactEmail = 'community@newspulse.co.in';");
     expect(readPage('contact.tsx')).toContain("const grievanceEmail = 'grievance@newspulse.co.in';");
-    expect(readPage('careers.tsx')).toContain("const contactEmail = 'newspulse.team@gmail.com';");
+    expect(readPage('contact.tsx')).toContain("const adsEmail = 'ads@newspulse.co.in';");
+    expect(readPage('careers.tsx')).toContain("const contactEmail = 'contact@newspulse.co.in';");
     expect(readPage('community-reporter.tsx')).toContain("const contactEmail = 'community@newspulse.co.in';");
     expect(readPage('community-reporter', 'guidelines.tsx')).toContain("const contactEmail = 'community@newspulse.co.in';");
     expect(readPage('journalist-desk.tsx')).toContain("const contactEmail = 'community@newspulse.co.in';");
     expect(readPage('editorial-policy.tsx')).toContain("const contactEmail = 'community@newspulse.co.in';");
-    expect(readPage('terms-of-service.tsx')).toContain("const contactEmail = 'newspulse.team@gmail.com';");
+    expect(readPage('terms-of-service.tsx')).toContain("const contactEmail = 'contact@newspulse.co.in';");
   });
 });

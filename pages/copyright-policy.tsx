@@ -2,7 +2,7 @@ import React from 'react';
 import { AlertTriangle, CopyCheck, Gavel, Mail, Shield, ShieldAlert } from 'lucide-react';
 import PublicBusinessPageLayout, { ContactPill, PageEyebrow, SectionHeading, SurfacePanel } from '../components/public/PublicBusinessPageLayout';
 
-const contactEmail = 'Newspulse.team@gmail.com';
+const contactEmail = 'grievance@newspulse.co.in';
 const contactHref = '/contact?type=copyright';
 const contactLabel = 'Contact News Pulse team';
 
@@ -77,7 +77,7 @@ export default function CopyrightPolicyPage() {
             <div className="rounded-[24px] border border-slate-200/80 bg-white p-6 shadow-[0_16px_36px_-30px_rgba(15,23,42,0.24)]">
               <div className="text-base font-black tracking-tight text-slate-950">Protected original work</div>
               <p className="mt-3 text-sm leading-7 text-slate-600">
-                If anyone wants licensing permission or wants to report unauthorized copying, they can contact Newspulse.team@gmail.com.
+                If anyone wants licensing permission or wants to report unauthorized copying, they can contact grievance@newspulse.co.in.
               </p>
               <p className="mt-3 text-sm leading-7 text-slate-600">
                 No person, website, app, publication, AI tool, bot, scraper, or third party may copy, reproduce, republish, modify, translate, distribute, store, scrape, or commercially use News Pulse content without prior written permission from News Pulse Media.
@@ -112,7 +112,7 @@ export default function CopyrightPolicyPage() {
               {
                 key: 'sharing-contact',
                 content: (
-                  <>If anyone wants licensing permission or wants to report unauthorized copying, they can contact Newspulse.team@gmail.com.</>
+                  <>If anyone wants licensing permission or wants to report unauthorized copying, they can contact grievance@newspulse.co.in.</>
                 ),
               },
             ].map((item, index) => (

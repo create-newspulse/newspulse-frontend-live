@@ -47,8 +47,8 @@ describe('pages/reporter/dashboard', () => {
     routerState.replace.mockClear();
     routerState.asPath = '/reporter/dashboard';
     useReporterPortalSessionMock.mockReturnValue({
-      session: { email: 'newspulse.team@gmail.com' },
-      reporter: { email: 'newspulse.team@gmail.com' },
+      session: { email: 'reporter@example.com' },
+      reporter: { email: 'reporter@example.com' },
       authenticated: true,
       status: 'authenticated',
       isReady: true,

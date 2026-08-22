@@ -2,7 +2,7 @@ import React from 'react';
 import { AlertTriangle, BadgeCheck, FileCheck2, Gavel, Mail, Shield, ShieldAlert } from 'lucide-react';
 import PublicBusinessPageLayout, { ContactPill, PageEyebrow, SectionHeading, SurfacePanel } from '../components/public/PublicBusinessPageLayout';
 
-const contactEmail = 'newspulse.ads@gmail.com';
+const contactEmail = 'ads@newspulse.co.in';
 
 export default function AdvertisingPolicyPage() {
   return (

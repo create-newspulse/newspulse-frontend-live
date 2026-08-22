@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { BadgeCheck, Briefcase, FileText, HeartHandshake, Languages, Mail, PencilLine, Scale, SearchCheck, ShieldCheck, Video, Users } from 'lucide-react';
 import PublicBusinessPageLayout, { PageEyebrow, SectionHeading, SurfacePanel } from '../components/public/PublicBusinessPageLayout';
 
-const contactEmail = 'newspulse.team@gmail.com';
+const contactEmail = 'contact@newspulse.co.in';
 const applicationSubject = 'Career Application - [Position] - [Applicant Name]';
 const contactHref = `mailto:${contactEmail}?subject=${encodeURIComponent(applicationSubject)}`;
 

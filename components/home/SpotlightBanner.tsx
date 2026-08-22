@@ -39,7 +39,7 @@ export default function SpotlightBanner() {
         </div>
 
         <a
-          href="mailto:newspulse.ads@gmail.com?subject=Advertise%20on%20News%20Pulse"
+          href="mailto:ads@newspulse.co.in?subject=Advertise%20on%20News%20Pulse"
           className="shrink-0 inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-bold border border-slate-200 bg-white/90 text-slate-900 hover:bg-white dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-100 dark:hover:bg-slate-900/60"
         >
           {t('common.advertiseHere')}

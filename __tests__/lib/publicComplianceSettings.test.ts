@@ -68,7 +68,7 @@ describe('lib/publicComplianceSettings', () => {
           grievanceOfficerLocation: 'India',
           chiefEditorName: 'Shailesh Rathod',
           chiefEditorDesignation: 'Chief Editor',
-          editorialEmail: 'newspulse.team@gmail.com',
+          editorialEmail: 'community@newspulse.co.in',
         },
       },
     });
@@ -77,6 +77,6 @@ describe('lib/publicComplianceSettings', () => {
     expect(settings.grievanceOfficerDesignation).toBe('Grievance Officer');
     expect(settings.grievanceOfficerLocation).toBe('India');
     expect(settings.chiefEditorDesignation).toBe('Chief Editor');
-    expect(settings.editorialEmail).toBe('newspulse.team@gmail.com');
+    expect(settings.editorialEmail).toBe('community@newspulse.co.in');
   });
 });

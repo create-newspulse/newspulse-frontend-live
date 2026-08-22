@@ -4,7 +4,7 @@ import { AlertTriangle, BadgeInfo, Copyright, FileText, Globe, Mail, Megaphone, 
 import PublicBusinessPageLayout, { PageEyebrow, SectionHeading, SurfacePanel } from '../components/public/PublicBusinessPageLayout';
 import { useI18n } from '../src/i18n/LanguageProvider';
 
-const contactEmail = 'newspulse.team@gmail.com';
+const contactEmail = 'contact@newspulse.co.in';
 
 const termsSections = [
   {

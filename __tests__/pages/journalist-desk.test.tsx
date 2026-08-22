@@ -15,7 +15,7 @@ describe('pages/journalist-desk', () => {
 
     expect(screen.getByRole('heading', { name: 'Journalist Desk' })).toBeTruthy();
     expect(screen.getAllByText(email).length).toBeGreaterThan(0);
-    expect(container.textContent).not.toContain('newspulse.team@gmail.com');
+    expect(container.textContent).not.toContain('@gmail.com');
   });
 
   it('uses the shared community mailbox and Journalist Desk subject for all mailto links', () => {

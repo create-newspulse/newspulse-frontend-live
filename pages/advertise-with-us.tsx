@@ -3,10 +3,10 @@ import { ArrowRight, Briefcase, Globe2, Handshake, Layers3, Mail, Megaphone, Mon
 import PublicBusinessPageLayout, { ContactPill, PageEyebrow, SectionHeading, SurfacePanel } from '../components/public/PublicBusinessPageLayout';
 import { PUBLIC_AD_INQUIRY_OPTIONS, getPublicAdOpportunityLabel, normalizePublicAdInquiryValue } from '../src/lib/publicAdOpportunities';
 
-const contactEmail = 'newspulse.ads@gmail.com';
+const contactEmail = 'ads@newspulse.co.in';
 const suggestedSubject = 'Advertising Enquiry - [Brand Name] - [Campaign Type]';
 const submitSuccessMessage = 'Your advertising enquiry has been received. News Pulse ads desk will review it.';
-const submitErrorFallback = 'Your enquiry could not be submitted right now. Please try again or email newspulse.ads@gmail.com directly.';
+const submitErrorFallback = 'Your enquiry could not be submitted right now. Please try again or email ads@newspulse.co.in directly.';
 
 const whyAdvertiseCards = [
   {

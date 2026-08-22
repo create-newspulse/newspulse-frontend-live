@@ -23,7 +23,7 @@ describe('pages/api/public/compliance-settings', () => {
           grievanceOfficerLocation: 'India',
           chiefEditorName: 'Shailesh Rathod',
           chiefEditorDesignation: 'Chief Editor',
-          editorialEmail: 'newspulse.team@gmail.com',
+          editorialEmail: 'community@newspulse.co.in',
         },
       }),
     });

@@ -4,7 +4,7 @@ import { Globe2, HeartHandshake, Languages, ShieldCheck, Sparkles, Target, Users
 import PublicBusinessPageLayout, { PageEyebrow, SectionHeading, SurfacePanel } from '../components/public/PublicBusinessPageLayout';
 import { useI18n } from '../src/i18n/LanguageProvider';
 
-const contactEmail = 'Newspulse.team@gmail.com';
+const contactEmail = 'contact@newspulse.co.in';
 
 const trustCards = [
   {
