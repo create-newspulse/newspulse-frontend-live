@@ -13,7 +13,12 @@
 
 # Environment files
 .env
-.env.*.local
+.env.*
+*.env
+
+# Safe environment templates may be tracked
+!.env.example
+!.env.*.example
 
 # Vercel
 .vercel
@@ -65,7 +70,3 @@ components/ExploreCategories.tsx
 # Vitest leftovers (project uses Jest)
 vitest.config.ts
 vitest.shims.d.ts
-
-.env.local
-**/.env.local
-
