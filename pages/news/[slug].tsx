@@ -376,7 +376,8 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
   React.useEffect(() => {
     if (!resolvedArticle?._id) return;
 
-    void refreshFromTranslationGroup();
+    // SSR already delivered the freshest article for this locale, so only re-sync
+    // when a publish actually happens instead of refetching on every mount.
     return subscribePublicDataRefresh(() => {
       void refreshFromTranslationGroup();
     });
@@ -1053,29 +1054,40 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
       return { notFound: true };
     }
 
-    const translationGroupId = String((article as any)?.translationGroupId || '').trim();
-    if (translationGroupId) {
+    const primaryArticleId = String((article as any)?._id || '').trim();
+
+    // Secondary lists are not needed to render the article, so they run alongside
+    // the translation-group lookup instead of after it.
+    const relatedPromise = (async () => {
       try {
-        const groupEndpoint = `${origin}/api/public/news/group/${encodeURIComponent(translationGroupId)}?${params.toString()}`;
-        const groupRes = await fetch(groupEndpoint, { method: 'GET', headers, cache: 'no-store' });
-        const groupJson = await groupRes.json().catch(() => null);
-        const groupItems = Array.isArray(groupJson?.items)
-          ? groupJson.items
-          : Array.isArray(groupJson?.articles)
-            ? groupJson.articles
-            : Array.isArray(groupJson?.data)
-              ? groupJson.data
-              : [];
-        article = pickFreshestArticleForLocale({
-          currentArticle: article,
-          groupArticles: groupItems,
-          locale: toRouteLocale(lang),
-          policy: STRICT_LOCALE_POLICY,
-        }) as Article | null;
+        const categoryKey = resolveCategoryQueryKey(article);
+        const limit = 24;
+        const relatedParams = new URLSearchParams();
+        if (categoryKey) relatedParams.set('category', categoryKey);
+        relatedParams.set('lang', lang);
+        relatedParams.set('language', lang);
+        relatedParams.set('strictLocale', '1');
+        relatedParams.set('limit', String(limit));
+
+        const endpoint = `${origin}/api/public/news?${relatedParams.toString()}`;
+        const res = await fetch(endpoint, { method: 'GET', headers, cache: 'no-store' });
+        const listData = await res.json().catch(() => null);
+        const itemsRaw =
+          Array.isArray(listData) ? listData :
+          Array.isArray(listData?.items) ? listData.items :
+          Array.isArray(listData?.articles) ? listData.articles :
+          Array.isArray(listData?.data) ? listData.data :
+          [];
+
+        return Array.isArray(itemsRaw) ? (itemsRaw as Article[]) : [];
       } catch {
-        // Keep original article when the sync group endpoint is unavailable.
+        return [] as Article[];
       }
-    }
+    })();
+
+    // NOTE: /api/public/news/slug/[slug] and /api/public/news/[id] already resolve the
+    // translation group with the same locale + policy, so repeating it here only added
+    // a second blocking round trip for an identical result.
 
     const localized = getLocalizedArticleFields(article, lang, STRICT_LOCALE_POLICY);
     if (!localized.isVisible) {
@@ -1112,43 +1124,22 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
     const html = localized.bodyHtml;
 
     const extra = await (async () => {
-      try {
-        const categoryKey = resolveCategoryQueryKey(article);
-        const limit = 24;
-        const params = new URLSearchParams();
-        if (categoryKey) params.set('category', categoryKey);
-        params.set('lang', lang);
-        params.set('language', lang);
-        params.set('strictLocale', '1');
-        params.set('limit', String(limit));
+      const items = await relatedPromise;
+      const currentId = String((resolvedArticle as any)?._id || '').trim();
 
-        const endpoint = `${origin}/api/public/news?${params.toString()}`;
-        const res = await fetch(endpoint, { method: 'GET', headers, cache: 'no-store' });
-        const data = await res.json().catch(() => null);
-        const itemsRaw =
-          Array.isArray(data) ? data :
-          Array.isArray(data?.items) ? data.items :
-          Array.isArray(data?.articles) ? data.articles :
-          Array.isArray(data?.data) ? data.data :
-          [];
+      const filtered = items.filter((x) => {
+        const id = String((x as any)?._id || '').trim();
+        if (!id) return false;
+        return id !== currentId && id !== primaryArticleId;
+      });
 
-        const items: Article[] = Array.isArray(itemsRaw) ? (itemsRaw as Article[]) : [];
-        const currentId = String((resolvedArticle as any)?._id || '').trim();
+      const top = [...filtered];
+      top.sort((a, b) => (Number((b as any)?.reads || 0) || 0) - (Number((a as any)?.reads || 0) || 0));
 
-        const filtered = items.filter((x) => String((x as any)?._id || '').trim() && String((x as any)?._id || '').trim() !== currentId);
-
-        const top = [...filtered];
-        top.sort((a, b) => (Number((b as any)?.reads || 0) || 0) - (Number((a as any)?.reads || 0) || 0));
-
-        const related = filtered.slice(0, 12);
-
-        return {
-          topStories: top.slice(0, 10),
-          relatedStories: related,
-        };
-      } catch {
-        return { topStories: [], relatedStories: [] };
-      }
+      return {
+        topStories: top.slice(0, 10),
+        relatedStories: filtered.slice(0, 12),
+      };
     })();
 
     return {
