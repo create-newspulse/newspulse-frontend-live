@@ -14,7 +14,7 @@ import { subscribePublicDataRefresh } from '../../lib/publicDataRefresh';
 import { pickFreshestArticleForLocale, shouldReplaceArticleWithFreshCandidate } from '../../lib/translationGroupSync';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { tHeading, toLanguageKey } from '../../utils/localizedNames';
-import { buildNewsUrl } from '../../lib/newsRoutes';
+import { buildNewsUrl, isNavigableNewsHref } from '../../lib/newsRoutes';
 import HomeRightRail, { articleToHomeRightRailFeedItem } from '../../components/home/HomeRightRail';
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
 import { resolveSponsoredContentMeta } from '../../lib/sponsoredContent';
@@ -200,6 +200,27 @@ function getArticleSourceLang(article: Article | null): 'en' | 'hi' | 'gu' | nul
   if (!article) return null;
   const raw = (article as any)?.sourceLang || (article as any)?.sourceLanguage || (article as any)?.language || (article as any)?.lang;
   return raw ? normalizeLang(raw) : null;
+}
+
+/** Renders a real link only when the related story resolves to a route, never a dead '#'. */
+function RelatedStoryShell({
+  href,
+  className,
+  children,
+}: {
+  href: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  if (!isNavigableNewsHref(href)) {
+    return <div className={className}>{children}</div>;
+  }
+
+  return (
+    <a href={href} className={className}>
+      {children}
+    </a>
+  );
 }
 
 function debugNewsDetailResolution(stage: string, payload: Record<string, unknown>) {
@@ -802,7 +823,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                       debugStoryCard('article-related-grid', s, img);
 
                       return (
-                        <a
+                        <RelatedStoryShell
                           key={getStoryReactKey(s, href)}
                           href={href}
                           className="group h-full rounded-2xl border border-slate-200 bg-white shadow-sm hover:bg-slate-50 overflow-hidden"
@@ -820,7 +841,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
                               {excerpt ? <div className="mt-1 min-h-[2.5rem] line-clamp-2 text-xs leading-5 text-slate-600">{excerpt}</div> : <div className="mt-1 min-h-[2.5rem]" />}
                             </div>
                           </div>
-                        </a>
+                        </RelatedStoryShell>
                       );
                     })}
                   </div>

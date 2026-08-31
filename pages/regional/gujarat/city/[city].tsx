@@ -5,7 +5,7 @@ import { useLanguage } from '../../../../utils/LanguageContext';
 import { getGujaratCityName, getStateName, tHeading } from '../../../../utils/localizedNames';
 import type { GetStaticProps } from 'next';
 import { normalizeLang, useI18n } from '../../../../src/i18n/LanguageProvider';
-import { buildNewsUrl } from '../../../../lib/newsRoutes';
+import { buildNewsUrl, isNavigableNewsHref } from '../../../../lib/newsRoutes';
 import { resolveArticleSlug } from '../../../../lib/articleSlugs';
 import { resolveCoverFitMode, resolveCoverImageUrl } from '../../../../lib/coverImages';
 import { getStoryId } from '../../../../lib/storyIdentity';
@@ -127,8 +127,10 @@ export default function GujaratCityPage() {
                   const summary = typeof article?.summary === 'string' ? article.summary.trim() : '';
                   const titleParts = splitStoryTitleHook(title);
                   const titleHookColor = getStoryTitleHookColor(article?.category || article?.section || article?.topic);
+                  const Shell: any = isNavigableNewsHref(href) ? 'a' : 'div';
+                  const shellProps = isNavigableNewsHref(href) ? { href } : {};
                   return (
-                  <a key={id || href} href={href} className="group block rounded-2xl border bg-white p-6 shadow-sm transition hover:shadow-md dark:bg-gray-800">
+                  <Shell key={id || href} {...shellProps} className="group block rounded-2xl border bg-white p-6 shadow-sm transition hover:shadow-md dark:bg-gray-800">
                     <div className="mb-3 flex items-start gap-3">
                       <StoryImage storyId={id} src={coverUrl} fitMode={fitMode} alt={title || ''} variant="mini" className="order-2 rounded-xl" />
 
@@ -146,7 +148,7 @@ export default function GujaratCityPage() {
                     <div className="mt-3 text-xs text-gray-400">{t('common.source')}: {article.source || t('brand.name')}</div>
                       </div>
                     </div>
-                  </a>
+                  </Shell>
                 );
                 })
               ) : (

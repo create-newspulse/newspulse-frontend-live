@@ -48,11 +48,16 @@ export function usePublicVersion(pollMs: number = DEFAULT_VERSION_POLL_MS): UseP
           if (cancelled || controller.signal.aborted) return;
 
           const previousVersion = versionRef.current;
-          versionRef.current = next.version;
           setVersion(next.version);
           setUpdatedAt(next.updatedAt);
           setError(null);
           setIsLoading(false);
+
+          // A local/default fallback version is not a real publish, so it must never
+          // be compared against (or replace) the last backend-confirmed version.
+          if (next.source === 'fallback') return;
+
+          versionRef.current = next.version;
 
           if (previousVersion && next.version && previousVersion !== next.version) {
             dispatchPublicDataRefresh({

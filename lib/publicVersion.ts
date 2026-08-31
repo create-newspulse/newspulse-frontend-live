@@ -1,7 +1,13 @@
+export type PublicVersionSource = 'backend' | 'fallback' | 'unknown';
+
 export type PublicVersionState = {
   ok: boolean;
   version: string | null;
   updatedAt: string | null;
+};
+
+export type PublicVersionResult = PublicVersionState & {
+  source: PublicVersionSource;
 };
 
 function isRecord(value: unknown): value is Record<string, any> {
@@ -49,7 +55,7 @@ export function normalizePublicVersion(raw: unknown): PublicVersionState {
   };
 }
 
-export async function fetchPublicVersion(options?: { signal?: AbortSignal }): Promise<PublicVersionState> {
+export async function fetchPublicVersion(options?: { signal?: AbortSignal }): Promise<PublicVersionResult> {
   const endpoint = '/api/public/version';
   const res = await fetch(endpoint, {
     method: 'GET',
@@ -69,5 +75,9 @@ export async function fetchPublicVersion(options?: { signal?: AbortSignal }): Pr
     throw new Error(`PUBLIC_VERSION_FETCH_FAILED_${res.status || 0}`);
   }
 
-  return normalized;
+  const rawSource = isRecord(body) ? String(body.source || '').trim().toLowerCase() : '';
+  const source: PublicVersionSource =
+    rawSource === 'backend' || rawSource === 'fallback' ? rawSource : 'unknown';
+
+  return { ...normalized, source };
 }

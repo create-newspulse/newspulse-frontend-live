@@ -11,6 +11,7 @@ type PublicVersionResponse = {
   ok: boolean;
   version: string | null;
   updatedAt: string | null;
+  source?: 'backend' | 'fallback';
   message?: string;
 };
 
@@ -33,12 +34,14 @@ async function readLocalPublishedVersion(): Promise<PublicVersionResponse> {
       ok: normalized.ok,
       version: normalized.version,
       updatedAt: normalized.updatedAt,
+      source: 'fallback',
     };
   } catch {
     return {
       ok: false,
       version: null,
       updatedAt: null,
+      source: 'fallback',
       message: 'LOCAL_VERSION_UNAVAILABLE',
     };
   }
@@ -64,6 +67,7 @@ async function tryFetchVersion(url: string): Promise<PublicVersionResponse | nul
       ok: normalized.ok,
       version: normalized.version,
       updatedAt: normalized.updatedAt,
+      source: 'backend',
     };
   } catch {
     return null;
@@ -75,7 +79,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     res.setHeader('Allow', 'GET');
     return res.status(405).json({ ok: false, version: null, updatedAt: null, message: 'METHOD_NOT_ALLOWED' });
   }
-
   noStore(res);
 
   const origin = normalizeOrigin(getPublicApiBaseUrl());

@@ -5,7 +5,7 @@ import { ChevronRight, GraduationCap, Play } from 'lucide-react';
 import { useYouthPulse } from '../../features/youthPulse/useYouthPulse';
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle } from '../../lib/contentFallback';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
-import { buildNewsUrl } from '../../lib/newsRoutes';
+import { buildNewsUrl, isNavigableNewsHref } from '../../lib/newsRoutes';
 import type { Article } from '../../lib/publicNewsApi';
 import { COVER_PLACEHOLDER_SRC, resolveCoverFitMode, resolveCoverImageUrl } from '../../lib/coverImages';
 import { debugStoryCard, getStoryId, getStoryReactKey, getStorySlug, getStoryTranslationGroupId } from '../../lib/storyIdentity';
@@ -92,6 +92,27 @@ function categoryBadgeClasses(raw: unknown): string {
   if (key === 'glamour') return 'bg-rose-50 text-rose-700 border-rose-100';
   if (key === 'regional') return 'bg-emerald-50 text-emerald-700 border-emerald-100';
   return 'bg-slate-50 text-slate-700 border-slate-100';
+}
+
+/** Renders a real link only when the article resolves to a route, never a dead '#'. */
+function StoryCardShell({
+  href,
+  className,
+  children,
+}: {
+  href: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  if (!isNavigableNewsHref(href)) {
+    return <div className={className}>{children}</div>;
+  }
+
+  return (
+    <Link href={href} className={className}>
+      {children}
+    </Link>
+  );
 }
 
 export function articleToHomeRightRailFeedItem(article: Article, requestedLang: HomeRightRailLang) {
@@ -246,7 +267,7 @@ export function HomeRightRailLatestNews({ theme = DEFAULT_HOME_RIGHT_RAIL_THEME,
             debugStoryCard('home-feed-list', item, item?.imageSrc);
 
             return (
-              <Link
+              <StoryCardShell
                 key={storyKey}
                 href={href}
                 className="block rounded-[20px] border-b border-slate-100 px-3 py-2.5 transition last:border-b-0 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
@@ -270,7 +291,7 @@ export function HomeRightRailLatestNews({ theme = DEFAULT_HOME_RIGHT_RAIL_THEME,
                   </span>
                   {item?.titleIsOriginal ? <OriginalTag /> : null}
                 </div>
-              </Link>
+              </StoryCardShell>
             );
           })
         )}

@@ -18,7 +18,7 @@ import { DEFAULT_NORMALIZED_PUBLIC_SETTINGS, type PublicLiveTvSettings } from ".
 import AdSlot from "../src/components/ads/AdSlot";
 import { useBookmarks } from "../hooks/useBookmarks";
 import { resolveArticleSlug } from "../lib/articleSlugs";
-import { buildNewsUrl } from "../lib/newsRoutes";
+import { buildNewsUrl, isNavigableNewsHref } from "../lib/newsRoutes";
 import { resolveSponsoredContentMeta } from "../lib/sponsoredContent";
 import HomepageSponsoredFeatureCard from "../components/home/HomepageSponsoredFeatureCard";
 import HomeRightRail from "../components/home/HomeRightRail";
@@ -280,6 +280,34 @@ const HOME_SPOTLIGHT_MAX_PER_CATEGORY = 2;
 const HOME_SPOTLIGHT_MAX_GLAMOUR_ITEMS = 1;
 const HOME_SPOTLIGHT_SOURCE_LIMIT = 18;
 const HOME_SPOTLIGHT_ROTATE_MS = 5000;
+const SPOTLIGHT_RESUME_DELAY_MS = 1200;
+
+/** Renders a real link only when the article resolves to a route, never a dead '#'. */
+function StoryLinkShell({
+  href,
+  className,
+  style,
+  children,
+}: {
+  href: string;
+  className?: string;
+  style?: React.CSSProperties;
+  children: React.ReactNode;
+}) {
+  if (!isNavigableNewsHref(href)) {
+    return (
+      <div className={className} style={style}>
+        {children}
+      </div>
+    );
+  }
+
+  return (
+    <Link href={href} className={className} style={style}>
+      {children}
+    </Link>
+  );
+}
 const HOME_SPOTLIGHT_FRESH_HOURS = 72;
 const HOME_FRESH_SUMMARY_STORY_LIMIT = 3;
 const HOME_FRESH_COMPACT_STORY_LIMIT = 14;
@@ -2116,7 +2144,6 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick, founderToggle
 function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
   const { t } = useI18n();
   const { isBookmarked, toggleBookmark } = useBookmarks();
-  const router = useRouter();
 
   const requestedLang = (item?.requestedLang || 'en') as 'en' | 'hi' | 'gu';
   const article = item?.article as Article | null | undefined;
@@ -2274,17 +2301,6 @@ function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
   const topStoryTitleParts = splitStoryTitleHook(vm?.title || '');
   const topStoryTitleHookColor = getStoryTitleHookColor(vm?.category);
 
-  const openArticle = React.useCallback(() => {
-    if (!primaryHref) return;
-    if (vm?.destinationIsExternal) {
-      if (typeof window !== 'undefined') {
-        window.open(primaryHref, '_blank', 'noopener,noreferrer');
-      }
-      return;
-    }
-    void router.push(primaryHref);
-  }, [primaryHref, router, vm?.destinationIsExternal]);
-
   if (article && vm?.imageSrc) {
     debugStoryCard(
       'home-top-story',
@@ -2342,20 +2358,6 @@ function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
     <Surface theme={theme} className="group overflow-hidden">
       <div
         className={cx('relative overflow-hidden px-5 py-5 sm:px-6 sm:py-6 lg:px-7 lg:py-6', vm ? 'cursor-pointer' : '')}
-        role={vm ? 'link' : undefined}
-        tabIndex={vm ? 0 : undefined}
-        aria-label={vm ? (vm.title || t('home.topStory')) : undefined}
-        onClick={vm ? openArticle : undefined}
-        onKeyDown={
-          vm
-            ? (e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  openArticle();
-                }
-              }
-            : undefined
-        }
       >
         <div
           className="pointer-events-none absolute inset-0"
@@ -2370,7 +2372,25 @@ function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
           }}
         />
 
-        <div className="relative flex items-start justify-between gap-3">
+        {vm && primaryHref ? (
+          vm.destinationIsExternal ? (
+            <a
+              href={primaryHref}
+              target="_blank"
+              rel="sponsored noopener noreferrer"
+              aria-label={vm.title || t('home.topStory')}
+              className="absolute inset-0 z-10"
+            />
+          ) : (
+            <Link
+              href={primaryHref}
+              aria-label={vm.title || t('home.topStory')}
+              className="absolute inset-0 z-10"
+            />
+          )
+        ) : null}
+
+        <div className="pointer-events-none relative z-20 flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span
               className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-extrabold uppercase tracking-[0.16em]"
@@ -2388,7 +2408,7 @@ function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
                 onClick={onToggleSave}
                 aria-label={bookmarked ? t('common.saved') : t('common.save')}
                 title={bookmarked ? t('common.saved') : t('common.save')}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border transition hover:opacity-[0.98]"
+                className="pointer-events-auto inline-flex h-10 w-10 items-center justify-center rounded-2xl border transition hover:opacity-[0.98]"
                 style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}
               >
                 <Bookmark className="h-5 w-5" fill={bookmarked ? 'currentColor' : 'none'} />
@@ -2397,7 +2417,7 @@ function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
           </div>
         </div>
 
-        <div className="relative mt-4">
+        <div className="pointer-events-none relative z-20 mt-4">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: theme.sub }}>
             <span>{vm.time}</span>
             <span aria-hidden="true" style={{ opacity: 0.45 }}>•</span>
@@ -2476,7 +2496,7 @@ function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
                     href={primaryHref}
                     target="_blank"
                     rel="sponsored noopener noreferrer"
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold border transition hover:opacity-[0.98]"
+                    className="pointer-events-auto inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold border transition hover:opacity-[0.98]"
                     style={{ background: isSponsoredFeatureCard ? '#b45309' : theme.accent, color: '#fff', borderColor: 'transparent' }}
                     onClick={(e) => e.stopPropagation()}
                   >
@@ -2485,7 +2505,7 @@ function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
                 ) : (
                   <Link
                     href={primaryHref}
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold border transition hover:opacity-[0.98]"
+                    className="pointer-events-auto inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold border transition hover:opacity-[0.98]"
                     style={{ background: isSponsoredFeatureCard ? '#b45309' : theme.accent, color: '#fff', borderColor: 'transparent' }}
                     onClick={(e) => e.stopPropagation()}
                   >
@@ -2498,7 +2518,7 @@ function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
                 <Button
                   theme={theme}
                   variant="soft"
-                  className="px-4 py-2.5"
+                  className="pointer-events-auto px-4 py-2.5"
                   onClick={(e: React.MouseEvent) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -2603,7 +2623,7 @@ function CenterStoryFeed({ theme, items, lang }: any) {
               debugStoryCard('home-fresh-updates', item, imageSrc);
 
               return (
-                <Link
+                <StoryLinkShell
                   key={storyKey}
                   href={href}
                   className="group block rounded-[28px] border p-3 shadow-[0_18px_38px_-32px_rgba(15,23,42,0.32)] transition hover:-translate-y-[1px] hover:shadow-[0_24px_46px_-30px_rgba(15,23,42,0.34)] sm:p-4"
@@ -2665,7 +2685,7 @@ function CenterStoryFeed({ theme, items, lang }: any) {
                       ) : null}
                     </div>
                   </article>
-                </Link>
+                </StoryLinkShell>
               );
             })}
       </div>
@@ -2793,7 +2813,7 @@ function MoreReadsSection({ theme, items, lang }: any) {
               debugStoryCard('home-more-reads', item, imageSrc);
 
               return (
-                <Link
+                <StoryLinkShell
                   key={storyKey}
                   href={href}
                   className="group block rounded-[28px] border p-3 shadow-[0_16px_36px_-30px_rgba(15,23,42,0.28)] transition hover:-translate-y-[1px] hover:shadow-[0_22px_46px_-30px_rgba(15,23,42,0.30)] sm:p-4"
@@ -2835,7 +2855,7 @@ function MoreReadsSection({ theme, items, lang }: any) {
                       {summary}
                     </div>
                   ) : null}
-                </Link>
+                </StoryLinkShell>
               );
             })}
           </div>
@@ -3217,6 +3237,30 @@ function HomeSpotlightCarousel({ theme, title, href, items, lang, Icon }: any) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const touchStartX = useRef<number | null>(null);
+  const resumeTimerRef = useRef<number | null>(null);
+
+  const clearResumeTimer = React.useCallback(() => {
+    if (resumeTimerRef.current == null) return;
+    window.clearTimeout(resumeTimerRef.current);
+    resumeTimerRef.current = null;
+  }, []);
+
+  const pauseRotation = React.useCallback(() => {
+    clearResumeTimer();
+    setIsPaused(true);
+  }, [clearResumeTimer]);
+
+  // Resume only after the tap has had time to become a click, so rotation never
+  // swaps the card the reader is pressing.
+  const resumeRotationSoon = React.useCallback(() => {
+    clearResumeTimer();
+    resumeTimerRef.current = window.setTimeout(() => {
+      resumeTimerRef.current = null;
+      setIsPaused(false);
+    }, SPOTLIGHT_RESUME_DELAY_MS);
+  }, [clearResumeTimer]);
+
+  React.useEffect(() => clearResumeTimer, [clearResumeTimer]);
 
   const lineClamp2: React.CSSProperties = {
     display: '-webkit-box',
@@ -3385,10 +3429,22 @@ function HomeSpotlightCarousel({ theme, title, href, items, lang, Icon }: any) {
         <div
           className="overflow-hidden rounded-[30px] border p-4 shadow-[0_24px_54px_-38px_rgba(15,23,42,0.30)] sm:p-5 lg:p-6"
           style={{ borderColor: theme.border, background: theme.surface }}
-          onTouchStart={onTouchStart}
-          onTouchEnd={onTouchEnd}
-          onMouseEnter={() => setIsPaused(true)}
-          onMouseLeave={() => setIsPaused(false)}
+          onTouchStart={(event) => {
+            pauseRotation();
+            onTouchStart(event);
+          }}
+          onTouchEnd={(event) => {
+            onTouchEnd(event);
+            resumeRotationSoon();
+          }}
+          onPointerDown={pauseRotation}
+          onPointerUp={resumeRotationSoon}
+          onPointerCancel={resumeRotationSoon}
+          onMouseEnter={pauseRotation}
+          onMouseLeave={() => {
+            clearResumeTimer();
+            setIsPaused(false);
+          }}
         >
           <AnimatePresence mode="wait">
             <motion.article

@@ -8,7 +8,7 @@ import { fetchPublicNews, type Article } from '../lib/publicNewsApi';
 import { getLocalizedArticleFields, STRICT_LOCALE_POLICY } from '../lib/localizedArticleFields';
 import { useLanguage } from '../utils/LanguageContext';
 import { useI18n } from '../src/i18n/LanguageProvider';
-import { buildNewsUrl } from '../lib/newsRoutes';
+import { buildNewsUrl, isNavigableNewsHref } from '../lib/newsRoutes';
 import { COVER_PLACEHOLDER_SRC, resolveCoverFitMode, resolveCoverImageUrl } from '../lib/coverImages';
 import { debugStoryCard, getStoryId, getStoryReactKey } from '../lib/storyIdentity';
 import { formatEditorialDateTime, resolveStoryDateIso } from '../lib/storyDateTime';
@@ -237,6 +237,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
                   if (!localized.isVisible) return null;
 
                   const href = buildNewsUrl({ id, slug: localized.slug || id, lang: language });
+                  const canOpen = isNavigableNewsHref(href);
                   const when = formatEditorialDateTime(resolveStoryDateIso(a as any));
                   const title = localized.title || t('categoryPage.untitled');
                   const summary = localized.summary;
@@ -267,9 +268,15 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
                           </div>
                         ) : null}
 
-                        <Link href={href} className="block text-lg font-bold text-newsPulse-navy hover:text-newsPulse-blue hover:underline">
-                          <span>{title}</span>
-                        </Link>
+                        {canOpen ? (
+                          <Link href={href} className="block text-lg font-bold text-newsPulse-navy hover:text-newsPulse-blue hover:underline">
+                            <span>{title}</span>
+                          </Link>
+                        ) : (
+                          <div className="block text-lg font-bold text-newsPulse-navy">
+                            <span>{title}</span>
+                          </div>
+                        )}
 
                         {summary ? (
                           <p
@@ -297,9 +304,11 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery }: Cat
                           {readingTime ? <span>{readingTime}</span> : null}
                         </div>
 
-                        <Link href={href} className="mt-4 inline-flex text-sm font-bold text-newsPulse-blue hover:underline">
-                          Read More
-                        </Link>
+                        {canOpen ? (
+                          <Link href={href} className="mt-4 inline-flex text-sm font-bold text-newsPulse-blue hover:underline">
+                            Read More
+                          </Link>
+                        ) : null}
                       </div>
                     </li>
                   );

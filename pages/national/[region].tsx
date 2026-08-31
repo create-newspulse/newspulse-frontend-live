@@ -8,7 +8,7 @@ import type { GetStaticProps } from 'next';
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle, type UiLang } from '../../lib/contentFallback';
 import OriginalTag from '../../components/OriginalTag';
 import { useI18n } from '../../src/i18n/LanguageProvider';
-import { buildNewsUrl } from '../../lib/newsRoutes';
+import { buildNewsUrl, isNavigableNewsHref } from '../../lib/newsRoutes';
 import { localizeArticle } from '../../lib/localizeArticle';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
 import { COVER_PLACEHOLDER_SRC, resolveCoverFitMode, resolveCoverImageUrl } from '../../lib/coverImages';
@@ -87,8 +87,10 @@ export default function RegionPage(props: { lang: 'en' | 'hi' | 'gu'; data?: any
                     const safeTitle = title || titleRes.text || article.title || t('common.untitled');
                     const titleParts = splitStoryTitleHook(safeTitle);
                     const titleHookColor = getStoryTitleHookColor(article?.category || article?.section || article?.topic);
+                    const Shell: any = isNavigableNewsHref(href) ? 'a' : 'div';
+                    const shellProps = isNavigableNewsHref(href) ? { href } : {};
                     return (
-                    <a key={id || href} href={href} className="group block p-6 rounded-2xl border shadow-sm hover:shadow-md bg-white dark:bg-gray-800 transition">
+                    <Shell key={id || href} {...shellProps} className="group block p-6 rounded-2xl border shadow-sm hover:shadow-md bg-white dark:bg-gray-800 transition">
                       <div className="mb-3 flex items-start gap-3">
                         <StoryImage
                           storyId={id}
@@ -114,7 +116,7 @@ export default function RegionPage(props: { lang: 'en' | 'hi' | 'gu'; data?: any
                       <div className="mt-3 text-xs text-gray-400">{t('common.source')}: {article.source || t('brand.name')}</div>
                         </div>
                       </div>
-                    </a>
+                    </Shell>
                   );
                   })
                 ) : (

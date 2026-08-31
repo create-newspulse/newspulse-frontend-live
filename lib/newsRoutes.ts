@@ -22,6 +22,14 @@ export function buildNewsUrl(options: { id: string; slug?: string; lang?: unknow
   return `${prefix}/news/${slug}`;
 }
 
+/** `buildNewsUrl` returns '#' when an article has no usable id/slug; such links must not be clickable. */
+export function isNavigableNewsHref(href: unknown): boolean {
+  const value = String(href ?? '').trim();
+  if (!value) return false;
+  if (value === '#') return false;
+  return true;
+}
+
 export function splitNewsParams(value: unknown): { id: string; slug: string } | null {
   const raw = String(value || '').trim();
   if (!raw) return null;

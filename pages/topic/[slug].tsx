@@ -9,7 +9,7 @@ import { resolveArticleSummaryOrExcerpt, resolveArticleTitle } from '../../lib/c
 import OriginalTag from '../../components/OriginalTag';
 import { useLanguage } from '../../utils/LanguageContext';
 import { useI18n } from '../../src/i18n/LanguageProvider';
-import { buildNewsUrl } from '../../lib/newsRoutes';
+import { buildNewsUrl, isNavigableNewsHref } from '../../lib/newsRoutes';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
 import { COVER_PLACEHOLDER_SRC, resolveCoverFitMode, resolveCoverImageUrl } from '../../lib/coverImages';
 import { formatEditorialDateTime, resolveStoryDateIso } from '../../lib/storyDateTime';
@@ -123,12 +123,21 @@ export default function TopicPage() {
                       />
 
                       <div className="p-4">
-                        <Link href={href} className="block text-lg font-bold text-slate-900 hover:underline">
-                          <span className="inline-flex flex-wrap items-center gap-2">
-                            <span>{titleRes.text || t('categoryPage.untitled')}</span>
-                            {titleRes.isOriginal ? <OriginalTag /> : null}
-                          </span>
-                        </Link>
+                        {isNavigableNewsHref(href) ? (
+                          <Link href={href} className="block text-lg font-bold text-slate-900 hover:underline">
+                            <span className="inline-flex flex-wrap items-center gap-2">
+                              <span>{titleRes.text || t('categoryPage.untitled')}</span>
+                              {titleRes.isOriginal ? <OriginalTag /> : null}
+                            </span>
+                          </Link>
+                        ) : (
+                          <div className="block text-lg font-bold text-slate-900">
+                            <span className="inline-flex flex-wrap items-center gap-2">
+                              <span>{titleRes.text || t('categoryPage.untitled')}</span>
+                              {titleRes.isOriginal ? <OriginalTag /> : null}
+                            </span>
+                          </div>
+                        )}
 
                         {summary ? (
                           <p
