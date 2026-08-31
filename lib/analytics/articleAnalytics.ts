@@ -35,15 +35,15 @@ export type ArticleViewEventPayload = ArticleAnalyticsBasePayload & {
 export type ScrollMilestoneEventPayload = ArticleAnalyticsBasePayload & {
   articleId: string;
   slug: string;
-  milestonePct: 25 | 50 | 75 | 100;
-  scrollDepthPct: number;
+  milestone: 25 | 50 | 75 | 100;
+  scrollPercent: number;
 };
 
 export type EngagedReadEventPayload = ArticleAnalyticsBasePayload & {
   articleId: string;
   slug: string;
   readTimeSec: number;
-  scrollDepthPct: number;
+  scrollPercent: number;
 };
 
 export type HeartbeatEventPayload = ArticleAnalyticsBasePayload & {

@@ -127,9 +127,14 @@ describe('useArticleAnalytics', () => {
 
     const calls = await readBeaconCalls((navigator as any).sendBeacon);
     const milestoneCalls = calls.filter((c) => c.url.includes('/api/analytics/scroll-milestone'));
-    const milestones = milestoneCalls.map((c) => c.payload?.milestonePct).sort((a, b) => a - b);
+    const milestones = milestoneCalls.map((c) => c.payload?.milestone).sort((a, b) => a - b);
 
     expect(milestones).toEqual([25, 50, 75, 100]);
+    expect(milestoneCalls.every((c) => c.payload?.milestonePct === undefined)).toBe(true);
+    expect(milestoneCalls.every((c) => typeof c.payload?.scrollPercent === 'number')).toBe(true);
+    expect(milestoneCalls.every((c) => c.payload?.articleId === 'a2')).toBe(true);
+    expect(milestoneCalls.every((c) => typeof c.payload?.visitorId === 'string' && c.payload.visitorId.length > 0)).toBe(true);
+    expect(milestoneCalls.every((c) => typeof c.payload?.sessionId === 'string' && c.payload.sessionId.length > 0)).toBe(true);
   });
 
   it('fires engaged-read only after 15s active AND 50% scroll', async () => {
@@ -164,7 +169,12 @@ describe('useArticleAnalytics', () => {
     expect(engagedCalls.length).toBe(1);
     expect(engagedCalls[0].payload.articleId).toBe('a3');
     expect(engagedCalls[0].payload.readTimeSec).toBeGreaterThanOrEqual(15);
-    expect(engagedCalls[0].payload.scrollDepthPct).toBeGreaterThanOrEqual(50);
+    expect(engagedCalls[0].payload.scrollPercent).toBeGreaterThanOrEqual(50);
+
+    const heartbeatCalls = calls.filter((c) => c.url.includes('/api/analytics/article-heartbeat'));
+    expect(heartbeatCalls.length).toBeGreaterThanOrEqual(1);
+    expect(heartbeatCalls[0].payload.articleId).toBe('a3');
+    expect(typeof heartbeatCalls[0].payload.readTimeSec).toBe('number');
   });
 
   it('resets correctly when navigating between articles', async () => {

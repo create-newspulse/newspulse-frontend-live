@@ -215,8 +215,8 @@ export function useArticleAnalytics({ article, slug, lang, isPendingTranslation 
           ...base,
           articleId,
           slug: safeSlug,
-          milestonePct,
-          scrollDepthPct: Math.round(scrollDepthPct),
+          milestone: milestonePct,
+          scrollPercent: Math.round(scrollDepthPct),
         });
       });
     };
@@ -234,7 +234,7 @@ export function useArticleAnalytics({ article, slug, lang, isPendingTranslation 
           articleId,
           slug: safeSlug,
           readTimeSec: Math.max(0, Math.floor(readTimeSecRef.current)),
-          scrollDepthPct: Math.round(scrollDepthPct),
+          scrollPercent: Math.round(scrollDepthPct),
         });
       });
     };

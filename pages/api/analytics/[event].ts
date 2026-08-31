@@ -1,6 +1,40 @@
-// pages/api/analytics/[event].ts - Friendly shim to proxy analytics events
+// pages/api/analytics/[event].ts - Same-origin proxy for News Pulse first-party article analytics
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { getApiOrigin } from '../../../lib/publicNewsApi'
+
+// Verified News Pulse backend analytics contract (flat JSON body).
+const BACKEND_EVENT_PATHS: Record<string, string> = {
+  'article-view': '/api/analytics/article/view',
+  'engaged-read': '/api/analytics/article/engagement',
+  'scroll-milestone': '/api/analytics/article/scroll',
+  'article-heartbeat': '/api/analytics/article/heartbeat',
+}
+
+// A backend outage would otherwise emit one log line per reader event.
+export const FAILURE_LOG_WINDOW_MS = 60_000
+const failureLogState = new Map<string, { lastLoggedAt: number; suppressed: number }>()
+
+function warnForwardingFailureThrottled(eventType: string, status: number | 'error') {
+  const key = `${eventType}:${status}`
+  const now = Date.now()
+  const state = failureLogState.get(key)
+
+  if (state && now - state.lastLoggedAt < FAILURE_LOG_WINDOW_MS) {
+    state.suppressed += 1
+    return
+  }
+
+  const suppressed = state?.suppressed ?? 0
+  failureLogState.set(key, { lastLoggedAt: now, suppressed: 0 })
+
+  const detail = status === 'error' ? 'unreachable' : `status ${status}`
+  const tail = suppressed > 0 ? ` (${suppressed} similar suppressed in the last ${FAILURE_LOG_WINDOW_MS / 1000}s)` : ''
+  console.warn(`Analytics forwarding failed for "${eventType}" (${detail})${tail}`)
+}
+
+export function __resetAnalyticsFailureLogStateForTests() {
+  failureLogState.clear()
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Basic CORS headers; mirror admin analytics route
@@ -19,7 +53,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const { event } = req.query
-  const type = Array.isArray(event) ? event[0] : event
+  const rawType = Array.isArray(event) ? event[0] : event
+  const safeType = typeof rawType === 'string' ? rawType : String(rawType || 'event')
 
   try {
     // Normalize body: sendBeacon may send text/plain; try to parse JSON if it's a string
@@ -28,44 +63,42 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       try {
         payload = JSON.parse(payload)
       } catch {
-        // keep as-is if not JSON
+        payload = {}
       }
     }
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) payload = {}
 
-    // Public site must not depend on admin-only proxy routes.
-    // Forward to a public backend analytics endpoint if available; otherwise no-op (200).
+    const backendPath = BACKEND_EVENT_PATHS[safeType]
+    if (!backendPath) {
+      res.status(200).json({ success: true, tracked: false, reason: 'unsupported_event' })
+      return
+    }
+
     const origin = getApiOrigin()
-    const safeType = typeof type === 'string' ? type : String(type || 'event')
-    const candidates = [
-      `${origin}/api/analytics/${encodeURIComponent(safeType)}`,
-      `${origin}/api/public/analytics/${encodeURIComponent(safeType)}`,
-      `${origin}/api/analytics`,
-      `${origin}/api/public/analytics`,
-    ]
-
-    let lastStatus: number | undefined
-    for (const url of candidates) {
-      try {
-        const resp = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({ type: safeType, data: payload }),
-        })
-        lastStatus = resp.status
-        if (!resp.ok) continue
-
-        const json = await resp.json().catch(() => ({ success: true, tracked: true }))
-        res.status(200).json(json)
-        return
-      } catch {
-        continue
-      }
+    if (!origin) {
+      res.status(200).json({ success: true, tracked: false, reason: 'backend_not_configured' })
+      return
     }
 
-    res.status(200).json({ success: true, tracked: false, status: lastStatus })
-  } catch (err: any) {
-    console.warn('Analytics event proxy failed:', err?.message || err)
-    // Always succeed to avoid noisy console errors in the UI
-    res.status(200).json({ success: true, tracked: false })
+    const resp = await fetch(`${origin}${backendPath}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(payload),
+    })
+
+    if (!resp.ok) {
+      warnForwardingFailureThrottled(safeType, resp.status)
+      res.status(502).json({ success: false, tracked: false })
+      return
+    }
+
+    // Let the backend override `tracked` when it intentionally skips or dedupes an event.
+    const json = await resp.json().catch(() => null)
+    const merged = json && typeof json === 'object' && !Array.isArray(json) ? json : {}
+    res.status(200).json({ success: true, tracked: true, ...merged })
+  } catch {
+    // Never expose backend internals; log only the event name and outcome.
+    warnForwardingFailureThrottled(safeType, 'error')
+    res.status(502).json({ success: false, tracked: false })
   }
 }
