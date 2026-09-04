@@ -977,7 +977,7 @@ function Drawer({ open, onClose, theme, title, children, side = "right" }: any) 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50"
+            className="fixed inset-0 z-50 h-dvh overflow-hidden"
             onClick={onClose}
             style={{ background: "rgba(0,0,0,0.35)" }}
           />
@@ -987,13 +987,13 @@ function Drawer({ open, onClose, theme, title, children, side = "right" }: any) 
             exit={{ x: fromX, opacity: 0 }}
             transition={{ type: "spring", stiffness: 260, damping: 28 }}
             className={cx(
-              "fixed top-0 z-[60] h-full w-[420px] max-w-[92vw]",
+              "fixed inset-y-0 z-[60] h-dvh w-[420px] max-w-[92vw]",
               side === "right" ? "right-0" : "left-0"
             )}
           >
-            <div className="h-full p-3">
-              <Surface theme={theme} className="h-full overflow-hidden">
-                <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: theme.border }}>
+            <div className="flex h-full p-3">
+              <Surface theme={theme} className="flex min-h-0 w-full flex-col overflow-hidden">
+                <div className="flex shrink-0 items-center justify-between border-b px-4 py-3" style={{ borderColor: theme.border }}>
                   <div className="text-sm font-extrabold" style={{ color: theme.text }}>
                     {title}
                   </div>
@@ -1001,7 +1001,7 @@ function Drawer({ open, onClose, theme, title, children, side = "right" }: any) 
                     <X className="h-5 w-5" />
                   </IconButton>
                 </div>
-                <div className="h-[calc(100%-60px)] overflow-auto p-4">{children}</div>
+                <div className="min-h-0 flex-1 touch-pan-y overflow-x-hidden overflow-y-auto overscroll-contain p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] [-webkit-overflow-scrolling:touch]">{children}</div>
               </Surface>
             </div>
           </motion.div>
@@ -4103,6 +4103,20 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mobileLeftOpen, setMobileLeftOpen] = useState(false);
+
+  React.useEffect(() => {
+    if (!mobileLeftOpen) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnRouteChange = () => setMobileLeftOpen(false);
+
+    document.body.style.overflow = 'hidden';
+    router.events.on('routeChangeStart', closeOnRouteChange);
+
+    return () => {
+      router.events.off('routeChangeStart', closeOnRouteChange);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileLeftOpen, router.events]);
 
   React.useEffect(() => {
     setHydrated(true);

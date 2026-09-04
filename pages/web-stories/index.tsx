@@ -21,5 +21,5 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
 };
 
 export default function WebStoriesPage() {
-  return <CategoryFeedPage title="Web Stories" categoryKey="web-stories" />;
+  return <CategoryFeedPage title="Web Stories" categoryKey="web-stories" useCategoryShell />;
 }

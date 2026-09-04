@@ -75,8 +75,8 @@ describe('CategoryFeedPage editorial listing', () => {
   test('displays a clean empty editorial state and fetches all published editorial records', async () => {
     renderEditorialPage([]);
 
-    expect(screen.getByRole('heading', { name: 'Editorial' })).toBeTruthy();
-    expect(screen.getByText('In-depth Editorials and Special Stories from News Pulse.')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Editorial Desk' })).toBeTruthy();
+    expect(screen.getByText('News Pulse opinions, analysis, perspectives and in-depth commentary.')).toBeTruthy();
     expect(screen.getByPlaceholderText('Search Editorials and Special Stories...')).toBeTruthy();
     expect(await screen.findByText('No stories yet.')).toBeTruthy();
     expect(fetchPublicNews).toHaveBeenCalledWith(expect.objectContaining({
@@ -112,7 +112,10 @@ describe('CategoryFeedPage editorial listing', () => {
     expect(screen.getByText('SPECIAL STORY')).toBeTruthy();
     expect(screen.getByText('EDITORIAL')).toBeTruthy();
     expect(screen.queryByText(/Founder.s Voice/i)).toBeNull();
-    expect(screen.queryByText(/Opinion|Analysis|Commentary|Explainer/i)).toBeNull();
+    expect(screen.queryByText('OPINION')).toBeNull();
+    expect(screen.queryByText('ANALYSIS')).toBeNull();
+    expect(screen.queryByText('COMMENTARY')).toBeNull();
+    expect(screen.queryByText('EXPLAINER')).toBeNull();
     expect(screen.getByText('By Kiran Parmar')).toBeTruthy();
     expect(screen.getByText('Founder, News Pulse')).toBeTruthy();
     expect(screen.getByText('By Authorised Editor')).toBeTruthy();
@@ -150,14 +153,14 @@ describe('CategoryFeedPage editorial listing', () => {
   });
 
   test.each([
-    ['hi', 'संपादकीय', 'न्यूज़ पल्स के गहन संपादकीय और विशेष लेख।', 'संपादकीय और विशेष लेख खोजें...'],
-    ['gu', 'સંપાદકીય', 'ન્યૂઝ પલ્સના વિશ્લેષણાત્મક સંપાદકીય અને વિશેષ લેખો.', 'સંપાદકીય અને વિશેષ લેખો શોધો...'],
-  ])('renders localized %s editorial header copy', async (language, title, subtitle, placeholder) => {
+    ['hi', 'संपादकीय और विशेष लेख खोजें...'],
+    ['gu', 'સંપાદકીય અને વિશેષ લેખો શોધો...'],
+  ])('renders localized %s editorial search copy with the shared desk header', async (language, placeholder) => {
     mockLanguage = language;
     renderEditorialPage([]);
 
-    expect(screen.getByRole('heading', { name: title })).toBeTruthy();
-    expect(screen.getByText(subtitle)).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Editorial Desk' })).toBeTruthy();
+    expect(screen.getByText('News Pulse opinions, analysis, perspectives and in-depth commentary.')).toBeTruthy();
     expect(screen.getByPlaceholderText(placeholder)).toBeTruthy();
     expect(await screen.findByText('No stories yet.')).toBeTruthy();
   });

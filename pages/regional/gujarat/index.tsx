@@ -3,12 +3,13 @@ import React from 'react';
 import type { GetStaticProps } from 'next';
 import { useRouter } from 'next/router';
 
-import BreakingTicker from '../../../components/regional/BreakingTicker';
 import DistrictChipBar from '../../../components/regional/DistrictChipBar';
 import DistrictPicker from '../../../components/regional/DistrictPicker';
 import CategoryRail from '../../../components/regional/CategoryRail';
 import RegionalTabs, { type RegionalTabKey } from '../../../components/regional/RegionalTabs';
-import RegionalFeedCards from '../../../components/regional/RegionalFeedCards';
+import BreakingTicker from '../../../components/regional/BreakingTicker';
+import RegionalHomeStorySections from '../../../components/regional/RegionalHomeStorySections';
+import NewsPulseCategoryShell from '../../../components/NewsPulseCategoryShell';
 
 import { getStoryCategoryLabel } from '../../../lib/publicStories';
 import { GUJARAT_DISTRICTS } from '../../../utils/regions';
@@ -31,6 +32,8 @@ const CATEGORIES = [
   'Culture',
   'Development',
 ] as const;
+
+const REGIONAL_FEED_BATCH_SIZE = 30;
 
 type AnyStory = any;
 
@@ -128,33 +131,24 @@ function extractDistrictSlugFromStory(story: AnyStory): string {
   return '';
 }
 
-function isPublished(story: AnyStory): boolean {
-  return String(story?.status || '').toLowerCase() === 'published';
+function regionalStoryKey(story: AnyStory): string {
+  return String(story?._id || story?.id || story?.slug || '').trim().toLowerCase();
 }
 
-function isBreakingStory(story: AnyStory): boolean {
-  const categoryLabel = String(getStoryCategoryLabel(story?.category) || story?.category || '').toLowerCase().trim();
-  const tags = tagList(story?.tags);
-  return categoryLabel === 'breaking' || tags.includes('breaking') || tags.includes('tag:breaking');
-}
+function dedupeRegionalStories(stories: AnyStory[]): AnyStory[] {
+  const seen = new Set<string>();
+  const output: AnyStory[] = [];
 
-function isGujaratTagged(story: AnyStory): boolean {
-  const tags = tagList(story?.tags);
-  if (tags.includes('state:gujarat') || tags.includes('gujarat') || tags.includes('state-gujarat')) return true;
+  for (const story of Array.isArray(stories) ? stories : []) {
+    const key = regionalStoryKey(story);
+    if (key) {
+      if (seen.has(key)) continue;
+      seen.add(key);
+    }
+    output.push(story);
+  }
 
-  // Treat district/city tagged items as Gujarat-relevant for this page.
-  if (tags.some((t) => t.startsWith('district:') || t.startsWith('city:'))) return true;
-
-  // Also match against known Gujarat districts by slug/name.
-  const districtTokens = new Set(
-    GUJARAT_DISTRICTS.flatMap((d) => [String(d.slug || '').toLowerCase(), String(d.name || '').toLowerCase()]).filter(Boolean)
-  );
-  if (tags.some((t) => districtTokens.has(t))) return true;
-
-  const districtField = String(extractDistrict(story) || '').toLowerCase().trim();
-  if (districtField && districtTokens.has(districtField)) return true;
-
-  return false;
+  return output;
 }
 
 export default function GujaratIndexPage() {
@@ -211,60 +205,15 @@ export default function GujaratIndexPage() {
 
   const [stories, setStories] = React.useState<AnyStory[]>([]);
   const [loading, setLoading] = React.useState(false);
+  const [loadingMore, setLoadingMore] = React.useState(false);
+  const [page, setPage] = React.useState(1);
+  const [hasMore, setHasMore] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [loadMoreError, setLoadMoreError] = React.useState<string | null>(null);
   const [refreshNonce, setRefreshNonce] = React.useState(0);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    const debugRegional =
-      process.env.NODE_ENV !== 'production' &&
-      typeof window !== 'undefined' &&
-      new URLSearchParams(window.location.search).get('debugRegional') === '1';
-
-    const run = async () => {
-      try {
-        const params = buildRegionalFeedSearchParams({ state: 'gujarat', lang: uiLang });
-        const url = `/api/public/regional?${params.toString()}`;
-
-        const res = await fetch(url, { method: 'GET', cache: 'no-store', headers: { Accept: 'application/json' } });
-        if (!res.ok) throw new Error(`Failed to fetch regional feed (${res.status})`);
-
-        const data = await res.json().catch(() => null);
-
-        if (debugRegional) {
-          // eslint-disable-next-line no-console
-          console.log('[regional/gujarat] feed debug', {
-            url,
-            status: res.status,
-            cacheControl: res.headers.get('cache-control'),
-            age: res.headers.get('age'),
-            xVercelCache: res.headers.get('x-vercel-cache'),
-            payload: data,
-          });
-        }
-        const items = unwrapRegionalFeedItems(data) as AnyStory[];
-
-        if (!cancelled) setStories(items);
-      } catch (e: any) {
-        // eslint-disable-next-line no-console
-        console.error('Failed to fetch regional feed', e);
-        if (cancelled) return;
-        setError(e?.message || t('regionalUI.failedToLoadStories'));
-      } finally {
-        if (cancelled) return;
-        setLoading(false);
-      }
-    };
-
-    run();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [refreshNonce, t, uiLang]);
+  const loadingPageRef = React.useRef<number | null>(null);
+  const activeFeedRequestRef = React.useRef('');
+  const inFlightFeedRequestRef = React.useRef('');
 
   const districtFilteringEnabled = React.useMemo(
     () =>
@@ -278,6 +227,11 @@ export default function GujaratIndexPage() {
   );
 
   const effectiveCategory = React.useMemo(() => (tab === 'Civic' ? 'Civic' : selectedCategory), [tab, selectedCategory]);
+
+  const regionalFeedFilterKey = React.useMemo(
+    () => `${uiLang}:${effectiveCategory}:${normalize(searchQuery)}`,
+    [effectiveCategory, searchQuery, uiLang]
+  );
 
   const tTopicChip = (c: string) => {
     switch (c) {
@@ -306,16 +260,98 @@ export default function GujaratIndexPage() {
     }
   };
 
+  const fetchRegionalPage = React.useCallback(async (pageToLoad: number) => {
+    const requestedLimit = pageToLoad * REGIONAL_FEED_BATCH_SIZE;
+    const requestKey = `${regionalFeedFilterKey}:${refreshNonce}:${pageToLoad}`;
+    if (inFlightFeedRequestRef.current === requestKey) return;
+
+    loadingPageRef.current = pageToLoad;
+    activeFeedRequestRef.current = requestKey;
+    inFlightFeedRequestRef.current = requestKey;
+
+    if (pageToLoad === 1) {
+      setLoading(true);
+      setError(null);
+      setLoadMoreError(null);
+      setHasMore(true);
+      setPage(1);
+    } else {
+      setLoadingMore(true);
+      setLoadMoreError(null);
+    }
+
+    const debugRegional =
+      process.env.NODE_ENV !== 'production' &&
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('debugRegional') === '1';
+
+    try {
+      const params = buildRegionalFeedSearchParams({ state: 'gujarat', lang: uiLang });
+      params.set('limit', String(requestedLimit));
+      if (effectiveCategory !== 'All') params.set('topic', normalize(effectiveCategory));
+      const query = String(searchQuery || '').trim();
+      if (query) params.set('q', query);
+
+      const url = `/api/public/regional?${params.toString()}`;
+      const res = await fetch(url, { method: 'GET', cache: 'no-store', headers: { Accept: 'application/json' } });
+      if (!res.ok) throw new Error(`Failed to fetch regional feed (${res.status})`);
+
+      const data = await res.json().catch(() => null);
+      if (activeFeedRequestRef.current !== requestKey) return;
+
+      if (debugRegional) {
+        // eslint-disable-next-line no-console
+        console.log('[regional/gujarat] feed debug', {
+          url,
+          status: res.status,
+          cacheControl: res.headers.get('cache-control'),
+          age: res.headers.get('age'),
+          xVercelCache: res.headers.get('x-vercel-cache'),
+          payload: data,
+        });
+      }
+
+      const items = dedupeRegionalStories(unwrapRegionalFeedItems(data) as AnyStory[]);
+      setStories(items);
+      setPage(pageToLoad);
+      setHasMore(items.length >= requestedLimit);
+    } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to fetch regional feed', e);
+      if (activeFeedRequestRef.current !== requestKey) return;
+      const message = e?.message || t('regionalUI.failedToLoadStories');
+      if (pageToLoad === 1) setError(message);
+      else {
+        setLoadMoreError(message);
+        setHasMore(true);
+      }
+    } finally {
+      if (activeFeedRequestRef.current === requestKey) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
+      if (loadingPageRef.current === pageToLoad) loadingPageRef.current = null;
+      if (inFlightFeedRequestRef.current === requestKey) inFlightFeedRequestRef.current = '';
+    }
+  }, [effectiveCategory, refreshNonce, regionalFeedFilterKey, searchQuery, t, uiLang]);
+
+  React.useEffect(() => {
+    fetchRegionalPage(1);
+  }, [fetchRegionalPage]);
+
+  const loadNextRegionalPage = React.useCallback(() => {
+    if (loading || loadingMore || !hasMore) return;
+    fetchRegionalPage(page + 1);
+  }, [fetchRegionalPage, hasMore, loading, loadingMore, page]);
+
   const filteredStories = React.useMemo(() => {
     let list = stories;
 
-    // Category filter
     if (effectiveCategory !== 'All') {
       const wanted = normalize(effectiveCategory);
       list = list.filter((s) => normalize(extractCategory(s)).includes(wanted));
     }
 
-    // Search filter
     const q = normalize(searchQuery);
     if (q) {
       list = list.filter((s) => {
@@ -327,14 +363,28 @@ export default function GujaratIndexPage() {
     return list;
   }, [stories, effectiveCategory, searchQuery]);
 
-  const tickerItems = React.useMemo(() => {
-    const breakingItems = (stories || []).filter((s) => isPublished(s) && isBreakingStory(s));
-    const gujaratBreakingItems = breakingItems.filter((s) => isGujaratTagged(s));
-    const chosen = gujaratBreakingItems.length ? gujaratBreakingItems : breakingItems;
-    return chosen.slice(0, 12);
-  }, [stories]);
+  const regionalTickerItems = React.useMemo(
+    () =>
+      (Array.isArray(stories) ? stories : [])
+        .map((story) => ({
+          _id: String(story?._id || story?.id || story?.slug || '').trim(),
+          title: String(story?.title || story?.headline || story?.shortTitle || '').trim(),
+          category: story?.category,
+          tags: story?.tags,
+          createdAt: story?.createdAt,
+          publishedAt: story?.publishedAt,
+        }))
+        .filter((story) => story._id && story.title)
+        .slice(0, 12),
+    [stories]
+  );
 
   const stateName = getStateName(langKey, 'gujarat', 'Gujarat');
+
+  const regionalLoadMoreLabel = React.useMemo(() => {
+    const contextLabel = effectiveCategory === 'All' ? stateName : tTopicChip(effectiveCategory);
+    return `Load More ${contextLabel} Stories`;
+  }, [effectiveCategory, stateName]);
 
   const onSelectCategory = (c: (typeof CATEGORIES)[number]) => {
     setSelectedCategory(c);
@@ -353,103 +403,103 @@ export default function GujaratIndexPage() {
     }
   };
 
+  const regionalTopControls = (
+    <div className="rounded-[28px] border border-slate-200/80 bg-white/90 shadow-[0_18px_44px_-38px_rgba(15,23,42,0.28)] backdrop-blur">
+      <div className="p-4 sm:p-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="text-[11px] font-black uppercase tracking-[0.22em] text-newsPulse-blue/80">
+              {tHeading(language as any, 'regional')} {t('regionalGujaratPage.feedWord')} • {stateName}
+            </div>
+            <h1 className="mt-1 text-2xl font-black tracking-tight text-newsPulse-navy sm:text-3xl">
+              {t('regionalGujaratPage.regionalPulse')} – {stateName}
+            </h1>
+          </div>
+
+          <div className="w-full md:max-w-[340px]">
+            <div className="relative w-full">
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={t('regionalGujaratPage.searchPlaceholder')}
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 pr-10 text-sm outline-none focus:ring-2 focus:ring-slate-200"
+              />
+              <div className="pointer-events-none absolute right-3 top-2.5 text-slate-400">⌕</div>
+            </div>
+          </div>
+        </div>
+
+        <DistrictChipBar
+          className="mt-3"
+          districts={localizedDistricts}
+          selectedDistrictSlug={null}
+          onSelectAll={() => pushPath('/regional/gujarat')}
+          onSelectDistrict={onSelectDistrict}
+          onMore={() => setPickerOpen(true)}
+          allLabel={t('regionalUI.allGujarat')}
+          moreLabel={t('regionalUI.more')}
+        />
+
+        <div className="mt-2">
+          <CategoryRail
+            categories={[...CATEGORIES]}
+            selected={effectiveCategory}
+            onSelect={onSelectCategory}
+            getLabel={tTopicChip}
+          />
+        </div>
+
+        <RegionalTabs
+          className="mt-3"
+          value={tab}
+          onChange={(t0) => {
+            setTab(t0);
+            if (t0 === 'Civic') setSelectedCategory('Civic');
+          }}
+          getLabel={(k) => {
+            switch (k) {
+              case 'Feed':
+                return t('regionalUI.tabFeed');
+              case 'Districts':
+                return t('regionalUI.tabDistricts');
+              case 'Civic':
+                return t('regionalUI.tabCivic');
+              case 'Map':
+                return t('regionalUI.tabMap');
+              default:
+                return k;
+            }
+          }}
+        />
+      </div>
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
+    <>
       <Head>
         <title>{t('regionalGujaratPage.headTitle')}</title>
         <meta name="description" content={t('regionalGujaratPage.headDescription')} />
       </Head>
 
-      <div className="sticky top-0 z-40">
-        {tab === 'Feed' && (
+      <NewsPulseCategoryShell
+        activeCategory="regional"
+        latestItems={stories}
+        lang={uiLang}
+        tickerContent={(
           <BreakingTicker
-            items={tickerItems}
+            items={regionalTickerItems}
             variant="breaking"
-            emptyText={t('home.noBreaking')}
+            label="REGIONAL UPDATES"
+            emptyText="No regional updates right now."
+            viewAllHref="/regional/gujarat"
+            className="overflow-hidden rounded-xl border-0"
           />
         )}
-
-        <div className="border-b border-slate-200 bg-white/90 backdrop-blur">
-          <div className="mx-auto max-w-6xl px-4 py-3">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <div className="text-3xl font-black tracking-tight">
-                  {t('regionalGujaratPage.regionalPulse')} – {stateName}
-                </div>
-                <div className="text-sm text-slate-600">
-                  {tHeading(language as any, 'regional')} {t('regionalGujaratPage.feedWord')} • {stateName}
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <div className="relative w-full sm:w-[340px]">
-                  <input
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder={t('regionalGujaratPage.searchPlaceholder')}
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 pr-10 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-                  />
-                  <div className="pointer-events-none absolute right-3 top-2.5 text-slate-400">⌕</div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setPickerOpen(true)}
-                  className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium hover:bg-slate-50"
-                  title={t('regionalGujaratPage.pickDistrictTitle')}
-                >
-                  {t('regionalUI.allGujarat')}
-                </button>
-              </div>
-            </div>
-
-            <DistrictChipBar
-              className="mt-3"
-              districts={localizedDistricts}
-              selectedDistrictSlug={null}
-              onSelectAll={() => pushPath('/regional/gujarat')}
-              onSelectDistrict={onSelectDistrict}
-              onMore={() => setPickerOpen(true)}
-              allLabel={t('regionalUI.allGujarat')}
-              moreLabel={t('regionalUI.more')}
-            />
-
-            <div className="mt-2">
-              <CategoryRail
-                categories={[...CATEGORIES]}
-                selected={effectiveCategory}
-                onSelect={onSelectCategory}
-                getLabel={tTopicChip}
-              />
-            </div>
-
-            <RegionalTabs
-              className="mt-3"
-              value={tab}
-              onChange={(t0) => {
-                setTab(t0);
-                if (t0 === 'Civic') setSelectedCategory('Civic');
-              }}
-              getLabel={(k) => {
-                switch (k) {
-                  case 'Feed':
-                    return t('regionalUI.tabFeed');
-                  case 'Districts':
-                    return t('regionalUI.tabDistricts');
-                  case 'Civic':
-                    return t('regionalUI.tabCivic');
-                  case 'Map':
-                    return t('regionalUI.tabMap');
-                  default:
-                    return k;
-                }
-              }}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="mx-auto max-w-6xl px-4 py-6">
+        topContent={regionalTopControls}
+      >
+      <div className="min-w-0 text-slate-900">
+      <div className="py-4">
         {!!error && (
           <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">{error}</div>
@@ -500,41 +550,22 @@ export default function GujaratIndexPage() {
           </div>
         ) : (
           <>
-            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <div className="text-2xl font-bold">
-                  {t('regionalGujaratPage.latestFrom')} {stateName}
-                </div>
-                <div className="text-sm text-slate-600">
-                  {effectiveCategory === 'All'
-                    ? t('regionalGujaratPage.allLocalCategories')
-                    : `${t('regionalGujaratPage.categoryPrefix')} ${tTopicChip(effectiveCategory)}`}
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedCategory('All');
-                  setSearchQuery('');
-                  setTab('Feed');
-                }}
-                className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium hover:bg-slate-50"
-              >
-                {t('common.reset')}
-              </button>
-            </div>
-
-            <RegionalFeedCards
+            <RegionalHomeStorySections
               stories={filteredStories}
               requestedLang={uiLang}
               loading={loading}
-              districtFilteringEnabled={districtFilteringEnabled}
+              stateName={stateName}
+              categoryLabel={`${t('regionalGujaratPage.latestFrom')} ${stateName}`}
               showDistrictBadges={districtFilteringEnabled}
               getDistrictLabel={getLocalizedDistrictFromStory}
               emptyTitle={t('regionalUI.emptyTitle')}
+              emptyHint={t('regionalUI.emptyHint')}
               readMoreLabel={t('regionalUI.readMore')}
-              videoPreviewHiddenLabel={t('regionalUI.videoPreviewHidden')}
+              loadMoreLabel={regionalLoadMoreLabel}
+              hasMore={hasMore}
+              loadingMore={loadingMore}
+              loadMoreError={loadMoreError}
+              onLoadMore={loadNextRegionalPage}
               fallbackCategoryLabel={tHeading(language as any, 'regional')}
             />
           </>
@@ -561,7 +592,9 @@ export default function GujaratIndexPage() {
           {t('regionalGujaratPage.regionalPulse')} – {stateName}
         </div>
       </footer>
-    </div>
+      </div>
+      </NewsPulseCategoryShell>
+    </>
   );
 }
 

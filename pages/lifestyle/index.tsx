@@ -21,5 +21,5 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
 };
 
 export default function LifestylePage() {
-  return <CategoryFeedPage title="Lifestyle" categoryKey="lifestyle" />;
+  return <CategoryFeedPage title="Lifestyle" categoryKey="lifestyle" useCategoryShell />;
 }

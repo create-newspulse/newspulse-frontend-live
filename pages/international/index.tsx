@@ -16,5 +16,5 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
 };
 
 export default function International() {
-  return <CategoryFeedPage title="International" categoryKey="international" />;
+  return <CategoryFeedPage title="International" categoryKey="international" useCategoryShell />;
 }

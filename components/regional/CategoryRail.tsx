@@ -29,13 +29,24 @@ function Chip({ active, children, onClick }: { active?: boolean; children: React
 
 export default function CategoryRail({ categories, selected, onSelect, getLabel, className }: CategoryRailProps) {
   const labelOf = (c: string) => (typeof getLabel === 'function' ? getLabel(c) : c);
+
   return (
-    <div className={classNames('flex items-center gap-2 overflow-x-auto pb-1', className)}>
-      {categories.map((c) => (
-        <Chip key={c} active={selected === c} onClick={() => onSelect(c)}>
-          {labelOf(c)}
-        </Chip>
-      ))}
+    <div className={classNames('min-w-0', className)}>
+      <div className="no-scrollbar flex items-center gap-2 overflow-x-auto pb-1 md:hidden">
+        {categories.map((c) => (
+          <Chip key={c} active={selected === c} onClick={() => onSelect(c)}>
+            {labelOf(c)}
+          </Chip>
+        ))}
+      </div>
+
+      <div className="hidden flex-wrap items-center gap-2 md:flex">
+        {categories.map((c) => (
+          <Chip key={c} active={selected === c} onClick={() => onSelect(c)}>
+            {labelOf(c)}
+          </Chip>
+        ))}
+      </div>
     </div>
   );
 }

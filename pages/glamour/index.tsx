@@ -21,5 +21,5 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
 };
 
 export default function GlamourPage() {
-  return <CategoryFeedPage title="Glamour" categoryKey="glamour" />;
+  return <CategoryFeedPage title="Glamour" categoryKey="glamour" useCategoryShell />;
 }

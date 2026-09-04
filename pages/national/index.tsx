@@ -5,10 +5,11 @@ import React from 'react';
 import type { GetStaticProps } from 'next';
 
 import BreakingTicker from '../../components/regional/BreakingTicker';
+import NewsPulseCategoryShell from '../../components/NewsPulseCategoryShell';
 
 import { ALL_REGIONS } from '../../utils/india';
 import { useLanguage } from '../../utils/LanguageContext';
-import { getRegionName, tHeading, toLanguageKey } from '../../utils/localizedNames';
+import { getRegionName, toLanguageKey } from '../../utils/localizedNames';
 
 import { fetchPublicNews } from '../../lib/publicNewsApi';
 import { useI18n } from '../../src/i18n/LanguageProvider';
@@ -16,13 +17,11 @@ import { buildNewsUrl } from '../../lib/newsRoutes';
 import { localizeArticle } from '../../lib/localizeArticle';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
-import AdSlot from '../../src/components/ads/AdSlot';
 import { getStoryTitleHookColor, splitStoryTitleHook } from '../../lib/storyTitleHook';
-import type { PublicViralVideo } from '../../lib/publicViralVideos';
-import { normalizePublicViralVideosPayload } from '../../lib/publicViralVideos';
-import PublicViralVideoCard from '../../components/viral-videos/PublicViralVideoCard';
 import StoryImage, { TopStoryImage } from '../../src/components/story/StoryImage';
 import { getPublicApiBaseUrl } from '../../lib/publicApiBase';
+import CategoryDeskHeader from '../../src/components/category/CategoryDeskHeader';
+import CategoryStoryHierarchy, { type CategoryStoryHierarchyItem } from '../../components/category/CategoryStoryHierarchy';
 
 type AnyStory = any;
 
@@ -184,11 +183,6 @@ function storyHref(story: AnyStory, lang: unknown): string {
   const slug = resolveArticleSlug(story, lang);
   if (!id) return '#';
   return buildNewsUrl({ id, slug, lang });
-}
-
-function withLangPrefix(path: string, lang: 'en' | 'hi' | 'gu'): string {
-  if (lang === 'en') return path;
-  return `/${lang}${path}`;
 }
 
 function storyImage(story: AnyStory): string {
@@ -396,148 +390,6 @@ function CompactFeedRow({ story, lang }: { story: AnyStory; lang: 'en' | 'hi' | 
   );
 }
 
-function NationalSidebarLatestWidget({
-  lang,
-  items,
-  loading,
-}: {
-  lang: 'en' | 'hi' | 'gu';
-  items: AnyStory[];
-  loading: boolean;
-}) {
-  const { t } = useI18n();
-
-  if (!loading && items.length === 0) return null;
-
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-      <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-4 dark:border-gray-800">
-        <div>
-          <div className="text-[11px] font-black uppercase tracking-[0.18em] text-newsPulse-blue/80">Latest</div>
-          <div className="mt-1 text-sm font-extrabold text-slate-900 dark:text-gray-100">News Pulse</div>
-        </div>
-        <Link href={withLangPrefix('/latest', lang)} className="text-xs font-semibold text-newsPulse-blue hover:underline">
-          {t('common.viewAll')}
-        </Link>
-      </div>
-
-      <div className="p-2">
-        {loading ? (
-          Array.from({ length: 4 }).map((_, index) => (
-            <div key={`latest-skeleton-${index}`} className="rounded-xl px-3 py-3">
-              <div className="h-3 w-16 animate-pulse rounded bg-slate-100 dark:bg-gray-800" />
-              <div className="mt-2 h-4 w-full animate-pulse rounded bg-slate-100 dark:bg-gray-800" />
-            </div>
-          ))
-        ) : (
-          items.slice(0, 6).map((item, index) => {
-            const href = storyHref(item, lang);
-            const { title } = localizeArticle(item, lang);
-            const itemTitle = String(title || item?.title || t('common.untitled')).trim();
-            const category = String(item?.category || '').trim();
-
-            return (
-              <a
-                key={String(item?._id || item?.id || item?.slug || index)}
-                href={href}
-                className="block rounded-xl px-3 py-3 transition hover:bg-slate-50 dark:hover:bg-gray-800/70"
-              >
-                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-gray-400">
-                  {category ? <span className="truncate">{category}</span> : null}
-                  {storyDateIso(item) ? <span className="h-1 w-1 rounded-full bg-slate-300 dark:bg-gray-600" /> : null}
-                  {storyDateIso(item) ? <ClientTime iso={storyDateIso(item)} /> : null}
-                </div>
-                <div className="mt-2 line-clamp-2 text-sm font-semibold leading-snug text-slate-900 dark:text-gray-100">
-                  {itemTitle}
-                </div>
-              </a>
-            );
-          })
-        )}
-      </div>
-    </div>
-  );
-}
-
-function NationalSidebarVideoFeature({ lang, video }: { lang: 'en' | 'hi' | 'gu'; video: PublicViralVideo | null }) {
-  const { t } = useI18n();
-
-  if (!video) return null;
-
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-      <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-4 dark:border-gray-800">
-        <div>
-          <div className="text-[11px] font-black uppercase tracking-[0.18em] text-newsPulse-blue/80">Video</div>
-          <div className="mt-1 text-sm font-extrabold text-slate-900 dark:text-gray-100">Feature Card</div>
-        </div>
-        <Link href={withLangPrefix('/viral-videos', lang)} className="text-xs font-semibold text-newsPulse-blue hover:underline">
-          {t('common.viewAll')}
-        </Link>
-      </div>
-      <div className="p-3">
-        <PublicViralVideoCard video={video} compact lightTopChrome />
-      </div>
-    </div>
-  );
-}
-
-function NationalSidebarYouthDeskWidget({
-  lang,
-  items,
-  loading,
-}: {
-  lang: 'en' | 'hi' | 'gu';
-  items: AnyStory[];
-  loading: boolean;
-}) {
-  const { t } = useI18n();
-
-  if (!loading && items.length === 0) return null;
-
-  return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-      <div className="flex items-start justify-between gap-3 border-b border-slate-200 bg-[linear-gradient(135deg,rgba(79,70,229,0.10),rgba(37,99,235,0.05)_70%,rgba(255,255,255,0.72)_100%)] px-4 py-4 dark:border-gray-800 dark:bg-none">
-        <div>
-          <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-gray-400">Youth Desk</div>
-          <div className="mt-1 text-sm font-extrabold text-slate-900 dark:text-gray-100">Trending</div>
-        </div>
-        <Link href={withLangPrefix('/youth-pulse', lang)} className="text-xs font-semibold text-newsPulse-blue hover:underline">
-          {t('common.viewAll')}
-        </Link>
-      </div>
-
-      <div className="grid gap-2.5 p-4">
-        {loading ? (
-          Array.from({ length: 4 }).map((_, index) => (
-            <div key={`youth-skeleton-${index}`} className="h-12 animate-pulse rounded-[20px] border border-slate-200 bg-slate-50 dark:border-gray-800 dark:bg-gray-800/70" />
-          ))
-        ) : (
-          items.slice(0, 4).map((item, index) => {
-            const href = storyHref(item, lang);
-            const { title } = localizeArticle(item, lang);
-            const itemTitle = String(title || item?.title || t('common.untitled')).trim();
-
-            return (
-              <a
-                key={String(item?._id || item?.id || item?.slug || index)}
-                href={href}
-                className="group flex items-center gap-3 rounded-[20px] border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-900 shadow-[0_14px_30px_-28px_rgba(15,23,42,0.32)] transition duration-200 hover:-translate-y-0.5 hover:bg-slate-50 hover:shadow-[0_18px_34px_-28px_rgba(15,23,42,0.36)] dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800/80"
-              >
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-indigo-200 bg-indigo-50 text-[10px] font-black uppercase tracking-[0.12em] text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">
-                  YD
-                </span>
-                <span className="min-w-0 flex-1 line-clamp-2 font-semibold leading-snug">{itemTitle}</span>
-                <span className="shrink-0 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-slate-600 dark:text-gray-500 dark:group-hover:text-gray-300">→</span>
-              </a>
-            );
-          })
-        )}
-      </div>
-    </div>
-  );
-}
-
 export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data: AnyStory[] | null; breaking?: AnyStory[] | null }) {
   const router = useRouter();
   const { language } = useLanguage();
@@ -572,15 +424,13 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
   const [loadingMore, setLoadingMore] = React.useState(false);
   const [hasMore, setHasMore] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-  const [sidebarLatestItems, setSidebarLatestItems] = React.useState<AnyStory[]>([]);
-  const [sidebarLatestLoading, setSidebarLatestLoading] = React.useState(true);
-  const [sidebarYouthItems, setSidebarYouthItems] = React.useState<AnyStory[]>([]);
-  const [sidebarYouthLoading, setSidebarYouthLoading] = React.useState(true);
-  const [sidebarVideoFeature, setSidebarVideoFeature] = React.useState<PublicViralVideo | null>(null);
+  const [loadMoreError, setLoadMoreError] = React.useState<string | null>(null);
 
-  const sentinelRef = React.useRef<HTMLDivElement | null>(null);
   const didInitRef = React.useRef(false);
   const refreshStateRef = React.useRef({ page: 1 });
+  const loadingPageRef = React.useRef<number | null>(null);
+  const activeFeedRequestRef = React.useRef('');
+  const inFlightFeedRequestRef = React.useRef('');
 
   React.useEffect(() => {
     refreshStateRef.current = { page };
@@ -657,41 +507,75 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
   const loadPage = React.useCallback(
     async (pageToLoad: number) => {
       const limit = 20;
+      const requestKey = `${effectiveLang}:${pageToLoad}`;
+      if (inFlightFeedRequestRef.current === requestKey) return;
+
+      loadingPageRef.current = pageToLoad;
+      activeFeedRequestRef.current = requestKey;
+      inFlightFeedRequestRef.current = requestKey;
+
       try {
         if (pageToLoad === 1) {
           setLoading(true);
           setError(null);
+          setLoadMoreError(null);
         } else {
           setLoadingMore(true);
+          setLoadMoreError(null);
         }
 
         // Public API does not currently support pagination params; emulate paging by increasing limit.
         const requested = pageToLoad * limit;
         const resp = await fetchPublicNews({ category: 'national', language: effectiveLang, limit: requested });
+        if (activeFeedRequestRef.current !== requestKey) return;
+
         if (resp?.error) {
-          setError(resp.error);
-          setHasMore(false);
-          if (pageToLoad === 1) setStories([]);
+          if (pageToLoad === 1) {
+            setError(resp.error);
+            setHasMore(false);
+            setStories([]);
+          } else {
+            setLoadMoreError(resp.error);
+            setHasMore(true);
+          }
           return;
         }
 
         const items = Array.isArray(resp?.items) ? resp.items : [];
 
         // Heuristic: if backend returns a full page worth, assume there may be more.
-        setHasMore(items.length >= requested);
+        const total = typeof resp?.meta?.total === 'number' ? resp.meta.total : undefined;
+        const totalPages = typeof resp?.meta?.totalPages === 'number' ? resp.meta.totalPages : undefined;
+        setHasMore(typeof total === 'number' ? items.length < total : typeof totalPages === 'number' ? pageToLoad < totalPages : items.length >= requested);
         setStories(items);
 
         setPage(pageToLoad);
       } catch (e: any) {
-        setError(e?.message ? String(e.message) : t('nationalPage.failedToLoad'));
-        if (pageToLoad === 1) setStories([]);
+        if (activeFeedRequestRef.current !== requestKey) return;
+        const message = e?.message ? String(e.message) : t('nationalPage.failedToLoad');
+        if (pageToLoad === 1) {
+          setError(message);
+          setStories([]);
+        } else {
+          setLoadMoreError(message);
+          setHasMore(true);
+        }
       } finally {
-        setLoading(false);
-        setLoadingMore(false);
+        if (activeFeedRequestRef.current === requestKey) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
+        if (loadingPageRef.current === pageToLoad) loadingPageRef.current = null;
+        if (inFlightFeedRequestRef.current === requestKey) inFlightFeedRequestRef.current = '';
       }
     },
     [effectiveLang, t]
   );
+
+  const loadNextPage = React.useCallback(() => {
+    if (loading || loadingMore || !hasMore) return;
+    loadPage(page + 1);
+  }, [hasMore, loadPage, loading, loadingMore, page]);
 
   // Initial fetch + refetch when language changes
   React.useEffect(() => {
@@ -771,28 +655,6 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
     };
   }, [effectiveLang]);
 
-  // Infinite scroll
-  React.useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el) return;
-    if (!hasMore) return;
-    if (loading || loadingMore) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const first = entries[0];
-        if (!first?.isIntersecting) return;
-        if (loading || loadingMore) return;
-        if (!hasMore) return;
-        loadPage(page + 1);
-      },
-      { root: null, rootMargin: '600px', threshold: 0 }
-    );
-
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [hasMore, loadPage, loading, loadingMore, page]);
-
   const regionOptions = React.useMemo(() => {
     return ALL_REGIONS.map((r) => ({
       slug: r.slug,
@@ -845,49 +707,12 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
   }, [filteredStories, sortKey]);
 
   const hero = sortedStories[0] || null;
-  const feed = hero ? sortedStories.slice(1) : sortedStories;
 
   const heroLocalizedTitle = React.useMemo(() => {
     if (!hero) return '';
     const { title, content } = localizeArticle(hero, effectiveLang);
     return String(title || hero?.title || '').trim();
   }, [effectiveLang, hero]);
-
-  const topStories = React.useMemo(() => {
-    const base = [...sortedStories];
-    base.sort((a, b) => (Number(b?.reads || 0) || 0) - (Number(a?.reads || 0) || 0));
-    return base.slice(0, 8);
-  }, [sortedStories]);
-
-  const trendingTopics = React.useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const s of sortedStories) {
-      for (const t of tagList(s?.tags)) {
-        if (!t) continue;
-        counts.set(t, (counts.get(t) || 0) + 1);
-      }
-    }
-    const entries: Array<[string, number]> = [];
-    counts.forEach((v, k) => {
-      entries.push([k, v]);
-    });
-
-    const pairs = entries
-      .filter(([k]) => k.length >= 3 && k !== 'breaking' && k !== 'national')
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([k]) => k);
-
-    return pairs.length ? pairs : TOPIC_CHIPS.filter((t) => t !== 'All').map((t) => normalize(t));
-  }, [sortedStories]);
-
-  const videoStory = React.useMemo(() => {
-    return (
-      sortedStories.find((s) => !!s?.videoUrl || !!s?.video || tagList(s?.tags).includes('video')) ||
-      sortedStories.find((s) => !!s?.image || !!s?.thumbnail) ||
-      null
-    );
-  }, [sortedStories]);
 
   const heroListenText = React.useMemo(() => {
     if (!hero) return '';
@@ -917,389 +742,177 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
     }
   };
 
-  React.useEffect(() => {
-    const controller = new AbortController();
-    setSidebarLatestLoading(true);
-    setSidebarYouthLoading(true);
+  const nationalHierarchyItems: CategoryStoryHierarchyItem[] = sortedStories.map((story) => {
+    const href = storyHref(story, effectiveLang);
+    const { title, content } = localizeArticle(story, effectiveLang);
+    const safeTitle = String(title || story?.title || t('common.untitled')).trim();
+    const localizedSummary = String(content || '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const tags = tagList(story?.tags);
+    const tag = tags[0] || String(story?.topic || story?.section || 'National').trim();
+    const where = storyLocation(story);
 
-    (async () => {
-      const videoParams = new URLSearchParams({ limit: '6', lang: effectiveLang, language: effectiveLang });
+    return {
+      id: String(story?._id || story?.id || story?.slug || safeTitle).trim(),
+      href,
+      title: safeTitle,
+      titleText: safeTitle,
+      summary: localizedSummary || storyExcerpt(story),
+      summaryText: localizedSummary || storyExcerpt(story),
+      imageSrc: storyImage(story),
+      imageFitMode: 'cover',
+      label: tag || 'National',
+      meta: [where].filter(Boolean),
+      dateIso: storyDateIso(story),
+      readingTime: '',
+      raw: story,
+    } satisfies CategoryStoryHierarchyItem;
+  });
 
-      const [latestResp, youthResp, videoResp] = await Promise.all([
-        fetchPublicNews({ language: effectiveLang, limit: 6, signal: controller.signal }),
-        fetchPublicNews({ category: 'youth-pulse', language: effectiveLang, limit: 4, signal: controller.signal }),
-        fetch(`/api/public/viral-videos?${videoParams.toString()}`, {
-          method: 'GET',
-          headers: { Accept: 'application/json' },
-          signal: controller.signal,
-        })
-          .then(async (response) => ({ ok: response.ok, json: await response.json().catch(() => null) }))
-          .catch(() => ({ ok: false, json: null })),
-      ]);
+  const nationalTopContent = (
+    <CategoryDeskHeader
+      eyebrow="NATIONAL DESK • INDIA"
+      title="National Pulse – India"
+      description="Latest national news, politics, government and major developments from across India."
+      actionLayoutBreakpoint="lg"
+      contentClassName="lg:flex-[1_1_60%] lg:max-w-[65%]"
+      actionsClassName="md:max-w-none lg:flex-[1_1_38%] lg:max-w-[42%] lg:self-start"
+      actions={(
+        <div className="w-full">
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={t('nationalPage.searchPlaceholder')}
+            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-newsPulse-navy outline-none focus:ring-2 focus:ring-slate-200"
+          />
+        </div>
+      )}
+    >
+        <Link href="/national/states" className="inline-flex w-fit text-sm font-semibold text-newsPulse-blue hover:underline">
+          {t('nationalPage.browseStates')}
+        </Link>
 
-      if (controller.signal.aborted) return;
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          {TOPIC_CHIPS.map((chip) => (
+            <button
+              key={chip}
+              type="button"
+              onClick={() => setSelectedTopic(chip)}
+              className={classNames(
+                'shrink-0 rounded-full border px-3 py-1.5 text-sm font-semibold',
+                selectedTopic === chip
+                  ? 'border-slate-900 bg-slate-900 text-white'
+                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900/60'
+              )}
+              aria-pressed={selectedTopic === chip}
+            >
+              {tTopicChip(chip)}
+            </button>
+          ))}
+        </div>
 
-      setSidebarLatestItems(Array.isArray(latestResp.items) ? latestResp.items.slice(0, 6) : []);
-      setSidebarLatestLoading(false);
+        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(220px,320px)_minmax(160px,220px)_1fr] lg:items-center">
+          <select
+            value={selectedRegion}
+            onChange={(e) => setSelectedRegion(e.target.value)}
+            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200"
+            aria-label={t('nationalPage.filterByStateOrUt')}
+          >
+            <option value="all">{t('nationalPage.allStatesUts')}</option>
+            {regionOptions.map((r) => (
+              <option key={r.slug} value={r.slug}>
+                {r.label}
+              </option>
+            ))}
+          </select>
 
-      setSidebarYouthItems(Array.isArray(youthResp.items) ? youthResp.items.slice(0, 4) : []);
-      setSidebarYouthLoading(false);
+          <select
+            value={sortKey}
+            onChange={(e) => setSortKey(e.target.value as SortKey)}
+            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200"
+            aria-label={t('nationalPage.sortStories')}
+          >
+            <option value="latest">{t('nationalPage.sortLatest')}</option>
+            <option value="most-read">{t('nationalPage.sortMostRead')}</option>
+          </select>
 
-      const normalizedVideos = normalizePublicViralVideosPayload(videoResp.json);
-      const featuredVideo = normalizedVideos.items.find((item) => item.showOnHomepage) || normalizedVideos.items[0] || null;
-      setSidebarVideoFeature(videoResp.ok ? featuredVideo : null);
-    })().catch(() => {
-      if (controller.signal.aborted) return;
-      setSidebarLatestItems([]);
-      setSidebarLatestLoading(false);
-      setSidebarYouthItems([]);
-      setSidebarYouthLoading(false);
-      setSidebarVideoFeature(null);
-    });
-
-    return () => controller.abort();
-  }, [effectiveLang]);
+          <div className="hidden items-center justify-end text-xs text-slate-500 lg:flex dark:text-gray-400">
+            {t('nationalPage.showing')} {sortedStories.length} {t('nationalPage.stories')}
+          </div>
+        </div>
+    </CategoryDeskHeader>
+  );
 
   return (
-    <div className="min-h-screen bg-white text-slate-900 dark:bg-dark-primary dark:text-dark-text">
+    <>
       <Head>
         <title>{t('nationalPage.headTitle')}</title>
         <meta name="description" content={t('nationalPage.headDescription')} />
       </Head>
 
-      {/* Top bar */}
-      <div className="border-b border-newsPulse-slate/25 dark:border-gray-800">
-        <div className="mx-auto max-w-7xl px-4 py-3">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-1 rounded-full bg-newsPulse-blue" />
-              <div>
-                <h1 className="text-xl md:text-2xl font-extrabold leading-tight text-newsPulse-navy dark:text-gray-100">🏛️ {tHeading(langKey, 'national')}</h1>
-                <div className="text-xs text-newsPulse-slate dark:text-gray-400">{t('nationalPage.newsFeed')}</div>
-              </div>
-              <Link href="/national/states" className="ml-2 text-sm font-semibold text-newsPulse-blue hover:underline">
-                {t('nationalPage.browseStates')}
-              </Link>
-            </div>
-
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-              <div className="w-full sm:w-80">
-                <input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={t('nationalPage.searchPlaceholder')}
-                  className="w-full rounded-xl border border-newsPulse-slate/25 bg-newsPulse-white px-3 py-2 text-sm text-newsPulse-navy outline-none focus:ring-2 focus:ring-newsPulse-blue/20 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-400 dark:focus:ring-white/10"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* LIVE ticker */}
-      <BreakingTicker items={breaking as any} variant="live" />
-
-      {/* Sticky filters (mobile) */}
-      <div className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur lg:static lg:bg-transparent lg:backdrop-blur-0 dark:border-gray-800 dark:bg-dark-primary/95">
-        <div className="mx-auto max-w-7xl px-4 py-2">
-          <div className="flex items-center gap-2 overflow-x-auto pb-1">
-            {TOPIC_CHIPS.map((chip) => (
-              <button
-                key={chip}
-                type="button"
-                onClick={() => setSelectedTopic(chip)}
-                className={classNames(
-                  'shrink-0 rounded-full border px-3 py-1.5 text-sm font-semibold',
-                  selectedTopic === chip
-                    ? 'border-slate-900 bg-slate-900 text-white'
-                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-900/60'
-                )}
-                aria-pressed={selectedTopic === chip}
-              >
-                {tTopicChip(chip)}
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            <select
-              value={selectedRegion}
-              onChange={(e) => setSelectedRegion(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200"
-              aria-label={t('nationalPage.filterByStateOrUt')}
-            >
-              <option value="all">{t('nationalPage.allStatesUts')}</option>
-              {regionOptions.map((r) => (
-                <option key={r.slug} value={r.slug}>
-                  {r.label}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={sortKey}
-              onChange={(e) => setSortKey(e.target.value as SortKey)}
-              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200"
-              aria-label={t('nationalPage.sortStories')}
-            >
-              <option value="latest">{t('nationalPage.sortLatest')}</option>
-              <option value="most-read">{t('nationalPage.sortMostRead')}</option>
-            </select>
-
-            <div className="hidden lg:flex items-center justify-end text-xs text-slate-500 dark:text-gray-400">
-              {t('nationalPage.showing')} {sortedStories.length} {t('nationalPage.stories')}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="mx-auto max-w-7xl px-4 pb-10 pt-4">
+      <NewsPulseCategoryShell
+        activeCategory="national"
+        latestItems={stories}
+        lang={effectiveLang}
+        tickerContent={(
+          <BreakingTicker items={breaking as any} variant="live" className="overflow-hidden rounded-xl border-0" />
+        )}
+        topContent={nationalTopContent}
+      >
+        <div className="min-w-0 text-slate-900 dark:text-gray-100">
         {error ? (
           <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
             {error}
           </div>
         ) : null}
 
-        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-10">
-          {/* Left 70% */}
-          <main className="lg:col-span-7">
-            {/* Hero */}
-            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-              {loading && !hero ? (
-                <div className="p-4">
-                  <div className="h-48 w-full animate-pulse rounded-xl bg-slate-100 dark:bg-gray-800" />
-                  <div className="mt-3 h-6 w-3/4 animate-pulse rounded bg-slate-100 dark:bg-gray-800" />
-                  <div className="mt-2 h-4 w-full animate-pulse rounded bg-slate-100 dark:bg-gray-800" />
-                </div>
-              ) : hero ? (
-                <div className="p-4">
-                  <a href={storyHref(hero, effectiveLang)} className="block group">
-                    <TopStoryImage
-                      storyId={String(hero?._id || hero?.id || '').trim() || undefined}
-                      src={storyImage(hero)}
-                      alt={heroLocalizedTitle || ''}
-                      priority
-                      fallbackSrc={COVER_PLACEHOLDER_SRC}
-                    />
-                    <div className="mt-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="inline-flex items-center gap-2 text-xs font-black tracking-widest text-red-700">
-                            {t('nationalPage.topStory')}
-                          </div>
-                          <h2 className="mt-1 line-clamp-2 text-xl md:text-2xl font-extrabold leading-tight">
-                            {heroLocalizedTitle}
-                          </h2>
-                        </div>
-                        <div className="shrink-0 text-right">
-                          <ClientTime iso={storyDateIso(hero)} />
-                          <div className="mt-1 text-xs text-slate-500 dark:text-gray-400">📍 {storyLocation(hero)}</div>
-                        </div>
-                      </div>
-
-                      {storyExcerpt(hero) ? (
-                        <p className="mt-2 line-clamp-2 text-sm text-slate-700 dark:text-gray-300">
-                          {storyExcerpt(hero)}
-                        </p>
-                      ) : null}
-                    </div>
+          <CategoryStoryHierarchy
+            items={nationalHierarchyItems}
+            categoryLabel="National News"
+            topLabel={t('nationalPage.topStory')}
+            keyLabel="Key National Stories"
+            latestLabel="Latest National Stories"
+            loadMoreLabel="Load More National Stories"
+            emptyTitle="No news found"
+            loading={loading}
+            hasMore={hasMore}
+            loadingMore={loadingMore}
+            loadMoreError={loadMoreError}
+            autoLoadMore
+            onLoadMore={loadNextPage}
+            renderTopActions={() => (
+              hero ? (
+                <>
+                  <a
+                    href={storyHref(hero, effectiveLang)}
+                    className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                  >
+                    {t('common.read')}
                   </a>
-
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <a
-                      href={storyHref(hero, effectiveLang)}
-                      className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-                    >
-                      {t('common.read')}
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => voice.toggle(heroListenText)}
-                      className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900/60"
-                      aria-pressed={voice.speaking}
-                    >
-                      {voice.speaking ? t('common.mute') : t('common.listen')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={shareHero}
-                      className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900/60"
-                    >
-                      {t('common.share')}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="p-6 text-sm text-slate-600 dark:text-gray-300">No news found</div>
-              )}
-            </div>
-
-            {/* Feed list */}
-            <div className="mt-3 rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-              <div className="border-b border-slate-200 px-4 py-4 dark:border-gray-800">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-[11px] font-black uppercase tracking-[0.22em] text-newsPulse-blue/80">National Desk</div>
-                    <div className="mt-1 text-lg font-extrabold tracking-tight text-slate-900 dark:text-gray-100">Latest National News</div>
-                  </div>
-                  <div className="text-xs text-slate-500 dark:text-gray-400">
-                    {sortedStories.length} {t('common.results')}
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                {feed.length === 0 && !loading ? (
-                  <div className="p-6 text-sm text-slate-600 dark:text-gray-300">No news found</div>
-                ) : null}
-
-                {feed.map((s, idx) => {
-                  const row = <CompactFeedRow key={String(s?._id || s?.id || s?.slug || idx)} story={s} lang={effectiveLang} />;
-                  // Mobile: insert sidebar blocks after 8 stories
-                  if (idx === 7) {
-                    return (
-                      <React.Fragment key={`row-${String(s?._id || s?.id || s?.slug || idx)}`}>
-                        {row}
-                        <div className="lg:hidden border-t border-slate-200">
-                          <div className="p-4">
-                            <NationalSidebar
-                              language={effectiveLang}
-                              lang={effectiveLang}
-                              topStories={topStories}
-                              trendingTopics={trendingTopics}
-                              latestItems={sidebarLatestItems}
-                              latestLoading={sidebarLatestLoading}
-                              youthItems={sidebarYouthItems}
-                              youthLoading={sidebarYouthLoading}
-                              videoFeature={sidebarVideoFeature}
-                            />
-                          </div>
-                        </div>
-                      </React.Fragment>
-                    );
-                  }
-                  return row;
-                })}
-                <div ref={sentinelRef} />
-
-                {loadingMore ? (
-                  <div className="p-4 text-center text-xs text-slate-500 dark:text-gray-400">{t('common.loadingMore')}</div>
-                ) : null}
-              </div>
-            </div>
-          </main>
-
-          {/* Right 30% */}
-          <aside className="hidden self-start lg:col-span-3 lg:block">
-            <div className="sticky top-4 self-start">
-              <NationalSidebar
-                language={effectiveLang}
-                lang={effectiveLang}
-                topStories={topStories}
-                trendingTopics={trendingTopics}
-                latestItems={sidebarLatestItems}
-                latestLoading={sidebarLatestLoading}
-                youthItems={sidebarYouthItems}
-                youthLoading={sidebarYouthLoading}
-                videoFeature={sidebarVideoFeature}
-              />
-            </div>
-          </aside>
+                  <button
+                    type="button"
+                    onClick={() => voice.toggle(heroListenText)}
+                    className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900/60"
+                    aria-pressed={voice.speaking}
+                  >
+                    {voice.speaking ? t('common.mute') : t('common.listen')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={shareHero}
+                    className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900/60"
+                  >
+                    {t('common.share')}
+                  </button>
+                </>
+              ) : null
+            )}
+          />
         </div>
-      </div>
-    </div>
-  );
-}
-
-function NationalSidebar({
-  language,
-  lang,
-  topStories,
-  trendingTopics,
-  latestItems,
-  latestLoading,
-  youthItems,
-  youthLoading,
-  videoFeature,
-}: {
-  language: any;
-  lang: 'en' | 'hi' | 'gu';
-  topStories: AnyStory[];
-  trendingTopics: string[];
-  latestItems: AnyStory[];
-  latestLoading: boolean;
-  youthItems: AnyStory[];
-  youthLoading: boolean;
-  videoFeature: PublicViralVideo | null;
-}) {
-  const { t } = useI18n();
-  const slugify = (value: string) =>
-    String(value || '')
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9\s-]/g, '')
-      .replace(/\s+/g, '-')
-      .replace(/-+/g, '-');
-
-  return (
-    <div className="space-y-3 self-start">
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-        <div className="px-4 py-3 border-b border-slate-200">
-          <div className="text-sm font-extrabold">{t('nationalPage.trendingTopicsTitle')}</div>
-        </div>
-        <div className="p-4 flex flex-wrap gap-2">
-          {trendingTopics.slice(0, 10).map((t) => (
-            <Link
-              key={t}
-              href={`/topic/${encodeURIComponent(slugify(t))}?q=${encodeURIComponent(t)}`}
-              className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 cursor-pointer hover:bg-slate-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-            >
-              #{t}
-            </Link>
-          ))}
-        </div>
-      </div>
-
-      <AdSlot slot="HOME_RIGHT_300x250" variant="right300" />
-
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-        <div className="px-4 py-3 border-b border-slate-200">
-          <div className="text-sm font-extrabold">{t('nationalPage.topStoriesTitle')}</div>
-        </div>
-        <div className="p-2">
-          {topStories.length ? (
-            topStories.slice(0, 8).map((s, i) => (
-              <a
-                key={String(s?._id || s?.id || s?.slug || i)}
-                href={storyHref(s, language)}
-                className="flex items-start gap-3 rounded-xl px-2 py-2 hover:bg-slate-50 dark:hover:bg-gray-900/60"
-              >
-                <div className="shrink-0 text-xs font-black text-slate-500 w-5 text-right dark:text-gray-400">{i + 1}</div>
-                <div className="min-w-0">
-                  <div className="line-clamp-2 text-sm font-semibold text-slate-900 dark:text-gray-100">
-                    {(() => {
-                      const { title } = localizeArticle(s, lang);
-                      return String(title || s?.title || t('common.untitled'));
-                    })()}
-                  </div>
-                  <div className="mt-1 text-xs text-slate-500 dark:text-gray-400">📍 {storyLocation(s)}</div>
-                </div>
-              </a>
-            ))
-          ) : (
-            <div className="p-3 text-sm text-slate-600 dark:text-gray-300">{t('nationalPage.noTopStoriesYet')}</div>
-          )}
-        </div>
-      </div>
-
-      <NationalSidebarLatestWidget lang={lang} items={latestItems} loading={latestLoading} />
-
-      <AdSlot slot="HOME_RIGHT_300x600" variant="right300x600" className="mx-auto" />
-
-      <NationalSidebarVideoFeature lang={lang} video={videoFeature} />
-
-      <NationalSidebarYouthDeskWidget lang={lang} items={youthItems} loading={youthLoading} />
-    </div>
+      </NewsPulseCategoryShell>
+    </>
   );
 }
 

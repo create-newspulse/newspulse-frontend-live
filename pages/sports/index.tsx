@@ -21,5 +21,5 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
 };
 
 export default function SportsPage() {
-  return <CategoryFeedPage title="Sports" categoryKey="sports" />;
+  return <CategoryFeedPage title="Sports" categoryKey="sports" useCategoryShell />;
 }

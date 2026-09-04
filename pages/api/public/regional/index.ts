@@ -186,6 +186,19 @@ function setPayloadItems(payload: any, items: any[]): any {
   return { ...(payload as any), items };
 }
 
+function readPositiveLimit(value: string | string[] | undefined): number {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const n = Number(raw || 0);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+function limitRegionalPayload(payload: any, limit: number): any {
+  if (!limit) return payload;
+  const items = unwrapRegionalFeedItems(payload);
+  if (!items.length || items.length <= limit) return payload;
+  return setPayloadItems(payload, items.slice(0, limit));
+}
+
 async function fetchRegionalFallbackFromStories(options: {
   base: string;
   qs: string;
@@ -218,11 +231,15 @@ async function fetchRegionalFallbackFromStories(options: {
 
   const tryFetch = async (tryParams: URLSearchParams): Promise<any | null> => {
     const url = `${options.base}/api/public/stories?${tryParams.toString()}`;
-    const upstream = await fetchWithTimeout(url, options.upstreamInit, options.timeoutMs);
-    const text = await upstream.text().catch(() => '');
-    if (upstream.status === 404) return null;
-    if (!upstream.ok) return null;
-    return safeJson(text);
+    try {
+      const upstream = await fetchWithTimeout(url, options.upstreamInit, options.timeoutMs);
+      const text = await upstream.text().catch(() => '');
+      if (upstream.status === 404) return null;
+      if (!upstream.ok) return null;
+      return safeJson(text);
+    } catch {
+      return null;
+    }
   };
 
   const json = await tryFetch(params);
@@ -314,12 +331,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const stateSlug = isInvalidOptionalToken(stateSlugRaw) ? '' : stateSlugRaw;
   const districtSlug = isInvalidOptionalToken(districtSlugRaw) ? '' : districtSlugRaw;
+  const requestedLimit = readPositiveLimit(req.query.limit as any);
 
   const citySlugRaw = normalizeGeoToken(asSingleQueryValue(req.query.citySlug) || asSingleQueryValue(req.query.city));
   const citySlug = isInvalidOptionalToken(citySlugRaw) ? '' : citySlugRaw;
 
   const explicitLanguage = !!(Array.isArray(req.query.language) ? req.query.language[0] : req.query.language);
   const wantsGeoFilter = !!districtSlug || !!citySlug;
+
+  const fetchFilteredStoriesFallback = async (): Promise<any | null> => {
+    const fallback = await fetchRegionalFallbackFromStories({
+      base,
+      qs: sanitized.qs,
+      requestedLang,
+      explicitLanguage,
+      stateSlug,
+      districtSlug,
+      upstreamInit,
+      timeoutMs,
+    });
+    if (fallback == null) return null;
+
+    const dedupedFallback = dedupeRegionalFeedPayload(fallback ?? [], requestedLang);
+    return filterRegionalFeedPayload(
+      dedupedFallback,
+      (it) => shouldKeepRegionalItem(it) && isLocaleCompatible(it, requestedLocale)
+    );
+  };
 
   // Preferred upstream endpoint (query-string based): /api/public/regional?state=...
   const primaryUrl = `${base}/api/public/regional${sanitized.qs}`;
@@ -365,6 +403,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           xVercelCache: legacy.headers.get('x-vercel-cache'),
         });
         if (!legacy.ok) {
+          if (legacy.status >= 500) {
+            const fallback = await fetchFilteredStoriesFallback();
+            return res.status(200).json(limitRegionalPayload(fallback ?? [], requestedLimit));
+          }
           return res.status(legacy.status).json({ ok: false, message: 'UPSTREAM_ERROR', status: legacy.status });
         }
 
@@ -407,15 +449,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           if (fallback) {
             const dedupedFallback = dedupeRegionalFeedPayload(fallback ?? [], requestedLang);
             const filteredFallback = filterRegionalFeedPayload(dedupedFallback, (it) => shouldKeepRegionalItem(it) && isLocaleCompatible(it, requestedLocale));
-            return res.status(200).json(filteredFallback);
+            return res.status(200).json(limitRegionalPayload(filteredFallback, requestedLimit));
           }
         }
 
-        return res.status(200).json(filtered);
+        return res.status(200).json(limitRegionalPayload(filtered, requestedLimit));
       }
     }
 
     if (!upstream.ok) {
+      if (upstream.status >= 500) {
+        const fallback = await fetchFilteredStoriesFallback();
+        return res.status(200).json(limitRegionalPayload(fallback ?? [], requestedLimit));
+      }
       return res.status(upstream.status).json({ ok: false, message: 'UPSTREAM_ERROR', status: upstream.status });
     }
 
@@ -462,7 +508,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (fallback) {
         const dedupedFallback = dedupeRegionalFeedPayload(fallback ?? [], requestedLang);
         const filteredFallback = filterRegionalFeedPayload(dedupedFallback, (it) => shouldKeepRegionalItem(it) && isLocaleCompatible(it, requestedLocale));
-        if (unwrapRegionalFeedItems(filteredFallback).length) return res.status(200).json(filteredFallback);
+        if (unwrapRegionalFeedItems(filteredFallback).length) return res.status(200).json(limitRegionalPayload(filteredFallback, requestedLimit));
       }
     }
 
@@ -482,15 +528,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (fallback) {
         const dedupedFallback = dedupeRegionalFeedPayload(fallback ?? [], requestedLang);
         const filteredFallback = filterRegionalFeedPayload(dedupedFallback, (it) => shouldKeepRegionalItem(it) && isLocaleCompatible(it, requestedLocale));
-        return res.status(200).json(filteredFallback);
+        return res.status(200).json(limitRegionalPayload(filteredFallback, requestedLimit));
       }
     }
 
-    return res.status(200).json(filtered);
+    return res.status(200).json(limitRegionalPayload(filtered, requestedLimit));
   } catch (e: any) {
     res.setHeader('Cache-Control', 'no-store, max-age=0');
-    const msg = String(e?.name || '').includes('Abort') ? 'UPSTREAM_TIMEOUT' : 'UPSTREAM_FETCH_FAILED';
-    const status = msg === 'UPSTREAM_TIMEOUT' ? 504 : 502;
-    return res.status(status).json({ ok: false, message: msg, status });
+    const fallback = await fetchFilteredStoriesFallback().catch(() => null);
+    if (fallback != null) return res.status(200).json(limitRegionalPayload(fallback, requestedLimit));
+
+    return res.status(200).json([]);
   }
 }

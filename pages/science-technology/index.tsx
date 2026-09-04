@@ -21,5 +21,5 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
 };
 
 export default function ScienceTechnologyPage() {
-  return <CategoryFeedPage title="Science & Technology" categoryKey="science-technology" />;
+  return <CategoryFeedPage title="Science & Technology" categoryKey="science-technology" useCategoryShell />;
 }

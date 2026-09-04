@@ -30,8 +30,10 @@ export type BreakingTickerItem = {
 export type BreakingTickerProps = {
   items: BreakingTickerItem[];
   variant?: 'breaking' | 'live';
+  label?: string;
   emptyText?: string;
   className?: string;
+  viewAllHref?: string;
   /** Backend speed in seconds (will be clamped to a safe range). */
   speedSeconds?: number;
 };
@@ -61,8 +63,10 @@ function toTagList(tags: any): string[] {
 export default function BreakingTicker({
   items,
   variant = 'breaking',
+  label: labelOverride,
   emptyText,
   className,
+  viewAllHref: viewAllHrefOverride,
   speedSeconds,
 }: BreakingTickerProps) {
   const router = useRouter();
@@ -134,9 +138,12 @@ export default function BreakingTicker({
         .filter((item) => String(item.message || '').trim() !== ''),
     [mergedItems]
   );
+  const hasTickerItems = safeItems.length > 0;
 
-  const label = isBreaking ? t('home.breakingNews') : t('home.liveUpdates');
+  const label = labelOverride || (isBreaking ? t('home.breakingNews') : t('home.liveUpdates'));
   const viewAllHref = (() => {
+    if (viewAllHrefOverride) return viewAllHrefOverride;
+
     const raw = String(router.asPath || '/');
     const beforeHash = raw.split('#')[0] || '/';
     const pathPart = (beforeHash.split('?')[0] || '/').trim() || '/';
@@ -190,52 +197,58 @@ export default function BreakingTicker({
         </div>
 
         <div className="relative flex-1 overflow-hidden">
-          <div key={restartKey} className="np-tickerTrack" style={{ animationDuration: `${durationSec}s` }}>
-            <div className="np-tickerSeq flex items-center gap-10 text-sm font-medium">
-              {renderItems.map((item, i) => (
-                <span
-                  key={`${id}-a-${item.id}-${i}`}
-                  className="tickerText whitespace-nowrap"
-                  lang={tickerLang}
-                  data-type={item.type}
-                >
-                  {item.type === 'ad' ? (
-                    item.url ? (
-                      <a href={item.url} target="_blank" rel="sponsored noopener noreferrer" className="hover:underline">
-                        {`🟡 Ad: ${item.message}`}
-                      </a>
+          {hasTickerItems ? (
+            <div key={restartKey} className="np-tickerTrack" style={{ animationDuration: `${durationSec}s` }}>
+              <div className="np-tickerSeq flex items-center gap-10 text-sm font-medium">
+                {renderItems.map((item, i) => (
+                  <span
+                    key={`${id}-a-${item.id}-${i}`}
+                    className="tickerText whitespace-nowrap"
+                    lang={tickerLang}
+                    data-type={item.type}
+                  >
+                    {item.type === 'ad' ? (
+                      item.url ? (
+                        <a href={item.url} target="_blank" rel="sponsored noopener noreferrer" className="hover:underline">
+                          {`🟡 Ad: ${item.message}`}
+                        </a>
+                      ) : (
+                        <>{`🟡 Ad: ${item.message}`}</>
+                      )
                     ) : (
-                      <>{`🟡 Ad: ${item.message}`}</>
-                    )
-                  ) : (
-                    item.message
-                  )}
-                </span>
-              ))}
-            </div>
-            <div className="np-tickerSeq flex items-center gap-10 text-sm font-medium">
-              {renderItems.map((item, i) => (
-                <span
-                  key={`${id}-b-${item.id}-${i}`}
-                  className="tickerText whitespace-nowrap"
-                  lang={tickerLang}
-                  data-type={item.type}
-                >
-                  {item.type === 'ad' ? (
-                    item.url ? (
-                      <a href={item.url} target="_blank" rel="sponsored noopener noreferrer" className="hover:underline">
-                        {`🟡 Ad: ${item.message}`}
-                      </a>
+                      item.message
+                    )}
+                  </span>
+                ))}
+              </div>
+              <div className="np-tickerSeq flex items-center gap-10 text-sm font-medium">
+                {renderItems.map((item, i) => (
+                  <span
+                    key={`${id}-b-${item.id}-${i}`}
+                    className="tickerText whitespace-nowrap"
+                    lang={tickerLang}
+                    data-type={item.type}
+                  >
+                    {item.type === 'ad' ? (
+                      item.url ? (
+                        <a href={item.url} target="_blank" rel="sponsored noopener noreferrer" className="hover:underline">
+                          {`🟡 Ad: ${item.message}`}
+                        </a>
+                      ) : (
+                        <>{`🟡 Ad: ${item.message}`}</>
+                      )
                     ) : (
-                      <>{`🟡 Ad: ${item.message}`}</>
-                    )
-                  ) : (
-                    item.message
-                  )}
-                </span>
-              ))}
+                      item.message
+                    )}
+                  </span>
+                ))}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="truncate text-sm font-medium text-white/90" lang={tickerLang}>
+              {renderItems[0]?.message || ''}
+            </div>
+          )}
         </div>
 
         <Link
