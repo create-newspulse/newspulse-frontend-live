@@ -1,5 +1,5 @@
 import React from 'react';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 
 import NewsSlugDetailPage, { getServerSideProps } from '../../pages/news/[slug]';
 import { fetchPublicNews } from '../../lib/publicNewsApi';
@@ -246,7 +246,7 @@ describe('pages/news/[slug] editorial detail', () => {
     expect(readSource?.getAttribute('href')).toBe('/news/pending-story');
   });
 
-  test('orders article sidebar as advertisement, Latest News, Drone Video, then Youth Desk', async () => {
+  test('keeps article sidebar minimal without Home right-rail modules', async () => {
     (fetchPublicNews as jest.Mock).mockResolvedValue({
       items: [
         editorialArticle({ _id: 'latest-1', category: 'national', title: 'Latest News Sidebar Story', slug: 'latest-news-sidebar-story' }),
@@ -284,29 +284,19 @@ describe('pages/news/[slug] editorial detail', () => {
       />
     );
 
-    expect(await screen.findByText('Latest News Sidebar Story')).toBeTruthy();
-    expect(await screen.findByText('Drone Video Feature')).toBeTruthy();
-    expect(await screen.findByText('Campus Youth Desk Story')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'All' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Regional' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'National' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'International' })).toBeTruthy();
-    expect(screen.queryByText('HOME_RIGHT_300x600')).toBeNull();
-
-    const topAd = screen.getByText('HOME_RIGHT_300x250');
-    const latestHeading = screen.getByText('LATEST');
-    const droneTitle = screen.getByText('Drone Video Feature');
-    const youthHeading = screen.getByText('YOUTH DESK');
-    const playButton = screen.getByRole('button', { name: 'Play Drone Video Feature' });
-
-    expect(Boolean(topAd.compareDocumentPosition(latestHeading) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(latestHeading.compareDocumentPosition(droneTitle) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(droneTitle.compareDocumentPosition(youthHeading) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(screen.getAllByText('HOME_RIGHT_300x250')).toHaveLength(1);
-    expect(playButton.closest('.video-card-media')?.className || '').toContain('aspect-[9/16]');
-
-    fireEvent.click(playButton);
-    expect(screen.queryByRole('button', { name: 'Play Drone Video Feature' })).toBeNull();
+    expect(screen.queryByText('HOME_RIGHT_300x600')).toBeNull();
+    expect(screen.queryByText('Latest News Sidebar Story')).toBeNull();
+    expect(screen.queryByText('Drone Video Feature')).toBeNull();
+    expect(screen.queryByText('Campus Youth Desk Story')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'All' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Regional' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'National' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'International' })).toBeNull();
+    expect(screen.queryByText('HOME_RIGHT_300x600')).toBeNull();
+    expect(screen.queryByText('LATEST')).toBeNull();
+    expect(screen.queryByText('YOUTH DESK')).toBeNull();
+    expect(fetchPublicNews).not.toHaveBeenCalled();
   });
 
   test('returns 404 for invalid or unavailable public articles', async () => {

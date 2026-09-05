@@ -276,7 +276,7 @@ export default function ViralVideoLibraryPage({ initialItems, initialError }: Pr
         <title>{`${title} | ${t('brand.name')}`}</title>
       </Head>
 
-      <main className="relative min-h-screen overflow-hidden bg-[#111214] text-white">
+      <main className="relative mt-4 min-h-screen overflow-hidden bg-[#111214] text-white sm:mt-5 lg:mt-7">
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.035)_0%,rgba(255,255,255,0)_22%,rgba(0,0,0,0.28)_100%)]" />
         <div className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 pb-10 pt-5 sm:px-6 lg:px-8">
           <header className="flex flex-col gap-2 border-b border-white/10 pb-5 sm:flex-row sm:items-end sm:justify-between">

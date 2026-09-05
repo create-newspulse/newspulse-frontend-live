@@ -9,13 +9,12 @@ import CategoryHeader from '../../src/components/category/CategoryHeader';
 import { getCategoryQueryKey, getCategoryRouteKey } from '../../lib/categoryKeys';
 import { getLocalizedArticleFields, STRICT_LOCALE_POLICY, type RouteLocale } from '../../lib/localizedArticleFields';
 import { formatArticleBodyHtml, splitArticleBodyBlocks, stripDuplicateOpeningParagraph } from '../../lib/articleBody';
-import { fetchPublicNews, fetchPublicNewsGroup, unwrapArticle, type Article } from '../../lib/publicNewsApi';
+import { fetchPublicNewsGroup, unwrapArticle, type Article } from '../../lib/publicNewsApi';
 import { subscribePublicDataRefresh } from '../../lib/publicDataRefresh';
 import { pickFreshestArticleForLocale, shouldReplaceArticleWithFreshCandidate } from '../../lib/translationGroupSync';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { tHeading, toLanguageKey } from '../../utils/localizedNames';
 import { buildNewsUrl, isNavigableNewsHref } from '../../lib/newsRoutes';
-import HomeRightRail, { articleToHomeRightRailFeedItem } from '../../components/home/HomeRightRail';
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
 import { resolveSponsoredContentMeta } from '../../lib/sponsoredContent';
 import { debugStoryCard, getStoryId, getStoryReactKey } from '../../lib/storyIdentity';
@@ -55,6 +54,14 @@ function ArticleDisplayAd({ slotId }: ArticleDisplayAdProps) {
         <span className="text-xs uppercase tracking-wide text-slate-500">ADVERTISEMENT</span>
       </div>
       <AdSlot slot={slotId} variant={variant} renderMode="articleDisplay" className="w-full" />
+    </div>
+  );
+}
+
+function ArticleReadingSidebar() {
+  return (
+    <div className="sticky top-4 grid w-full min-w-0 gap-4">
+      <AdSlot slot="HOME_RIGHT_300x250" variant="right300" />
     </div>
   );
 }
@@ -228,7 +235,7 @@ function debugNewsDetailResolution(stage: string, payload: Record<string, unknow
   console.info('[pages/news/[slug]]', { stage, ...payload });
 }
 
-export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topStories, relatedStories, error, pending, pendingSourceLang = null, siteUrl }: Props) {
+export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, relatedStories, error, pending, pendingSourceLang = null, siteUrl }: Props) {
   const { t } = useI18n();
   const router = useRouter();
 
@@ -237,7 +244,6 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
   const [pendingTranslate, setPendingTranslate] = React.useState<boolean>(Boolean(pending));
   const [pendingError, setPendingError] = React.useState<string | null>(error || null);
   const [pendingExhausted, setPendingExhausted] = React.useState<boolean>(false);
-  const [sidebarLatestItems, setSidebarLatestItems] = React.useState<any[] | null>(null);
   const pendingTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingAttemptsRef = React.useRef<number>(0);
 
@@ -382,27 +388,6 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
       void refreshFromTranslationGroup();
     });
   }, [refreshFromTranslationGroup, resolvedArticle?._id]);
-
-  React.useEffect(() => {
-    const controller = new AbortController();
-    setSidebarLatestItems(null);
-
-    (async () => {
-      const latestResp = await fetchPublicNews({ language: lang, limit: 40, extraQuery: { strictLocale: '1' }, signal: controller.signal });
-
-      if (controller.signal.aborted) return;
-
-      const latestItems = Array.isArray(latestResp.items)
-        ? latestResp.items.map((item) => articleToHomeRightRailFeedItem(item as Article, lang))
-        : [];
-      setSidebarLatestItems(latestItems);
-    })().catch(() => {
-      if (controller.signal.aborted) return;
-      setSidebarLatestItems([]);
-    });
-
-    return () => controller.abort();
-  }, [lang]);
 
   const articleBodyHtml = React.useMemo(
     () => stripDuplicateOpeningParagraph(resolvedSafeHtml, displaySummary),
@@ -854,7 +839,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, topS
 
             {/* Sidebar */}
             <aside className="lg:col-span-4">
-              <HomeRightRail lang={lang} latestItems={sidebarLatestItems} includeTallAd={false} />
+              <ArticleReadingSidebar />
             </aside>
           </div>
         </div>
