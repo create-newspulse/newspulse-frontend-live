@@ -7,7 +7,17 @@ import HomeRightRail, { articleToHomeRightRailFeedItem, DEFAULT_HOME_RIGHT_RAIL_
 import AdSlot from '../src/components/ads/AdSlot';
 import { usePublicSettings } from '../src/context/PublicSettingsContext';
 import { DEFAULT_NORMALIZED_PUBLIC_SETTINGS } from '../src/lib/publicSettings';
-import { fetchPublicNews } from '../lib/publicNewsApi';
+import { fetchPublicNews, type Article } from '../lib/publicNewsApi';
+import {
+	buildHomeSpotlightItems,
+	buildHomepageSponsoredFeatureIdentitySet,
+	collectHomeSpotlightIdentifiers,
+	fetchHomeSpotlightSectionArticles,
+	HOME_FRESH_SOURCE_LIMIT,
+	isHomeSpotlightSponsoredContent,
+	selectHomeSpotlightFeedItems,
+} from '../lib/homeSpotlight';
+import { fetchHomepageSponsoredFeature } from '../lib/publicSponsoredFeature';
 
 type NewsPulseCategoryShellProps = {
 	activeCategory: string;
@@ -54,6 +64,28 @@ function safeJsonParse(raw: string): any {
 	}
 }
 
+function readCachedHomeSpotlightItems(lang: HomeRightRailLang): any[] {
+	if (typeof window === 'undefined') return [];
+
+	const stores = [window.localStorage, window.sessionStorage];
+	for (const store of stores) {
+		try {
+			const raw = store.getItem(HOME_STORY_CACHE_KEY);
+			const cache = raw ? safeJsonParse(raw) : null;
+			if (!cache || typeof cache !== 'object') continue;
+			if (cache.lang && cache.lang !== lang) continue;
+
+			const excludedIdentitySet = new Set<string>();
+			collectHomeSpotlightIdentifiers(cache.topStory, lang).forEach((value) => excludedIdentitySet.add(value));
+			const freshStories = Array.isArray(cache.freshStories) ? cache.freshStories : [];
+			const items = selectHomeSpotlightFeedItems(freshStories, excludedIdentitySet);
+			if (items.length) return items;
+		} catch {}
+	}
+
+	return [];
+}
+
 function readCachedHomeLatestItems(lang: HomeRightRailLang): any[] {
 	if (typeof window === 'undefined') return [];
 
@@ -90,29 +122,51 @@ export default function NewsPulseCategoryShell({ activeCategory, latestItems, la
 	const activePath = routeForCategory(activeCategory);
 	const { settings, isModuleEnabled, moduleOrder } = usePublicSettings();
 	const [globalLatestItems, setGlobalLatestItems] = React.useState<any[] | null>(null);
+	const [homeSpotlightItems, setHomeSpotlightItems] = React.useState<any[] | null>(null);
 
 	React.useEffect(() => {
-		if (rightRail) return;
-
 		let cancelled = false;
 		const cachedItems = readCachedHomeLatestItems(lang);
-		setGlobalLatestItems(cachedItems.length ? cachedItems : null);
+		const cachedGlobalSpotlightItems = readCachedHomeSpotlightItems(lang);
+		if (!rightRail) setGlobalLatestItems(cachedItems.length ? cachedItems : null);
+		setHomeSpotlightItems(cachedGlobalSpotlightItems.length ? cachedGlobalSpotlightItems : null);
 
 		const controller = new AbortController();
-		const loadLatest = async () => {
-			const response = await fetchPublicNews({ language: lang, limit: 40, signal: controller.signal });
+		const loadHomeSharedNews = async () => {
+			const [latestResult, sectionResult, sponsoredFeatureResult] = await Promise.allSettled([
+				fetchPublicNews({ language: lang, limit: HOME_FRESH_SOURCE_LIMIT, signal: controller.signal }),
+				fetchHomeSpotlightSectionArticles({ lang, signal: controller.signal }),
+				fetchHomepageSponsoredFeature({ lang, placement: 'homepage', signal: controller.signal }),
+			]);
 			if (cancelled || controller.signal.aborted) return;
 
-			const items = Array.isArray(response.items)
-				? response.items.map((article) => articleToHomeRightRailFeedItem(article as any, lang))
-				: [];
-			if (items.length || cachedItems.length) {
-				setGlobalLatestItems(items.length ? items : cachedItems);
+			const latestResp = latestResult.status === 'fulfilled' ? latestResult.value : null;
+			const latestArticles = Array.isArray(latestResp?.items) ? latestResp.items : [];
+			const sectionArticlesByKey = sectionResult.status === 'fulfilled' ? sectionResult.value : {};
+			const sponsoredFeature = sponsoredFeatureResult.status === 'fulfilled' ? sponsoredFeatureResult.value : null;
+
+			if (!rightRail) {
+				const editorialLatestItems = latestArticles
+					.filter((article) => !isHomeSpotlightSponsoredContent(article, lang))
+					.map((article) => articleToHomeRightRailFeedItem(article as any, lang));
+				setGlobalLatestItems(editorialLatestItems.length ? editorialLatestItems : cachedItems.length ? cachedItems : null);
 			}
+
+			const spotlightItems = buildHomeSpotlightItems({
+				latestArticles,
+				sectionArticlesByKey,
+				lang,
+				articleToFeedItem: (article: Article) => articleToHomeRightRailFeedItem(article as any, lang),
+				extraExcludedIdentitySet: buildHomepageSponsoredFeatureIdentitySet(sponsoredFeature),
+			});
+			const fallbackItems = spotlightItems.length ? spotlightItems : cachedGlobalSpotlightItems.length ? cachedGlobalSpotlightItems : [];
+			setHomeSpotlightItems(fallbackItems);
 		};
 
-		void loadLatest().catch(() => {
-			if (!cancelled && cachedItems.length) setGlobalLatestItems(cachedItems);
+		void loadHomeSharedNews().catch(() => {
+			if (cancelled) return;
+			if (!rightRail && cachedItems.length) setGlobalLatestItems(cachedItems);
+			setHomeSpotlightItems(cachedGlobalSpotlightItems.length ? cachedGlobalSpotlightItems : []);
 		});
 
 		return () => {
@@ -122,7 +176,7 @@ export default function NewsPulseCategoryShell({ activeCategory, latestItems, la
 	}, [lang, rightRail]);
 
 	const rightRailLatestItems = globalLatestItems && globalLatestItems.length > 0 ? globalLatestItems : latestItems;
-	const spotlightItems = Array.isArray(rightRailLatestItems) ? rightRailLatestItems : [];
+	const spotlightItems = Array.isArray(homeSpotlightItems) ? homeSpotlightItems : [];
 	const resolvedRightRail = rightRail ?? (
 		<HomeRightRail theme={DEFAULT_HOME_RIGHT_RAIL_THEME} latestItems={rightRailLatestItems} lang={lang} />
 	);
@@ -276,15 +330,17 @@ export default function NewsPulseCategoryShell({ activeCategory, latestItems, la
 					<AdSlot slot="HOME_BILLBOARD_970x250" variant="billboard970x250" className="mx-auto" />
 				</div>
 
-				<div className="spotlight-section mt-8">
-					<HomeSpotlightCarousel
-						theme={DEFAULT_HOME_RIGHT_RAIL_THEME}
-						title="News Pulse Spotlight"
-						href="/latest"
-						items={spotlightItems}
-						lang={lang}
-					/>
-				</div>
+				{spotlightItems.length ? (
+					<div className="spotlight-section mt-8">
+						<HomeSpotlightCarousel
+							theme={DEFAULT_HOME_RIGHT_RAIL_THEME}
+							title="News Pulse Spotlight"
+							href="/latest"
+							items={spotlightItems}
+							lang={lang}
+						/>
+					</div>
+				) : null}
 			</div>
 		</section>
 	);

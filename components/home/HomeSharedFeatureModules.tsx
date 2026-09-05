@@ -14,7 +14,9 @@ import { getStoryTitleHookColor, splitStoryTitleHook } from '../../lib/storyTitl
 import { getStoryId, getStoryReactKey, getStorySlug } from '../../lib/storyIdentity';
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle } from '../../lib/contentFallback';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
+import { normalizeHomeSpotlightCategoryKey } from '../../lib/homeSpotlight';
 import StoryImage from '../../src/components/story/StoryImage';
+import OriginalTag from '../OriginalTag';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import type { HomeRightRailLang, HomeRightRailTheme } from './HomeRightRail';
 import { DEFAULT_HOME_RIGHT_RAIL_THEME } from './HomeRightRail';
@@ -132,6 +134,16 @@ function labelKeyForTrendingTopic(key: string): string | null {
   if (key === 'tech-ai') return 'trending.techAI';
   if (key === 'education') return 'trending.education';
   return null;
+}
+
+function labelKeyForCategory(key: string): string {
+  if (key === 'science-technology') return 'categories.scienceTechnology';
+  if (key === 'web-stories') return 'categories.webStories';
+  if (key === 'viral-videos') return 'categories.viralVideos';
+  if (key === 'youth') return 'categories.youthPulse';
+  if (key === 'inspiration') return 'categories.inspirationHub';
+  if (key === 'community') return 'categories.communityReporter';
+  return `categories.${key}`;
 }
 
 function localizePath(path: string, lang: HomeRightRailLang) {
@@ -322,10 +334,7 @@ export function HomeSpotlightCarousel({
   const { t } = useI18n();
   const safeLang = lang === 'hi' || lang === 'gu' ? lang : 'en';
   const localizedHref = localizePath(href, safeLang);
-  const slides = React.useMemo(
-    () => (Array.isArray(items) ? items.map((item) => toSpotlightViewModel(item, safeLang)).filter(Boolean).slice(0, HOME_SPOTLIGHT_MAX_ITEMS) : []),
-    [items, safeLang]
-  );
+  const slides = React.useMemo(() => (Array.isArray(items) ? items.slice(0, HOME_SPOTLIGHT_MAX_ITEMS) : []), [items]);
   const [activeIndex, setActiveIndex] = React.useState(0);
   const [isPaused, setIsPaused] = React.useState(false);
   const touchStartX = React.useRef<number | null>(null);
@@ -371,54 +380,49 @@ export function HomeSpotlightCarousel({
     return () => window.clearInterval(timerId);
   }, [isPaused, slides.length]);
 
-  const activeItem = slides[activeIndex] as ReturnType<typeof toSpotlightViewModel> | null;
-  if (!activeItem) {
-    return (
-      <Surface theme={theme} className="overflow-hidden">
-        <div
-          className="border-b px-4 py-4 sm:px-5"
-          style={{
-            borderColor: theme.border,
-            background: theme.mode === 'dark'
-              ? 'linear-gradient(135deg, rgba(56,189,248,0.10), rgba(244,114,182,0.09) 65%, transparent 100%)'
-              : 'linear-gradient(135deg, rgba(37,99,235,0.08), rgba(244,114,182,0.08) 65%, rgba(255,255,255,0.76) 100%)',
-          }}
-        >
-          <div className="flex items-center justify-between gap-4">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 text-[12px] font-extrabold uppercase tracking-[0.16em]" style={{ color: theme.sub }}>
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded-2xl border" style={{ borderColor: theme.border, background: theme.surface2, color: theme.text }}>
-                  <Icon className="h-4 w-4" />
-                </span>
-                Spotlight
-              </div>
-              <div className="mt-2 text-2xl font-black tracking-tight" style={{ color: theme.text }}>
-                {title}
-              </div>
-              <div className="mt-1 max-w-2xl text-sm leading-6" style={{ color: theme.sub }}>
-                Freshly selected from the newsroom's most important stories
-              </div>
-            </div>
+  const activeItem = slides[activeIndex] || null;
 
-            <Link href={localizedHref} className="inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold transition hover:opacity-[0.98]" style={{ color: theme.text, borderColor: theme.border, background: theme.surface }}>
-              {t('common.viewAll')} <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
-        </div>
+  const resolveCategoryLabel = React.useCallback(
+    (raw: unknown) => {
+      const categoryRaw = String(raw || '').trim();
+      const categoryKey = normalizeHomeSpotlightCategoryKey(categoryRaw);
+      const categoryLabelKey = categoryKey ? labelKeyForCategory(categoryKey) : '';
+      const translated = categoryLabelKey ? t(categoryLabelKey) : '';
+      if (categoryLabelKey && translated && translated !== categoryLabelKey) return translated;
+      return categoryRaw;
+    },
+    [t]
+  );
 
-        <div className="p-4 sm:p-5">
-          <div className="rounded-[30px] border px-5 py-10 text-center shadow-[0_24px_54px_-38px_rgba(15,23,42,0.30)]" style={{ borderColor: theme.border, background: theme.surface }}>
-            <div className="text-sm font-semibold" style={{ color: theme.text }}>No spotlight stories right now.</div>
-            <div className="mt-1 text-sm" style={{ color: theme.sub }}>Fresh newsroom picks will appear here when stories are available.</div>
-          </div>
-        </div>
-      </Surface>
-    );
-  }
+  const vm = React.useMemo(() => {
+    if (!activeItem) return null;
 
-  const titleParts = splitStoryTitleHook(activeItem.title);
-  const titleHookColor = getStoryTitleHookColor(activeItem.categoryLabel);
-  const canOpen = isNavigableNewsHref(activeItem.href);
+    const storyId = getStoryId(activeItem);
+    const rawSlug = getStorySlug(activeItem);
+    const storyHref = buildNewsUrl({ id: storyId || rawSlug, slug: rawSlug, lang: safeLang });
+    const categoryLabel = resolveCategoryLabel(activeItem?.category);
+    const summary = truncateSmart(String(activeItem?.desc || '').trim(), 180);
+    const readMinutes = estimateReadMinutes(`${String(activeItem?.title || '').trim()} ${summary}`);
+
+    return {
+      key: getStoryReactKey(activeItem, storyHref),
+      href: storyHref,
+      categoryLabel,
+      summary,
+      readMinutes,
+      imageSrc: String(activeItem?.imageSrc || '').trim(),
+      title: String(activeItem?.title || '').trim(),
+      time: String(activeItem?.time || '').trim(),
+      coverFitMode: activeItem?.coverFitMode,
+      storyId,
+      titleIsOriginal: Boolean(activeItem?.titleIsOriginal),
+    };
+  }, [activeItem, resolveCategoryLabel, safeLang]);
+
+  if (!vm) return null;
+
+  const spotlightTitleParts = splitStoryTitleHook(vm.title);
+  const spotlightTitleHookColor = getStoryTitleHookColor(vm.categoryLabel);
   const lineClamp2: React.CSSProperties = {
     display: '-webkit-box',
     WebkitLineClamp: 2,
@@ -508,55 +512,67 @@ export function HomeSpotlightCarousel({
         >
           <AnimatePresence mode="wait">
             <motion.article
-              key={activeItem.key}
+              key={vm.key}
               initial={{ opacity: 0, y: 10, scale: 0.992 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, y: -10, scale: 0.996 }}
               transition={{ duration: 0.34, ease: 'easeOut' }}
               className="grid gap-5 lg:grid-cols-[minmax(0,1.02fr)_minmax(0,0.98fr)] lg:items-center lg:gap-7"
             >
-              <Link href={canOpen ? activeItem.href : localizedHref} className="group block">
+              <Link href={vm.href} className="group block">
                 <div className="relative overflow-hidden rounded-[28px] bg-slate-100 shadow-[0_22px_48px_-36px_rgba(15,23,42,0.26)] ring-1 ring-slate-200/70">
                   <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-20 bg-[linear-gradient(180deg,rgba(15,23,42,0.12),rgba(15,23,42,0))]" />
-                  <StoryImage
-                    storyId={activeItem.storyId}
-                    src={activeItem.imageSrc}
-                    fitMode={activeItem.coverFitMode}
-                    alt={activeItem.title}
-                    variant="top"
-                    fallbackSrc={COVER_PLACEHOLDER_SRC}
-                    allowLowResContainFallback={false}
-                    className="w-full rounded-none bg-transparent shadow-none ring-0"
-                  />
+                  {vm.imageSrc ? (
+                    <StoryImage
+                      storyId={vm.storyId}
+                      src={vm.imageSrc}
+                      fitMode={vm.coverFitMode}
+                      alt={vm.title}
+                      variant="top"
+                      fallbackSrc={COVER_PLACEHOLDER_SRC}
+                      allowLowResContainFallback={false}
+                      className="w-full rounded-none bg-transparent shadow-none ring-0"
+                    />
+                  ) : (
+                    <div className="w-full bg-slate-100" style={{ aspectRatio: '16 / 9' }}>
+                      <div className="grid h-full w-full place-items-center">
+                        <div className="text-xs font-extrabold tracking-tight text-slate-500 select-none">
+                          News <span className="text-slate-700">Pulse</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </Link>
 
               <div className="min-w-0 lg:pr-2">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: theme.sub }}>
-                  {activeItem.categoryLabel ? (
+                  {vm.categoryLabel ? (
                     <span className="rounded-full border px-2.5 py-1 shadow-[0_10px_24px_-20px_rgba(15,23,42,0.35)]" style={{ borderColor: theme.border, background: theme.surface2, color: theme.text }}>
-                      {activeItem.categoryLabel}
+                      {vm.categoryLabel}
                     </span>
                   ) : null}
-                  {activeItem.time ? <span className="text-[10.5px]" style={{ color: theme.muted || theme.sub }}>{activeItem.time}</span> : null}
-                  {activeItem.time ? <span aria-hidden="true" style={{ opacity: 0.38 }}>-</span> : null}
-                  <span className="text-[10.5px]" style={{ color: theme.muted || theme.sub }}>{activeItem.readMinutes} {t('common.minutesShort')}</span>
+                  {vm.time ? <span className="text-[10.5px]" style={{ color: theme.muted }}>{vm.time}</span> : null}
+                  {vm.time ? <span aria-hidden="true" style={{ opacity: 0.38 }}>•</span> : null}
+                  <span className="text-[10.5px]" style={{ color: theme.muted }}>{vm.readMinutes} {t('common.minutesShort')}</span>
                 </div>
 
-                <h3 className="mt-4 min-w-0 text-[1.62rem] font-black leading-[1.14] tracking-tight sm:text-[1.92rem]" style={{ color: theme.text, ...lineClamp2 }}>
-                  {titleParts.highlightedHook ? <span style={{ color: titleHookColor }}>{titleParts.highlightedHook}</span> : null}
-                  {titleParts.remainingTitle ? <span>{` ${titleParts.remainingTitle}`}</span> : null}
-                  {!titleParts.highlightedHook && !titleParts.remainingTitle ? <span>{activeItem.title}</span> : null}
-                </h3>
+                <div className="mt-4 flex items-start gap-2">
+                  <h3 className="min-w-0 text-[1.62rem] font-black leading-[1.14] tracking-[-0.015em] sm:text-[1.92rem]" style={{ color: theme.text, ...lineClamp2 }}>
+                    {spotlightTitleParts.highlightedHook ? <span style={{ color: spotlightTitleHookColor }}>{spotlightTitleParts.highlightedHook}</span> : null}
+                    {spotlightTitleParts.remainingTitle ? <span>{` ${spotlightTitleParts.remainingTitle}`}</span> : null}
+                  </h3>
+                  {vm.titleIsOriginal ? <OriginalTag /> : null}
+                </div>
 
-                {activeItem.summary ? (
+                {vm.summary ? (
                   <div className="mt-4 max-w-xl text-sm leading-6 sm:text-[15px] sm:leading-6" style={{ color: theme.sub, ...lineClamp3 }}>
-                    {activeItem.summary}
+                    {vm.summary}
                   </div>
                 ) : null}
 
                 <div className="mt-6 flex flex-wrap items-center gap-3">
-                  <Link href={canOpen ? activeItem.href : localizedHref} className="inline-flex items-center justify-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-semibold transition hover:opacity-[0.98]" style={{ background: theme.accent, color: '#fff', borderColor: 'transparent' }}>
+                  <Link href={vm.href} className="inline-flex items-center justify-center gap-2 rounded-2xl border px-4 py-2.5 text-sm font-semibold transition hover:opacity-[0.98]" style={{ background: theme.accent, color: '#fff', borderColor: 'transparent' }}>
                     {t('common.read')} <ArrowRight className="h-4 w-4" />
                   </Link>
 

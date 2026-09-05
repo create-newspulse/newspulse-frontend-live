@@ -42,7 +42,7 @@ function needsSmartBack(pathnameNoLocale: string): boolean {
 
   if (p.startsWith('/news/')) return true;
   if (p === '/breaking') return true;
-  if (p.startsWith('/regional/')) return true;
+  if (p.startsWith('/regional/') && p !== '/regional/gujarat') return true;
   if (p === '/search' || p.startsWith('/search/')) return true;
 
   return false;

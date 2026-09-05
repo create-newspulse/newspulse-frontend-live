@@ -19,6 +19,13 @@ import AdSlot from "../src/components/ads/AdSlot";
 import { useBookmarks } from "../hooks/useBookmarks";
 import { resolveArticleSlug } from "../lib/articleSlugs";
 import { buildNewsUrl, isNavigableNewsHref } from "../lib/newsRoutes";
+import {
+  buildHomeSpotlightItems,
+  buildHomepageSponsoredFeatureIdentitySet,
+  fetchHomeSpotlightSectionArticles,
+  HOME_FRESH_SOURCE_LIMIT,
+  HOME_SPOTLIGHT_RENDER_FILTER_KEYS,
+} from "../lib/homeSpotlight";
 import { resolveSponsoredContentMeta } from "../lib/sponsoredContent";
 import HomepageSponsoredFeatureCard from "../components/home/HomepageSponsoredFeatureCard";
 import HomeRightRail from "../components/home/HomeRightRail";
@@ -38,8 +45,10 @@ import { absolutePublicUrl, NEWS_PULSE_BRAND_NAME, NEWS_PULSE_LOGO_PATH, NEWS_PU
 import InspirationHubHomepageSection from "../components/home/InspirationHubHomepageSection";
 import LiveTvOfflineSequence from "../components/LiveTvOfflineSequence";
 import HeaderLogo from "../src/components/layout/HeaderLogo";
+import SharedMobileNavigationDrawer from "../src/components/layout/SharedMobileNavigationDrawer";
 import EmbeddedMediaConsentGate from "../src/consent/EmbeddedMediaConsentGate";
 import { useCookieConsent } from "../src/consent/CookieConsentProvider";
+import { HomeSpotlightCarousel as SharedHomeSpotlightCarousel } from "../components/home/HomeSharedFeatureModules";
 import type { GetStaticProps } from "next";
 import { AnimatePresence, motion } from "framer-motion";
 import { useI18n } from "../src/i18n/LanguageProvider";
@@ -272,16 +281,6 @@ const HOME_EDITORIAL_SECTIONS = [
   { key: 'web-stories', route: '/web-stories', Icon: BookOpen },
 ] as const;
 
-const HOME_SPOTLIGHT_PRIMARY_SECTION_KEYS = ['regional', 'national', 'international', 'science-technology', 'sports', 'business', 'youth'] as const;
-const HOME_SPOTLIGHT_FALLBACK_SECTION_KEYS = ['glamour'] as const;
-const HOME_SPOTLIGHT_RENDER_FILTER_KEYS = ['regional', 'national', 'international', 'business', 'science-technology', 'sports', 'lifestyle', 'glamour'] as const;
-const HOME_SPOTLIGHT_MAX_ITEMS = 8;
-const HOME_SPOTLIGHT_MAX_PER_CATEGORY = 2;
-const HOME_SPOTLIGHT_MAX_GLAMOUR_ITEMS = 1;
-const HOME_SPOTLIGHT_SOURCE_LIMIT = 18;
-const HOME_SPOTLIGHT_ROTATE_MS = 5000;
-const SPOTLIGHT_RESUME_DELAY_MS = 1200;
-
 /** Renders a real link only when the article resolves to a route, never a dead '#'. */
 function StoryLinkShell({
   href,
@@ -312,7 +311,6 @@ const HOME_SPOTLIGHT_FRESH_HOURS = 72;
 const HOME_FRESH_SUMMARY_STORY_LIMIT = 3;
 const HOME_FRESH_COMPACT_STORY_LIMIT = 14;
 const HOME_FRESH_STORY_LIMIT = HOME_FRESH_SUMMARY_STORY_LIMIT + HOME_FRESH_COMPACT_STORY_LIMIT;
-const HOME_FRESH_SOURCE_LIMIT = 40;
 
 const CATEGORY_THEME: Record<string, { base: string; icon: string; hover: string; ring: string; active: string; dot: string }> = {
   breaking: {
@@ -3229,361 +3227,6 @@ function HomeEditorialSection({ theme, title, href, items, lang, Icon }: any) {
   );
 }
 
-function HomeSpotlightCarousel({ theme, title, href, items, lang, Icon }: any) {
-  const { t } = useI18n();
-  const safeLang = lang === 'hi' || lang === 'gu' ? lang : 'en';
-  const localizedHref = localizePath(href, safeLang);
-  const slides = React.useMemo(() => (Array.isArray(items) ? items.slice(0, HOME_SPOTLIGHT_MAX_ITEMS) : []), [items]);
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [isPaused, setIsPaused] = useState(false);
-  const touchStartX = useRef<number | null>(null);
-  const resumeTimerRef = useRef<number | null>(null);
-
-  const clearResumeTimer = React.useCallback(() => {
-    if (resumeTimerRef.current == null) return;
-    window.clearTimeout(resumeTimerRef.current);
-    resumeTimerRef.current = null;
-  }, []);
-
-  const pauseRotation = React.useCallback(() => {
-    clearResumeTimer();
-    setIsPaused(true);
-  }, [clearResumeTimer]);
-
-  // Resume only after the tap has had time to become a click, so rotation never
-  // swaps the card the reader is pressing.
-  const resumeRotationSoon = React.useCallback(() => {
-    clearResumeTimer();
-    resumeTimerRef.current = window.setTimeout(() => {
-      resumeTimerRef.current = null;
-      setIsPaused(false);
-    }, SPOTLIGHT_RESUME_DELAY_MS);
-  }, [clearResumeTimer]);
-
-  React.useEffect(() => clearResumeTimer, [clearResumeTimer]);
-
-  const lineClamp2: React.CSSProperties = {
-    display: '-webkit-box',
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: 'vertical',
-    overflow: 'hidden',
-  };
-
-  const lineClamp3: React.CSSProperties = {
-    display: '-webkit-box',
-    WebkitLineClamp: 3,
-    WebkitBoxOrient: 'vertical',
-    overflow: 'hidden',
-  };
-
-  const resolveCategoryLabel = React.useCallback(
-    (raw: unknown) => {
-      const categoryRaw = String(raw || '').trim();
-      const categoryKey = normalizeCategoryKey(categoryRaw);
-      const categoryLabelKey = categoryKey ? labelKeyForCategory(categoryKey) : '';
-      const translated = categoryLabelKey ? t(categoryLabelKey) : '';
-      if (categoryLabelKey && translated && translated !== categoryLabelKey) return translated;
-      return categoryRaw;
-    },
-    [t]
-  );
-
-  React.useEffect(() => {
-    setActiveIndex(0);
-  }, [slides.length]);
-
-  const goToPrevious = React.useCallback(() => {
-    if (slides.length <= 1) return;
-    setActiveIndex((current) => (current - 1 + slides.length) % slides.length);
-  }, [slides.length]);
-
-  const goToNext = React.useCallback(() => {
-    if (slides.length <= 1) return;
-    setActiveIndex((current) => (current + 1) % slides.length);
-  }, [slides.length]);
-
-  React.useEffect(() => {
-    if (slides.length <= 1 || isPaused) return;
-    const timerId = window.setInterval(() => {
-      setActiveIndex((current) => (current + 1) % slides.length);
-    }, HOME_SPOTLIGHT_ROTATE_MS);
-
-    return () => window.clearInterval(timerId);
-  }, [isPaused, slides.length]);
-
-  const onTouchStart = React.useCallback((event: React.TouchEvent<HTMLDivElement>) => {
-    touchStartX.current = event.changedTouches[0]?.clientX ?? null;
-  }, []);
-
-  const onTouchEnd = React.useCallback((event: React.TouchEvent<HTMLDivElement>) => {
-    const startX = touchStartX.current;
-    const endX = event.changedTouches[0]?.clientX ?? null;
-    touchStartX.current = null;
-
-    if (startX == null || endX == null) return;
-
-    const delta = endX - startX;
-    if (Math.abs(delta) < 40) return;
-
-    if (delta > 0) {
-      goToPrevious();
-      return;
-    }
-
-    goToNext();
-  }, [goToNext, goToPrevious]);
-
-  const activeItem = slides[activeIndex] || null;
-
-  const vm = React.useMemo(() => {
-    if (!activeItem) return null;
-
-    const storyId = getStoryId(activeItem);
-    const rawSlug = getStorySlug(activeItem);
-    const storyHref = buildNewsUrl({ id: storyId || rawSlug, slug: rawSlug, lang: safeLang });
-    const categoryLabel = resolveCategoryLabel(activeItem?.category);
-    const summary = truncateSmart(String(activeItem?.desc || '').trim(), 180);
-    const readMinutes = estimateReadMinutes(`${String(activeItem?.title || '').trim()} ${summary}`);
-
-    return {
-      key: getStoryReactKey(activeItem, storyHref),
-      href: storyHref,
-      categoryLabel,
-      summary,
-      readMinutes,
-      imageSrc: String(activeItem?.imageSrc || '').trim(),
-      title: String(activeItem?.title || '').trim(),
-      time: String(activeItem?.time || '').trim(),
-      coverFitMode: activeItem?.coverFitMode,
-      storyId,
-      titleIsOriginal: Boolean(activeItem?.titleIsOriginal),
-    };
-  }, [activeItem, resolveCategoryLabel, safeLang]);
-
-  if (!vm) return null;
-
-  const spotlightTitleParts = splitStoryTitleHook(vm.title);
-  const spotlightTitleHookColor = getStoryTitleHookColor(vm.categoryLabel);
-
-  return (
-    <Surface theme={theme} className="overflow-hidden">
-      <div
-        className="border-b px-4 py-4 sm:px-5"
-        style={{
-          borderColor: theme.border,
-          background: theme.mode === 'dark'
-            ? 'linear-gradient(135deg, rgba(56,189,248,0.10), rgba(244,114,182,0.09) 65%, transparent 100%)'
-            : 'linear-gradient(135deg, rgba(37,99,235,0.08), rgba(244,114,182,0.08) 65%, rgba(255,255,255,0.76) 100%)',
-        }}
-      >
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 text-[12px] font-extrabold uppercase tracking-[0.16em]" style={{ color: theme.sub }}>
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-2xl border" style={{ borderColor: theme.border, background: theme.surface2, color: theme.text }}>
-                <Icon className="h-4 w-4" />
-              </span>
-              Spotlight
-            </div>
-            <div className="mt-2 text-2xl font-black tracking-tight" style={{ color: theme.text }}>
-              {title}
-            </div>
-            <div className="mt-1 max-w-2xl text-sm leading-6" style={{ color: theme.sub }}>
-              Freshly selected from the newsroom's most important stories
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <div className="hidden items-center gap-2 sm:flex">
-              <button
-                type="button"
-                onClick={goToPrevious}
-                aria-label="Previous spotlight story"
-                className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border transition hover:opacity-[0.98]"
-                style={{ color: theme.text, borderColor: theme.border, background: theme.surface }}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={goToNext}
-                aria-label="Next spotlight story"
-                className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border transition hover:opacity-[0.98]"
-                style={{ color: theme.text, borderColor: theme.border, background: theme.surface }}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-
-            <Link
-              href={localizedHref}
-              className="inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold transition hover:opacity-[0.98]"
-              style={{ color: theme.text, borderColor: theme.border, background: theme.surface }}
-            >
-              {t('common.viewAll')} <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
-        </div>
-      </div>
-
-      <div className="p-4 sm:p-5">
-        <div
-          className="overflow-hidden rounded-[30px] border p-4 shadow-[0_24px_54px_-38px_rgba(15,23,42,0.30)] sm:p-5 lg:p-6"
-          style={{ borderColor: theme.border, background: theme.surface }}
-          onTouchStart={(event) => {
-            pauseRotation();
-            onTouchStart(event);
-          }}
-          onTouchEnd={(event) => {
-            onTouchEnd(event);
-            resumeRotationSoon();
-          }}
-          onPointerDown={pauseRotation}
-          onPointerUp={resumeRotationSoon}
-          onPointerCancel={resumeRotationSoon}
-          onMouseEnter={pauseRotation}
-          onMouseLeave={() => {
-            clearResumeTimer();
-            setIsPaused(false);
-          }}
-        >
-          <AnimatePresence mode="wait">
-            <motion.article
-              key={vm.key}
-              initial={{ opacity: 0, y: 10, scale: 0.992 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, y: -10, scale: 0.996 }}
-              transition={{ duration: 0.34, ease: 'easeOut' }}
-              className="grid gap-5 lg:grid-cols-[minmax(0,1.02fr)_minmax(0,0.98fr)] lg:items-center lg:gap-7"
-            >
-              <Link href={vm.href} className="group block">
-                <div className="relative overflow-hidden rounded-[28px] bg-slate-100 shadow-[0_22px_48px_-36px_rgba(15,23,42,0.26)] ring-1 ring-slate-200/70">
-                  <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-20 bg-[linear-gradient(180deg,rgba(15,23,42,0.12),rgba(15,23,42,0))]" />
-                  {vm.imageSrc ? (
-                    <StoryImage
-                      storyId={vm.storyId}
-                      src={vm.imageSrc}
-                      fitMode={vm.coverFitMode}
-                      alt={vm.title}
-                      variant="top"
-                      fallbackSrc={COVER_PLACEHOLDER_SRC}
-                      allowLowResContainFallback={false}
-                      className="w-full rounded-none bg-transparent shadow-none ring-0"
-                    />
-                  ) : (
-                    <div className="w-full bg-slate-100" style={{ aspectRatio: '16 / 9' }}>
-                      <div className="grid h-full w-full place-items-center">
-                        <div className="text-xs font-extrabold tracking-tight text-slate-500 select-none">
-                          News <span className="text-slate-700">Pulse</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </Link>
-
-              <div className="min-w-0 lg:pr-2">
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: theme.sub }}>
-                  {vm.categoryLabel ? (
-                    <span className="rounded-full border px-2.5 py-1 shadow-[0_10px_24px_-20px_rgba(15,23,42,0.35)]" style={{ borderColor: theme.border, background: theme.surface2, color: theme.text }}>
-                      {vm.categoryLabel}
-                    </span>
-                  ) : null}
-                  {vm.time ? <span className="text-[10.5px]" style={{ color: theme.muted }}>{vm.time}</span> : null}
-                  {vm.time ? <span aria-hidden="true" style={{ opacity: 0.38 }}>•</span> : null}
-                  <span className="text-[10.5px]" style={{ color: theme.muted }}>{vm.readMinutes} {t('common.minutesShort')}</span>
-                </div>
-
-                <div className="mt-4 flex items-start gap-2">
-                  <h3 className="min-w-0 text-[1.62rem] font-black leading-[1.14] tracking-[-0.015em] sm:text-[1.92rem]" style={{ color: theme.text, ...lineClamp2 }}>
-                    {spotlightTitleParts.highlightedHook ? <span style={{ color: spotlightTitleHookColor }}>{spotlightTitleParts.highlightedHook}</span> : null}
-                    {spotlightTitleParts.remainingTitle ? <span>{` ${spotlightTitleParts.remainingTitle}`}</span> : null}
-                  </h3>
-                  {vm.titleIsOriginal ? <OriginalTag /> : null}
-                </div>
-
-                {vm.summary ? (
-                  <div className="mt-4 max-w-xl text-sm leading-6 sm:text-[15px] sm:leading-6" style={{ color: theme.sub, ...lineClamp3 }}>
-                    {vm.summary}
-                  </div>
-                ) : null}
-
-                <div className="mt-6 flex flex-wrap items-center gap-3">
-                  <Link
-                    href={vm.href}
-                    className="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold border transition hover:opacity-[0.98]"
-                    style={{ background: theme.accent, color: '#fff', borderColor: 'transparent' }}
-                  >
-                    {t('common.read')} <ArrowRight className="h-4 w-4" />
-                  </Link>
-
-                  <div className="flex items-center gap-2 sm:hidden">
-                    <button
-                      type="button"
-                      onClick={goToPrevious}
-                      aria-label="Previous spotlight story"
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border transition hover:opacity-[0.98]"
-                      style={{ color: theme.text, borderColor: theme.border, background: theme.surface2 }}
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={goToNext}
-                      aria-label="Next spotlight story"
-                      className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border transition hover:opacity-[0.98]"
-                      style={{ color: theme.text, borderColor: theme.border, background: theme.surface2 }}
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </motion.article>
-          </AnimatePresence>
-        </div>
-
-        {slides.length > 1 ? (
-          <div className="mt-4 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.14em]" style={{ color: theme.sub }}>
-              <span>{activeIndex + 1} / {slides.length}</span>
-              <span className="inline-flex h-1.5 w-20 overflow-hidden rounded-full" style={{ background: theme.border }}>
-                <motion.span
-                  key={`spotlight-progress-${activeIndex}-${isPaused ? 'paused' : 'running'}`}
-                  initial={{ width: '0%' }}
-                  animate={{ width: isPaused ? '100%' : '100%' }}
-                  transition={{ duration: isPaused ? 0.2 : HOME_SPOTLIGHT_ROTATE_MS / 1000, ease: 'linear' }}
-                  className="h-full rounded-full"
-                  style={{ background: theme.accent }}
-                />
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              {slides.map((slide: any, index: number) => {
-                const isActive = index === activeIndex;
-                const key = `${getStoryReactKey(slide, `${String(slide?.id || slide?.slug || index)}`)}-${index}`;
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setActiveIndex(index)}
-                    aria-label={`Go to spotlight story ${index + 1}`}
-                    className="h-2.5 rounded-full transition-all"
-                    style={{
-                      width: isActive ? 24 : 8,
-                      background: isActive ? theme.accent : theme.border,
-                      opacity: isActive ? 1 : 0.55,
-                    }}
-                  />
-                );
-              })}
-            </div>
-          </div>
-        ) : null}
-      </div>
-    </Surface>
-  );
-}
-
 function QuickToolsCard({ theme, onToast, viralVideosFrontendEnabled = true }: any) {
   const { t } = useI18n();
   return (
@@ -4105,20 +3748,6 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
   const [mobileLeftOpen, setMobileLeftOpen] = useState(false);
 
   React.useEffect(() => {
-    if (!mobileLeftOpen) return undefined;
-    const previousOverflow = document.body.style.overflow;
-    const closeOnRouteChange = () => setMobileLeftOpen(false);
-
-    document.body.style.overflow = 'hidden';
-    router.events.on('routeChangeStart', closeOnRouteChange);
-
-    return () => {
-      router.events.off('routeChangeStart', closeOnRouteChange);
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [mobileLeftOpen, router.events]);
-
-  React.useEffect(() => {
     setHydrated(true);
   }, []);
 
@@ -4255,29 +3884,10 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
     }
 
     (async () => {
-      const sectionEntries = await Promise.all(
-        HOME_EDITORIAL_SECTIONS.map(async (section) => {
-          const resp = await fetchPublicNews({
-            category: section.key,
-            language: apiLang,
-            limit: HOME_SPOTLIGHT_SOURCE_LIMIT,
-            extraQuery: { strictLocale: '1' },
-            signal: controller.signal,
-          });
-
-          const items = Array.isArray(resp?.items)
-            ? resp.items
-                .filter((article) => !isHomepageSponsoredContent(article, apiLang))
-                .slice()
-                .sort((left, right) => storyPublishedTimeValue(right) - storyPublishedTimeValue(left))
-            : [];
-
-          return [section.key, items] as const;
-        })
-      );
+      const sectionArticlesByKey = await fetchHomeSpotlightSectionArticles({ lang: apiLang, signal: controller.signal });
 
       if (controller.signal.aborted) return;
-      setHomeSectionNews(Object.fromEntries(sectionEntries));
+      setHomeSectionNews(sectionArticlesByKey as Record<string, Article[]>);
     })().catch(() => {
       if (controller.signal.aborted) return;
       setHomeSectionNews({});
@@ -4590,17 +4200,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
   );
 
   const homepageSponsoredFeatureIdentitySet = React.useMemo(() => {
-    const values = new Set<string>();
-
-    [
-      String(homepageSponsoredFeature?.linkedArticleId || '').trim().toLowerCase(),
-      String(homepageSponsoredFeature?.linkedArticleSlug || '').trim().toLowerCase(),
-      String(homepageSponsoredFeature?.headline || '').trim().toLowerCase(),
-    ]
-      .filter(Boolean)
-      .forEach((value) => values.add(value));
-
-    return values;
+    return buildHomepageSponsoredFeatureIdentitySet(homepageSponsoredFeature);
   }, [homepageSponsoredFeature]);
 
   const leadStoryIdentitySet = React.useMemo(() => {
@@ -4697,15 +4297,6 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
     return values;
   }, [apiLang, centerFeedItems, homepageSponsoredFeatureIdentitySet, moreReadItems, topStory]);
 
-  const spotlightExcludedIdentitySet = React.useMemo(() => {
-    const values = new Set<string>();
-
-    collectHomepageStoryIdentifiers(topStory, apiLang).forEach((value) => values.add(value));
-    homepageSponsoredFeatureIdentitySet.forEach((value) => values.add(value));
-
-    return values;
-  }, [apiLang, homepageSponsoredFeatureIdentitySet, topStory]);
-
   const editorialSections = React.useMemo(() => {
     return HOME_EDITORIAL_SECTIONS.map((section) => {
       const rawItems = Array.isArray(homeSectionNews[section.key]) ? homeSectionNews[section.key] : [];
@@ -4738,104 +4329,13 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
     }).filter((section) => section.items.length > 0);
   }, [apiLang, homeSectionNews, homepageLeadIdentitySet, t]);
 
-  const spotlightItems = React.useMemo(() => {
-    const seen = new Set<string>();
-
-    const toIdentity = (item: any) => {
-      const identifiers = [
-        String(item?._id || item?.id || '').trim().toLowerCase(),
-        String(item?.slug || '').trim().toLowerCase(),
-      ].filter(Boolean);
-
-      return identifiers[0] || identifiers[1] || String(item?.title || '').trim().toLowerCase();
-    };
-
-    const buildFeedItem = (article: any) => articleToFeedItem(article as any, apiLang);
-
-    const rawHomepageStories = [
-      ...(Array.isArray(latestRawStories) ? latestRawStories : []),
-      ...HOME_EDITORIAL_SECTIONS.flatMap((section) => Array.isArray(homeSectionNews[section.key]) ? homeSectionNews[section.key] : []),
-    ];
-
-    const rawStoryCandidates = rawHomepageStories
-      .map((article) => {
-        const feedItem = buildFeedItem(article);
-        const identity = toIdentity({
-          _id: (article as any)?._id || (article as any)?.id || feedItem?.id,
-          slug: (article as any)?.slug || feedItem?.slug,
-          title: feedItem?.title,
-        });
-
-        if (!identity || seen.has(identity)) return null;
-        if (spotlightExcludedIdentitySet.has(identity)) return null;
-        if (isHomepageSponsoredContent(article, apiLang)) return null;
-
-        const sortTime = storyPublishedTimeValue(article);
-        if (!sortTime) return null;
-
-        seen.add(identity);
-
-        return {
-          identity,
-          sortTime,
-          categoryKey: normalizeCategoryKey((article as any)?.category || feedItem?.category),
-          qualityScore:
-            (String(feedItem?.imageSrc || '').trim().length > 0 ? 2 : 0) +
-            (String(feedItem?.desc || '').trim().length >= 30 ? 1 : 0),
-          item: feedItem,
-        };
-      })
-      .filter(Boolean) as Array<{
-        identity: string;
-        sortTime: number;
-        categoryKey: string;
-        qualityScore: number;
-        item: any;
-      }>;
-
-    const sortedCandidates = rawStoryCandidates.sort((left, right) => {
-        if (left.sortTime !== right.sortTime) return right.sortTime - left.sortTime;
-        if (left.qualityScore !== right.qualityScore) return right.qualityScore - left.qualityScore;
-        return left.identity.localeCompare(right.identity);
-      });
-
-    const primaryCandidates = sortedCandidates.filter((candidate) =>
-      HOME_SPOTLIGHT_PRIMARY_SECTION_KEYS.includes(candidate.categoryKey as (typeof HOME_SPOTLIGHT_PRIMARY_SECTION_KEYS)[number])
-    );
-
-    const glamourCandidates = sortedCandidates.filter((candidate) =>
-      HOME_SPOTLIGHT_FALLBACK_SECTION_KEYS.includes(candidate.categoryKey as (typeof HOME_SPOTLIGHT_FALLBACK_SECTION_KEYS)[number])
-    );
-
-    const filled: typeof rawStoryCandidates = [];
-    const categoryCounts = new Map<string, number>();
-
-    for (let pass = 1; pass <= HOME_SPOTLIGHT_MAX_PER_CATEGORY; pass += 1) {
-      for (const candidate of primaryCandidates) {
-        if (filled.length >= HOME_SPOTLIGHT_MAX_ITEMS) break;
-
-        const currentCount = categoryCounts.get(candidate.categoryKey) || 0;
-        if (currentCount >= pass) continue;
-
-        filled.push(candidate);
-        categoryCounts.set(candidate.categoryKey, currentCount + 1);
-      }
-
-      if (filled.length >= HOME_SPOTLIGHT_MAX_ITEMS) break;
-    }
-
-    for (const candidate of glamourCandidates) {
-      if (filled.length >= HOME_SPOTLIGHT_MAX_ITEMS) break;
-
-      const currentCount = categoryCounts.get(candidate.categoryKey) || 0;
-      if (currentCount >= HOME_SPOTLIGHT_MAX_GLAMOUR_ITEMS) continue;
-
-      filled.push(candidate);
-      categoryCounts.set(candidate.categoryKey, currentCount + 1);
-    }
-
-    return filled.slice(0, HOME_SPOTLIGHT_MAX_ITEMS).map((candidate) => candidate.item);
-  }, [apiLang, homeSectionNews, latestRawStories, spotlightExcludedIdentitySet]);
+  const spotlightItems = React.useMemo(() => buildHomeSpotlightItems({
+    latestArticles: latestRawStories,
+    sectionArticlesByKey: homeSectionNews,
+    lang: apiLang,
+    articleToFeedItem: (article) => articleToFeedItem(article, apiLang),
+    extraExcludedIdentitySet: homepageSponsoredFeatureIdentitySet,
+  }), [apiLang, homeSectionNews, homepageSponsoredFeatureIdentitySet, latestRawStories]);
 
   const renderedEditorialSections = React.useMemo(
     () => editorialSections.filter((section) => !HOME_SPOTLIGHT_RENDER_FILTER_KEYS.includes(section.key as (typeof HOME_SPOTLIGHT_RENDER_FILTER_KEYS)[number])),
@@ -5304,7 +4804,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
 
         {spotlightItems.length ? (
           <div className="spotlight-section">
-            <HomeSpotlightCarousel
+            <SharedHomeSpotlightCarousel
               theme={theme}
               title="News Pulse Spotlight"
               href="/latest"
@@ -5354,161 +4854,15 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
         <PreferencesDrawer theme={theme} open={settingsOpen} onClose={() => setSettingsOpen(false)} moduleState={moduleState} onToast={onToast} />
       ) : null}
 
-      <Drawer open={mobileLeftOpen} onClose={() => setMobileLeftOpen(false)} theme={theme} title={t('common.menu')} side="left">
-        <div className="grid gap-5">
-          <div className="grid gap-3">
-            <div className="grid grid-cols-3 gap-2">
-              {mobileMenuTopActions.map((item) => {
-                const quickTheme = MENU_QUICK_THEME[item.themeKey];
-
-                return (
-                  <Link
-                    key={item.key}
-                    href={item.href}
-                    onClick={() => setMobileLeftOpen(false)}
-                    className={cx(
-                      "inline-flex min-h-[72px] flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-center text-xs font-bold transition-all duration-200 focus-visible:outline-none",
-                      quickTheme.base,
-                      quickTheme.hover,
-                      quickTheme.ring,
-                      item.active && "ring-2 ring-offset-0"
-                    )}
-                  >
-                    <item.Icon className="h-4 w-4" />
-                    <span className="leading-tight">{item.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-
-            <div className="rounded-[26px] border p-3" style={{ borderColor: theme.border, background: theme.surface2 }}>
-              <div className="mb-3 text-[11px] font-black uppercase tracking-[0.18em]" style={{ color: theme.sub }}>
-                Quick Access
-              </div>
-              <div className="grid gap-2">
-                {mobileMenuQuickAccess.map((item) => (
-                  <Link
-                    key={item.key}
-                    href={item.href}
-                    onClick={() => setMobileLeftOpen(false)}
-                    className="inline-flex items-center gap-3 rounded-2xl border px-3 py-2.5 text-sm font-semibold transition-colors duration-200 hover:bg-white/60"
-                    style={{ borderColor: theme.border, color: theme.text, background: theme.surface }}
-                  >
-                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border" style={{ borderColor: theme.border, background: theme.surface2 }}>
-                      <item.Icon className="h-4 w-4" />
-                    </span>
-                    <span className="truncate">{item.label}</span>
-                    <ChevronRight className="ml-auto h-4 w-4" style={{ color: theme.sub }} />
-                  </Link>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-[26px] border p-3" style={{ borderColor: theme.border, background: theme.surface2 }}>
-            <div className="mb-3 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em]" style={{ color: theme.sub }}>
-              <Globe className="h-4 w-4" />
-              {t('common.categories')}
-            </div>
-
-            <div className="grid gap-2">
-            {getVisibleCats(founderToggles).map((c: any) => {
-              const tone = CATEGORY_THEME[c.key] || CATEGORY_THEME.__default;
-              const active = activeCatKey === c.key;
-              const href = CATEGORY_ROUTES[c.key as string];
-              const label = t(labelKeyForCategory(String(c.key)));
-
-              const content = (
-                <div
-                  className={cx(
-                    "flex items-center gap-3 rounded-2xl border px-3 py-2.5 text-sm font-semibold transition-all duration-200 focus-visible:outline-none",
-                    "bg-white/70 hover:bg-white/95",
-                    tone.ring,
-                    active && "shadow-[0_10px_24px_-20px_rgba(15,23,42,0.35)]"
-                  )}
-                  style={{
-                    borderColor: active ? theme.text : theme.border,
-                    color: theme.text,
-                  }}
-                >
-                  <span className={cx("inline-flex h-9 w-9 items-center justify-center rounded-2xl border", tone.icon)}>
-                    <c.Icon className="h-4 w-4" />
-                  </span>
-                  <span className="truncate">{label}</span>
-                  {(c as any).badge ? (
-                    <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em]"
-                      style={{ borderColor: theme.border, color: theme.sub, background: theme.surface2 }}>
-                      {(c as any).badge}
-                    </span>
-                  ) : null}
-                  <ChevronRight className="ml-auto h-4 w-4" style={{ color: theme.sub }} />
-                </div>
-              );
-
-              if (href) {
-                return (
-                  <Link
-                    key={c.key}
-                    href={href}
-                    onClick={() => {
-                      setActiveCatKey(c.key);
-                      setMobileLeftOpen(false);
-                    }}
-                  >
-                    {content}
-                  </Link>
-                );
-              }
-
-              return (
-                <button
-                  key={c.key}
-                  type="button"
-                  onClick={() => {
-                    setActiveCatKey(c.key);
-                    setMobileLeftOpen(false);
-                    onToast(`Category: ${label}`);
-                  }}
-                  className="text-left"
-                  style={{ background: "transparent", border: "none", padding: 0, margin: 0 }}
-                >
-                  {content}
-                </button>
-              );
-            })}
-            </div>
-          </div>
-
-          <div className="rounded-[26px] border p-3" style={{ borderColor: theme.border, background: theme.surface2 }}>
-            <div className="mb-3 text-[11px] font-black uppercase tracking-[0.18em]" style={{ color: theme.sub }}>
-              Language
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {mobileMenuLanguages.map((item) => {
-                const active = apiLang === item.key;
-                return (
-                  <Link
-                    key={item.key}
-                    href={localizePath('/', item.key)}
-                    onClick={() => {
-                      setLang(item.key);
-                      setMobileLeftOpen(false);
-                    }}
-                    className="inline-flex items-center justify-center rounded-2xl border px-3 py-2 text-xs font-bold transition-colors duration-200"
-                    style={{
-                      borderColor: active ? theme.text : theme.border,
-                      color: active ? theme.text : theme.sub,
-                      background: active ? theme.surface : theme.surface2,
-                    }}
-                  >
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </Drawer>
+      <SharedMobileNavigationDrawer
+        open={mobileLeftOpen}
+        onClose={() => setMobileLeftOpen(false)}
+        theme={theme}
+        activeCategoryKey={activeCatKey}
+        onCategoryPick={setActiveCatKey}
+        founderToggles={founderToggles}
+        lang={apiLang}
+      />
 
       <Toast theme={theme} message={toast} onDone={() => setToast("")} />
     </div>

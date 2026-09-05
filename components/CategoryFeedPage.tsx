@@ -363,25 +363,28 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
   const topStory = useCategoryShell ? filteredItems[0] || null : null;
   const freshStories = useCategoryShell && topStory ? filteredItems.slice(1) : filteredItems;
 
+  const editorialSearch = isEditorialPage ? (
+    <div>
+      <label htmlFor="editorial-search" className="sr-only">{editorialSearchCopy.searchPlaceholder}</label>
+      <input
+        id="editorial-search"
+        type="search"
+        value={searchQuery}
+        onChange={(event) => setSearchQuery(event.target.value)}
+        placeholder={editorialSearchCopy.searchPlaceholder}
+        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-newsPulse-navy outline-none transition focus:ring-2 focus:ring-slate-200"
+      />
+    </div>
+  ) : null;
+
   const renderHeader = () => (
     <CategoryDeskHeader
       eyebrow={deskCopy.eyebrow}
       title={deskCopy.title}
       description={deskCopy.description}
-      actions={isEditorialPage ? (
-        <div>
-          <label htmlFor="editorial-search" className="sr-only">{editorialSearchCopy.searchPlaceholder}</label>
-          <input
-            id="editorial-search"
-            type="search"
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder={editorialSearchCopy.searchPlaceholder}
-            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-newsPulse-navy outline-none transition focus:ring-2 focus:ring-slate-200"
-          />
-        </div>
-      ) : null}
-    />
+    >
+      {editorialSearch}
+    </CategoryDeskHeader>
   );
 
   const getCardView = (a: Article) => {
