@@ -1,4 +1,4 @@
-import { getStaticProps } from '../../pages/index';
+import { getServerSideProps } from '../../pages/index';
 import { fetchPublicNews } from '../../lib/publicNewsApi';
 
 jest.mock('../../lib/publicNewsApi', () => ({
@@ -48,6 +48,15 @@ function publicArticle(language: 'en' | 'hi' | 'gu') {
   };
 }
 
+function createServerSideContext(locale?: string) {
+  return {
+    locale,
+    res: {
+      setHeader: jest.fn(),
+    },
+  };
+}
+
 describe('homepage article language requests', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -64,7 +73,7 @@ describe('homepage article language requests', () => {
       endpoint: '/api/public/news',
     });
 
-    const result = await getStaticProps({ locale } as any) as any;
+    const result = await getServerSideProps(createServerSideContext(locale) as any) as any;
 
     expect(fetchPublicNews).toHaveBeenCalledWith(expect.objectContaining({
       language: expectedLanguage,

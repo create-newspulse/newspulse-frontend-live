@@ -49,7 +49,7 @@ import SharedMobileNavigationDrawer from "../src/components/layout/SharedMobileN
 import EmbeddedMediaConsentGate from "../src/consent/EmbeddedMediaConsentGate";
 import { useCookieConsent } from "../src/consent/CookieConsentProvider";
 import { HomeSpotlightCarousel as SharedHomeSpotlightCarousel } from "../components/home/HomeSharedFeatureModules";
-import type { GetStaticProps } from "next";
+import type { GetServerSideProps } from "next";
 import { AnimatePresence, motion } from "framer-motion";
 import { useI18n } from "../src/i18n/LanguageProvider";
 import { resolveInspirationHubDroneTvSettings, resolveInspirationHubSectionText } from "../src/lib/inspirationHubSettings";
@@ -58,6 +58,7 @@ import { usePublicFounderToggles } from "../hooks/usePublicFounderToggles";
 import { DEFAULT_PUBLIC_FOUNDER_TOGGLES, type PublicFounderToggles } from "../lib/publicFounderToggles";
 import { subscribePublicDataRefresh } from "../lib/publicDataRefresh";
 import { hasStoredConsentForCategory } from "../src/consent/cookieConsent";
+import { getPublicArticleStatus } from "../lib/localizedArticleFields";
 import {
   ArrowRight,
   Bell,
@@ -102,12 +103,6 @@ import {
 const cx = (...c: Array<string | false | null | undefined>) => c.filter(Boolean).join(" ");
 
 const STYLE_STORAGE_KEY = 'np_style';
-const HOME_STORY_CACHE_KEY = 'newspulse-home-cache';
-
-function getHomeStoryCacheKey(lang: UiLangCode): string {
-  const safeLang = lang === 'hi' || lang === 'gu' ? lang : 'en';
-  return `${HOME_STORY_CACHE_KEY}:${safeLang}`;
-}
 
 function readSavedStyleId(): string | null {
   if (typeof window === 'undefined') return null;
@@ -126,67 +121,6 @@ function writeSavedStyleId(themeId: string) {
   if (!hasStoredConsentForCategory('preferences')) return;
   try {
     window.localStorage.setItem(STYLE_STORAGE_KEY, String(themeId || ''));
-  } catch {}
-}
-
-type HomeStoryCache = {
-  lang: UiLangCode;
-  topStory: Article | null;
-  freshStories: any[];
-  timestamp: number;
-};
-
-function normalizeHomeStoryCache(raw: any, lang: UiLangCode): HomeStoryCache | null {
-  if (!raw || typeof raw !== 'object') return null;
-  if (raw.lang && raw.lang !== lang) return null;
-
-  const topStory = raw.topStory && typeof raw.topStory === 'object' ? raw.topStory as Article : null;
-  const freshStories = Array.isArray(raw.freshStories) ? raw.freshStories : [];
-  const timestamp = Number(raw.timestamp);
-
-  if (!topStory && freshStories.length === 0) return null;
-
-  return {
-    lang,
-    topStory,
-    freshStories,
-    timestamp: Number.isFinite(timestamp) ? timestamp : 0,
-  };
-}
-
-function readHomeStoryCache(lang: UiLangCode): HomeStoryCache | null {
-  if (typeof window === 'undefined') return null;
-
-  const stores = [window.localStorage, window.sessionStorage];
-  for (const store of stores) {
-    try {
-      const raw = store.getItem(HOME_STORY_CACHE_KEY);
-      const cache = normalizeHomeStoryCache(raw ? safeJsonParse(raw) : null, lang);
-      if (cache) return cache;
-    } catch {}
-  }
-
-  return null;
-}
-
-function writeHomeStoryCache(lang: UiLangCode, topStory: Article | null, freshStories: any[]) {
-  if (typeof window === 'undefined') return;
-  if (!topStory && (!Array.isArray(freshStories) || freshStories.length === 0)) return;
-
-  const payload = JSON.stringify({
-    lang,
-    topStory,
-    freshStories: Array.isArray(freshStories) ? freshStories : [],
-    timestamp: Date.now(),
-  });
-
-  try {
-    window.localStorage.setItem(HOME_STORY_CACHE_KEY, payload);
-    return;
-  } catch {}
-
-  try {
-    window.sessionStorage.setItem(HOME_STORY_CACHE_KEY, payload);
   } catch {}
 }
 
@@ -580,18 +514,70 @@ function toUiLangCode(value: unknown): UiLangCode {
   return 'en';
 }
 
-function safeJsonParse(v: string) {
-  try {
-    return JSON.parse(v);
-  } catch {
-    return null;
-  }
-}
-
 function clampNum(n: any, min: number, max: number, fallback: number) {
   const v = Number(n);
   if (!Number.isFinite(v)) return fallback;
   return Math.min(max, Math.max(min, v));
+}
+
+export const HOMEPAGE_RESPONSE_CACHE_CONTROL = 'no-store, no-cache, must-revalidate, proxy-revalidate';
+
+function getHomepagePublicationTimeValue(article: any): number {
+  const explicitPublishedAt = String(article?.publishedAt || article?.publishAt || '').trim();
+  if (explicitPublishedAt) {
+    const parsed = Date.parse(explicitPublishedAt);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  return getStoryDateTimeValue(article);
+}
+
+export function selectHomepageEditorialArticles(items: Article[] | null | undefined, requestedLang: UiLangCode): Article[] {
+  return (Array.isArray(items) ? items : [])
+    .filter((article) => getPublicArticleStatus(article) === 'published')
+    .filter((article) => !isHomepageSponsoredContent(article, requestedLang))
+    .slice()
+    .sort((left, right) => {
+      const leftTime = getHomepagePublicationTimeValue(left);
+      const rightTime = getHomepagePublicationTimeValue(right);
+      if (leftTime !== rightTime) return rightTime - leftTime;
+      return String((left as any)?._id || (left as any)?.id || (left as any)?.slug || '')
+        .localeCompare(String((right as any)?._id || (right as any)?.id || (right as any)?.slug || ''));
+    });
+}
+
+export async function resolveHomepageLatestStories(requestedLang: UiLangCode, signal?: AbortSignal): Promise<{
+  topStory: Article | null;
+  freshStories: any[] | null;
+  rawStories: Article[] | null;
+  endpoint: string;
+  error?: string;
+  status?: number;
+}> {
+  const latestResp = await fetchPublicNews({ language: requestedLang, limit: HOME_FRESH_SOURCE_LIMIT, signal });
+  if (latestResp.error) {
+    return {
+      topStory: null,
+      freshStories: null,
+      rawStories: null,
+      endpoint: latestResp.endpoint,
+      error: latestResp.error,
+      status: latestResp.status,
+    };
+  }
+
+  const editorialLatestArticles = selectHomepageEditorialArticles(latestResp.items, requestedLang);
+  return {
+    topStory: editorialLatestArticles[0] || null,
+    freshStories: editorialLatestArticles.map((article) => articleToFeedItem(article as any, requestedLang)),
+    rawStories: editorialLatestArticles,
+    endpoint: latestResp.endpoint,
+    status: latestResp.status,
+  };
+}
+
+export function shouldShowHomepageTopStorySkeleton(topStory: Article | null | undefined, latestStories: any[] | null | undefined): boolean {
+  return !topStory || latestStories == null;
 }
 
 type HomePageStaticProps = {
@@ -604,7 +590,9 @@ type HomePageStaticProps = {
   initialFreshStories: any[] | null;
 };
 
-export const getStaticProps: GetStaticProps<HomePageStaticProps> = async ({ locale }) => {
+export const getServerSideProps: GetServerSideProps<HomePageStaticProps> = async ({ locale, res }) => {
+  res.setHeader('Cache-Control', HOMEPAGE_RESPONSE_CACHE_CONTROL);
+
   const { getMessages } = await import("../lib/getMessages");
   const { normalizeSponsoredFeatureLang, resolvePublicHomepageSponsoredFeature } = await import("../lib/publicSponsoredFeatureSource");
   const initialLang = toUiLangCode(locale);
@@ -616,15 +604,9 @@ export const getStaticProps: GetStaticProps<HomePageStaticProps> = async ({ loca
   let initialFreshStories: any[] | null = null;
 
   try {
-    const latestResp = await fetchPublicNews({ language: initialLang, limit: HOME_FRESH_SOURCE_LIMIT });
-    if (!latestResp.error) {
-      const editorialLatestArticles = (Array.isArray(latestResp.items) ? latestResp.items : [])
-        .filter((article) => !isHomepageSponsoredContent(article, initialLang));
-      if (editorialLatestArticles.length > 0) {
-        initialTopStory = editorialLatestArticles[0] || null;
-        initialFreshStories = editorialLatestArticles.map((article) => articleToFeedItem(article as any, initialLang));
-      }
-    }
+    const latest = await resolveHomepageLatestStories(initialLang);
+    initialTopStory = latest.topStory;
+    initialFreshStories = latest.freshStories;
   } catch {
     initialTopStory = null;
     initialFreshStories = null;
@@ -3773,25 +3755,12 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
   }, [lang]);
 
 
-  // Hydrate cached center stories only after React has matched the server HTML.
-  React.useEffect(() => {
-    if (!hydrated) return;
-
-    const cachedHome = readHomeStoryCache(apiLang);
-    if (!cachedHome) return;
-
-    setTopStory((current) => current || cachedHome.topStory || null);
-    setLatestFromBackend((current) => (Array.isArray(current) && current.length > 0) ? current : cachedHome.freshStories);
-  }, [apiLang, hydrated]);
-
-
   // Fetch homepage data (latest) from backend.
   React.useEffect(() => {
     if (!hydrated) return;
 
     const controller = new AbortController();
     const isBackgroundRefresh = homepagePublicRefreshTick > 0;
-    const cachedHome = readHomeStoryCache(apiLang);
 
     if (!isBackgroundRefresh) {
       setLatestRawStories(null);
@@ -3799,52 +3768,43 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
 
     (async () => {
       // Latest news drives the center homepage; do not wait for side-channel fetches.
-      const latestPromise = fetchPublicNews({ language: apiLang, limit: HOME_FRESH_SOURCE_LIMIT, signal: controller.signal });
+      const latestPromise = resolveHomepageLatestStories(apiLang, controller.signal);
       const breakingPromise = fetchPublicNews({ category: 'breaking', language: apiLang, limit: 10, signal: controller.signal });
       breakingPromise.catch(() => null);
 
       const [latestResult] = await Promise.allSettled([latestPromise]);
       if (controller.signal.aborted) return;
-      const latestResp = latestResult.status === 'fulfilled'
+      const latest = latestResult.status === 'fulfilled'
         ? latestResult.value
         : {
-            items: [],
-            meta: { limit: HOME_FRESH_SOURCE_LIMIT },
+            topStory: null,
+            freshStories: null,
+            rawStories: null,
             endpoint: '',
             status: undefined,
             error: latestResult.reason instanceof Error ? latestResult.reason.message : 'fetch failed',
           };
-      const latestArticles = Array.isArray(latestResp.items) ? latestResp.items : [];
       if (process.env.NODE_ENV !== 'production') {
-        if (latestResp.error) {
+        if (latest.error) {
           // eslint-disable-next-line no-console
           console.error('[homepage] latest news fetch failed', {
             lang: apiLang,
-            endpoint: latestResp.endpoint,
-            status: latestResp.status ?? null,
-            error: latestResp.error,
+            endpoint: latest.endpoint,
+            status: latest.status ?? null,
+            error: latest.error,
           });
-        } else if (!latestArticles.length) {
+        } else if (!Array.isArray(latest.rawStories) || !latest.rawStories.length) {
           // eslint-disable-next-line no-console
           console.warn('[homepage] latest news returned 0 items', {
             lang: apiLang,
-            endpoint: latestResp.endpoint,
+            endpoint: latest.endpoint,
           });
         }
       }
 
-      if (latestResp.error && cachedHome) {
-        return;
-      }
-
-      const editorialLatestArticles = latestArticles.filter((article) => !isHomepageSponsoredContent(article, apiLang));
-      const nextTopStory = editorialLatestArticles[0] || null;
-      const nextFreshStories = editorialLatestArticles.map((a) => articleToFeedItem(a as any, apiLang));
-
-      setTopStory(nextTopStory);
-      setLatestRawStories(editorialLatestArticles);
-      setLatestFromBackend(nextFreshStories);
-      writeHomeStoryCache(apiLang, nextTopStory, nextFreshStories);
+      setTopStory(latest.topStory);
+      setLatestRawStories(latest.rawStories || []);
+      setLatestFromBackend(latest.freshStories || []);
 
       const [breakingResult] = await Promise.allSettled([breakingPromise]);
       if (controller.signal.aborted) return;
@@ -3865,11 +3825,9 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
       void breakingResp;
     })().catch(() => {
       if (controller.signal.aborted) return;
-      if (!cachedHome) {
-        setTopStory(null);
-        setLatestRawStories([]);
-        setLatestFromBackend([]);
-      }
+      setTopStory(null);
+      setLatestRawStories([]);
+      setLatestFromBackend([]);
     });
 
     return () => controller.abort();
@@ -4737,7 +4695,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
                         featureDotColor: undefined,
                       }}
                       onToast={onToast}
-                      isLoading={latestFromBackend == null}
+                      isLoading={shouldShowHomepageTopStorySkeleton(topStory, latestFromBackend)}
                     />
                   </div>
                   <div className="fresh-stories-card">
