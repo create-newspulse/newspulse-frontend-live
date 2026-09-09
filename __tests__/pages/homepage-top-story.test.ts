@@ -2,10 +2,12 @@ import fs from 'fs';
 import path from 'path';
 import {
   HOMEPAGE_RESPONSE_CACHE_CONTROL,
+  estimateReadMinutes,
   getServerSideProps,
   resolveHomepageLatestStories,
   selectHomepageEditorialArticles,
   shouldShowHomepageTopStorySkeleton,
+  storyLocationLabel,
 } from '../../pages/index';
 import { fetchPublicNews } from '../../lib/publicNewsApi';
 
@@ -98,10 +100,30 @@ describe('homepage Top Story freshness', () => {
     expect(selected.map((item) => item._id)).toEqual(['sept-9', 'sept-5']);
   });
 
+  test('public Top Story metadata renders location without publication status and keeps reading time', () => {
+    const publicAhmedabadArticle = article({
+      _id: 'ahmedabad-location',
+      status: 'published',
+      location: {
+        district: 'ahmedabad',
+        state: 'draft',
+      },
+    });
+
+    expect(storyLocationLabel(publicAhmedabadArticle)).toBe('Ahmedabad');
+    expect(storyLocationLabel(publicAhmedabadArticle)).not.toContain('draft');
+    expect(storyLocationLabel(publicAhmedabadArticle)).not.toContain('published');
+    expect(storyLocationLabel(article({ location: { city: 'ahmedabad', state: 'gujarat' } }))).toBe('Ahmedabad, Gujarat');
+    expect(estimateReadMinutes(Array.from({ length: 1321 }, () => 'word').join(' '))).toBe(7);
+    expect(source).toContain('<MapPin className="h-3.5 w-3.5" /> {vm.location}');
+    expect(source).toContain('<BookOpen className="h-3.5 w-3.5" /> {vm.readMinutes} {t(\'common.minutesShort\')}');
+  });
+
   test('server-rendered homepage props contain the newest published Top Story and no-store cache headers', async () => {
     (fetchPublicNews as jest.Mock).mockResolvedValueOnce({
       items: [
         article({ _id: 'sept-5', title: '5 Sept article', slug: 'sept-5', publishedAt: '2026-09-05T08:00:00.000Z' }),
+        article({ _id: 'draft-sept-10', title: 'Draft homepage article', slug: 'draft-sept-10', status: 'draft', publishedAt: '2026-09-10T08:00:00.000Z' }),
         article({ _id: 'sept-9', title: '9 Sept article', slug: 'sept-9', publishedAt: '2026-09-09T08:00:00.000Z' }),
       ],
       meta: {},
@@ -115,6 +137,7 @@ describe('homepage Top Story freshness', () => {
     expect(fetchPublicNews).toHaveBeenCalledWith(expect.objectContaining({ language: 'en', limit: 40 }));
     expect(result.props.initialTopStory._id).toBe('sept-9');
     expect(result.props.initialFreshStories.map((item: any) => item.id)).toEqual(['sept-9', 'sept-5']);
+    expect(result.props.initialFreshStories.map((item: any) => item.title)).not.toContain('Draft homepage article');
   });
 
   test('stale previous articles are not read from persisted homepage cache as loading fallback', () => {
@@ -128,6 +151,7 @@ describe('homepage Top Story freshness', () => {
   test('hydration refetch uses the same latest-story query and selector as server render', async () => {
     const items = [
       article({ _id: 'sept-5', title: '5 Sept article', slug: 'sept-5', publishedAt: '2026-09-05T08:00:00.000Z' }),
+      article({ _id: 'draft-sept-10', title: 'Draft homepage article', slug: 'draft-sept-10', status: 'draft', publishedAt: '2026-09-10T08:00:00.000Z' }),
       article({ _id: 'sept-9', title: '9 Sept article', slug: 'sept-9', publishedAt: '2026-09-09T08:00:00.000Z' }),
     ];
 
@@ -139,6 +163,8 @@ describe('homepage Top Story freshness', () => {
     const clientResult = await resolveHomepageLatestStories('en');
 
     expect(serverResult.props.initialTopStory._id).toBe(clientResult.topStory?._id);
+    expect(serverResult.props.initialFreshStories.map((item: any) => item.id)).toEqual(clientResult.freshStories?.map((item: any) => item.id));
+    expect(clientResult.freshStories?.map((item: any) => item.title)).not.toContain('Draft homepage article');
     expect(fetchPublicNews).toHaveBeenNthCalledWith(1, expect.objectContaining({ language: 'en', limit: 40 }));
     expect(fetchPublicNews).toHaveBeenNthCalledWith(2, expect.objectContaining({ language: 'en', limit: 40 }));
   });

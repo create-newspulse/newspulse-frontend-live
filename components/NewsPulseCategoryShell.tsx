@@ -7,6 +7,7 @@ import HomeRightRail, { articleToHomeRightRailFeedItem, DEFAULT_HOME_RIGHT_RAIL_
 import AdSlot from '../src/components/ads/AdSlot';
 import { usePublicSettings } from '../src/context/PublicSettingsContext';
 import { DEFAULT_NORMALIZED_PUBLIC_SETTINGS } from '../src/lib/publicSettings';
+import { filterPubliclyPublishedArticles } from '../lib/localizedArticleFields';
 import { fetchPublicNews, type Article } from '../lib/publicNewsApi';
 import {
 	buildHomeSpotlightItems,
@@ -77,7 +78,7 @@ function readCachedHomeSpotlightItems(lang: HomeRightRailLang): any[] {
 
 			const excludedIdentitySet = new Set<string>();
 			collectHomeSpotlightIdentifiers(cache.topStory, lang).forEach((value) => excludedIdentitySet.add(value));
-			const freshStories = Array.isArray(cache.freshStories) ? cache.freshStories : [];
+			const freshStories = filterPubliclyPublishedArticles(cache.freshStories);
 			const items = selectHomeSpotlightFeedItems(freshStories, excludedIdentitySet);
 			if (items.length) return items;
 		} catch {}
@@ -97,9 +98,9 @@ function readCachedHomeLatestItems(lang: HomeRightRailLang): any[] {
 			if (!cache || typeof cache !== 'object') continue;
 			if (cache.lang && cache.lang !== lang) continue;
 
-			const freshStories = Array.isArray(cache.freshStories) ? cache.freshStories : [];
+			const freshStories = filterPubliclyPublishedArticles(cache.freshStories);
 			const topStory = cache.topStory && typeof cache.topStory === 'object'
-				? articleToHomeRightRailFeedItem(cache.topStory as any, lang)
+				? filterPubliclyPublishedArticles([cache.topStory]).map((article) => articleToHomeRightRailFeedItem(article as any, lang))[0] || null
 				: null;
 			const items = [topStory, ...freshStories].filter(Boolean);
 			if (!items.length) continue;
@@ -120,6 +121,10 @@ function readCachedHomeLatestItems(lang: HomeRightRailLang): any[] {
 
 export default function NewsPulseCategoryShell({ activeCategory, latestItems, lang, rightRail, tickerContent, topContent, children }: NewsPulseCategoryShellProps) {
 	const activePath = routeForCategory(activeCategory);
+	const publicLatestItems = React.useMemo(
+		() => Array.isArray(latestItems) ? filterPubliclyPublishedArticles(latestItems) : latestItems,
+		[latestItems]
+	);
 	const { settings, isModuleEnabled, moduleOrder } = usePublicSettings();
 	const [globalLatestItems, setGlobalLatestItems] = React.useState<any[] | null>(null);
 	const [homeSpotlightItems, setHomeSpotlightItems] = React.useState<any[] | null>(null);
@@ -141,7 +146,7 @@ export default function NewsPulseCategoryShell({ activeCategory, latestItems, la
 			if (cancelled || controller.signal.aborted) return;
 
 			const latestResp = latestResult.status === 'fulfilled' ? latestResult.value : null;
-			const latestArticles = Array.isArray(latestResp?.items) ? latestResp.items : [];
+			const latestArticles = filterPubliclyPublishedArticles(latestResp?.items);
 			const sectionArticlesByKey = sectionResult.status === 'fulfilled' ? sectionResult.value : {};
 			const sponsoredFeature = sponsoredFeatureResult.status === 'fulfilled' ? sponsoredFeatureResult.value : null;
 
@@ -175,7 +180,7 @@ export default function NewsPulseCategoryShell({ activeCategory, latestItems, la
 		};
 	}, [lang, rightRail]);
 
-	const rightRailLatestItems = globalLatestItems && globalLatestItems.length > 0 ? globalLatestItems : latestItems;
+	const rightRailLatestItems = globalLatestItems && globalLatestItems.length > 0 ? globalLatestItems : publicLatestItems;
 	const spotlightItems = Array.isArray(homeSpotlightItems) ? homeSpotlightItems : [];
 	const resolvedRightRail = rightRail ?? (
 		<HomeRightRail theme={DEFAULT_HOME_RIGHT_RAIL_THEME} latestItems={rightRailLatestItems} lang={lang} />

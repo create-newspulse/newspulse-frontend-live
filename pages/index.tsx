@@ -58,7 +58,8 @@ import { usePublicFounderToggles } from "../hooks/usePublicFounderToggles";
 import { DEFAULT_PUBLIC_FOUNDER_TOGGLES, type PublicFounderToggles } from "../lib/publicFounderToggles";
 import { subscribePublicDataRefresh } from "../lib/publicDataRefresh";
 import { hasStoredConsentForCategory } from "../src/consent/cookieConsent";
-import { getPublicArticleStatus } from "../lib/localizedArticleFields";
+import { filterPubliclyPublishedArticles, isPubliclyPublishedArticle } from "../lib/localizedArticleFields";
+import { formatPublicArticleLocation } from "../lib/publicLocation";
 import {
   ArrowRight,
   Bell,
@@ -533,8 +534,7 @@ function getHomepagePublicationTimeValue(article: any): number {
 }
 
 export function selectHomepageEditorialArticles(items: Article[] | null | undefined, requestedLang: UiLangCode): Article[] {
-  return (Array.isArray(items) ? items : [])
-    .filter((article) => getPublicArticleStatus(article) === 'published')
+  return filterPubliclyPublishedArticles(items)
     .filter((article) => !isHomepageSponsoredContent(article, requestedLang))
     .slice()
     .sort((left, right) => {
@@ -711,7 +711,7 @@ function makeDekFromContent(text: string): string {
   return `${slice.trim()}…`;
 }
 
-function estimateReadMinutes(text: string): number {
+export function estimateReadMinutes(text: string): number {
   const s = String(text || '').trim();
   if (!s) return 1;
   const words = s.split(/\s+/g).filter(Boolean).length;
@@ -719,16 +719,8 @@ function estimateReadMinutes(text: string): number {
   return Math.max(1, Math.ceil(words / 220));
 }
 
-function storyLocationLabel(story: any): string {
-  const loc = story?.location;
-  if (typeof loc === 'string') return loc.trim();
-  const parts = [
-    safeTitle(loc?.city),
-    safeTitle(loc?.district),
-    safeTitle(loc?.state),
-    safeTitle(loc?.region),
-  ].filter(Boolean);
-  return parts.join(', ');
+export function storyLocationLabel(story: any): string {
+  return formatPublicArticleLocation(story);
 }
 
 function pickTranslatedField(item: any, lang: 'en' | 'hi' | 'gu', field: string): string {
@@ -801,6 +793,7 @@ function articleToFeedItem(a: Article, requestedLang: 'en' | 'hi' | 'gu') {
     lang: String((a as any)?.lang || (a as any)?.language || (a as any)?.sourceLang || (a as any)?.sourceLanguage || '').trim(),
     slug,
     translationGroupId: getStoryTranslationGroupId(a as any) || undefined,
+    status: isPubliclyPublishedArticle(a as any) ? 'published' : 'unpublished',
     title,
     desc,
     titleIsOriginal: titleRes.isOriginal,

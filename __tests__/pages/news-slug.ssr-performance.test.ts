@@ -58,7 +58,10 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
     mockFetchSequence((url) => {
       if (url.includes('/api/public/news/slug/')) return { article: article() };
       if (url.includes('/api/public/news?')) {
-        return { items: [article({ _id: 'other-1', slug: 'other-story', title: 'Other Story' })] };
+        return { items: [
+          article({ _id: 'other-1', slug: 'other-story', title: 'Other Story' }),
+          article({ _id: 'draft-related', slug: 'draft-related', title: 'Draft Related Story', status: 'draft' }),
+        ] };
       }
       return {};
     });
@@ -69,6 +72,7 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
     expect(result.props.safeHtml).toContain('Body');
     expect(result.props.relatedStories).toHaveLength(1);
     expect(result.props.relatedStories[0]._id).toBe('other-1');
+    expect(result.props.relatedStories.map((item: any) => item._id)).not.toContain('draft-related');
   });
 
   test('never re-fetches the translation group that the API route already resolved', async () => {
@@ -119,6 +123,17 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
     const result: any = await getServerSideProps(createCtx('missing-story'));
 
     expect(result.notFound).toBe(true);
+  });
+
+  test('returns notFound when a public slug resolves to a draft article', async () => {
+    mockFetchSequence((url) => {
+      if (url.includes('/api/public/news/slug/')) return { article: article({ status: 'draft', title: 'Draft Detail Story' }) };
+      return { items: [] };
+    });
+
+    const result: any = await getServerSideProps(createCtx('draft-detail-story'));
+
+    expect(result).toEqual({ notFound: true });
   });
 
   test('preserves the permanent canonical-slug redirect', async () => {

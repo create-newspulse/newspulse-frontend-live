@@ -25,7 +25,12 @@ jest.mock('../../components/home/HomeRightRail', () => ({
     accent: '#2563eb',
     accent2: '#7c3aed',
   },
-  articleToHomeRightRailFeedItem: (article: any) => ({ ...article, publishedAt: undefined, iso: article.publishedAt }),
+  articleToHomeRightRailFeedItem: (article: any) => ({
+    ...article,
+    imageSrc: jest.requireActual('../../lib/coverImages').resolveCoverImageUrl(article),
+    publishedAt: undefined,
+    iso: article.publishedAt,
+  }),
   default: ({ latestItems, lang }: { latestItems: any[] | null; lang: string }) => (
     <aside data-testid="home-right-rail" data-lang={lang} data-count={Array.isArray(latestItems) ? latestItems.length : -1} />
   ),
@@ -49,6 +54,7 @@ jest.mock('../../components/home/HomeSharedFeatureModules', () => ({
         data-count={list.length}
         data-first-category={String(first?.category || '')}
         data-first-title={String(first?.title || '')}
+        data-first-image-src={String(first?.imageSrc || '')}
       />
     );
   },
@@ -79,8 +85,17 @@ function publicArticle(id: string, category: string, publishedAt: string) {
     title: `${category} story ${id}`,
     summary: 'A useful homepage-style summary for the shared spotlight module.',
     category,
+    status: 'published',
     publishedAt,
     imageUrl: `/images/${id}.jpg`,
+  };
+}
+
+function draftArticle(id: string, category: string, publishedAt: string) {
+  return {
+    ...publicArticle(id, category, publishedAt),
+    title: `draft ${category} story ${id}`,
+    status: 'draft',
   };
 }
 
@@ -94,6 +109,10 @@ function firstSpotlightCategory(): string {
 
 function firstSpotlightTitle(): string {
   return String(screen.getByTestId('home-spotlight').getAttribute('data-first-title') || '');
+}
+
+function firstSpotlightImageSrc(): string {
+  return String(screen.getByTestId('home-spotlight').getAttribute('data-first-image-src') || '');
 }
 
 function mockPublicNews(options: { categories?: Record<string, any[]>; global?: any[] } = {}) {
@@ -121,7 +140,10 @@ describe('NewsPulseCategoryShell', () => {
 
   test('reuses Home shell rails and highlights the active category route', async () => {
     render(
-      <NewsPulseCategoryShell activeCategory="business" latestItems={[{ id: '1' }, { id: '2' }]} lang="en">
+      <NewsPulseCategoryShell activeCategory="business" latestItems={[
+        publicArticle('latest-1', 'business', '2026-09-05T10:00:00.000Z'),
+        publicArticle('latest-2', 'business', '2026-09-05T09:00:00.000Z'),
+      ]} lang="en">
         <h1>Business Desk</h1>
       </NewsPulseCategoryShell>
     );
@@ -182,6 +204,79 @@ describe('NewsPulseCategoryShell', () => {
     expect(fetchPublicNewsMock).toHaveBeenCalledWith(expect.objectContaining({ category: 'science-technology', language: 'en', limit: 18 }));
     expect(firstSpotlightCategory()).toBe('business');
     expect(firstSpotlightTitle()).toBe('business story global-business');
+  });
+
+  test('passes the same resolved article image into shared Spotlight items', async () => {
+    const imageUrl = 'https://res.cloudinary.com/dc918or5b/image/upload/v1788930962/newspulse/articles/tvo76azi8mlvnqziihay.png';
+    mockPublicNews({
+      global: [
+        publicArticle('global-lead', 'national', '2026-09-05T10:00:00.000Z'),
+        {
+          ...publicArticle('target-article', 'regional', '2026-09-05T09:00:00.000Z'),
+          imageUrl,
+          coverImage: { url: imageUrl, publicId: 'newspulse/articles/tvo76azi8mlvnqziihay' },
+          coverImageUrl: imageUrl,
+        },
+      ],
+    });
+
+    render(
+      <NewsPulseCategoryShell activeCategory="regional" latestItems={[]} lang="en">
+        <h1>Regional</h1>
+      </NewsPulseCategoryShell>
+    );
+
+    await waitFor(() => {
+      expect(firstSpotlightImageSrc()).toBe(imageUrl);
+    });
+  });
+
+  test('excludes draft articles from shared Spotlight and latest rail data', async () => {
+    mockPublicNews({
+      global: [
+        publicArticle('global-lead', 'national', '2026-09-05T10:00:00.000Z'),
+        draftArticle('draft-regional', 'regional', '2026-09-05T09:30:00.000Z'),
+        publicArticle('published-regional', 'regional', '2026-09-05T09:00:00.000Z'),
+      ],
+    });
+
+    render(
+      <NewsPulseCategoryShell activeCategory="regional" latestItems={[
+        draftArticle('draft-prop', 'regional', '2026-09-05T11:00:00.000Z'),
+        publicArticle('published-prop', 'regional', '2026-09-05T10:00:00.000Z'),
+      ]} lang="en">
+        <h1>Regional</h1>
+      </NewsPulseCategoryShell>
+    );
+
+    await waitFor(() => {
+      expect(firstSpotlightTitle()).toBe('regional story published-regional');
+    });
+    expect(firstSpotlightTitle()).not.toContain('draft');
+    expect(screen.getByTestId('home-right-rail').getAttribute('data-count')).toBe('2');
+  });
+
+  test('does not resurrect cached draft homepage stories from storage', async () => {
+    window.localStorage.setItem('newspulse-home-cache', JSON.stringify({
+      lang: 'en',
+      topStory: draftArticle('cached-draft-lead', 'national', '2026-09-05T12:00:00.000Z'),
+      freshStories: [draftArticle('cached-draft-story', 'business', '2026-09-05T11:00:00.000Z')],
+    }));
+    mockPublicNews({ global: [] });
+
+    render(
+      <NewsPulseCategoryShell activeCategory="business" latestItems={[]} lang="en">
+        <h1>Business</h1>
+      </NewsPulseCategoryShell>
+    );
+
+    expect(screen.queryByTestId('home-spotlight')).toBeNull();
+  expect(screen.getByTestId('home-right-rail').getAttribute('data-count')).toBe('0');
+
+    await waitFor(() => {
+      expect(fetchPublicNewsMock).toHaveBeenCalledWith(expect.objectContaining({ language: 'en', limit: 40 }));
+    });
+    expect(screen.queryByTestId('home-spotlight')).toBeNull();
   });
 
   test('does not filter shared Spotlight by activeCategory', async () => {

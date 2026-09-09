@@ -1,5 +1,6 @@
 import { getPublicApiBaseUrl } from './publicApiBase';
 import { getCategoryQueryKey } from './categoryKeys';
+import { filterPubliclyPublishedArticles } from './localizedArticleFields';
 
 export type ArticleBase = {
   _id: string;
@@ -159,7 +160,7 @@ export async function fetchPublicNews(options: {
       };
     }
 
-    const items = unwrapArticles(data);
+    const items = filterPubliclyPublishedArticles(unwrapArticles(data));
     const meta: PublicNewsMeta = {
       total: data && typeof data === 'object' ? (data.total as number | undefined) : undefined,
       page: data && typeof data === 'object' ? (data.page as number | undefined) : undefined,

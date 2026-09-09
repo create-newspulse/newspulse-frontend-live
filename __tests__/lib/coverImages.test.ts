@@ -63,6 +63,45 @@ describe('coverImages', () => {
     expect(resolveCoverFitMode(article, { src: resolveCoverImageUrl(article), altText: 'Hero image' })).toBe('cover');
   });
 
+  test('resolves supported current and alternate article image fields consistently', () => {
+    const fields = [
+      { imageUrl: 'https://res.cloudinary.com/demo/image/upload/image-url.jpg' },
+      { imageURL: 'https://res.cloudinary.com/demo/image/upload/image-url-uppercase.jpg' },
+      { coverImageUrl: 'https://res.cloudinary.com/demo/image/upload/cover-image-url.jpg' },
+      { coverImage: { url: 'https://res.cloudinary.com/demo/image/upload/cover-image.jpg' } },
+      { featuredImageUrl: 'https://res.cloudinary.com/demo/image/upload/featured-image-url.jpg' },
+      { featuredImage: { url: 'https://res.cloudinary.com/demo/image/upload/featured-image.jpg' } },
+      { thumbnailUrl: 'https://res.cloudinary.com/demo/image/upload/thumbnail-url.jpg' },
+      { thumbnail: { url: 'https://res.cloudinary.com/demo/image/upload/thumbnail.jpg' } },
+      { media: { url: 'https://res.cloudinary.com/demo/image/upload/media-url.jpg' } },
+      { media: [{ thumbnailUrl: 'https://res.cloudinary.com/demo/image/upload/media-thumbnail-url.jpg' }] },
+    ];
+
+    for (const field of fields) {
+      const article: any = { _id: 'article-field', ...field };
+      const expected = JSON.stringify(field).match(/https:\/\/[^\"]+/)?.[0];
+      expect(resolveCoverImageUrl(article)).toBe(expected);
+    }
+  });
+
+  test('resolves multilingual variants from source/group-level image when localized text has no media', () => {
+    const article: any = {
+      _id: 'article-multilingual',
+      imageUrl: 'https://res.cloudinary.com/demo/image/upload/source-image.jpg',
+      translations: {
+        hi: { title: 'Hindi title', summary: 'Hindi summary' },
+        gu: { title: 'Gujarati title', summary: 'Gujarati summary' },
+      },
+    };
+
+    expect(resolveCoverImageUrl(article, { lang: 'hi' })).toBe('https://res.cloudinary.com/demo/image/upload/source-image.jpg');
+    expect(resolveCoverImageUrl(article, { lang: 'gu' })).toBe('https://res.cloudinary.com/demo/image/upload/source-image.jpg');
+  });
+
+  test('returns empty for genuinely missing image fields', () => {
+    expect(resolveCoverImageUrl({ _id: 'article-missing', title: 'No image article' })).toBe('');
+  });
+
   test('ignores invalid local file paths and keeps searching for a usable remote image', () => {
     const article: any = {
       _id: 'article-4',

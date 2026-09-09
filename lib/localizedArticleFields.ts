@@ -186,6 +186,15 @@ export function getPublicArticleStatus(article: any): LocalizedArticleFields['st
   return 'unknown';
 }
 
+export function isPubliclyPublishedArticle(article: any): boolean {
+  return getPublicArticleStatus(article) === 'published';
+}
+
+export function filterPubliclyPublishedArticles<T>(articles: T[] | null | undefined): T[] {
+  const input = Array.isArray(articles) ? articles : [];
+  return input.filter((article) => isPubliclyPublishedArticle(article as any));
+}
+
 function getTranslationContainer(article: any): any {
   return article?.translations || article?.translation || article?.i18n || article?.localized || article?.locales || article?.byLang || article?.textByLang || null;
 }

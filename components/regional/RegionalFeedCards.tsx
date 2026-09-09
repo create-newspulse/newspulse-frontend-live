@@ -8,6 +8,7 @@ import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImag
 import { getStoryTitleHookColor, splitStoryTitleHook } from '../../lib/storyTitleHook';
 import StoryImage from '../../src/components/story/StoryImage';
 import { normalizeRouteLocale } from '../../lib/localizedArticleFields';
+import { formatPublicLocationParts } from '../../lib/publicLocation';
 
 function classNames(...s: Array<string | false | null | undefined>) {
   return s.filter(Boolean).join(' ');
@@ -58,17 +59,7 @@ function extractFirstTaggedValue(tags: string[], key: 'state' | 'district' | 'ci
 }
 
 function prettifyLocationLabel(value: string): string {
-  const raw = String(value || '').trim();
-  if (!raw) return '';
-
-  // If it looks like a slug-ish ASCII token, make it human-friendly.
-  const asciiSafe = /^[a-z0-9\s-]+$/i.test(raw);
-  if (!asciiSafe) return raw;
-
-  const spaced = raw.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
-  if (!spaced) return raw;
-
-  return spaced.replace(/\b[a-z]/g, (m) => m.toUpperCase());
+  return formatPublicLocationParts([value]);
 }
 
 function stripKnownTagPrefixes(tag: string): string {
@@ -250,8 +241,7 @@ function StoryCard({
   const isOriginal = !!storyLocale && storyLocale !== requestedLang;
 
   const coverUrl = resolveCoverImageUrl(story);
-  const status = String(story?.status || story?.state || '').trim();
-  const footerLocation = locationLabels[0] && status && normalizeBadgeKey(locationLabels[0]) === normalizeBadgeKey(status) ? '' : (locationLabels[0] || '');
+  const footerLocation = locationLabels[0] || '';
   const titleParts = splitStoryTitleHook(title);
   const titleHookColor = getStoryTitleHookColor(categoryLabel || badgeLabels[0] || fallbackCategoryLabel);
   const topMetaLabels = badgeLabels.slice(0, 3);
@@ -282,9 +272,6 @@ function StoryCard({
               {label}
             </span>
           ))}
-          {status && !topMetaLabels.some((label) => normalizeBadgeKey(label) === normalizeBadgeKey(status)) ? (
-            <span className="rounded-full bg-newsPulse-blue/10 px-2.5 py-1 text-newsPulse-blue">{status}</span>
-          ) : null}
           <span className="inline-flex items-center gap-1.5 text-[11px] font-medium normal-case tracking-normal text-slate-500">
             <span className="h-1 w-1 rounded-full bg-slate-300" />
             <span>{dateText}</span>
@@ -311,8 +298,6 @@ function StoryCard({
 
         <div className="mt-3.5 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-500">
           {footerLocation ? <span className="truncate">📍 {footerLocation}</span> : null}
-          {footerLocation && status ? <span className="hidden sm:inline text-slate-300">•</span> : null}
-          {status ? <span className="capitalize">{status}</span> : null}
         </div>
 
         {!!story?.videoUrl ? (

@@ -96,12 +96,15 @@ function collectImageCandidates(source: any): unknown[] {
     source?.featuredImage,
     source?.featuredImageUrl,
     source?.thumbnail,
+    source?.thumbnailUrl,
     !Array.isArray(activeMedia) ? activeMedia?.cover : undefined,
     !Array.isArray(activeMedia) ? activeMedia?.image : undefined,
     !Array.isArray(activeMedia) ? activeMedia?.thumbnail : undefined,
+    !Array.isArray(activeMedia) ? activeMedia?.thumbnailUrl : undefined,
     media0?.cover,
     media0?.image,
     media0?.thumbnail,
+    media0?.thumbnailUrl,
     media0,
   ];
 }

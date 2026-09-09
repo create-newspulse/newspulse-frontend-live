@@ -1,10 +1,12 @@
 import {
+  filterPubliclyPublishedArticles,
   getLocalizedArticleFields,
   getLocalizedContent,
   getLocalizedSlug,
   getLocalizedSummary,
   STRICT_LOCALE_POLICY,
   getLocalizedTitle,
+  isPubliclyPublishedArticle,
 } from '../../lib/localizedArticleFields';
 
 describe('localizedArticleFields', () => {
@@ -151,5 +153,14 @@ describe('localizedArticleFields', () => {
     expect(getLocalizedArticleFields({ ...baseArticle, status: 'archived', publishedAt: '2026-01-01T10:00:00.000Z' }, 'en').isVisible).toBe(false);
     expect(getLocalizedArticleFields({ ...baseArticle, archived: true, publishedAt: '2026-01-01T10:00:00.000Z' }, 'en').isVisible).toBe(false);
     expect(getLocalizedArticleFields({ ...baseArticle, deleted: true, publishedAt: '2026-01-01T10:00:00.000Z' }, 'en').isVisible).toBe(false);
+  });
+
+  test('exposes one canonical public-published predicate for collection filtering', () => {
+    const published: any = { _id: 'published', status: 'published', publishedAt: '2026-01-01T10:00:00.000Z' };
+    const draft: any = { _id: 'draft', status: 'draft', publishedAt: '2026-01-02T10:00:00.000Z' };
+
+    expect(isPubliclyPublishedArticle(published)).toBe(true);
+    expect(isPubliclyPublishedArticle(draft)).toBe(false);
+    expect(filterPubliclyPublishedArticles([published, draft]).map((item) => item._id)).toEqual(['published']);
   });
 });

@@ -131,6 +131,16 @@ describe('CategoryFeedPage editorial listing', () => {
     expect(detailLink.getAttribute('href')).toBe('/news/founder-special');
   });
 
+  test('excludes draft articles from category cards', async () => {
+    renderEditorialPage([
+      mockArticle({ _id: 'published-editorial', slug: 'published-editorial', title: 'Published Editorial' }),
+      mockArticle({ _id: 'draft-editorial', slug: 'draft-editorial', title: 'Draft Editorial', status: 'draft' }),
+    ]);
+
+    expect(await screen.findByText('Published Editorial')).toBeTruthy();
+    expect(screen.queryByText('Draft Editorial')).toBeNull();
+  });
+
   test.each([
     ['en', 'English Editorial', '/news/english-editorial'],
     ['hi', 'हिंदी संपादकीय', '/hi/news/hindi-editorial'],

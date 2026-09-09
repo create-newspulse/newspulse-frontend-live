@@ -4,6 +4,7 @@ import { ChevronRight, GraduationCap, Play } from 'lucide-react';
 
 import { useYouthPulse } from '../../features/youthPulse/useYouthPulse';
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle } from '../../lib/contentFallback';
+import { isPubliclyPublishedArticle } from '../../lib/localizedArticleFields';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
 import { buildNewsUrl, isNavigableNewsHref } from '../../lib/newsRoutes';
 import type { Article } from '../../lib/publicNewsApi';
@@ -135,6 +136,7 @@ export function articleToHomeRightRailFeedItem(article: Article, requestedLang: 
     lang: String((article as any)?.lang || (article as any)?.language || (article as any)?.sourceLang || (article as any)?.sourceLanguage || '').trim(),
     slug,
     translationGroupId: getStoryTranslationGroupId(article as any) || undefined,
+    status: isPubliclyPublishedArticle(article as any) ? 'published' : 'unpublished',
     title,
     desc,
     titleIsOriginal: titleRes.isOriginal,

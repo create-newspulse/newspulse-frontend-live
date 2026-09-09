@@ -1,4 +1,5 @@
 import { resolveArticleSlug } from './articleSlugs';
+import { filterPubliclyPublishedArticles, isPubliclyPublishedArticle } from './localizedArticleFields';
 import { fetchPublicNews, type Article } from './publicNewsApi';
 import { resolveSponsoredContentMeta } from './sponsoredContent';
 import { getStoryDateTimeValue } from './storyDateTime';
@@ -92,6 +93,7 @@ function homeSpotlightSortTime(item: any): number {
 export function selectHomeSpotlightFeedItems(items: any[], excludedIdentitySet: Set<string>): any[] {
   const seen = new Set<string>();
   const candidates = (Array.isArray(items) ? items : [])
+    .filter((item) => isPubliclyPublishedArticle(item))
     .map((item) => {
       const identity = homeSpotlightIdentity(item);
       if (!identity || seen.has(identity)) return null;
@@ -169,7 +171,7 @@ export function buildHomeSpotlightItems(options: {
   articleToFeedItem: (article: Article) => any;
   extraExcludedIdentitySet?: Set<string>;
 }): any[] {
-  const latestArticles = Array.isArray(options.latestArticles) ? options.latestArticles : [];
+  const latestArticles = filterPubliclyPublishedArticles(options.latestArticles);
   const editorialLatestArticles = latestArticles.filter((article) => !isHomeSpotlightSponsoredContent(article, options.lang));
   const topStory = editorialLatestArticles[0] || null;
   const excludedIdentitySet = new Set<string>(options.extraExcludedIdentitySet || []);
@@ -177,7 +179,7 @@ export function buildHomeSpotlightItems(options: {
 
   const rawHomepageStories = [
     ...editorialLatestArticles,
-    ...HOME_SPOTLIGHT_SECTION_KEYS.flatMap((sectionKey) => Array.isArray(options.sectionArticlesByKey[sectionKey]) ? options.sectionArticlesByKey[sectionKey] || [] : []),
+    ...HOME_SPOTLIGHT_SECTION_KEYS.flatMap((sectionKey) => filterPubliclyPublishedArticles(options.sectionArticlesByKey[sectionKey])),
   ];
 
   const feedItems = rawHomepageStories
@@ -215,7 +217,7 @@ export async function fetchHomeSpotlightSectionArticles(options: {
       });
 
       const items = Array.isArray(response?.items)
-        ? response.items
+        ? filterPubliclyPublishedArticles(response.items)
             .filter((article) => !isHomeSpotlightSponsoredContent(article, options.lang))
             .slice()
             .sort((left, right) => getStoryDateTimeValue(right) - getStoryDateTimeValue(left))

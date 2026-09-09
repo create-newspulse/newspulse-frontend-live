@@ -55,4 +55,10 @@ describe('next.config backend separation', () => {
 
     expect(JSON.stringify(rewrites)).toContain('https://newspulse-backend-real.onrender.com/admin-api/public/:path*');
   });
+
+  it('allows the next/image qualities used by article cards and hero images', () => {
+    const config = require('../next.config.js');
+
+    expect(config.images.qualities).toEqual([74, 75, 76, 78, 90]);
+  });
 });

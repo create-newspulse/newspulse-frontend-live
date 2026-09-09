@@ -49,8 +49,10 @@ jest.mock('../../features/youthPulse/useYouthPulse', () => ({
 
 jest.mock('../../src/components/story/StoryImage', () => ({
   __esModule: true,
-  default: ({ alt }: { alt: string }) => <img alt={alt} />,
-  ArticleHeroImage: ({ alt }: { alt: string }) => <img alt={alt} data-testid="article-hero-image" />,
+  default: ({ alt, src }: { alt: string; src?: string }) => <img alt={alt} src={src} />,
+  ArticleHeroImage: ({ alt, src, fallbackSrc }: { alt: string; src?: string | null; fallbackSrc?: string }) => (
+    <img alt={alt} src={src || fallbackSrc} data-testid="article-hero-image" />
+  ),
 }));
 
 jest.mock('../../hooks/useArticleAnalytics', () => ({
@@ -190,6 +192,48 @@ describe('pages/news/[slug] editorial detail', () => {
     expect(screen.queryByText('GU')).toBeNull();
     expect(screen.queryByText('Why Responsible Digital Journalism Matters More Than Ever')).toBeNull();
     expect(screen.queryByText('English article body')).toBeNull();
+  });
+
+  test('renders article detail hero with the resolved shared article image', async () => {
+    const imageUrl = 'https://res.cloudinary.com/dc918or5b/image/upload/v1788930962/newspulse/articles/tvo76azi8mlvnqziihay.png';
+
+    render(
+      <NewsSlugDetailPage
+        messages={{}}
+        locale="en"
+        lang="en"
+        slug="special-story"
+        siteUrl="https://www.newspulse.co.in"
+        article={editorialArticle({ imageUrl, coverImage: { url: imageUrl }, coverImageUrl: imageUrl }) as any}
+        safeHtml="<p>Complete article content</p>"
+        topStories={[]}
+        relatedStories={[]}
+        error={null}
+        pending={false}
+      />
+    );
+
+    expect(screen.getByTestId('article-hero-image').getAttribute('src')).toBe(imageUrl);
+  });
+
+  test('uses the article detail placeholder only when no usable image resolves', async () => {
+    render(
+      <NewsSlugDetailPage
+        messages={{}}
+        locale="en"
+        lang="en"
+        slug="special-story"
+        siteUrl="https://www.newspulse.co.in"
+        article={editorialArticle({ imageUrl: 'C:\\fakepath\\broken.jpg', coverImage: null, coverImageUrl: '' }) as any}
+        safeHtml="<p>Complete article content</p>"
+        topStories={[]}
+        relatedStories={[]}
+        error={null}
+        pending={false}
+      />
+    );
+
+    expect(screen.getByTestId('article-hero-image').getAttribute('src')).toBe('/fallback.svg');
   });
 
   test('renders Hindi article body on Hindi detail routes', async () => {

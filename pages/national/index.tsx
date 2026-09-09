@@ -22,6 +22,7 @@ import StoryImage, { TopStoryImage } from '../../src/components/story/StoryImage
 import { getPublicApiBaseUrl } from '../../lib/publicApiBase';
 import CategoryDeskHeader from '../../src/components/category/CategoryDeskHeader';
 import CategoryStoryHierarchy, { type CategoryStoryHierarchyItem } from '../../components/category/CategoryStoryHierarchy';
+import { formatPublicArticleLocation } from '../../lib/publicLocation';
 
 type AnyStory = any;
 
@@ -202,27 +203,7 @@ function storyExcerpt(story: AnyStory): string {
 }
 
 function storyLocation(story: AnyStory): string {
-  const loc = story?.location;
-
-  if (typeof loc === 'string' && loc.trim()) return loc.trim();
-  if (loc && typeof loc === 'object' && !Array.isArray(loc)) {
-    const parts = [
-      (loc as any)?.city,
-      (loc as any)?.district,
-      (loc as any)?.state,
-      (loc as any)?.country,
-    ]
-      .map((v) => (typeof v === 'string' ? v.trim() : ''))
-      .filter(Boolean);
-    if (parts.length) return parts.join(', ');
-  }
-
-  const fallbacks = [story?.region, story?.city, story?.state, story?.source?.name, story?.source];
-  for (const v of fallbacks) {
-    if (typeof v === 'string' && v.trim()) return v.trim();
-  }
-
-  return 'India';
+  return formatPublicArticleLocation(story) || 'India';
 }
 
 function matchesTopic(story: AnyStory, topic: TopicChip): boolean {
@@ -324,8 +305,7 @@ function CompactFeedRow({ story, lang }: { story: AnyStory; lang: 'en' | 'hi' | 
   const where = storyLocation(story);
   const tags = tagList(story?.tags);
   const tag = tags[0] || String(story?.topic || story?.section || '').trim();
-  const status = String((story as any)?.status || (story as any)?.state || '').trim();
-  const footerLocation = where && status && where.toLowerCase() === status.toLowerCase() ? '' : where;
+  const footerLocation = where;
   const translationStatus = String((story as any)?.translationStatus || '').trim();
   const titleParts = splitStoryTitleHook(safeTitle);
   const titleHookColor = getStoryTitleHookColor(tag || story?.category || story?.section);
@@ -358,7 +338,6 @@ function CompactFeedRow({ story, lang }: { story: AnyStory; lang: 'en' | 'hi' | 
       <div className="min-w-0 flex-1 px-4 pb-4 pt-4 sm:px-0 sm:py-0">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-gray-400">
           {tag ? <span className="rounded-full bg-newsPulse-blue/10 px-2.5 py-1 text-newsPulse-blue">{tag}</span> : null}
-          {status ? <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600 dark:bg-gray-800 dark:text-gray-300">{status}</span> : null}
           {lang === 'gu' && translationStatus ? (
             <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-slate-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300">
               {translationStatus}
@@ -382,8 +361,6 @@ function CompactFeedRow({ story, lang }: { story: AnyStory; lang: 'en' | 'hi' | 
 
         <div className="mt-3.5 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-500 dark:text-gray-400">
           {footerLocation ? <span className="truncate">📍 {footerLocation}</span> : null}
-          {footerLocation && status ? <span className="hidden sm:inline text-slate-300 dark:text-gray-600">•</span> : null}
-          {status ? <span className="capitalize">{status}</span> : null}
         </div>
       </div>
     </a>

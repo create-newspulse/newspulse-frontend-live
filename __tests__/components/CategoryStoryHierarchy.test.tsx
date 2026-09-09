@@ -10,7 +10,7 @@ jest.mock('next/link', () => ({
 
 jest.mock('../../src/components/story/StoryImage', () => ({
   __esModule: true,
-  default: ({ alt }: { alt: string }) => <img alt={alt} />,
+  default: ({ alt, src }: { alt: string; src?: string }) => <img alt={alt} src={src} data-testid="story-image" />,
 }));
 
 function story(index: number, overrides: Partial<CategoryStoryHierarchyItem> = {}): CategoryStoryHierarchyItem {
@@ -132,5 +132,23 @@ describe('CategoryStoryHierarchy', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
     expect(onLoadMore).toHaveBeenCalledTimes(1);
+  });
+
+  test('renders compact latest rows with the resolved article image and placeholder fallback', () => {
+    render(
+      <CategoryStoryHierarchy
+        items={[
+          ...Array.from({ length: 5 }, (_, index) => story(index + 1)),
+          story(6, { title: 'Compact image story', titleText: 'Compact image story', imageSrc: 'https://res.cloudinary.com/demo/image/upload/card.jpg' }),
+          story(7, { title: 'Compact missing image story', titleText: 'Compact missing image story', imageSrc: '' }),
+        ]}
+        categoryLabel="National News"
+        loadMoreLabel="Load More National Stories"
+        emptyTitle="No stories found"
+      />
+    );
+
+    expect(screen.getByAltText('Compact image story').getAttribute('src')).toBe('https://res.cloudinary.com/demo/image/upload/card.jpg');
+    expect(screen.getByAltText('Compact missing image story').getAttribute('src')).toBe('/fallback.svg');
   });
 });

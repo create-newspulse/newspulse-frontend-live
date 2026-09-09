@@ -7,7 +7,7 @@ import { useRouter } from 'next/router';
 import AdSlot from '../../src/components/ads/AdSlot';
 import CategoryHeader from '../../src/components/category/CategoryHeader';
 import { getCategoryQueryKey, getCategoryRouteKey } from '../../lib/categoryKeys';
-import { getLocalizedArticleFields, STRICT_LOCALE_POLICY, type RouteLocale } from '../../lib/localizedArticleFields';
+import { filterPubliclyPublishedArticles, getLocalizedArticleFields, STRICT_LOCALE_POLICY, type RouteLocale } from '../../lib/localizedArticleFields';
 import { formatArticleBodyHtml, splitArticleBodyBlocks, stripDuplicateOpeningParagraph } from '../../lib/articleBody';
 import { fetchPublicNewsGroup, unwrapArticle, type Article } from '../../lib/publicNewsApi';
 import { subscribePublicDataRefresh } from '../../lib/publicDataRefresh';
@@ -1064,7 +1064,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
           Array.isArray(listData?.data) ? listData.data :
           [];
 
-        return Array.isArray(itemsRaw) ? (itemsRaw as Article[]) : [];
+        return filterPubliclyPublishedArticles(Array.isArray(itemsRaw) ? (itemsRaw as Article[]) : []);
       } catch {
         return [] as Article[];
       }

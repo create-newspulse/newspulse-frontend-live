@@ -4,7 +4,7 @@ import { useRouter } from 'next/router';
 import React, { useMemo, useState } from 'react';
 import { getCategoryQueryKey, getCategoryRouteKey } from '../lib/categoryKeys';
 import { fetchPublicNews, type Article } from '../lib/publicNewsApi';
-import { getLocalizedArticleFields, STRICT_LOCALE_POLICY } from '../lib/localizedArticleFields';
+import { filterPubliclyPublishedArticles, getLocalizedArticleFields, STRICT_LOCALE_POLICY } from '../lib/localizedArticleFields';
 import { useLanguage } from '../utils/LanguageContext';
 import { useI18n } from '../src/i18n/LanguageProvider';
 import { buildNewsUrl, isNavigableNewsHref } from '../lib/newsRoutes';
@@ -255,7 +255,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
         return;
       }
 
-      const nextItems = dedupeArticles(Array.isArray(resp.items) ? resp.items : []);
+      const nextItems = dedupeArticles(filterPubliclyPublishedArticles(resp.items));
       setItems(nextItems);
       setPage(pageToLoad);
       setHasMore(hasMoreCategoryResults(resp, pageToLoad, requestedLimit));
@@ -334,7 +334,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
         });
       }
 
-      setItems(dedupeArticles(Array.isArray(resp.items) ? resp.items : []));
+      setItems(dedupeArticles(filterPubliclyPublishedArticles(resp.items)));
       setHasMore(hasMoreCategoryResults(resp, 1, CATEGORY_FEED_BATCH_SIZE));
       setLoaded(true);
     })().catch(() => {

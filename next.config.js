@@ -91,6 +91,7 @@ const nextConfig = {
   outputFileTracingRoot: __dirname,
 
   images: {
+    qualities: [74, 75, 76, 78, 90],
     domains: Array.from(
       new Set(
         ['res.cloudinary.com', 'newspulse-backend-real.onrender.com', getBackendHostname()].filter(Boolean)
