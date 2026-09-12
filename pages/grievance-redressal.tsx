@@ -8,7 +8,21 @@ const grievanceOfficerFallback = 'To be appointed / Details will be updated shor
 const chiefEditorFallback = 'Details will be updated shortly';
 const privacyEmail = 'privacy@newspulse.co.in';
 const submitSuccessMessage = 'Your grievance has been submitted successfully. Our team will review it as per the applicable timeline.';
+const grievanceResponseStatement = 'News Pulse will acknowledge receipt of a grievance within 24 hours. The Grievance Officer will take a decision on the grievance and communicate the decision to the complainant within 15 days of registration of the grievance, in accordance with the applicable rules.';
 const declarationText = 'I hereby declare that the information furnished above is true, correct, and complete to the best of my knowledge and belief.';
+
+function getReturnedGrievanceId(result: unknown): string {
+  if (!result || typeof result !== 'object') return '';
+
+  const fields = ['grievanceId', 'referenceId', 'trackingId', 'grievanceReference', 'referenceNumber'];
+  for (const field of fields) {
+    const value = (result as Record<string, unknown>)[field];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+    if (typeof value === 'number') return String(value);
+  }
+
+  return '';
+}
 
 type GrievanceFormState = {
   fullName: string;
@@ -44,6 +58,7 @@ export default function GrievanceRedressalPage() {
   const [form, setForm] = React.useState<GrievanceFormState>(initialFormState);
   const [error, setError] = React.useState<string | null>(null);
   const [success, setSuccess] = React.useState<string | null>(null);
+  const [successReferenceId, setSuccessReferenceId] = React.useState<string>('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const grievanceFormRef = React.useRef<HTMLFormElement | null>(null);
   const fullNameInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -103,6 +118,7 @@ export default function GrievanceRedressalPage() {
     event.preventDefault();
     setError(null);
     setSuccess(null);
+    setSuccessReferenceId('');
 
     const validationError = validateForm();
     if (validationError) {
@@ -139,6 +155,7 @@ export default function GrievanceRedressalPage() {
       }
 
       setSuccess(submitSuccessMessage);
+      setSuccessReferenceId(getReturnedGrievanceId(result));
       setForm(initialFormState);
     } catch {
       setError(submitErrorMessage);
@@ -192,7 +209,7 @@ export default function GrievanceRedressalPage() {
               Response timeline
             </div>
             <p className="mt-3 text-sm leading-7 text-slate-600">
-              We will acknowledge valid grievances within 24 hours and aim to resolve them within 15 days, where applicable.
+              {grievanceResponseStatement}
             </p>
           </div>
         </SurfacePanel>
@@ -201,7 +218,7 @@ export default function GrievanceRedressalPage() {
           <div className="text-[11px] font-black uppercase tracking-[0.16em] text-white/55">Response standard</div>
           <div className="mt-2 text-2xl font-black tracking-tight">Acknowledgement within 24 hours</div>
           <p className="mt-5 text-sm leading-7 text-white/72">
-            We will acknowledge valid grievances within 24 hours and aim to resolve them within 15 days, where applicable.
+            {grievanceResponseStatement}
           </p>
           <div className="mt-6 space-y-3 text-sm leading-7 text-white/74">
             <div className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-4">Submit the grievance form below for direct review by the News Pulse team.</div>
@@ -219,7 +236,12 @@ export default function GrievanceRedressalPage() {
           {
             icon: UserRound,
             title: 'Grievance Officer',
-            body: grievanceOfficer,
+            body: (
+              <div className="space-y-1">
+                <div className="font-semibold text-slate-800">{grievanceOfficer}</div>
+                <div>{grievanceEmail}</div>
+              </div>
+            ),
           },
           { icon: Mail, title: 'Editorial / Content Grievance', body: grievanceEmail },
           { icon: Mail, title: 'Privacy / DPDP Request', body: privacyEmail },
@@ -236,7 +258,12 @@ export default function GrievanceRedressalPage() {
       {showForm ? (
         <section className="mt-8 grid gap-6 lg:grid-cols-2 lg:items-stretch xl:gap-7">
           <SurfacePanel className="sm:p-8 lg:flex lg:h-full lg:flex-col">
-            {success ? <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{success}</div> : null}
+            {success ? (
+              <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                <div>{success}</div>
+                {successReferenceId ? <div className="mt-1 font-semibold">Reference ID: {successReferenceId}</div> : null}
+              </div>
+            ) : null}
             <SectionHeading
               title="Submit a grievance"
               description="Provide the publication details, the part alleged to be violative, and a clear summary for formal review."

@@ -86,6 +86,13 @@ export default function DigitalCodeOfEthicsPage() {
         </SurfacePanel>
 
         <SurfacePanel>
+          <SectionHeading title="Applicable Code of Ethics" description="" />
+          <p className="mt-4 text-sm leading-7 text-slate-600">
+            News Pulse observes the Norms of Journalistic Conduct of the Press Council of India, the applicable Programme Code, and applicable laws governing the publication of news and current-affairs content.
+          </p>
+        </SurfacePanel>
+
+        <SurfacePanel>
           <SectionHeading title="1. Purpose of this Code" description="" />
           <p className="mt-4 text-sm leading-7 text-slate-600">This Digital Code of Ethics has been created to ensure that News Pulse maintains high standards in digital news publishing. It is intended to guide our editorial decisions, newsroom practices, content review, correction handling, and public grievance redressal.</p>
           <p className="mt-3 text-sm leading-7 text-slate-600">This Code applies to news articles, reports, features, videos, images, explainers, editorials, sponsored content disclosures, community submissions, and any other public-facing content published by News Pulse.</p>

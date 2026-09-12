@@ -2,17 +2,19 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import GrievanceRedressalPage from '../../pages/grievance-redressal';
 
+const grievanceResponseStatement = 'News Pulse will acknowledge receipt of a grievance within 24 hours. The Grievance Officer will take a decision on the grievance and communicate the decision to the complainant within 15 days of registration of the grievance, in accordance with the applicable rules.';
+
 describe('pages/grievance-redressal', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     (global as any).fetch = jest.fn().mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input) === '/api/public/compliance-settings') {
+      if (String(input).startsWith('/api/public/compliance-settings')) {
         return {
           ok: true,
           json: async () => ({
             settings: {
               founderName: 'Kiran Parmar',
-              grievanceOfficerName: 'Asha Singh',
+              grievanceOfficerName: 'Shailesh Rathod',
               grievanceOfficerDesignation: 'Senior Grievance Officer',
               grievanceEmail: 'grievance@newspulse.co.in',
               grievanceOfficerLocation: 'India',
@@ -84,8 +86,13 @@ describe('pages/grievance-redressal', () => {
     expect(screen.queryByLabelText('Address for communication with PIN Code')).toBeNull();
 
     expect(
-      screen.getAllByText('We will acknowledge valid grievances within 24 hours and aim to resolve them within 15 days, where applicable.').length
-    ).toBeGreaterThan(0);
+      screen.getAllByText(grievanceResponseStatement).length
+    ).toBe(2);
+    expect(screen.queryByText(/acknowledge valid grievances/i)).toBeNull();
+    await waitFor(() => {
+      expect(screen.getAllByText('Shailesh Rathod').length).toBeGreaterThan(1);
+    });
+    expect(screen.getAllByText('India')).toHaveLength(1);
 
     expect(screen.getAllByRole('link', { name: 'grievance@newspulse.co.in' })[0]?.getAttribute('href')).toBe('#grievance-form');
     expect(screen.getByRole('link', { name: 'Email the News Pulse grievance officer' }).getAttribute('href')).toBe('#grievance-form');
@@ -132,7 +139,7 @@ describe('pages/grievance-redressal', () => {
 
   it('submits the grievance form and shows the success state', async () => {
     (global as any).fetch = jest.fn().mockImplementation(async (input: RequestInfo | URL) => {
-      if (String(input) === '/api/public/compliance-settings') {
+      if (String(input).startsWith('/api/public/compliance-settings')) {
         return {
           ok: true,
           json: async () => ({
@@ -153,7 +160,7 @@ describe('pages/grievance-redressal', () => {
       return {
         ok: true,
         status: 200,
-        json: async () => ({ ok: true }),
+        json: async () => ({ ok: true, grievanceId: 'grv-1' }),
       };
     });
 
@@ -191,5 +198,6 @@ describe('pages/grievance-redressal', () => {
     });
 
     expect(await screen.findByText('Your grievance has been submitted successfully. Our team will review it as per the applicable timeline.')).toBeTruthy();
+    expect(screen.getByText('Reference ID: grv-1')).toBeTruthy();
   });
 });
