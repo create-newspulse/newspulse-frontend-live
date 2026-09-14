@@ -8,7 +8,7 @@ import AdSlot from '../../src/components/ads/AdSlot';
 import CategoryHeader from '../../src/components/category/CategoryHeader';
 import { getCategoryQueryKey, getCategoryRouteKey } from '../../lib/categoryKeys';
 import { filterPubliclyPublishedArticles, getLocalizedArticleFields, STRICT_LOCALE_POLICY, type RouteLocale } from '../../lib/localizedArticleFields';
-import { formatArticleBodyHtml, splitArticleBodyBlocks, stripDuplicateOpeningParagraph } from '../../lib/articleBody';
+import { formatArticleBodyHtml, parseControlledInlineImageBlock, splitArticleBodyBlocks, stripDuplicateOpeningParagraph, type ControlledArticleInlineImage } from '../../lib/articleBody';
 import { fetchPublicNewsGroup, unwrapArticle, type Article } from '../../lib/publicNewsApi';
 import { subscribePublicDataRefresh } from '../../lib/publicDataRefresh';
 import { pickFreshestArticleForLocale, shouldReplaceArticleWithFreshCandidate } from '../../lib/translationGroupSync';
@@ -55,6 +55,51 @@ function ArticleDisplayAd({ slotId }: ArticleDisplayAdProps) {
       </div>
       <AdSlot slot={slotId} variant={variant} renderMode="articleDisplay" className="w-full" />
     </div>
+  );
+}
+
+type ArticleInlineImageProps = {
+  image: ControlledArticleInlineImage;
+};
+
+export function ArticleInlineImage({ image }: ArticleInlineImageProps) {
+  const [failed, setFailed] = React.useState(false);
+  const numericWidth = image.width ? Number(image.width) : undefined;
+  const numericHeight = image.height ? Number(image.height) : undefined;
+  const hasDimensions = Boolean(numericWidth && numericHeight);
+  const frameStyle: React.CSSProperties | undefined = hasDimensions
+    ? { aspectRatio: `${numericWidth} / ${numericHeight}` }
+    : undefined;
+  const altText = image.alt || image.caption || 'News Pulse article image';
+
+  return (
+    <figure className="not-prose np-inline-image" data-np-block="inline-image" data-np-media-id={image.mediaId || undefined}>
+      <div className="np-inline-image__frame" style={frameStyle}>
+        {failed ? (
+          <div className="np-inline-image__fallback" role="img" aria-label={altText}>
+            Image unavailable
+          </div>
+        ) : (
+          <img
+            className="np-inline-image__media"
+            src={image.src}
+            alt={altText}
+            width={numericWidth}
+            height={numericHeight}
+            loading="lazy"
+            decoding="async"
+            onError={() => setFailed(true)}
+          />
+        )}
+      </div>
+
+      {image.caption || image.credit ? (
+        <figcaption className="np-inline-image__caption">
+          {image.caption ? <span className="np-inline-image__caption-text">{image.caption}</span> : null}
+          {image.credit ? <span className="np-inline-image__credit">{image.credit}</span> : null}
+        </figcaption>
+      ) : null}
+    </figure>
   );
 }
 
@@ -770,14 +815,22 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
                 <div className="px-4 md:px-6 pb-6">
                   <article lang={lang} className="article-body prose prose-slate max-w-none">
                     {paragraphBlocks.length ? (
-                      paragraphBlocks.map((block, idx) => (
-                        <React.Fragment key={`pblock-${idx}`}>
-                          <div dangerouslySetInnerHTML={{ __html: block }} />
+                      paragraphBlocks.map((block, idx) => {
+                        const controlledImage = parseControlledInlineImageBlock(block);
+
+                        return (
+                          <React.Fragment key={`pblock-${idx}`}>
+                            {controlledImage ? (
+                              <ArticleInlineImage image={controlledImage} />
+                            ) : (
+                              <div dangerouslySetInnerHTML={{ __html: block }} />
+                            )}
                           {inlineInsertAfterIndex === idx ? (
                             <ArticleDisplayAd slotId="ARTICLE_INLINE" />
                           ) : null}
-                        </React.Fragment>
-                      ))
+                          </React.Fragment>
+                        );
+                      })
                     ) : (
                       <div dangerouslySetInnerHTML={{ __html: articleBodyHtml }} />
                     )}
@@ -915,6 +968,64 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
         .article-body :where(ul ul, ul ol, ol ul, ol ol) {
           margin-top: 0.45em;
           margin-bottom: 0.45em;
+        }
+
+        .article-body :where(.np-inline-image) {
+          clear: both;
+          display: block;
+          margin: 1.5rem 0;
+          max-width: 100%;
+          width: 100%;
+        }
+
+        .article-body :where(.np-inline-image__frame) {
+          align-items: center;
+          background: #f1f5f9;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          display: flex;
+          justify-content: center;
+          max-width: 100%;
+          overflow: hidden;
+          width: 100%;
+        }
+
+        .article-body :where(.np-inline-image__media) {
+          display: block;
+          height: auto;
+          max-width: 100%;
+          object-fit: contain;
+          width: 100%;
+        }
+
+        .article-body :where(.np-inline-image__fallback) {
+          align-items: center;
+          color: #64748b;
+          display: flex;
+          font-size: 0.92rem;
+          justify-content: center;
+          min-height: 12rem;
+          padding: 2rem;
+          text-align: center;
+          width: 100%;
+        }
+
+        .article-body :where(.np-inline-image__caption) {
+          color: #475569;
+          display: grid;
+          font-size: 0.82rem;
+          gap: 0.18rem;
+          line-height: 1.55;
+          margin-top: 0.55rem;
+        }
+
+        .article-body :where(.np-inline-image__caption-text) {
+          color: #334155;
+        }
+
+        .article-body :where(.np-inline-image__credit) {
+          color: #64748b;
+          font-weight: 600;
         }
 
         .article-body:lang(gu) :where(p, li),

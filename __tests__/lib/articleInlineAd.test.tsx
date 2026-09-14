@@ -1,4 +1,4 @@
-import { formatArticleBodyHtml, splitArticleBodyBlocks, stripDuplicateOpeningParagraph } from '../../lib/articleBody';
+import { formatArticleBodyHtml, parseControlledInlineImageBlock, splitArticleBodyBlocks, stripDuplicateOpeningParagraph } from '../../lib/articleBody';
 import { splitArticleHtmlForInlineAd } from '../../lib/articleInlineAd';
 
 describe('splitArticleHtmlForInlineAd', () => {
@@ -79,6 +79,81 @@ describe('formatArticleBodyHtml', () => {
 
     expect(html).toBe('<p>Alpha line one. Alpha line two.</p><p>Beta paragraph.</p>');
   });
+
+  it('renders an approved controlled inline image with caption and credit', () => {
+    const html = formatArticleBodyHtml('<div data-np-block="inline-image" data-np-media-id="media_123" data-np-src="https://cdn.newspulse.co.in/images/story.jpg" data-np-caption="Flood rescue image" data-np-credit="News Pulse / Staff" data-np-width="1200" data-np-height="800"></div>');
+
+    expect(html).toContain('<figure class="np-inline-image" data-np-block="inline-image" data-np-media-id="media_123">');
+    expect(html).toContain('<img class="np-inline-image__media" src="https://cdn.newspulse.co.in/images/story.jpg" alt="Flood rescue image" width="1200" height="800" loading="lazy" decoding="async" />');
+    expect(html).toContain('<span class="np-inline-image__caption-text" data-np-caption="true">Flood rescue image</span>');
+    expect(html).toContain('<span class="np-inline-image__credit" data-np-credit="true">Photo: News Pulse / Staff</span>');
+  });
+
+  it('keeps legacy img HTML rendering through the sanitizer fallback', () => {
+    const html = formatArticleBodyHtml('<p>Legacy image follows.</p><img src="https://cdn.newspulse.co.in/legacy.jpg" alt="Legacy image" loading="lazy" />');
+
+    expect(html).toContain('<p>Legacy image follows.</p>');
+    expect(html).toContain('<img src="https://cdn.newspulse.co.in/legacy.jpg" alt="Legacy image" loading="lazy" />');
+  });
+
+  it('allows missing caption on approved controlled inline images', () => {
+    const html = formatArticleBodyHtml('<div data-np-block="inline-image" data-np-media-id="media_124" data-np-src="https://cdn.newspulse.co.in/images/story.jpg" data-np-credit="News Pulse" data-np-width="1200" data-np-height="800"></div>');
+
+    expect(html).not.toContain('data-np-caption');
+    expect(html).toContain('Photo: News Pulse');
+  });
+
+  it('allows missing credit on approved controlled inline images', () => {
+    const html = formatArticleBodyHtml('<div data-np-block="inline-image" data-np-media-id="media_125" data-np-src="https://cdn.newspulse.co.in/images/story.jpg" data-np-caption="Only caption"></div>');
+
+    expect(html).toContain('Only caption');
+    expect(html).not.toContain('data-np-credit');
+  });
+
+  it('strips unsafe event attributes from controlled inline images', () => {
+    const html = formatArticleBodyHtml('<div data-np-block="inline-image" data-np-media-id="media_126" data-np-src="https://cdn.newspulse.co.in/images/story.jpg" data-np-caption="Safe" onclick="alert(1)"></div>');
+
+    expect(html).toContain('data-np-block="inline-image"');
+    expect(html).not.toContain('onclick');
+  });
+
+  it('rejects javascript URLs on controlled inline images', () => {
+    const html = formatArticleBodyHtml('<div data-np-block="inline-image" data-np-media-id="media_127" data-np-src="javascript:alert(1)" data-np-caption="Unsafe"></div>');
+
+    expect(html).toBe('');
+  });
+
+  it('does not preserve approved figure attributes with an invalid media id', () => {
+    const html = formatArticleBodyHtml('<figure class="np-inline-image" data-np-block="inline-image" data-np-media-id="../bad"><img class="np-inline-image__media" src="https://cdn.newspulse.co.in/images/story.jpg" alt="Story" /></figure>');
+
+    expect(html).toBe('<img class="np-inline-image__media" src="https://cdn.newspulse.co.in/images/story.jpg" alt="Story" />');
+    expect(parseControlledInlineImageBlock(html)).toBeNull();
+  });
+
+  it('does not treat arbitrary unapproved data markers as trusted media', () => {
+    const html = formatArticleBodyHtml('<div data-block="inline-image" data-src="https://cdn.newspulse.co.in/images/story.jpg" data-caption="Unsafe"><img src="javascript:alert(1)" onerror="alert(2)" /></div>');
+
+    expect(html).toBe('<div><img /></div>');
+    expect(html).not.toContain('data-block');
+    expect(html).not.toContain('data-src');
+    expect(html).not.toContain('javascript:');
+    expect(html).not.toContain('onerror');
+  });
+
+  it('keeps EN, HI, and GU controlled image variants on the same media source and id', () => {
+    const variants = ['English caption', 'हिंदी कैप्शन', 'ગુજરાતી કેપ્શન'].map((caption) => {
+      const html = formatArticleBodyHtml(`<div data-np-block="inline-image" data-np-media-id="shared_media_1" data-np-src="https://cdn.newspulse.co.in/images/shared.jpg" data-np-caption="${caption}"></div>`);
+      return parseControlledInlineImageBlock(html);
+    });
+
+    expect(variants.map((variant) => variant?.mediaId)).toEqual(['shared_media_1', 'shared_media_1', 'shared_media_1']);
+    expect(variants.map((variant) => variant?.src)).toEqual([
+      'https://cdn.newspulse.co.in/images/shared.jpg',
+      'https://cdn.newspulse.co.in/images/shared.jpg',
+      'https://cdn.newspulse.co.in/images/shared.jpg',
+    ]);
+    expect(variants.map((variant) => variant?.caption)).toEqual(['English caption', 'हिंदी कैप्शन', 'ગુજરાતી કેપ્શન']);
+  });
 });
 
 describe('stripDuplicateOpeningParagraph', () => {
@@ -141,6 +216,14 @@ describe('splitArticleBodyBlocks', () => {
       '<h2>Intro</h2>',
       '<p>First body paragraph.</p>',
       '<p>Second body paragraph.</p>',
+    ]);
+  });
+
+  it('keeps controlled figures as their own article body blocks', () => {
+    expect(splitArticleBodyBlocks('<p>Before.</p><figure data-np-block="inline-image"><img src="https://cdn.newspulse.co.in/story.jpg" /></figure><p>After.</p>')).toEqual([
+      '<p>Before.</p>',
+      '<figure data-np-block="inline-image"><img src="https://cdn.newspulse.co.in/story.jpg" /></figure>',
+      '<p>After.</p>',
     ]);
   });
 });

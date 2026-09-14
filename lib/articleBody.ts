@@ -1,5 +1,19 @@
 import sanitizeHtml from 'sanitize-html';
 
+const CONTROLLED_INLINE_IMAGE_BLOCK = 'inline-image';
+const CONTROLLED_INLINE_IMAGE_MEDIA_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{2,79}$/;
+const CONTROLLED_INLINE_IMAGE_DIMENSION_RE = /^[1-9][0-9]{0,4}$/;
+
+export type ControlledArticleInlineImage = {
+  src: string;
+  mediaId?: string;
+  alt?: string;
+  caption?: string;
+  credit?: string;
+  width?: string;
+  height?: string;
+};
+
 function decodeEntities(value: string): string {
   return String(value || '')
     .replace(/&nbsp;/gi, ' ')
@@ -73,7 +87,7 @@ function normalizeEscapedNewlines(value: string): string {
 }
 
 function hasBlockHtml(value: string): boolean {
-  return /<(?:p|div|ul|ol|li|blockquote|table|thead|tbody|tr|td|th|h[1-6]|hr)\b/i.test(value);
+  return /<(?:p|div|figure|figcaption|ul|ol|li|blockquote|table|thead|tbody|tr|td|th|h[1-6]|hr)\b/i.test(value);
 }
 
 function hasAnyHtml(value: string): boolean {
@@ -84,6 +98,135 @@ function normalizeInlineMarkup(value: string): string {
   return String(value || '')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/__(.+?)__/g, '<strong>$1</strong>');
+}
+
+function escapeHtml(value: string): string {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function parseTagAttributes(tagSource: string): Record<string, string> {
+  const attrs: Record<string, string> = {};
+  const attrRe = /\s([A-Za-z][A-Za-z0-9:-]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
+  let match: RegExpExecArray | null = null;
+
+  while ((match = attrRe.exec(tagSource))) {
+    const name = String(match[1] || '').toLowerCase();
+    const value = match[2] ?? match[3] ?? match[4] ?? '';
+    attrs[name] = decodeEntities(value).trim();
+  }
+
+  return attrs;
+}
+
+function normalizeControlledText(value: string): string {
+  return stripHtml(value).replace(/\s+/g, ' ').trim().slice(0, 240);
+}
+
+function normalizeControlledDimension(value: string): string {
+  const normalized = String(value || '').trim();
+  return CONTROLLED_INLINE_IMAGE_DIMENSION_RE.test(normalized) ? normalized : '';
+}
+
+function isPermittedControlledImageSrc(value: string): boolean {
+  const src = String(value || '').trim();
+  if (!src || /[\u0000-\u001f\u007f]/.test(src)) return false;
+  if (/^\/(?!\/)/.test(src)) return true;
+
+  try {
+    return new URL(src).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function formatPhotoCredit(value: string): string {
+  const credit = normalizeControlledText(value);
+  if (!credit) return '';
+  return /^photo\s*:/i.test(credit) ? credit : `Photo: ${credit}`;
+}
+
+function buildControlledInlineImageHtml(attrs: Record<string, string>): string | null {
+  if (attrs['data-np-block'] !== CONTROLLED_INLINE_IMAGE_BLOCK) return null;
+
+  const mediaId = String(attrs['data-np-media-id'] || '').trim();
+  if (mediaId && !CONTROLLED_INLINE_IMAGE_MEDIA_ID_RE.test(mediaId)) return '';
+
+  const src = String(attrs['data-np-src'] || '').trim();
+  if (!isPermittedControlledImageSrc(src)) return '';
+
+  const caption = normalizeControlledText(attrs['data-np-caption'] || '');
+  const credit = formatPhotoCredit(attrs['data-np-credit'] || '');
+  const alt = normalizeControlledText(attrs['data-np-alt'] || caption || 'News Pulse article image');
+  const width = normalizeControlledDimension(attrs['data-np-width'] || '');
+  const height = normalizeControlledDimension(attrs['data-np-height'] || '');
+
+  const figureAttrs = [
+    'class="np-inline-image"',
+    'data-np-block="inline-image"',
+    mediaId ? `data-np-media-id="${escapeHtml(mediaId)}"` : '',
+  ].filter(Boolean).join(' ');
+  const imageAttrs = [
+    'class="np-inline-image__media"',
+    `src="${escapeHtml(src)}"`,
+    `alt="${escapeHtml(alt)}"`,
+    width ? `width="${escapeHtml(width)}"` : '',
+    height ? `height="${escapeHtml(height)}"` : '',
+    'loading="lazy"',
+    'decoding="async"',
+  ].filter(Boolean).join(' ');
+  const captionHtml = caption ? `<span class="np-inline-image__caption-text" data-np-caption="true">${escapeHtml(caption)}</span>` : '';
+  const creditHtml = credit ? `<span class="np-inline-image__credit" data-np-credit="true">${escapeHtml(credit)}</span>` : '';
+  const figcaptionHtml = captionHtml || creditHtml
+    ? `<figcaption class="np-inline-image__caption">${captionHtml}${creditHtml}</figcaption>`
+    : '';
+
+  return `<figure ${figureAttrs}><img ${imageAttrs} />${figcaptionHtml}</figure>`;
+}
+
+function normalizeControlledInlineImageMarkers(value: string): string {
+  return String(value || '').replace(/<(figure|div|span)\b(?=[^>]*data-np-block\s*=\s*(?:"inline-image"|'inline-image'|inline-image))[^>]*(?:\/>|>\s*<\/\1>)/gi, (match) => {
+    const html = buildControlledInlineImageHtml(parseTagAttributes(match));
+    return html === null ? match : html;
+  });
+}
+
+export function parseControlledInlineImageBlock(html: string): ControlledArticleInlineImage | null {
+  const source = String(html || '').trim();
+  const figureMatch = source.match(/^<figure\b([^>]*)>([\s\S]*)<\/figure>$/i);
+  if (!figureMatch) return null;
+
+  const figureAttrs = parseTagAttributes(`<figure${figureMatch[1]}>`);
+  if (figureAttrs['data-np-block'] !== CONTROLLED_INLINE_IMAGE_BLOCK) return null;
+
+  const imageMatch = String(figureMatch[2] || '').match(/<img\b([^>]*)>/i);
+  if (!imageMatch) return null;
+
+  const imageAttrs = parseTagAttributes(`<img${imageMatch[1]}>`);
+  const src = String(imageAttrs.src || '').trim();
+  if (!isPermittedControlledImageSrc(src)) return null;
+
+  const mediaId = String(figureAttrs['data-np-media-id'] || '').trim();
+  if (mediaId && !CONTROLLED_INLINE_IMAGE_MEDIA_ID_RE.test(mediaId)) return null;
+
+  const captionMatch = source.match(/<span\b[^>]*data-np-caption="true"[^>]*>([\s\S]*?)<\/span>/i);
+  const creditMatch = source.match(/<span\b[^>]*data-np-credit="true"[^>]*>([\s\S]*?)<\/span>/i);
+  const width = normalizeControlledDimension(imageAttrs.width || '');
+  const height = normalizeControlledDimension(imageAttrs.height || '');
+
+  return {
+    src,
+    ...(mediaId ? { mediaId } : {}),
+    ...(imageAttrs.alt ? { alt: normalizeControlledText(imageAttrs.alt) } : {}),
+    ...(captionMatch ? { caption: normalizeControlledText(captionMatch[1] || '') } : {}),
+    ...(creditMatch ? { credit: normalizeControlledText(creditMatch[1] || '') } : {}),
+    ...(width ? { width } : {}),
+    ...(height ? { height } : {}),
+  };
 }
 
 function isHeadingLikeLine(value: string): boolean {
@@ -143,7 +286,7 @@ export function splitArticleBodyBlocks(html: string): string[] {
   if (!source) return [];
 
   const blocks: string[] = [];
-  const re = /<p\b[^>]*>[\s\S]*?<\/p>/gi;
+  const re = /<(p|figure)\b[^>]*>[\s\S]*?<\/\1>/gi;
   let lastIndex = 0;
   let match: RegExpExecArray | null = null;
 
@@ -187,7 +330,8 @@ export function formatArticleBodyHtml(rawContent: string): string {
   if (!normalized) return '';
 
   const htmlish = hasAnyHtml(normalized);
-  const preSanitized = htmlish && hasBlockHtml(normalized) ? normalized : paragraphizeTextContent(normalized);
+  const markedContent = normalizeControlledInlineImageMarkers(normalized);
+  const preSanitized = htmlish && hasBlockHtml(markedContent) ? markedContent : paragraphizeTextContent(markedContent);
 
   return sanitizeHtml(preSanitized, {
     disallowedTagsMode: 'discard',
@@ -214,6 +358,8 @@ export function formatArticleBodyHtml(rawContent: string): string {
       'h6',
       'hr',
       'a',
+      'figure',
+      'figcaption',
       'span',
       'div',
       'img',
@@ -226,10 +372,30 @@ export function formatArticleBodyHtml(rawContent: string): string {
     ],
     allowedAttributes: {
       a: ['href', 'name', 'target', 'rel'],
-      img: ['src', 'alt', 'title', 'width', 'height', 'loading'],
+      figure: [
+        { name: 'class', values: ['np-inline-image'] },
+        { name: 'data-np-block', values: ['inline-image'] },
+        'data-np-media-id',
+      ],
+      figcaption: [{ name: 'class', values: ['np-inline-image__caption'] }],
+      span: [
+        { name: 'class', values: ['np-inline-image__caption-text', 'np-inline-image__credit'] },
+        { name: 'data-np-caption', values: ['true'] },
+        { name: 'data-np-credit', values: ['true'] },
+      ],
+      img: ['src', 'alt', 'title', 'width', 'height', 'loading', 'decoding', { name: 'class', values: ['np-inline-image__media'] }],
       '*': ['class', 'style'],
     },
     allowedSchemes: ['http', 'https', 'mailto'],
+    exclusiveFilter: (frame) => {
+      if (frame.tag === 'figure') {
+        if (frame.attribs['data-np-block'] !== CONTROLLED_INLINE_IMAGE_BLOCK) return 'excludeTag';
+        const mediaId = String(frame.attribs['data-np-media-id'] || '').trim();
+        if (mediaId && !CONTROLLED_INLINE_IMAGE_MEDIA_ID_RE.test(mediaId)) return 'excludeTag';
+      }
+      if (frame.tag === 'figcaption' && frame.attribs.class !== 'np-inline-image__caption') return 'excludeTag';
+      return false;
+    },
     transformTags: {
       a: sanitizeHtml.simpleTransform('a', { rel: 'noopener noreferrer', target: '_blank' }),
     },

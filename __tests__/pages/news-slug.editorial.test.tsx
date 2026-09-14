@@ -1,5 +1,5 @@
 import React from 'react';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 import NewsSlugDetailPage, { getServerSideProps } from '../../pages/news/[slug]';
 import { fetchPublicNews } from '../../lib/publicNewsApi';
@@ -214,6 +214,45 @@ describe('pages/news/[slug] editorial detail', () => {
     );
 
     expect(screen.getByTestId('article-hero-image').getAttribute('src')).toBe(imageUrl);
+  });
+
+  test('renders controlled inline article images responsively with caption, credit, and fallback', async () => {
+    render(
+      <NewsSlugDetailPage
+        messages={{}}
+        locale="en"
+        lang="en"
+        slug="special-story"
+        siteUrl="https://www.newspulse.co.in"
+        article={editorialArticle() as any}
+        safeHtml={'<p>Complete article content</p><figure class="np-inline-image" data-np-block="inline-image" data-np-media-id="media_123"><img class="np-inline-image__media" src="https://cdn.newspulse.co.in/images/story.jpg" alt="Flood rescue image" width="1200" height="800" loading="lazy" decoding="async" /><figcaption class="np-inline-image__caption"><span class="np-inline-image__caption-text" data-np-caption="true">Flood rescue image</span><span class="np-inline-image__credit" data-np-credit="true">Photo: News Pulse / Staff</span></figcaption></figure><p>After image paragraph.</p>'}
+        topStories={[]}
+        relatedStories={[]}
+        error={null}
+        pending={false}
+      />
+    );
+
+    const inlineImage = screen.getByAltText('Flood rescue image') as HTMLImageElement;
+    const figure = inlineImage.closest('figure');
+    const frame = inlineImage.closest('.np-inline-image__frame') as HTMLElement | null;
+
+    expect(inlineImage.getAttribute('src')).toBe('https://cdn.newspulse.co.in/images/story.jpg');
+    expect(inlineImage.getAttribute('loading')).toBe('lazy');
+    expect(inlineImage.getAttribute('decoding')).toBe('async');
+    expect(inlineImage.getAttribute('width')).toBe('1200');
+    expect(inlineImage.getAttribute('height')).toBe('800');
+    expect(inlineImage.className).toContain('np-inline-image__media');
+    expect(figure?.className).toContain('np-inline-image');
+    expect(figure?.getAttribute('data-np-media-id')).toBe('media_123');
+    expect(frame?.getAttribute('style')).toContain('aspect-ratio: 1200 / 800');
+    expect(screen.getByText('Flood rescue image')).toBeTruthy();
+    expect(screen.getByText('Photo: News Pulse / Staff')).toBeTruthy();
+
+    fireEvent.error(inlineImage);
+
+    expect(screen.getByText('Image unavailable')).toBeTruthy();
+    expect(screen.getByText('Photo: News Pulse / Staff')).toBeTruthy();
   });
 
   test('uses the article detail placeholder only when no usable image resolves', async () => {
