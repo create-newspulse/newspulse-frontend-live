@@ -238,7 +238,7 @@ const nextConfig = {
       "object-src 'none'",
 
       // Next.js + GTM/GA
-      `script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://www.gstatic.com${
+      `script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://www.gstatic.com https://platform.twitter.com${
         isDev ? " 'unsafe-eval'" : ''
       }`,
 
@@ -255,13 +255,13 @@ const nextConfig = {
       "font-src 'self' data: https://*.gstatic.com",
 
       // ✅ IMPORTANT: allow backend API requests (this fixes your blocked fetch)
-      `connect-src 'self'${backend ? ` ${backend}` : ''} https://www.googletagmanager.com https://www.google-analytics.com https://firebaseinstallations.googleapis.com https://fcmregistrations.googleapis.com https://firebase.googleapis.com https://www.googleapis.com ws: wss:`,
+      `connect-src 'self'${backend ? ` ${backend}` : ''} https://www.googletagmanager.com https://www.google-analytics.com https://firebaseinstallations.googleapis.com https://fcmregistrations.googleapis.com https://firebase.googleapis.com https://www.googleapis.com https://syndication.twitter.com ws: wss:`,
 
-      // Frames: allow our own pages plus approved YouTube embed origins.
-      "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com",
+      // Frames: allow our own pages plus approved YouTube and X/Twitter embed origins.
+      "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://platform.twitter.com",
 
       // Older browsers may still consult child-src for frame/embed loads.
-      "child-src 'self' https://www.youtube.com https://www.youtube-nocookie.com",
+      "child-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://platform.twitter.com",
 
       // Workers (Next sometimes needs blob:)
       "worker-src 'self' blob:",

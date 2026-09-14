@@ -1,4 +1,4 @@
-import { formatArticleBodyHtml, parseControlledInlineImageBlock, parseControlledYouTubeBlock, splitArticleBodyBlocks, stripDuplicateOpeningParagraph } from '../../lib/articleBody';
+import { formatArticleBodyHtml, parseControlledInlineImageBlock, parseControlledXBlock, parseControlledYouTubeBlock, splitArticleBodyBlocks, stripDuplicateOpeningParagraph } from '../../lib/articleBody';
 import { splitArticleHtmlForInlineAd } from '../../lib/articleInlineAd';
 
 describe('splitArticleHtmlForInlineAd', () => {
@@ -234,6 +234,74 @@ describe('formatArticleBodyHtml', () => {
       'https://www.youtube-nocookie.com/embed/AbCdEfGhIjK?rel=0&modestbranding=1&playsinline=1',
     ]);
   });
+
+  it('preserves a valid x.com marker as a controlled X embed block', () => {
+    const html = formatArticleBodyHtml('<div data-np-block="x" data-np-post-id="2050104453630718079" data-np-url="https://x.com/i/status/2050104453630718079?s=20"></div>');
+    const embed = parseControlledXBlock(html);
+
+    expect(html).toContain('class="np-x-embed"');
+    expect(html).toContain('data-np-block="x"');
+    expect(html).toContain('data-np-post-id="2050104453630718079"');
+    expect(embed).toEqual({
+      postId: '2050104453630718079',
+      url: 'https://x.com/i/status/2050104453630718079',
+    });
+  });
+
+  it('preserves a valid twitter.com legacy marker as a controlled X embed block', () => {
+    const html = formatArticleBodyHtml('<div data-np-block="x" data-np-post-id="2050104453630718079" data-np-url="https://twitter.com/newspulse/status/2050104453630718079"></div>');
+
+    expect(parseControlledXBlock(html)).toEqual({
+      postId: '2050104453630718079',
+      url: 'https://twitter.com/newspulse/status/2050104453630718079',
+    });
+  });
+
+  it('rejects malformed controlled X markers', () => {
+    const missingId = formatArticleBodyHtml('<div data-np-block="x" data-np-url="https://x.com/i/status/2050104453630718079"></div>');
+    const badId = formatArticleBodyHtml('<div data-np-block="x" data-np-post-id="abc" data-np-url="https://x.com/i/status/2050104453630718079"></div>');
+    const nonEmpty = formatArticleBodyHtml('<div data-np-block="x" data-np-post-id="2050104453630718079" data-np-url="https://x.com/i/status/2050104453630718079"><blockquote class="twitter-tweet">raw embed</blockquote></div>');
+
+    expect(missingId).toBe('');
+    expect(badId).toBe('');
+    expect(nonEmpty).toBe('');
+  });
+
+  it('rejects controlled X URL and post ID mismatches', () => {
+    const html = formatArticleBodyHtml('<div data-np-block="x" data-np-post-id="2050104453630718079" data-np-url="https://x.com/i/status/1111104453630718079"></div>');
+
+    expect(html).toBe('');
+    expect(parseControlledXBlock(html)).toBeNull();
+  });
+
+  it('rejects controlled X lookalike domains', () => {
+    const html = formatArticleBodyHtml('<div data-np-block="x" data-np-post-id="2050104453630718079" data-np-url="https://x.com.example.com/i/status/2050104453630718079"></div>');
+
+    expect(html).toBe('');
+    expect(parseControlledXBlock(html)).toBeNull();
+  });
+
+  it('rejects javascript and data URLs on controlled X markers', () => {
+    const javascriptUrl = formatArticleBodyHtml('<div data-np-block="x" data-np-post-id="2050104453630718079" data-np-url="javascript:alert(1)"></div>');
+    const dataUrl = formatArticleBodyHtml('<div data-np-block="x" data-np-post-id="2050104453630718079" data-np-url="data:text/html,boom"></div>');
+
+    expect(javascriptUrl).toBe('');
+    expect(dataUrl).toBe('');
+  });
+
+  it('keeps EN, HI, and GU controlled X variants on the same post id', () => {
+    const variants = ['en', 'hi', 'gu'].map(() => {
+      const html = formatArticleBodyHtml('<div data-np-block="x" data-np-post-id="2050104453630718079" data-np-url="https://x.com/i/status/2050104453630718079"></div>');
+      return parseControlledXBlock(html);
+    });
+
+    expect(variants.map((variant) => variant?.postId)).toEqual(['2050104453630718079', '2050104453630718079', '2050104453630718079']);
+    expect(variants.map((variant) => variant?.url)).toEqual([
+      'https://x.com/i/status/2050104453630718079',
+      'https://x.com/i/status/2050104453630718079',
+      'https://x.com/i/status/2050104453630718079',
+    ]);
+  });
 });
 
 describe('stripDuplicateOpeningParagraph', () => {
@@ -311,6 +379,14 @@ describe('splitArticleBodyBlocks', () => {
     expect(splitArticleBodyBlocks('<p>Before.</p><div class="np-youtube-embed" data-np-block="youtube" data-np-video-id="AbCdEfGhIjK" data-np-url="https://www.youtube.com/watch?v=AbCdEfGhIjK" data-np-embed-url="https://www.youtube-nocookie.com/embed/AbCdEfGhIjK?rel=0&amp;modestbranding=1&amp;playsinline=1"></div><p>After.</p>')).toEqual([
       '<p>Before.</p>',
       '<div class="np-youtube-embed" data-np-block="youtube" data-np-video-id="AbCdEfGhIjK" data-np-url="https://www.youtube.com/watch?v=AbCdEfGhIjK" data-np-embed-url="https://www.youtube-nocookie.com/embed/AbCdEfGhIjK?rel=0&amp;modestbranding=1&amp;playsinline=1"></div>',
+      '<p>After.</p>',
+    ]);
+  });
+
+  it('keeps controlled X markers as their own article body blocks', () => {
+    expect(splitArticleBodyBlocks('<p>Before.</p><div class="np-x-embed" data-np-block="x" data-np-post-id="2050104453630718079" data-np-url="https://x.com/i/status/2050104453630718079"></div><p>After.</p>')).toEqual([
+      '<p>Before.</p>',
+      '<div class="np-x-embed" data-np-block="x" data-np-post-id="2050104453630718079" data-np-url="https://x.com/i/status/2050104453630718079"></div>',
       '<p>After.</p>',
     ]);
   });

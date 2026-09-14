@@ -8,7 +8,7 @@ import AdSlot from '../../src/components/ads/AdSlot';
 import CategoryHeader from '../../src/components/category/CategoryHeader';
 import { getCategoryQueryKey, getCategoryRouteKey } from '../../lib/categoryKeys';
 import { filterPubliclyPublishedArticles, getLocalizedArticleFields, STRICT_LOCALE_POLICY, type RouteLocale } from '../../lib/localizedArticleFields';
-import { formatArticleBodyHtml, parseControlledInlineImageBlock, parseControlledYouTubeBlock, splitArticleBodyBlocks, stripDuplicateOpeningParagraph, type ControlledArticleInlineImage, type ControlledArticleYouTubeEmbed } from '../../lib/articleBody';
+import { formatArticleBodyHtml, parseControlledInlineImageBlock, parseControlledXBlock, parseControlledYouTubeBlock, splitArticleBodyBlocks, stripDuplicateOpeningParagraph, type ControlledArticleInlineImage, type ControlledArticleXEmbed, type ControlledArticleYouTubeEmbed } from '../../lib/articleBody';
 import { fetchPublicNewsGroup, unwrapArticle, type Article } from '../../lib/publicNewsApi';
 import { subscribePublicDataRefresh } from '../../lib/publicDataRefresh';
 import { pickFreshestArticleForLocale, shouldReplaceArticleWithFreshCandidate } from '../../lib/translationGroupSync';
@@ -23,6 +23,7 @@ import { getStoryTitleHookColor, splitStoryTitleHook } from '../../lib/storyTitl
 import StoryImage, { ArticleHeroImage } from '../../src/components/story/StoryImage';
 import EmbeddedMediaConsentGate from '../../src/consent/EmbeddedMediaConsentGate';
 import { useArticleAnalytics } from '../../hooks/useArticleAnalytics';
+import { hasRenderedTwitterWidgetFrame, loadTwitterWidgetsIn } from '../../lib/xWidgets';
 import {
   getArticleAuthorDesignation,
   getArticleAuthorName,
@@ -133,6 +134,88 @@ export function ArticleYouTubeEmbed({ embed }: ArticleYouTubeEmbedProps) {
               referrerPolicy="strict-origin-when-cross-origin"
               onError={() => setFailed(true)}
             />
+          </EmbeddedMediaConsentGate>
+        )}
+      </div>
+    </figure>
+  );
+}
+
+type ArticleXEmbedProps = {
+  embed: ControlledArticleXEmbed;
+};
+
+function ArticleXEmbedFrame({ embed, onFailed, onLoaded }: ArticleXEmbedProps & { onFailed: () => void; onLoaded: () => void }) {
+  const containerRef = React.useRef<HTMLDivElement | null>(null);
+
+  React.useEffect(() => {
+    if (!embed.url || typeof window === 'undefined') return;
+
+    let cancelled = false;
+    let timerId: number | undefined;
+
+    const markFailed = () => {
+      if (!cancelled) onFailed();
+    };
+
+    loadTwitterWidgetsIn(containerRef.current).then(() => {
+      if (cancelled) return;
+      onLoaded();
+      timerId = window.setTimeout(() => {
+        if (cancelled) return;
+        if (!hasRenderedTwitterWidgetFrame(containerRef.current)) markFailed();
+      }, 7000);
+    }).catch(markFailed);
+
+    return () => {
+      cancelled = true;
+      if (timerId) window.clearTimeout(timerId);
+    };
+  }, [embed.postId, embed.url, onFailed, onLoaded]);
+
+  return (
+    <div ref={containerRef} className="np-x-embed__container">
+      <blockquote className="twitter-tweet np-x-embed__tweet" data-dnt="true" data-conversation="none">
+        <a href={embed.url}></a>
+      </blockquote>
+    </div>
+  );
+}
+
+export function ArticleXEmbed({ embed }: ArticleXEmbedProps) {
+  const [failed, setFailed] = React.useState(false);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    setFailed(false);
+    setLoading(true);
+  }, [embed.postId, embed.url]);
+
+  const markFailed = React.useCallback(() => {
+    setLoading(false);
+    setFailed(true);
+  }, []);
+
+  const markLoaded = React.useCallback(() => {
+    setLoading(false);
+  }, []);
+
+  return (
+    <figure className="not-prose np-x-embed" data-np-block="x" data-np-post-id={embed.postId}>
+      <div className="np-x-embed__frame">
+        {failed ? (
+          <div className="np-x-embed__fallback" role="note">
+            <span>X post unavailable</span>
+            <a href={embed.url} target="_blank" rel="noopener noreferrer">
+              Open on X
+            </a>
+          </div>
+        ) : (
+          <EmbeddedMediaConsentGate title="X post" className="np-x-embed__consent" placeholderClassName="rounded-lg">
+            <div className="np-x-embed__loader-shell">
+              <ArticleXEmbedFrame embed={embed} onFailed={markFailed} onLoaded={markLoaded} />
+              {loading ? <div className="np-x-embed__loading" role="status">Loading X post...</div> : null}
+            </div>
           </EmbeddedMediaConsentGate>
         )}
       </div>
@@ -855,6 +938,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
                       paragraphBlocks.map((block, idx) => {
                         const controlledImage = parseControlledInlineImageBlock(block);
                         const controlledYouTube = controlledImage ? null : parseControlledYouTubeBlock(block);
+                        const controlledX = controlledImage || controlledYouTube ? null : parseControlledXBlock(block);
 
                         return (
                           <React.Fragment key={`pblock-${idx}`}>
@@ -862,6 +946,8 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
                               <ArticleInlineImage image={controlledImage} />
                             ) : controlledYouTube ? (
                               <ArticleYouTubeEmbed embed={controlledYouTube} />
+                            ) : controlledX ? (
+                              <ArticleXEmbed embed={controlledX} />
                             ) : (
                               <div dangerouslySetInnerHTML={{ __html: block }} />
                             )}
@@ -1111,6 +1197,76 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
 
         .article-body :where(.np-youtube-embed__fallback a) {
           color: #ffffff;
+          font-weight: 700;
+          text-decoration: underline;
+          text-underline-offset: 3px;
+        }
+
+        .article-body :where(.np-x-embed) {
+          clear: both;
+          display: block;
+          margin: 1.5rem auto;
+          max-width: 100%;
+          width: 100%;
+        }
+
+        .article-body :where(.np-x-embed__frame) {
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          max-width: 100%;
+          min-height: 18rem;
+          overflow: hidden;
+          position: relative;
+          width: 100%;
+        }
+
+        .article-body :where(.np-x-embed__consent),
+        .article-body :where(.np-x-embed__loader-shell) {
+          min-height: 18rem;
+          position: relative;
+          width: 100%;
+        }
+
+        .article-body :where(.np-x-embed__container) {
+          align-items: flex-start;
+          display: flex;
+          justify-content: center;
+          min-height: 18rem;
+          overflow-x: hidden;
+          padding: 1rem;
+          width: 100%;
+        }
+
+        .article-body :where(.np-x-embed__tweet) {
+          margin: 0 auto !important;
+          max-width: min(550px, 100%) !important;
+          width: 100% !important;
+        }
+
+        .article-body :where(.np-x-embed__loading),
+        .article-body :where(.np-x-embed__fallback) {
+          align-items: center;
+          color: #475569;
+          display: flex;
+          flex-direction: column;
+          font-size: 0.92rem;
+          gap: 0.55rem;
+          justify-content: center;
+          min-height: 18rem;
+          padding: 2rem;
+          text-align: center;
+          width: 100%;
+        }
+
+        .article-body :where(.np-x-embed__loading) {
+          background: #f8fafc;
+          inset: 0;
+          position: absolute;
+        }
+
+        .article-body :where(.np-x-embed__fallback a) {
+          color: #0f172a;
           font-weight: 700;
           text-decoration: underline;
           text-underline-offset: 3px;

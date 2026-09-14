@@ -10,6 +10,7 @@ import EmbeddedMediaConsentGate from '../../src/consent/EmbeddedMediaConsentGate
 import { COVER_PLACEHOLDER_SRC } from '../../lib/coverImages';
 import { fetchServerPublicFounderToggles } from '../../lib/publicFounderToggles';
 import { getPublicViralVideoPosterUrl, getPublicViralVideoXEmbedUrl, normalizePublicViralVideo, normalizePublicViralVideosPayload, resolvePublicViralVideoPlayback, type PublicViralVideo } from '../../lib/publicViralVideos';
+import { hasLoadedTwitterWidgets, hasRenderedTwitterWidgetFrame, loadTwitterWidgetsIn } from '../../lib/xWidgets';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 
 type Props = {
@@ -115,7 +116,6 @@ function XEmbedPlayer({ tweetUrl, posterSrc, title, slug }: { tweetUrl: string; 
 
     let cancelled = false;
     let timerId: number | undefined;
-    const scriptId = 'news-pulse-x-widgets';
     const debugEnabled = process.env.NODE_ENV === 'development';
 
     const logState = (widgetsLoaded: boolean) => {
@@ -138,60 +138,30 @@ function XEmbedPlayer({ tweetUrl, posterSrc, title, slug }: { tweetUrl: string; 
 
     const loadTweet = () => {
       if (timerId) window.clearTimeout(timerId);
-      const twttr = (window as any).twttr;
-      logState(true);
-      if (!containerRef.current || !twttr?.widgets?.load) {
+      logState(hasLoadedTwitterWidgets());
+      if (!containerRef.current) {
         markFailed();
         return;
       }
 
-      try {
-        const loadResult = twttr.widgets.load(containerRef.current);
-        Promise.resolve(loadResult).catch(markFailed);
+      loadTwitterWidgetsIn(containerRef.current).then(() => {
         timerId = window.setTimeout(() => {
           if (cancelled || !containerRef.current) return;
-          const hasRenderedFrame = Boolean(containerRef.current.querySelector('iframe'));
+          const hasRenderedFrame = hasRenderedTwitterWidgetFrame(containerRef.current);
           if (debugEnabled) {
             // eslint-disable-next-line no-console
             console.debug('[ViralVideoDetailPage] X embed iframe check:', { slug, hasRenderedFrame });
           }
           if (!hasRenderedFrame) setEmbedFailed(true);
         }, 7000);
-      } catch {
-        markFailed();
-      }
+      }).catch(markFailed);
     };
 
-    const existingScript = document.getElementById(scriptId) as HTMLScriptElement | null;
-    if (existingScript) {
-      if ((window as any).twttr?.widgets?.load) loadTweet();
-      else {
-        existingScript.addEventListener('load', loadTweet, { once: true });
-        existingScript.addEventListener('error', markFailed, { once: true });
-        timerId = window.setTimeout(() => {
-          if (!(window as any).twttr?.widgets?.load) markFailed();
-        }, 7000);
-      }
-    } else {
-      const script = document.createElement('script');
-      script.id = scriptId;
-      script.src = 'https://platform.twitter.com/widgets.js';
-      script.async = true;
-      script.charset = 'utf-8';
-      script.addEventListener('load', loadTweet, { once: true });
-      script.addEventListener('error', markFailed, { once: true });
-      document.body.appendChild(script);
-      timerId = window.setTimeout(() => {
-        if (!(window as any).twttr?.widgets?.load) markFailed();
-      }, 7000);
-    }
+    loadTweet();
 
     return () => {
       cancelled = true;
       if (timerId) window.clearTimeout(timerId);
-      const script = document.getElementById(scriptId);
-      script?.removeEventListener('load', loadTweet);
-      script?.removeEventListener('error', markFailed);
     };
   }, [tweetUrl]);
 

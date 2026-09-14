@@ -1,11 +1,14 @@
 import sanitizeHtml from 'sanitize-html';
 import { sanitizeEmbedUrl, toSafeYouTubeEmbedUrl } from '../src/lib/publicSettings';
+import { getPublicViralVideoXStatusUrl } from './publicViralVideos';
 
 const CONTROLLED_INLINE_IMAGE_BLOCK = 'inline-image';
 const CONTROLLED_YOUTUBE_BLOCK = 'youtube';
+const CONTROLLED_X_BLOCK = 'x';
 const CONTROLLED_INLINE_IMAGE_MEDIA_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{2,79}$/;
 const CONTROLLED_INLINE_IMAGE_DIMENSION_RE = /^[1-9][0-9]{0,4}$/;
 const CONTROLLED_YOUTUBE_VIDEO_ID_RE = /^[A-Za-z0-9_-]{6,}$/;
+const CONTROLLED_X_POST_ID_RE = /^\d{5,}$/;
 
 export type ControlledArticleInlineImage = {
   src: string;
@@ -20,6 +23,11 @@ export type ControlledArticleInlineImage = {
 export type ControlledArticleYouTubeEmbed = {
   videoId: string;
   embedUrl: string;
+  url: string;
+};
+
+export type ControlledArticleXEmbed = {
+  postId: string;
   url: string;
 };
 
@@ -158,6 +166,39 @@ function getYouTubeVideoIdFromEmbedUrl(value: string): string {
   }
 }
 
+function normalizeControlledXPostId(value: string): string {
+  const normalized = String(value || '').trim();
+  return CONTROLLED_X_POST_ID_RE.test(normalized) ? normalized : '';
+}
+
+function getXPostIdFromStatusUrl(value: string): string {
+  const statusUrl = getPublicViralVideoXStatusUrl(value);
+  if (!statusUrl) return '';
+
+  try {
+    const url = new URL(statusUrl);
+    const parts = url.pathname.split('/').filter(Boolean);
+    const statusIndex = parts.findIndex((part) => part.toLowerCase() === 'status');
+    return normalizeControlledXPostId(parts[statusIndex + 1] || '');
+  } catch {
+    return '';
+  }
+}
+
+function resolveControlledXEmbed(attrs: Record<string, string>): ControlledArticleXEmbed | null {
+  if (attrs['data-np-block'] !== CONTROLLED_X_BLOCK) return null;
+
+  const postId = normalizeControlledXPostId(attrs['data-np-post-id'] || '');
+  if (!postId) return null;
+
+  const url = getPublicViralVideoXStatusUrl(attrs['data-np-url'] || '');
+  if (!url) return null;
+
+  if (getXPostIdFromStatusUrl(url) !== postId) return null;
+
+  return { postId, url };
+}
+
 function resolveControlledYouTubeEmbed(attrs: Record<string, string>): ControlledArticleYouTubeEmbed | null {
   if (attrs['data-np-block'] !== CONTROLLED_YOUTUBE_BLOCK) return null;
 
@@ -271,6 +312,27 @@ function normalizeControlledYouTubeMarkers(value: string): string {
   });
 }
 
+function buildControlledXHtml(attrs: Record<string, string>): string | null {
+  if (attrs['data-np-block'] !== CONTROLLED_X_BLOCK) return null;
+
+  const embed = resolveControlledXEmbed(attrs);
+  if (!embed) return '';
+
+  return `<div class="np-x-embed" data-np-block="x" data-np-post-id="${escapeHtml(embed.postId)}" data-np-url="${escapeHtml(embed.url)}"></div>`;
+}
+
+function normalizeControlledXMarkers(value: string): string {
+  return String(value || '').replace(/<div\b(?=[^>]*data-np-block\s*=\s*(?:"x"|'x'|x))[^>]*(?:\/>|>[\s\S]*?<\/div>)/gi, (match) => {
+    if (!/\/>\s*$/i.test(match)) {
+      const openEndIndex = match.indexOf('>');
+      const closeStartIndex = match.toLowerCase().lastIndexOf('</div>');
+      if (openEndIndex < 0 || closeStartIndex < 0 || match.slice(openEndIndex + 1, closeStartIndex).trim()) return '';
+    }
+    const html = buildControlledXHtml(parseTagAttributes(match));
+    return html === null ? match : html;
+  });
+}
+
 export function parseControlledInlineImageBlock(html: string): ControlledArticleInlineImage | null {
   const source = String(html || '').trim();
   const figureMatch = source.match(/^<figure\b([^>]*)>([\s\S]*)<\/figure>$/i);
@@ -314,6 +376,17 @@ export function parseControlledYouTubeBlock(html: string): ControlledArticleYouT
   if (attrs['data-np-block'] !== CONTROLLED_YOUTUBE_BLOCK) return null;
 
   return resolveSanitizedControlledYouTubeEmbed(attrs);
+}
+
+export function parseControlledXBlock(html: string): ControlledArticleXEmbed | null {
+  const source = String(html || '').trim();
+  const divMatch = source.match(/^<div\b([^>]*)>\s*<\/div>$/i);
+  if (!divMatch) return null;
+
+  const attrs = parseTagAttributes(`<div${divMatch[1]}>`);
+  if (attrs['data-np-block'] !== CONTROLLED_X_BLOCK) return null;
+
+  return resolveControlledXEmbed(attrs);
 }
 
 function isHeadingLikeLine(value: string): boolean {
@@ -373,7 +446,7 @@ export function splitArticleBodyBlocks(html: string): string[] {
   if (!source) return [];
 
   const blocks: string[] = [];
-  const re = /<(p|figure)\b[^>]*>[\s\S]*?<\/\1>|<div\b(?=[^>]*data-np-block\s*=\s*(?:"youtube"|'youtube'|youtube))[^>]*>[\s\S]*?<\/div>/gi;
+  const re = /<(p|figure)\b[^>]*>[\s\S]*?<\/\1>|<div\b(?=[^>]*data-np-block\s*=\s*(?:"youtube"|'youtube'|youtube|"x"|'x'|x))[^>]*>[\s\S]*?<\/div>/gi;
   let lastIndex = 0;
   let match: RegExpExecArray | null = null;
 
@@ -417,7 +490,7 @@ export function formatArticleBodyHtml(rawContent: string): string {
   if (!normalized) return '';
 
   const htmlish = hasAnyHtml(normalized);
-  const markedContent = normalizeControlledYouTubeMarkers(normalizeControlledInlineImageMarkers(normalized));
+  const markedContent = normalizeControlledXMarkers(normalizeControlledYouTubeMarkers(normalizeControlledInlineImageMarkers(normalized)));
   const preSanitized = htmlish && hasBlockHtml(markedContent) ? markedContent : paragraphizeTextContent(markedContent);
 
   return sanitizeHtml(preSanitized, {
@@ -465,11 +538,12 @@ export function formatArticleBodyHtml(rawContent: string): string {
         'data-np-media-id',
       ],
       div: [
-        { name: 'class', values: ['np-youtube-embed'] },
-        { name: 'data-np-block', values: ['youtube'] },
+        { name: 'class', values: ['np-youtube-embed', 'np-x-embed'] },
+        { name: 'data-np-block', values: ['youtube', 'x'] },
         'data-np-video-id',
         'data-np-url',
         'data-np-embed-url',
+        'data-np-post-id',
       ],
       figcaption: [{ name: 'class', values: ['np-inline-image__caption'] }],
       span: [
@@ -489,6 +563,9 @@ export function formatArticleBodyHtml(rawContent: string): string {
       }
       if (frame.tag === 'div' && frame.attribs['data-np-block'] === CONTROLLED_YOUTUBE_BLOCK) {
         if (!resolveSanitizedControlledYouTubeEmbed(frame.attribs)) return 'excludeTag';
+      }
+      if (frame.tag === 'div' && frame.attribs['data-np-block'] === CONTROLLED_X_BLOCK) {
+        if (!resolveControlledXEmbed(frame.attribs)) return 'excludeTag';
       }
       if (frame.tag === 'figcaption' && frame.attribs.class !== 'np-inline-image__caption') return 'excludeTag';
       return false;

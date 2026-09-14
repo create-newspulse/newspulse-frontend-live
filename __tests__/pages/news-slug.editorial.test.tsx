@@ -1,9 +1,10 @@
 import React from 'react';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
-import NewsSlugDetailPage, { ArticleYouTubeEmbed, getServerSideProps } from '../../pages/news/[slug]';
+import NewsSlugDetailPage, { ArticleXEmbed, ArticleYouTubeEmbed, getServerSideProps } from '../../pages/news/[slug]';
 import { formatArticleBodyHtml } from '../../lib/articleBody';
 import { fetchPublicNews } from '../../lib/publicNewsApi';
+import { hasRenderedTwitterWidgetFrame, loadTwitterWidgetsIn } from '../../lib/xWidgets';
 
 jest.mock('../../src/i18n/LanguageProvider', () => ({
   useI18n: () => ({
@@ -64,6 +65,11 @@ jest.mock('../../lib/publicDataRefresh', () => ({
   subscribePublicDataRefresh: () => jest.fn(),
 }));
 
+jest.mock('../../lib/xWidgets', () => ({
+  hasRenderedTwitterWidgetFrame: jest.fn(() => true),
+  loadTwitterWidgetsIn: jest.fn(() => Promise.resolve()),
+}));
+
 jest.mock('../../src/consent/EmbeddedMediaConsentGate', () => ({
   __esModule: true,
   default: ({ title, className, children }: { title?: string; className?: string; children: React.ReactNode }) => (
@@ -106,6 +112,8 @@ function editorialArticle(overrides: Record<string, any> = {}) {
 describe('pages/news/[slug] editorial detail', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (hasRenderedTwitterWidgetFrame as jest.Mock).mockReturnValue(true);
+    (loadTwitterWidgetsIn as jest.Mock).mockResolvedValue(undefined);
     global.fetch = jest.fn(() => Promise.resolve({ ok: true, json: async () => ({ items: [] }) })) as any;
     (fetchPublicNews as jest.Mock).mockResolvedValue({ items: [], meta: {}, endpoint: '/api/public/news' });
   });
@@ -324,6 +332,82 @@ describe('pages/news/[slug] editorial detail', () => {
     expect(screen.queryByTitle('YouTube video')).toBeNull();
 
     stateSpy.mockRestore();
+  });
+
+  test('renders controlled X article embeds with consent gate responsive shell and shared loader', async () => {
+    const safeHtml = formatArticleBodyHtml('<p>Complete article content</p><div data-np-block="x" data-np-post-id="2050104453630718079" data-np-url="https://x.com/i/status/2050104453630718079"></div><p>After X paragraph.</p>');
+
+    render(
+      <NewsSlugDetailPage
+        messages={{}}
+        locale="en"
+        lang="en"
+        slug="special-story"
+        siteUrl="https://www.newspulse.co.in"
+        article={editorialArticle() as any}
+        safeHtml={safeHtml}
+        topStories={[]}
+        relatedStories={[]}
+        error={null}
+        pending={false}
+      />
+    );
+
+    const consentGate = screen.getByTestId('embedded-media-consent-gate');
+    const figure = document.querySelector('figure.np-x-embed') as HTMLElement | null;
+    const frame = document.querySelector('.np-x-embed__frame') as HTMLElement | null;
+    const statusLink = document.querySelector('.np-x-embed__tweet a') as HTMLAnchorElement | null;
+
+    expect(screen.getByText('Complete article content')).toBeTruthy();
+    expect(screen.getByText('After X paragraph.')).toBeTruthy();
+    expect(consentGate.getAttribute('data-title')).toBe('X post');
+    expect(figure?.getAttribute('data-np-block')).toBe('x');
+    expect(figure?.getAttribute('data-np-post-id')).toBe('2050104453630718079');
+    expect(frame).toBeTruthy();
+    expect(statusLink?.getAttribute('href')).toBe('https://x.com/i/status/2050104453630718079');
+    expect(screen.getByRole('status').textContent).toBe('Loading X post...');
+    await waitFor(() => expect(loadTwitterWidgetsIn).toHaveBeenCalledTimes(1));
+  });
+
+  test('does not initialize X widgets for articles without controlled X blocks', async () => {
+    render(
+      <NewsSlugDetailPage
+        messages={{}}
+        locale="en"
+        lang="en"
+        slug="special-story"
+        siteUrl="https://www.newspulse.co.in"
+        article={editorialArticle() as any}
+        safeHtml="<p>Complete article content</p>"
+        topStories={[]}
+        relatedStories={[]}
+        error={null}
+        pending={false}
+      />
+    );
+
+    expect(loadTwitterWidgetsIn).not.toHaveBeenCalled();
+    expect(document.querySelector('figure.np-x-embed')).toBeNull();
+  });
+
+  test('renders controlled X fallback with the validated external link on failure', async () => {
+    (loadTwitterWidgetsIn as jest.Mock).mockRejectedValueOnce(new Error('blocked'));
+
+    render(
+      <ArticleXEmbed
+        embed={{
+          postId: '2050104453630718079',
+          url: 'https://x.com/i/status/2050104453630718079',
+        }}
+      />
+    );
+
+    expect(await screen.findByText('X post unavailable')).toBeTruthy();
+    const fallbackLink = screen.getByRole('link', { name: 'Open on X' });
+    expect(fallbackLink.getAttribute('href')).toBe('https://x.com/i/status/2050104453630718079');
+    expect(fallbackLink.getAttribute('target')).toBe('_blank');
+    expect(fallbackLink.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(screen.queryByRole('status')).toBeNull();
   });
 
   test('uses the article detail placeholder only when no usable image resolves', async () => {
