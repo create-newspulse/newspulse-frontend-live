@@ -1,13 +1,19 @@
 import fs from 'fs';
 import path from 'path';
+import { act, renderHook } from '@testing-library/react';
 import {
+  HOMEPAGE_BACKGROUND_REVALIDATION_INTERVAL_MS,
   HOMEPAGE_RESPONSE_CACHE_CONTROL,
   estimateReadMinutes,
+  getHomepageLatestStoriesSignature,
   getServerSideProps,
   resolveHomepageLatestStories,
   selectHomepageEditorialArticles,
+  shouldApplyHomepageLatestStoriesUpdate,
+  shouldCommitHomepageLatestStoriesRefresh,
   shouldShowHomepageTopStorySkeleton,
   storyLocationLabel,
+  useHomepageRevalidationTriggers,
 } from '../../pages/index';
 import { fetchPublicNews } from '../../lib/publicNewsApi';
 
@@ -51,6 +57,13 @@ function createServerSideContext(locale?: string) {
   };
 }
 
+function setDocumentVisibilityState(value: DocumentVisibilityState) {
+  Object.defineProperty(document, 'visibilityState', {
+    configurable: true,
+    get: () => value,
+  });
+}
+
 describe('homepage Top Story freshness', () => {
   const source = fs.readFileSync(path.join(process.cwd(), 'pages', 'index.tsx'), 'utf8');
   let dateNowSpy: jest.SpyInstance<number, []>;
@@ -61,6 +74,8 @@ describe('homepage Top Story freshness', () => {
   });
 
   afterEach(() => {
+    jest.useRealTimers();
+    setDocumentVisibilityState('visible');
     dateNowSpy.mockRestore();
   });
 
@@ -167,6 +182,232 @@ describe('homepage Top Story freshness', () => {
     expect(clientResult.freshStories?.map((item: any) => item.title)).not.toContain('Draft homepage article');
     expect(fetchPublicNews).toHaveBeenNthCalledWith(1, expect.objectContaining({ language: 'en', limit: 40 }));
     expect(fetchPublicNews).toHaveBeenNthCalledWith(2, expect.objectContaining({ language: 'en', limit: 40 }));
+  });
+
+  test('background latest-news response with a later article is eligible to replace the current Top Story', async () => {
+    const currentItems = [
+      article({ _id: 'sept-9', title: '9 Sept article', slug: 'sept-9', publishedAt: '2026-09-09T08:00:00.000Z' }),
+    ];
+    const refreshedItems = [
+      article({ _id: 'sept-9-later', title: '9 Sept later article', slug: 'sept-9-later', publishedAt: '2026-09-09T11:00:00.000Z' }),
+      ...currentItems,
+    ];
+
+    (fetchPublicNews as jest.Mock)
+      .mockResolvedValueOnce({ items: currentItems, meta: {}, endpoint: '/api/public/news' })
+      .mockResolvedValueOnce({ items: refreshedItems, meta: {}, endpoint: '/api/public/news' });
+
+    const current = await resolveHomepageLatestStories('en');
+    const next = await resolveHomepageLatestStories('en');
+    const currentSignature = getHomepageLatestStoriesSignature({
+      topStory: current.topStory,
+      rawStories: current.rawStories,
+      freshStories: current.freshStories,
+    }, 'en');
+
+    expect(current.topStory?._id).toBe('sept-9');
+    expect(next.topStory?._id).toBe('sept-9-later');
+    expect(shouldCommitHomepageLatestStoriesRefresh({
+      currentSignature,
+      mode: 'background',
+      next: {
+        topStory: next.topStory,
+        rawStories: next.rawStories,
+        freshStories: next.freshStories,
+      },
+      requestedLang: 'en',
+    })).toBe(true);
+  });
+
+  test('identical latest-news response does not request an unnecessary background state replacement', async () => {
+    const items = [
+      article({ _id: 'sept-9', title: '9 Sept article', slug: 'sept-9', publishedAt: '2026-09-09T08:00:00.000Z' }),
+      article({ _id: 'sept-5', title: '5 Sept article', slug: 'sept-5', publishedAt: '2026-09-05T08:00:00.000Z' }),
+    ];
+    (fetchPublicNews as jest.Mock).mockResolvedValueOnce({ items, meta: {}, endpoint: '/api/public/news' });
+
+    const current = await resolveHomepageLatestStories('en');
+    const currentSnapshot = {
+      topStory: current.topStory,
+      rawStories: current.rawStories,
+      freshStories: current.freshStories,
+    };
+    const currentSignature = getHomepageLatestStoriesSignature(currentSnapshot, 'en');
+
+    expect(shouldApplyHomepageLatestStoriesUpdate(currentSnapshot, currentSnapshot, 'en')).toBe(false);
+    expect(shouldCommitHomepageLatestStoriesRefresh({
+      currentSignature,
+      mode: 'background',
+      next: currentSnapshot,
+      requestedLang: 'en',
+    })).toBe(false);
+  });
+
+  test('failed background latest-news response keeps the current homepage story visible', async () => {
+    const currentSnapshot = {
+      topStory: article({ _id: 'sept-9', title: '9 Sept article', slug: 'sept-9', publishedAt: '2026-09-09T08:00:00.000Z' }),
+      rawStories: [article({ _id: 'sept-9', title: '9 Sept article', slug: 'sept-9', publishedAt: '2026-09-09T08:00:00.000Z' })],
+      freshStories: null,
+    };
+    const currentSignature = getHomepageLatestStoriesSignature(currentSnapshot, 'en');
+
+    expect(shouldCommitHomepageLatestStoriesRefresh({
+      currentSignature,
+      error: 'Fetch failed',
+      mode: 'background',
+      next: {
+        topStory: null,
+        rawStories: null,
+        freshStories: null,
+      },
+      requestedLang: 'en',
+    })).toBe(false);
+  });
+
+  test('background latest-news refetch keeps the active homepage language', async () => {
+    (fetchPublicNews as jest.Mock).mockResolvedValueOnce({
+      items: [article({ _id: 'article-hi', language: 'hi', slug: 'article-hi' })],
+      meta: {},
+      endpoint: '/api/public/news',
+    });
+
+    const result = await resolveHomepageLatestStories('hi');
+
+    expect(fetchPublicNews).toHaveBeenCalledWith(expect.objectContaining({ language: 'hi', limit: 40 }));
+    expect(fetchPublicNews).not.toHaveBeenCalledWith(expect.objectContaining({ language: 'gj' }));
+    expect(result.topStory?._id).toBe('article-hi');
+  });
+
+  test('draft and sponsored articles returned during refetch cannot become Top Story', async () => {
+    (fetchPublicNews as jest.Mock).mockResolvedValueOnce({
+      items: [
+        article({ _id: 'draft-sept-11', title: 'Draft', slug: 'draft-sept-11', status: 'draft', publishedAt: '2026-09-11T08:00:00.000Z' }),
+        article({ _id: 'sponsored-sept-10', title: 'Sponsored', slug: 'sponsored-sept-10', publishedAt: '2026-09-10T08:00:00.000Z', isSponsoredArticle: true }),
+        article({ _id: 'sept-9', title: '9 Sept article', slug: 'sept-9', publishedAt: '2026-09-09T08:00:00.000Z' }),
+      ],
+      meta: {},
+      endpoint: '/api/public/news',
+    });
+
+    const result = await resolveHomepageLatestStories('en');
+
+    expect(result.topStory?._id).toBe('sept-9');
+    expect(result.freshStories?.map((item: any) => item.id)).toEqual(['sept-9']);
+  });
+
+  test('focus triggers a homepage background revalidation request', async () => {
+    jest.useFakeTimers();
+    const onRevalidate = jest.fn();
+
+    const { unmount } = renderHook(() => useHomepageRevalidationTriggers({
+      enabled: true,
+      intervalMs: HOMEPAGE_BACKGROUND_REVALIDATION_INTERVAL_MS,
+      onRevalidate,
+    }));
+
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+      await Promise.resolve();
+    });
+
+    expect(onRevalidate).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
+  test('hidden to visible transition triggers a homepage background revalidation request', async () => {
+    jest.useFakeTimers();
+    const onRevalidate = jest.fn();
+
+    const { unmount } = renderHook(() => useHomepageRevalidationTriggers({
+      enabled: true,
+      intervalMs: HOMEPAGE_BACKGROUND_REVALIDATION_INTERVAL_MS,
+      onRevalidate,
+    }));
+
+    await act(async () => {
+      setDocumentVisibilityState('hidden');
+      document.dispatchEvent(new Event('visibilitychange'));
+      await Promise.resolve();
+    });
+    expect(onRevalidate).not.toHaveBeenCalled();
+
+    await act(async () => {
+      setDocumentVisibilityState('visible');
+      document.dispatchEvent(new Event('visibilitychange'));
+      await Promise.resolve();
+    });
+
+    expect(onRevalidate).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
+  test('periodic timer triggers homepage background revalidation at the configured interval', async () => {
+    jest.useFakeTimers();
+    const onRevalidate = jest.fn();
+
+    const { unmount } = renderHook(() => useHomepageRevalidationTriggers({
+      enabled: true,
+      intervalMs: HOMEPAGE_BACKGROUND_REVALIDATION_INTERVAL_MS,
+      onRevalidate,
+    }));
+
+    act(() => {
+      jest.advanceTimersByTime(HOMEPAGE_BACKGROUND_REVALIDATION_INTERVAL_MS - 1);
+    });
+    expect(onRevalidate).not.toHaveBeenCalled();
+
+    await act(async () => {
+      jest.advanceTimersByTime(1);
+      await Promise.resolve();
+    });
+
+    expect(onRevalidate).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
+  test('simultaneous focus visibility and timer triggers coalesce into one revalidation request', async () => {
+    jest.useFakeTimers();
+    const onRevalidate = jest.fn();
+
+    const { unmount } = renderHook(() => useHomepageRevalidationTriggers({
+      enabled: true,
+      intervalMs: 1,
+      onRevalidate,
+    }));
+
+    await act(async () => {
+      jest.advanceTimersByTime(1);
+      window.dispatchEvent(new Event('focus'));
+      setDocumentVisibilityState('visible');
+      document.dispatchEvent(new Event('visibilitychange'));
+      await Promise.resolve();
+    });
+
+    expect(onRevalidate).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
+  test('homepage revalidation timers and listeners are cleaned up on unmount', async () => {
+    jest.useFakeTimers();
+    const onRevalidate = jest.fn();
+
+    const { unmount } = renderHook(() => useHomepageRevalidationTriggers({
+      enabled: true,
+      intervalMs: 1,
+      onRevalidate,
+    }));
+
+    unmount();
+
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+      setDocumentVisibilityState('visible');
+      document.dispatchEvent(new Event('visibilitychange'));
+      jest.advanceTimersByTime(1);
+      await Promise.resolve();
+    });
+
+    expect(onRevalidate).not.toHaveBeenCalled();
   });
 
   test('genuine latest-news API loading or failure resolves to a neutral skeleton state', async () => {

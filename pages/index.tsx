@@ -522,6 +522,15 @@ function clampNum(n: any, min: number, max: number, fallback: number) {
 }
 
 export const HOMEPAGE_RESPONSE_CACHE_CONTROL = 'no-store, no-cache, must-revalidate, proxy-revalidate';
+export const HOMEPAGE_BACKGROUND_REVALIDATION_INTERVAL_MS = 30_000;
+
+type HomepageLatestStoriesSnapshot = {
+  topStory: Article | null | undefined;
+  rawStories: Article[] | null | undefined;
+  freshStories: any[] | null | undefined;
+};
+
+type HomepageLatestRefreshMode = 'initial' | 'background';
 
 function getHomepagePublicationTimeValue(article: any): number {
   const explicitPublishedAt = String(article?.publishedAt || article?.publishAt || '').trim();
@@ -578,6 +587,123 @@ export async function resolveHomepageLatestStories(requestedLang: UiLangCode, si
 
 export function shouldShowHomepageTopStorySkeleton(topStory: Article | null | undefined, latestStories: any[] | null | undefined): boolean {
   return !topStory || latestStories == null;
+}
+
+function getHomepageStableStoryIdentifier(story: any, requestedLang: UiLangCode, fallbackIndex: number): string {
+  return String(
+    (story as any)?._id
+    || (story as any)?.id
+    || getStoryId(story as any)
+    || resolveArticleSlug(story as any, requestedLang)
+    || (story as any)?.slug
+    || (story as any)?.translationGroupId
+    || getStoryTranslationGroupId(story as any)
+    || (story as any)?.title
+    || `story-${fallbackIndex}`
+  ).trim().toLowerCase();
+}
+
+function getHomepageStableStoryTime(story: any): string {
+  const publicationTime = getHomepagePublicationTimeValue(story);
+  if (Number.isFinite(publicationTime) && publicationTime > 0) return String(publicationTime);
+
+  const iso = String((story as any)?.iso || '').trim();
+  if (iso) {
+    const parsedIso = Date.parse(iso);
+    if (Number.isFinite(parsedIso)) return String(parsedIso);
+  }
+
+  return '';
+}
+
+export function getHomepageLatestStoriesSignature(
+  snapshot: HomepageLatestStoriesSnapshot,
+  requestedLang: UiLangCode
+): string {
+  const sourceStories = Array.isArray(snapshot.rawStories) && snapshot.rawStories.length
+    ? snapshot.rawStories
+    : Array.isArray(snapshot.freshStories)
+      ? snapshot.freshStories
+      : snapshot.topStory
+        ? [snapshot.topStory]
+        : [];
+
+  return sourceStories
+    .map((story, index) => `${getHomepageStableStoryIdentifier(story, requestedLang, index)}:${getHomepageStableStoryTime(story)}`)
+    .join('|');
+}
+
+export function shouldApplyHomepageLatestStoriesUpdate(
+  current: HomepageLatestStoriesSnapshot,
+  next: HomepageLatestStoriesSnapshot,
+  requestedLang: UiLangCode
+): boolean {
+  return getHomepageLatestStoriesSignature(current, requestedLang) !== getHomepageLatestStoriesSignature(next, requestedLang);
+}
+
+export function shouldCommitHomepageLatestStoriesRefresh({
+  currentSignature,
+  error,
+  mode,
+  next,
+  requestedLang,
+}: {
+  currentSignature: string;
+  error?: string;
+  mode: HomepageLatestRefreshMode;
+  next: HomepageLatestStoriesSnapshot;
+  requestedLang: UiLangCode;
+}): boolean {
+  if (error) return mode !== 'background';
+  if (mode !== 'background') return true;
+  return currentSignature !== getHomepageLatestStoriesSignature(next, requestedLang);
+}
+
+export function useHomepageRevalidationTriggers({
+  enabled,
+  intervalMs = HOMEPAGE_BACKGROUND_REVALIDATION_INTERVAL_MS,
+  onRevalidate,
+}: {
+  enabled: boolean;
+  intervalMs?: number;
+  onRevalidate: () => void;
+}) {
+  const onRevalidateRef = React.useRef(onRevalidate);
+  const queuedRevalidationRef = React.useRef(false);
+
+  React.useEffect(() => {
+    onRevalidateRef.current = onRevalidate;
+  }, [onRevalidate]);
+
+  React.useEffect(() => {
+    if (!enabled || typeof window === 'undefined' || typeof document === 'undefined') return;
+    let active = true;
+
+    const triggerRevalidation = () => {
+      if (queuedRevalidationRef.current) return;
+      queuedRevalidationRef.current = true;
+      Promise.resolve().then(() => {
+        if (!active) return;
+        queuedRevalidationRef.current = false;
+        onRevalidateRef.current();
+      });
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') triggerRevalidation();
+    };
+
+    window.addEventListener('focus', triggerRevalidation);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    const intervalId = window.setInterval(triggerRevalidation, intervalMs);
+
+    return () => {
+      active = false;
+      window.removeEventListener('focus', triggerRevalidation);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.clearInterval(intervalId);
+      queuedRevalidationRef.current = false;
+    };
+  }, [enabled, intervalMs]);
 }
 
 type HomePageStaticProps = {
@@ -3691,6 +3817,12 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
   const [latestFromBackend, setLatestFromBackend] = useState<any[] | null>(() => initialFreshStories ?? null);
   const [latestRawStories, setLatestRawStories] = useState<Article[] | null>(null);
   const [topStory, setTopStory] = useState<Article | null>(() => initialTopStory ?? null);
+  const homepageLatestFetchRef = useRef<AbortController | null>(null);
+  const homepageLatestSignatureRef = useRef<string>(getHomepageLatestStoriesSignature({
+    topStory: initialTopStory ?? null,
+    rawStories: null,
+    freshStories: initialFreshStories ?? null,
+  }, apiLang));
   const [homepageSponsoredFeature, setHomepageSponsoredFeature] = useState<HomepageSponsoredFeature | null>(initialHomepageSponsoredFeature);
   const [homeSectionNews, setHomeSectionNews] = useState<Record<string, Article[]>>({});
   const [homepagePublicRefreshTick, setHomepagePublicRefreshTick] = useState(0);
@@ -3747,13 +3879,20 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
     setPrefs((p: any) => ({ ...p, lang: UI_LANG_LABEL[code] }));
   }, [lang]);
 
-
-  // Fetch homepage data (latest) from backend.
   React.useEffect(() => {
-    if (!hydrated) return;
+    homepageLatestSignatureRef.current = getHomepageLatestStoriesSignature({
+      topStory,
+      rawStories: latestRawStories,
+      freshStories: latestFromBackend,
+    }, apiLang);
+  }, [apiLang, latestFromBackend, latestRawStories, topStory]);
+
+  const refreshHomepageLatestStories = React.useCallback((mode: HomepageLatestRefreshMode) => {
+    if (!hydrated || homepageLatestFetchRef.current) return;
 
     const controller = new AbortController();
-    const isBackgroundRefresh = homepagePublicRefreshTick > 0;
+    homepageLatestFetchRef.current = controller;
+    const isBackgroundRefresh = mode === 'background';
 
     if (!isBackgroundRefresh) {
       setLatestRawStories(null);
@@ -3795,9 +3934,31 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
         }
       }
 
-      setTopStory(latest.topStory);
-      setLatestRawStories(latest.rawStories || []);
-      setLatestFromBackend(latest.freshStories || []);
+      if (!latest.error) {
+        const nextSnapshot = {
+          topStory: latest.topStory,
+          rawStories: latest.rawStories || [],
+          freshStories: latest.freshStories || [],
+        };
+        const nextSignature = getHomepageLatestStoriesSignature(nextSnapshot, apiLang);
+        const shouldApplyLatestStories = shouldCommitHomepageLatestStoriesRefresh({
+          currentSignature: homepageLatestSignatureRef.current,
+          mode,
+          next: nextSnapshot,
+          requestedLang: apiLang,
+        });
+
+        if (shouldApplyLatestStories) {
+          setTopStory(latest.topStory);
+          setLatestRawStories(latest.rawStories || []);
+          setLatestFromBackend(latest.freshStories || []);
+          homepageLatestSignatureRef.current = nextSignature;
+        }
+      } else if (!isBackgroundRefresh) {
+        setTopStory(null);
+        setLatestRawStories([]);
+        setLatestFromBackend([]);
+      }
 
       const [breakingResult] = await Promise.allSettled([breakingPromise]);
       if (controller.signal.aborted) return;
@@ -3817,14 +3978,47 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
       // Keep this fetch for other UI uses; tickers now come from broadcast hook.
       void breakingResp;
     })().catch(() => {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || isBackgroundRefresh) return;
       setTopStory(null);
       setLatestRawStories([]);
       setLatestFromBackend([]);
+    }).finally(() => {
+      if (homepageLatestFetchRef.current === controller) {
+        homepageLatestFetchRef.current = null;
+      }
     });
+  }, [apiLang, hydrated]);
 
-    return () => controller.abort();
-  }, [apiLang, homepagePublicRefreshTick, hydrated]);
+  const requestHomepageBackgroundRefresh = React.useCallback(() => {
+    setHomepagePublicRefreshTick((prev) => prev + 1);
+  }, []);
+
+  useHomepageRevalidationTriggers({
+    enabled: hydrated,
+    intervalMs: HOMEPAGE_BACKGROUND_REVALIDATION_INTERVAL_MS,
+    onRevalidate: requestHomepageBackgroundRefresh,
+  });
+
+
+  // Fetch homepage data (latest) from backend.
+  React.useEffect(() => {
+    if (!hydrated) return;
+    homepageLatestFetchRef.current?.abort();
+    homepageLatestFetchRef.current = null;
+    refreshHomepageLatestStories('initial');
+  }, [apiLang, hydrated, refreshHomepageLatestStories]);
+
+  React.useEffect(() => {
+    if (!hydrated || homepagePublicRefreshTick <= 0) return;
+    refreshHomepageLatestStories('background');
+  }, [homepagePublicRefreshTick, hydrated, refreshHomepageLatestStories]);
+
+  React.useEffect(() => {
+    return () => {
+      homepageLatestFetchRef.current?.abort();
+      homepageLatestFetchRef.current = null;
+    };
+  }, []);
 
   React.useEffect(() => {
     const controller = new AbortController();
