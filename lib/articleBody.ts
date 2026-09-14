@@ -1,8 +1,11 @@
 import sanitizeHtml from 'sanitize-html';
+import { sanitizeEmbedUrl, toSafeYouTubeEmbedUrl } from '../src/lib/publicSettings';
 
 const CONTROLLED_INLINE_IMAGE_BLOCK = 'inline-image';
+const CONTROLLED_YOUTUBE_BLOCK = 'youtube';
 const CONTROLLED_INLINE_IMAGE_MEDIA_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{2,79}$/;
 const CONTROLLED_INLINE_IMAGE_DIMENSION_RE = /^[1-9][0-9]{0,4}$/;
+const CONTROLLED_YOUTUBE_VIDEO_ID_RE = /^[A-Za-z0-9_-]{6,}$/;
 
 export type ControlledArticleInlineImage = {
   src: string;
@@ -12,6 +15,12 @@ export type ControlledArticleInlineImage = {
   credit?: string;
   width?: string;
   height?: string;
+};
+
+export type ControlledArticleYouTubeEmbed = {
+  videoId: string;
+  embedUrl: string;
+  url: string;
 };
 
 function decodeEntities(value: string): string {
@@ -132,6 +141,57 @@ function normalizeControlledDimension(value: string): string {
   return CONTROLLED_INLINE_IMAGE_DIMENSION_RE.test(normalized) ? normalized : '';
 }
 
+function normalizeControlledYouTubeVideoId(value: string): string {
+  const normalized = String(value || '').trim();
+  return CONTROLLED_YOUTUBE_VIDEO_ID_RE.test(normalized) ? normalized : '';
+}
+
+function getYouTubeVideoIdFromEmbedUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase();
+    if (hostname !== 'www.youtube-nocookie.com' && hostname !== 'youtube-nocookie.com' && hostname !== 'www.youtube.com' && hostname !== 'youtube.com') return '';
+    if (!url.pathname.startsWith('/embed/')) return '';
+    return normalizeControlledYouTubeVideoId(url.pathname.split('/')[2] || '');
+  } catch {
+    return '';
+  }
+}
+
+function resolveControlledYouTubeEmbed(attrs: Record<string, string>): ControlledArticleYouTubeEmbed | null {
+  if (attrs['data-np-block'] !== CONTROLLED_YOUTUBE_BLOCK) return null;
+
+  const videoId = normalizeControlledYouTubeVideoId(attrs['data-np-video-id'] || '');
+  if (!videoId) return null;
+
+  const sourceUrl = sanitizeEmbedUrl(attrs['data-np-url'] || '');
+  if (!sourceUrl) return null;
+
+  const embedUrl = toSafeYouTubeEmbedUrl(sourceUrl);
+  if (!embedUrl) return null;
+
+  const embedVideoId = getYouTubeVideoIdFromEmbedUrl(embedUrl);
+  if (embedVideoId !== videoId) return null;
+
+  return { videoId, embedUrl, url: sourceUrl };
+}
+
+function resolveSanitizedControlledYouTubeEmbed(attrs: Record<string, string>): ControlledArticleYouTubeEmbed | null {
+  if (attrs['data-np-block'] !== CONTROLLED_YOUTUBE_BLOCK) return null;
+
+  const videoId = normalizeControlledYouTubeVideoId(attrs['data-np-video-id'] || '');
+  if (!videoId) return null;
+
+  const embedUrl = toSafeYouTubeEmbedUrl(attrs['data-np-embed-url'] || attrs['data-np-url'] || '');
+  if (!embedUrl) return null;
+
+  const embedVideoId = getYouTubeVideoIdFromEmbedUrl(embedUrl);
+  if (embedVideoId !== videoId) return null;
+
+  const sourceUrl = sanitizeEmbedUrl(attrs['data-np-url'] || '') || embedUrl;
+  return { videoId, embedUrl, url: sourceUrl };
+}
+
 function isPermittedControlledImageSrc(value: string): boolean {
   const src = String(value || '').trim();
   if (!src || /[\u0000-\u001f\u007f]/.test(src)) return false;
@@ -195,6 +255,22 @@ function normalizeControlledInlineImageMarkers(value: string): string {
   });
 }
 
+function buildControlledYouTubeHtml(attrs: Record<string, string>): string | null {
+  if (attrs['data-np-block'] !== CONTROLLED_YOUTUBE_BLOCK) return null;
+
+  const embed = resolveControlledYouTubeEmbed(attrs);
+  if (!embed) return '';
+
+  return `<div class="np-youtube-embed" data-np-block="youtube" data-np-video-id="${escapeHtml(embed.videoId)}" data-np-url="${escapeHtml(embed.url)}" data-np-embed-url="${escapeHtml(embed.embedUrl)}"></div>`;
+}
+
+function normalizeControlledYouTubeMarkers(value: string): string {
+  return String(value || '').replace(/<div\b(?=[^>]*data-np-block\s*=\s*(?:"youtube"|'youtube'|youtube))[^>]*(?:\/|>\s*<\/div>)/gi, (match) => {
+    const html = buildControlledYouTubeHtml(parseTagAttributes(match));
+    return html === null ? match : html;
+  });
+}
+
 export function parseControlledInlineImageBlock(html: string): ControlledArticleInlineImage | null {
   const source = String(html || '').trim();
   const figureMatch = source.match(/^<figure\b([^>]*)>([\s\S]*)<\/figure>$/i);
@@ -227,6 +303,17 @@ export function parseControlledInlineImageBlock(html: string): ControlledArticle
     ...(width ? { width } : {}),
     ...(height ? { height } : {}),
   };
+}
+
+export function parseControlledYouTubeBlock(html: string): ControlledArticleYouTubeEmbed | null {
+  const source = String(html || '').trim();
+  const divMatch = source.match(/^<div\b([^>]*)>\s*<\/div>$/i);
+  if (!divMatch) return null;
+
+  const attrs = parseTagAttributes(`<div${divMatch[1]}>`);
+  if (attrs['data-np-block'] !== CONTROLLED_YOUTUBE_BLOCK) return null;
+
+  return resolveSanitizedControlledYouTubeEmbed(attrs);
 }
 
 function isHeadingLikeLine(value: string): boolean {
@@ -286,7 +373,7 @@ export function splitArticleBodyBlocks(html: string): string[] {
   if (!source) return [];
 
   const blocks: string[] = [];
-  const re = /<(p|figure)\b[^>]*>[\s\S]*?<\/\1>/gi;
+  const re = /<(p|figure)\b[^>]*>[\s\S]*?<\/\1>|<div\b(?=[^>]*data-np-block\s*=\s*(?:"youtube"|'youtube'|youtube))[^>]*>[\s\S]*?<\/div>/gi;
   let lastIndex = 0;
   let match: RegExpExecArray | null = null;
 
@@ -330,7 +417,7 @@ export function formatArticleBodyHtml(rawContent: string): string {
   if (!normalized) return '';
 
   const htmlish = hasAnyHtml(normalized);
-  const markedContent = normalizeControlledInlineImageMarkers(normalized);
+  const markedContent = normalizeControlledYouTubeMarkers(normalizeControlledInlineImageMarkers(normalized));
   const preSanitized = htmlish && hasBlockHtml(markedContent) ? markedContent : paragraphizeTextContent(markedContent);
 
   return sanitizeHtml(preSanitized, {
@@ -377,6 +464,13 @@ export function formatArticleBodyHtml(rawContent: string): string {
         { name: 'data-np-block', values: ['inline-image'] },
         'data-np-media-id',
       ],
+      div: [
+        { name: 'class', values: ['np-youtube-embed'] },
+        { name: 'data-np-block', values: ['youtube'] },
+        'data-np-video-id',
+        'data-np-url',
+        'data-np-embed-url',
+      ],
       figcaption: [{ name: 'class', values: ['np-inline-image__caption'] }],
       span: [
         { name: 'class', values: ['np-inline-image__caption-text', 'np-inline-image__credit'] },
@@ -392,6 +486,9 @@ export function formatArticleBodyHtml(rawContent: string): string {
         if (frame.attribs['data-np-block'] !== CONTROLLED_INLINE_IMAGE_BLOCK) return 'excludeTag';
         const mediaId = String(frame.attribs['data-np-media-id'] || '').trim();
         if (mediaId && !CONTROLLED_INLINE_IMAGE_MEDIA_ID_RE.test(mediaId)) return 'excludeTag';
+      }
+      if (frame.tag === 'div' && frame.attribs['data-np-block'] === CONTROLLED_YOUTUBE_BLOCK) {
+        if (!resolveSanitizedControlledYouTubeEmbed(frame.attribs)) return 'excludeTag';
       }
       if (frame.tag === 'figcaption' && frame.attribs.class !== 'np-inline-image__caption') return 'excludeTag';
       return false;

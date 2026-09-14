@@ -8,7 +8,7 @@ import AdSlot from '../../src/components/ads/AdSlot';
 import CategoryHeader from '../../src/components/category/CategoryHeader';
 import { getCategoryQueryKey, getCategoryRouteKey } from '../../lib/categoryKeys';
 import { filterPubliclyPublishedArticles, getLocalizedArticleFields, STRICT_LOCALE_POLICY, type RouteLocale } from '../../lib/localizedArticleFields';
-import { formatArticleBodyHtml, parseControlledInlineImageBlock, splitArticleBodyBlocks, stripDuplicateOpeningParagraph, type ControlledArticleInlineImage } from '../../lib/articleBody';
+import { formatArticleBodyHtml, parseControlledInlineImageBlock, parseControlledYouTubeBlock, splitArticleBodyBlocks, stripDuplicateOpeningParagraph, type ControlledArticleInlineImage, type ControlledArticleYouTubeEmbed } from '../../lib/articleBody';
 import { fetchPublicNewsGroup, unwrapArticle, type Article } from '../../lib/publicNewsApi';
 import { subscribePublicDataRefresh } from '../../lib/publicDataRefresh';
 import { pickFreshestArticleForLocale, shouldReplaceArticleWithFreshCandidate } from '../../lib/translationGroupSync';
@@ -21,6 +21,7 @@ import { debugStoryCard, getStoryId, getStoryReactKey } from '../../lib/storyIde
 import { formatEditorialDateTime } from '../../lib/storyDateTime';
 import { getStoryTitleHookColor, splitStoryTitleHook } from '../../lib/storyTitleHook';
 import StoryImage, { ArticleHeroImage } from '../../src/components/story/StoryImage';
+import EmbeddedMediaConsentGate from '../../src/consent/EmbeddedMediaConsentGate';
 import { useArticleAnalytics } from '../../hooks/useArticleAnalytics';
 import {
   getArticleAuthorDesignation,
@@ -99,6 +100,42 @@ export function ArticleInlineImage({ image }: ArticleInlineImageProps) {
           {image.credit ? <span className="np-inline-image__credit">{image.credit}</span> : null}
         </figcaption>
       ) : null}
+    </figure>
+  );
+}
+
+type ArticleYouTubeEmbedProps = {
+  embed: ControlledArticleYouTubeEmbed;
+};
+
+export function ArticleYouTubeEmbed({ embed }: ArticleYouTubeEmbedProps) {
+  const [failed, setFailed] = React.useState(false);
+
+  return (
+    <figure className="not-prose np-youtube-embed" data-np-block="youtube" data-np-video-id={embed.videoId}>
+      <div className="np-youtube-embed__frame" style={{ aspectRatio: '16 / 9' }}>
+        {failed ? (
+          <div className="np-youtube-embed__fallback" role="note">
+            <span>Video unavailable</span>
+            <a href={embed.url} target="_blank" rel="noopener noreferrer">
+              Watch on YouTube
+            </a>
+          </div>
+        ) : (
+          <EmbeddedMediaConsentGate title="YouTube video" className="absolute inset-0" placeholderClassName="rounded-lg">
+            <iframe
+              className="np-youtube-embed__iframe"
+              title="YouTube video"
+              src={embed.embedUrl}
+              loading="lazy"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+              referrerPolicy="strict-origin-when-cross-origin"
+              onError={() => setFailed(true)}
+            />
+          </EmbeddedMediaConsentGate>
+        )}
+      </div>
     </figure>
   );
 }
@@ -817,11 +854,14 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
                     {paragraphBlocks.length ? (
                       paragraphBlocks.map((block, idx) => {
                         const controlledImage = parseControlledInlineImageBlock(block);
+                        const controlledYouTube = controlledImage ? null : parseControlledYouTubeBlock(block);
 
                         return (
                           <React.Fragment key={`pblock-${idx}`}>
                             {controlledImage ? (
                               <ArticleInlineImage image={controlledImage} />
+                            ) : controlledYouTube ? (
+                              <ArticleYouTubeEmbed embed={controlledYouTube} />
                             ) : (
                               <div dangerouslySetInnerHTML={{ __html: block }} />
                             )}
@@ -1026,6 +1066,54 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
         .article-body :where(.np-inline-image__credit) {
           color: #64748b;
           font-weight: 600;
+        }
+
+        .article-body :where(.np-youtube-embed) {
+          clear: both;
+          display: block;
+          margin: 1.5rem 0;
+          max-width: 100%;
+          width: 100%;
+        }
+
+        .article-body :where(.np-youtube-embed__frame) {
+          background: #0f172a;
+          border-radius: 8px;
+          max-width: 100%;
+          overflow: hidden;
+          position: relative;
+          width: 100%;
+        }
+
+        .article-body :where(.np-youtube-embed__iframe) {
+          border: 0;
+          display: block;
+          height: 100%;
+          inset: 0;
+          position: absolute;
+          width: 100%;
+        }
+
+        .article-body :where(.np-youtube-embed__fallback) {
+          align-items: center;
+          color: #e2e8f0;
+          display: flex;
+          flex-direction: column;
+          font-size: 0.92rem;
+          gap: 0.55rem;
+          height: 100%;
+          justify-content: center;
+          min-height: 12rem;
+          padding: 2rem;
+          text-align: center;
+          width: 100%;
+        }
+
+        .article-body :where(.np-youtube-embed__fallback a) {
+          color: #ffffff;
+          font-weight: 700;
+          text-decoration: underline;
+          text-underline-offset: 3px;
         }
 
         .article-body:lang(gu) :where(p, li),

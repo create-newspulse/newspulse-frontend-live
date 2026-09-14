@@ -1,7 +1,8 @@
 import React from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
-import NewsSlugDetailPage, { getServerSideProps } from '../../pages/news/[slug]';
+import NewsSlugDetailPage, { ArticleYouTubeEmbed, getServerSideProps } from '../../pages/news/[slug]';
+import { formatArticleBodyHtml } from '../../lib/articleBody';
 import { fetchPublicNews } from '../../lib/publicNewsApi';
 
 jest.mock('../../src/i18n/LanguageProvider', () => ({
@@ -61,6 +62,15 @@ jest.mock('../../hooks/useArticleAnalytics', () => ({
 
 jest.mock('../../lib/publicDataRefresh', () => ({
   subscribePublicDataRefresh: () => jest.fn(),
+}));
+
+jest.mock('../../src/consent/EmbeddedMediaConsentGate', () => ({
+  __esModule: true,
+  default: ({ title, className, children }: { title?: string; className?: string; children: React.ReactNode }) => (
+    <div data-testid="embedded-media-consent-gate" data-title={title} className={className}>
+      {children}
+    </div>
+  ),
 }));
 
 jest.mock('../../lib/publicNewsApi', () => {
@@ -253,6 +263,67 @@ describe('pages/news/[slug] editorial detail', () => {
 
     expect(screen.getByText('Image unavailable')).toBeTruthy();
     expect(screen.getByText('Photo: News Pulse / Staff')).toBeTruthy();
+  });
+
+  test('renders controlled YouTube article embeds with consent gate responsive shell and fallback', async () => {
+    const safeHtml = formatArticleBodyHtml('<p>Complete article content</p><div data-np-block="youtube" data-np-video-id="AbCdEfGhIjK" data-np-url="https://www.youtube.com/watch?v=AbCdEfGhIjK"></div><p>After video paragraph.</p>');
+
+    render(
+      <NewsSlugDetailPage
+        messages={{}}
+        locale="en"
+        lang="en"
+        slug="special-story"
+        siteUrl="https://www.newspulse.co.in"
+        article={editorialArticle() as any}
+        safeHtml={safeHtml}
+        topStories={[]}
+        relatedStories={[]}
+        error={null}
+        pending={false}
+      />
+    );
+
+    const consentGate = screen.getByTestId('embedded-media-consent-gate');
+    const iframe = screen.getByTitle('YouTube video') as HTMLIFrameElement;
+    const figure = iframe.closest('figure');
+    const frame = iframe.closest('.np-youtube-embed__frame') as HTMLElement | null;
+
+    expect(screen.getByText('Complete article content')).toBeTruthy();
+    expect(screen.getByText('After video paragraph.')).toBeTruthy();
+    expect(consentGate.getAttribute('data-title')).toBe('YouTube video');
+    expect(consentGate.className).toContain('absolute inset-0');
+    expect(iframe.getAttribute('src')).toBe('https://www.youtube-nocookie.com/embed/AbCdEfGhIjK?rel=0&modestbranding=1&playsinline=1');
+    expect(iframe.getAttribute('loading')).toBe('lazy');
+    expect(iframe.getAttribute('allow')).toContain('encrypted-media');
+    expect(iframe.getAttribute('referrerpolicy')).toBe('strict-origin-when-cross-origin');
+    expect(figure?.className).toContain('np-youtube-embed');
+    expect(figure?.getAttribute('data-np-block')).toBe('youtube');
+    expect(figure?.getAttribute('data-np-video-id')).toBe('AbCdEfGhIjK');
+    expect(frame?.getAttribute('style')).toContain('aspect-ratio: 16 / 9');
+
+  });
+
+  test('renders the controlled YouTube fallback without breaking article layout', async () => {
+    const stateSpy = jest.spyOn(React, 'useState');
+    stateSpy.mockImplementationOnce(() => [true, jest.fn()] as any);
+
+    render(
+      <ArticleYouTubeEmbed
+        embed={{
+          videoId: 'AbCdEfGhIjK',
+          embedUrl: 'https://www.youtube-nocookie.com/embed/AbCdEfGhIjK?rel=0&modestbranding=1&playsinline=1',
+          url: 'https://www.youtube.com/watch?v=AbCdEfGhIjK',
+        }}
+      />
+    );
+
+    expect(screen.getByText('Video unavailable')).toBeTruthy();
+    const fallbackLink = screen.getByRole('link', { name: 'Watch on YouTube' });
+    expect(fallbackLink.getAttribute('href')).toBe('https://www.youtube.com/watch?v=AbCdEfGhIjK');
+    expect(screen.queryByTitle('YouTube video')).toBeNull();
+
+    stateSpy.mockRestore();
   });
 
   test('uses the article detail placeholder only when no usable image resolves', async () => {

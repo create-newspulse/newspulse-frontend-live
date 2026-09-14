@@ -1,4 +1,4 @@
-import { formatArticleBodyHtml, parseControlledInlineImageBlock, splitArticleBodyBlocks, stripDuplicateOpeningParagraph } from '../../lib/articleBody';
+import { formatArticleBodyHtml, parseControlledInlineImageBlock, parseControlledYouTubeBlock, splitArticleBodyBlocks, stripDuplicateOpeningParagraph } from '../../lib/articleBody';
 import { splitArticleHtmlForInlineAd } from '../../lib/articleInlineAd';
 
 describe('splitArticleHtmlForInlineAd', () => {
@@ -154,6 +154,86 @@ describe('formatArticleBodyHtml', () => {
     ]);
     expect(variants.map((variant) => variant?.caption)).toEqual(['English caption', 'हिंदी कैप्शन', 'ગુજરાતી કેપ્શન']);
   });
+
+  it('preserves a valid canonical YouTube marker as a controlled embed block', () => {
+    const html = formatArticleBodyHtml('<div data-np-block="youtube" data-np-video-id="AbCdEfGhIjK" data-np-url="https://www.youtube.com/watch?v=AbCdEfGhIjK"></div>');
+    const embed = parseControlledYouTubeBlock(html);
+
+    expect(html).toContain('class="np-youtube-embed"');
+    expect(html).toContain('data-np-block="youtube"');
+    expect(html).toContain('data-np-video-id="AbCdEfGhIjK"');
+    expect(embed).toEqual({
+      videoId: 'AbCdEfGhIjK',
+      url: 'https://www.youtube.com/watch?v=AbCdEfGhIjK',
+      embedUrl: 'https://www.youtube-nocookie.com/embed/AbCdEfGhIjK?rel=0&modestbranding=1&playsinline=1',
+    });
+  });
+
+  it('generates youtube-nocookie embed URLs for controlled YouTube markers', () => {
+    const html = formatArticleBodyHtml('<div data-np-block="youtube" data-np-video-id="ZyXwVuTsRqP" data-np-url="https://youtu.be/ZyXwVuTsRqP"></div>');
+
+    expect(parseControlledYouTubeBlock(html)?.embedUrl).toBe('https://www.youtube-nocookie.com/embed/ZyXwVuTsRqP?rel=0&modestbranding=1&playsinline=1');
+  });
+
+  it('rejects malformed controlled YouTube markers', () => {
+    const missingId = formatArticleBodyHtml('<div data-np-block="youtube" data-np-url="https://www.youtube.com/watch?v=AbCdEfGhIjK"></div>');
+    const mismatchedId = formatArticleBodyHtml('<div data-np-block="youtube" data-np-video-id="WrongVideo1" data-np-url="https://www.youtube.com/watch?v=AbCdEfGhIjK"></div>');
+
+    expect(missingId).toBe('');
+    expect(mismatchedId).toBe('');
+  });
+
+  it('rejects arbitrary-domain controlled YouTube markers', () => {
+    const html = formatArticleBodyHtml('<div data-np-block="youtube" data-np-video-id="AbCdEfGhIjK" data-np-url="https://example.com/watch?v=AbCdEfGhIjK"></div>');
+
+    expect(html).toBe('');
+    expect(parseControlledYouTubeBlock(html)).toBeNull();
+  });
+
+  it('rejects javascript URLs on controlled YouTube markers', () => {
+    const html = formatArticleBodyHtml('<div data-np-block="youtube" data-np-video-id="AbCdEfGhIjK" data-np-url="javascript:alert(1)"></div>');
+
+    expect(html).toBe('');
+    expect(parseControlledYouTubeBlock(html)).toBeNull();
+  });
+
+  it('still strips raw iframe HTML from article bodies', () => {
+    const html = formatArticleBodyHtml('<p>Before video.</p><iframe src="https://www.youtube.com/embed/AbCdEfGhIjK"></iframe><p>After video.</p>');
+
+    expect(html).toContain('<p>Before video.</p>');
+    expect(html).toContain('<p>After video.</p>');
+    expect(html).not.toContain('<iframe');
+    expect(html).not.toContain('youtube.com/embed');
+  });
+
+  it('still strips raw script HTML from article bodies', () => {
+    const html = formatArticleBodyHtml('<p>Before script.</p><script>alert(1)</script><p>After script.</p>');
+
+    expect(html).toContain('<p>Before script.</p>');
+    expect(html).toContain('<p>After script.</p>');
+    expect(html).not.toContain('<script');
+    expect(html).not.toContain('alert(1)');
+  });
+
+  it('keeps legacy article HTML rendering through the YouTube marker change', () => {
+    const html = formatArticleBodyHtml('<p>Legacy <strong>article</strong> body.</p><blockquote>Quoted context.</blockquote>');
+
+    expect(html).toBe('<p>Legacy <strong>article</strong> body.</p><blockquote>Quoted context.</blockquote>');
+  });
+
+  it('keeps EN, HI, and GU controlled YouTube variants on the same video id', () => {
+    const variants = ['en', 'hi', 'gu'].map(() => {
+      const html = formatArticleBodyHtml('<div data-np-block="youtube" data-np-video-id="AbCdEfGhIjK" data-np-url="https://www.youtube.com/watch?v=AbCdEfGhIjK"></div>');
+      return parseControlledYouTubeBlock(html);
+    });
+
+    expect(variants.map((variant) => variant?.videoId)).toEqual(['AbCdEfGhIjK', 'AbCdEfGhIjK', 'AbCdEfGhIjK']);
+    expect(variants.map((variant) => variant?.embedUrl)).toEqual([
+      'https://www.youtube-nocookie.com/embed/AbCdEfGhIjK?rel=0&modestbranding=1&playsinline=1',
+      'https://www.youtube-nocookie.com/embed/AbCdEfGhIjK?rel=0&modestbranding=1&playsinline=1',
+      'https://www.youtube-nocookie.com/embed/AbCdEfGhIjK?rel=0&modestbranding=1&playsinline=1',
+    ]);
+  });
 });
 
 describe('stripDuplicateOpeningParagraph', () => {
@@ -223,6 +303,14 @@ describe('splitArticleBodyBlocks', () => {
     expect(splitArticleBodyBlocks('<p>Before.</p><figure data-np-block="inline-image"><img src="https://cdn.newspulse.co.in/story.jpg" /></figure><p>After.</p>')).toEqual([
       '<p>Before.</p>',
       '<figure data-np-block="inline-image"><img src="https://cdn.newspulse.co.in/story.jpg" /></figure>',
+      '<p>After.</p>',
+    ]);
+  });
+
+  it('keeps controlled YouTube markers as their own article body blocks', () => {
+    expect(splitArticleBodyBlocks('<p>Before.</p><div class="np-youtube-embed" data-np-block="youtube" data-np-video-id="AbCdEfGhIjK" data-np-url="https://www.youtube.com/watch?v=AbCdEfGhIjK" data-np-embed-url="https://www.youtube-nocookie.com/embed/AbCdEfGhIjK?rel=0&amp;modestbranding=1&amp;playsinline=1"></div><p>After.</p>')).toEqual([
+      '<p>Before.</p>',
+      '<div class="np-youtube-embed" data-np-block="youtube" data-np-video-id="AbCdEfGhIjK" data-np-url="https://www.youtube.com/watch?v=AbCdEfGhIjK" data-np-embed-url="https://www.youtube-nocookie.com/embed/AbCdEfGhIjK?rel=0&amp;modestbranding=1&amp;playsinline=1"></div>',
       '<p>After.</p>',
     ]);
   });
