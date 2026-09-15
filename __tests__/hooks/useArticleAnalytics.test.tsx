@@ -2,7 +2,7 @@ import React from 'react';
 import { renderHook, act } from '@testing-library/react';
 
 import { useArticleAnalytics } from '../../hooks/useArticleAnalytics';
-import { shouldTrackClientAnalytics } from '../../lib/analytics/articleAnalytics';
+import { postAnalyticsEvent, shouldTrackClientAnalytics } from '../../lib/analytics/articleAnalytics';
 import { COOKIE_CONSENT_NAME, createConsentRecord, writeConsentCookie } from '../../src/consent/cookieConsent';
 
 jest.mock('next/router', () => ({
@@ -15,6 +15,25 @@ jest.mock('next/router', () => ({
 
 type BeaconCall = { url: string; payload: any };
 
+async function readBlobText(blob: Blob): Promise<string> {
+  if (typeof (blob as any).text === 'function') return (blob as any).text();
+
+  if (typeof Response === 'function') {
+    try {
+      return await new Response(blob).text();
+    } catch {
+      // fall through to FileReader for older jsdom implementations
+    }
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('Unable to read Blob'));
+    reader.readAsText(blob);
+  });
+}
+
 async function readBeaconCalls(sendBeaconMock: jest.Mock): Promise<BeaconCall[]> {
   const out: BeaconCall[] = [];
   for (const call of sendBeaconMock.mock.calls) {
@@ -24,7 +43,10 @@ async function readBeaconCalls(sendBeaconMock: jest.Mock): Promise<BeaconCall[]>
     let payload: any = null;
     try {
       if (blob && typeof blob.text === 'function') {
-        const text = await blob.text();
+        const text = await readBlobText(blob);
+        payload = JSON.parse(text);
+      } else if (typeof Blob === 'function' && blob instanceof Blob) {
+        const text = await readBlobText(blob);
         payload = JSON.parse(text);
       } else if (typeof blob === 'string') {
         payload = JSON.parse(blob);
@@ -65,7 +87,7 @@ describe('useArticleAnalytics', () => {
   });
 
   it('fires article-view once per article session', async () => {
-    const article = { _id: 'a1', category: 'business', language: 'en' } as any;
+    const article = { _id: '507f1f77bcf86cd799439011', category: 'business', language: 'en', status: 'published' } as any;
 
     const { rerender } = renderHook(
       (props: any) => {
@@ -89,9 +111,65 @@ describe('useArticleAnalytics', () => {
     const viewCalls = calls.filter((c) => c.url.includes('/api/analytics/article-view'));
     expect(viewCalls.length).toBe(1);
 
-    expect(viewCalls[0].payload.articleId).toBe('a1');
+    expect(viewCalls[0].payload.articleId).toBe('507f1f77bcf86cd799439011');
     expect(viewCalls[0].payload.slug).toBe('hello-world');
     expect(viewCalls[0].payload.category).toBe('business');
+  });
+
+  it('sends beacon analytics as application/json with a flat body', async () => {
+    await postAnalyticsEvent('article-view', {
+      articleId: '507f1f77bcf86cd799439011',
+      visitorId: 'visitor-1',
+      sessionId: 'session-1',
+      slug: 'hello-world',
+      category: 'business',
+    });
+
+    expect((navigator as any).sendBeacon).toHaveBeenCalledTimes(1);
+    expect((global as any).fetch).not.toHaveBeenCalled();
+
+    const [url, body] = ((navigator as any).sendBeacon as jest.Mock).mock.calls[0];
+    expect(url).toBe('/api/analytics/article-view');
+    expect(body).toBeInstanceOf(Blob);
+    expect((body as Blob).type).toBe('application/json');
+
+    const payload = JSON.parse(await readBlobText(body as Blob));
+    expect(payload).toMatchObject({
+      articleId: '507f1f77bcf86cd799439011',
+      visitorId: 'visitor-1',
+      sessionId: 'session-1',
+      slug: 'hello-world',
+      category: 'business',
+    });
+    expect(payload.type).toBeUndefined();
+    expect(payload.data).toBeUndefined();
+  });
+
+  it('falls back to fetch when sendBeacon refuses the event', async () => {
+    (navigator as any).sendBeacon = jest.fn(() => false);
+
+    await postAnalyticsEvent('article-view', {
+      articleId: '507f1f77bcf86cd799439011',
+      visitorId: 'visitor-1',
+      sessionId: 'session-1',
+      slug: 'hello-world',
+    });
+
+    expect((global as any).fetch).toHaveBeenCalledTimes(1);
+    const [url, init] = ((global as any).fetch as jest.Mock).mock.calls[0];
+    expect(url).toBe('/api/analytics/article-view');
+    expect(init).toMatchObject({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      keepalive: true,
+      cache: 'no-store',
+    });
+    expect(JSON.parse(init.body)).toMatchObject({
+      articleId: '507f1f77bcf86cd799439011',
+      visitorId: 'visitor-1',
+      sessionId: 'session-1',
+      slug: 'hello-world',
+    });
   });
 
   it('fires scroll milestones once each (25/50/75/100)', async () => {

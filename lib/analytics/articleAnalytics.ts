@@ -395,9 +395,10 @@ export async function postAnalyticsEvent(event: string, payload: any): Promise<v
     // sendBeacon is best-effort and non-blocking
     try {
       if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
-        // Use a string body for maximum compatibility; the API proxy normalizes string bodies.
-        navigator.sendBeacon(url, body);
-        return;
+        const beaconBody = typeof Blob === 'function'
+          ? new Blob([body], { type: 'application/json' })
+          : body;
+        if (navigator.sendBeacon(url, beaconBody)) return;
       }
     } catch {
       // ignore and fallback
