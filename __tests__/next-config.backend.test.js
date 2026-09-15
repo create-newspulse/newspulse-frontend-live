@@ -61,4 +61,25 @@ describe('next.config backend separation', () => {
 
     expect(config.images.qualities).toEqual([74, 75, 76, 78, 90]);
   });
+
+  it('allows controlled Instagram article iframes without enabling Instagram scripts or broad CSP sources', async () => {
+    process.env.NODE_ENV = 'production';
+    process.env.VERCEL_ENV = 'production';
+    const config = require('../next.config.js');
+
+    const headers = await config.headers();
+    const csp = headers[0].headers.find((header) => header.key === 'Content-Security-Policy').value;
+    const directives = Object.fromEntries(csp.split('; ').map((directive) => {
+      const [name, ...sources] = directive.split(' ');
+      return [name, sources];
+    }));
+
+    expect(directives['frame-src']).toContain('https://www.instagram.com');
+    expect(directives['script-src']).not.toContain('https://www.instagram.com');
+    expect(directives['script-src']).not.toContain('https://www.instagram.com/embed.js');
+    expect(directives['frame-src']).not.toContain('*');
+    expect(directives['script-src']).not.toContain('*');
+    expect(directives['script-src']).not.toContain('https:');
+    expect(directives['script-src']).not.toContain("'unsafe-eval'");
+  });
 });

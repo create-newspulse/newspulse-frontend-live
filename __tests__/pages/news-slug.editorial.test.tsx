@@ -1,7 +1,7 @@
 import React from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
-import NewsSlugDetailPage, { ArticleXEmbed, ArticleYouTubeEmbed, getServerSideProps } from '../../pages/news/[slug]';
+import NewsSlugDetailPage, { ArticleInstagramEmbed, ArticleXEmbed, ArticleYouTubeEmbed, getServerSideProps } from '../../pages/news/[slug]';
 import { formatArticleBodyHtml } from '../../lib/articleBody';
 import { fetchPublicNews } from '../../lib/publicNewsApi';
 import { hasRenderedTwitterWidgetFrame, loadTwitterWidgetsIn } from '../../lib/xWidgets';
@@ -332,6 +332,145 @@ describe('pages/news/[slug] editorial detail', () => {
     expect(screen.queryByTitle('YouTube video')).toBeNull();
 
     stateSpy.mockRestore();
+  });
+
+  test('renders controlled Instagram article embeds with consent gate and responsive shell', async () => {
+    const safeHtml = formatArticleBodyHtml('<p>Complete article content</p><div data-np-block="instagram" data-np-shortcode="C0ffee_Post1" data-np-url="https://www.instagram.com/p/C0ffee_Post1/"></div><p>After Instagram paragraph.</p>');
+
+    render(
+      <NewsSlugDetailPage
+        messages={{}}
+        locale="en"
+        lang="en"
+        slug="special-story"
+        siteUrl="https://www.newspulse.co.in"
+        article={editorialArticle() as any}
+        safeHtml={safeHtml}
+        topStories={[]}
+        relatedStories={[]}
+        error={null}
+        pending={false}
+      />
+    );
+
+    const consentGate = screen.getByTestId('embedded-media-consent-gate');
+    const iframe = screen.getByTitle('Instagram post') as HTMLIFrameElement;
+    const figure = iframe.closest('figure');
+    const frame = iframe.closest('.np-instagram-embed__frame') as HTMLElement | null;
+
+    expect(screen.getByText('Complete article content')).toBeTruthy();
+    expect(screen.getByText('After Instagram paragraph.')).toBeTruthy();
+    expect(consentGate.getAttribute('data-title')).toBe('Instagram post');
+    expect(consentGate.className).toContain('np-instagram-embed__consent');
+    expect(iframe.getAttribute('src')).toBe('https://www.instagram.com/p/C0ffee_Post1/embed');
+    expect(iframe.getAttribute('loading')).toBe('lazy');
+    expect(iframe.getAttribute('allow')).toContain('web-share');
+    expect(iframe.getAttribute('referrerpolicy')).toBe('strict-origin-when-cross-origin');
+    expect(figure?.className).toContain('np-instagram-embed');
+    expect(figure?.getAttribute('data-np-block')).toBe('instagram');
+    expect(figure?.getAttribute('data-np-shortcode')).toBe('C0ffee_Post1');
+    expect(frame).toBeTruthy();
+  });
+
+  test('renders controlled Instagram reel embeds from validated marker URLs', async () => {
+    const safeHtml = formatArticleBodyHtml('<div data-np-block="instagram" data-np-shortcode="Reel_Code9" data-np-url="https://www.instagram.com/reel/Reel_Code9/"></div>');
+
+    render(
+      <NewsSlugDetailPage
+        messages={{}}
+        locale="en"
+        lang="en"
+        slug="special-story"
+        siteUrl="https://www.newspulse.co.in"
+        article={editorialArticle() as any}
+        safeHtml={safeHtml}
+        topStories={[]}
+        relatedStories={[]}
+        error={null}
+        pending={false}
+      />
+    );
+
+    expect(screen.getByTitle('Instagram post').getAttribute('src')).toBe('https://www.instagram.com/reel/Reel_Code9/embed');
+  });
+
+  test('renders the controlled Instagram fallback with the validated external link on failure', async () => {
+    const stateSpy = jest.spyOn(React, 'useState');
+    stateSpy.mockImplementationOnce(() => [true, jest.fn()] as any);
+
+    render(
+      <ArticleInstagramEmbed
+        embed={{
+          kind: 'p',
+          shortcode: 'C0ffee_Post1',
+          embedUrl: 'https://www.instagram.com/p/C0ffee_Post1/embed',
+          url: 'https://www.instagram.com/p/C0ffee_Post1/',
+        }}
+      />
+    );
+
+    expect(screen.getByText('Instagram post unavailable')).toBeTruthy();
+    const fallbackLink = screen.getByRole('link', { name: 'Open on Instagram' });
+    expect(fallbackLink.getAttribute('href')).toBe('https://www.instagram.com/p/C0ffee_Post1/');
+    expect(fallbackLink.getAttribute('target')).toBe('_blank');
+    expect(fallbackLink.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(screen.queryByTitle('Instagram post')).toBeNull();
+
+    stateSpy.mockRestore();
+  });
+
+  test('shows the controlled Instagram fallback when the post-consent iframe does not load', async () => {
+    jest.useFakeTimers();
+
+    try {
+      render(
+        <ArticleInstagramEmbed
+          embed={{
+            kind: 'p',
+            shortcode: 'C0ffee_Post1',
+            embedUrl: 'https://www.instagram.com/p/C0ffee_Post1/embed',
+            url: 'https://www.instagram.com/p/C0ffee_Post1/',
+          }}
+        />
+      );
+
+      expect(screen.getByTitle('Instagram post')).toBeTruthy();
+
+      await act(async () => {
+        jest.advanceTimersByTime(12000);
+      });
+
+      expect(screen.getByText('Instagram post unavailable')).toBeTruthy();
+      expect(screen.getByRole('link', { name: 'Open on Instagram' }).getAttribute('href')).toBe('https://www.instagram.com/p/C0ffee_Post1/');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('renders EN, HI, and GU Instagram markers identically', async () => {
+    for (const language of ['en', 'hi', 'gu'] as const) {
+      cleanup();
+      const safeHtml = formatArticleBodyHtml('<div data-np-block="instagram" data-np-shortcode="C0ffee_Post1" data-np-url="https://www.instagram.com/p/C0ffee_Post1/"></div>');
+
+      render(
+        <NewsSlugDetailPage
+          messages={{}}
+          locale={language}
+          lang={language}
+          slug="special-story"
+          siteUrl="https://www.newspulse.co.in"
+          article={editorialArticle({ language }) as any}
+          safeHtml={safeHtml}
+          topStories={[]}
+          relatedStories={[]}
+          error={null}
+          pending={false}
+        />
+      );
+
+      expect(screen.getByTitle('Instagram post').getAttribute('src')).toBe('https://www.instagram.com/p/C0ffee_Post1/embed');
+      expect(document.querySelector('figure.np-instagram-embed')?.getAttribute('data-np-shortcode')).toBe('C0ffee_Post1');
+    }
   });
 
   test('renders controlled X article embeds with consent gate responsive shell and shared loader', async () => {

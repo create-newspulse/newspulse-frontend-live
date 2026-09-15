@@ -8,7 +8,7 @@ import AdSlot from '../../src/components/ads/AdSlot';
 import CategoryHeader from '../../src/components/category/CategoryHeader';
 import { getCategoryQueryKey, getCategoryRouteKey } from '../../lib/categoryKeys';
 import { filterPubliclyPublishedArticles, getLocalizedArticleFields, STRICT_LOCALE_POLICY, type RouteLocale } from '../../lib/localizedArticleFields';
-import { formatArticleBodyHtml, parseControlledInlineImageBlock, parseControlledXBlock, parseControlledYouTubeBlock, splitArticleBodyBlocks, stripDuplicateOpeningParagraph, type ControlledArticleInlineImage, type ControlledArticleXEmbed, type ControlledArticleYouTubeEmbed } from '../../lib/articleBody';
+import { formatArticleBodyHtml, parseControlledInlineImageBlock, parseControlledInstagramBlock, parseControlledXBlock, parseControlledYouTubeBlock, splitArticleBodyBlocks, stripDuplicateOpeningParagraph, type ControlledArticleInlineImage, type ControlledArticleInstagramEmbed, type ControlledArticleXEmbed, type ControlledArticleYouTubeEmbed } from '../../lib/articleBody';
 import { fetchPublicNewsGroup, unwrapArticle, type Article } from '../../lib/publicNewsApi';
 import { subscribePublicDataRefresh } from '../../lib/publicDataRefresh';
 import { pickFreshestArticleForLocale, shouldReplaceArticleWithFreshCandidate } from '../../lib/translationGroupSync';
@@ -216,6 +216,68 @@ export function ArticleXEmbed({ embed }: ArticleXEmbedProps) {
               <ArticleXEmbedFrame embed={embed} onFailed={markFailed} onLoaded={markLoaded} />
               {loading ? <div className="np-x-embed__loading" role="status">Loading X post...</div> : null}
             </div>
+          </EmbeddedMediaConsentGate>
+        )}
+      </div>
+    </figure>
+  );
+}
+
+type ArticleInstagramEmbedProps = {
+  embed: ControlledArticleInstagramEmbed;
+};
+
+function ArticleInstagramEmbedFrame({ embed, onFailed }: ArticleInstagramEmbedProps & { onFailed: () => void }) {
+  const timerRef = React.useRef<number | undefined>(undefined);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    timerRef.current = window.setTimeout(onFailed, 12000);
+    return () => {
+      if (timerRef.current) window.clearTimeout(timerRef.current);
+    };
+  }, [embed.embedUrl, onFailed]);
+
+  return (
+    <iframe
+      className="np-instagram-embed__iframe"
+      title="Instagram post"
+      src={embed.embedUrl}
+      loading="lazy"
+      allow="encrypted-media; picture-in-picture; web-share"
+      referrerPolicy="strict-origin-when-cross-origin"
+      onLoad={() => {
+        if (timerRef.current) window.clearTimeout(timerRef.current);
+      }}
+      onError={onFailed}
+    />
+  );
+}
+
+export function ArticleInstagramEmbed({ embed }: ArticleInstagramEmbedProps) {
+  const [failed, setFailed] = React.useState(false);
+
+  React.useEffect(() => {
+    setFailed(false);
+  }, [embed.embedUrl, embed.url]);
+
+  const markFailed = React.useCallback(() => {
+    setFailed(true);
+  }, []);
+
+  return (
+    <figure className="not-prose np-instagram-embed" data-np-block="instagram" data-np-shortcode={embed.shortcode}>
+      <div className="np-instagram-embed__frame">
+        {failed ? (
+          <div className="np-instagram-embed__fallback" role="note">
+            <span>Instagram post unavailable</span>
+            <a href={embed.url} target="_blank" rel="noopener noreferrer">
+              Open on Instagram
+            </a>
+          </div>
+        ) : (
+          <EmbeddedMediaConsentGate title="Instagram post" className="np-instagram-embed__consent" placeholderClassName="rounded-lg">
+            <ArticleInstagramEmbedFrame embed={embed} onFailed={markFailed} />
           </EmbeddedMediaConsentGate>
         )}
       </div>
@@ -939,6 +1001,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
                         const controlledImage = parseControlledInlineImageBlock(block);
                         const controlledYouTube = controlledImage ? null : parseControlledYouTubeBlock(block);
                         const controlledX = controlledImage || controlledYouTube ? null : parseControlledXBlock(block);
+                        const controlledInstagram = controlledImage || controlledYouTube || controlledX ? null : parseControlledInstagramBlock(block);
 
                         return (
                           <React.Fragment key={`pblock-${idx}`}>
@@ -948,6 +1011,8 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
                               <ArticleYouTubeEmbed embed={controlledYouTube} />
                             ) : controlledX ? (
                               <ArticleXEmbed embed={controlledX} />
+                            ) : controlledInstagram ? (
+                              <ArticleInstagramEmbed embed={controlledInstagram} />
                             ) : (
                               <div dangerouslySetInnerHTML={{ __html: block }} />
                             )}
@@ -1270,6 +1335,72 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
           font-weight: 700;
           text-decoration: underline;
           text-underline-offset: 3px;
+        }
+
+        .article-body :where(.np-instagram-embed) {
+          clear: both;
+          display: block;
+          margin: 1.5rem auto;
+          max-width: 100%;
+          width: 100%;
+        }
+
+        .article-body :where(.np-instagram-embed__frame) {
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          max-width: 100%;
+          min-height: 34rem;
+          overflow: hidden;
+          position: relative;
+          width: 100%;
+        }
+
+        .article-body :where(.np-instagram-embed__consent) {
+          min-height: 34rem;
+          position: relative;
+          width: 100%;
+        }
+
+        .article-body :where(.np-instagram-embed__iframe) {
+          border: 0;
+          display: block;
+          height: 34rem;
+          max-width: 100%;
+          width: 100%;
+        }
+
+        .article-body :where(.np-instagram-embed__fallback) {
+          align-items: center;
+          color: #475569;
+          display: flex;
+          flex-direction: column;
+          font-size: 0.92rem;
+          gap: 0.55rem;
+          justify-content: center;
+          min-height: 34rem;
+          padding: 2rem;
+          text-align: center;
+          width: 100%;
+        }
+
+        .article-body :where(.np-instagram-embed__fallback a) {
+          color: #0f172a;
+          font-weight: 700;
+          text-decoration: underline;
+          text-underline-offset: 3px;
+        }
+
+        @media (max-width: 640px) {
+          .article-body :where(.np-instagram-embed__frame),
+          .article-body :where(.np-instagram-embed__consent),
+          .article-body :where(.np-instagram-embed__fallback) {
+            min-height: 30rem;
+          }
+
+          .article-body :where(.np-instagram-embed__iframe) {
+            height: 30rem;
+          }
         }
 
         .article-body:lang(gu) :where(p, li),

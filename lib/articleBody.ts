@@ -5,10 +5,12 @@ import { getPublicViralVideoXStatusUrl } from './publicViralVideos';
 const CONTROLLED_INLINE_IMAGE_BLOCK = 'inline-image';
 const CONTROLLED_YOUTUBE_BLOCK = 'youtube';
 const CONTROLLED_X_BLOCK = 'x';
+const CONTROLLED_INSTAGRAM_BLOCK = 'instagram';
 const CONTROLLED_INLINE_IMAGE_MEDIA_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{2,79}$/;
 const CONTROLLED_INLINE_IMAGE_DIMENSION_RE = /^[1-9][0-9]{0,4}$/;
 const CONTROLLED_YOUTUBE_VIDEO_ID_RE = /^[A-Za-z0-9_-]{6,}$/;
 const CONTROLLED_X_POST_ID_RE = /^\d{5,}$/;
+const CONTROLLED_INSTAGRAM_SHORTCODE_RE = /^[A-Za-z0-9_-]{5,64}$/;
 
 export type ControlledArticleInlineImage = {
   src: string;
@@ -29,6 +31,13 @@ export type ControlledArticleYouTubeEmbed = {
 export type ControlledArticleXEmbed = {
   postId: string;
   url: string;
+};
+
+export type ControlledArticleInstagramEmbed = {
+  shortcode: string;
+  kind: 'p' | 'reel' | 'tv';
+  url: string;
+  embedUrl: string;
 };
 
 function decodeEntities(value: string): string {
@@ -171,6 +180,38 @@ function normalizeControlledXPostId(value: string): string {
   return CONTROLLED_X_POST_ID_RE.test(normalized) ? normalized : '';
 }
 
+function normalizeControlledInstagramShortcode(value: string): string {
+  const normalized = String(value || '').trim();
+  return CONTROLLED_INSTAGRAM_SHORTCODE_RE.test(normalized) ? normalized : '';
+}
+
+function getInstagramPostFromUrl(value: string): { kind: ControlledArticleInstagramEmbed['kind']; shortcode: string; url: string; embedUrl: string } | null {
+  try {
+    const url = new URL(String(value || '').trim());
+    const hostname = url.hostname.toLowerCase();
+    if (url.protocol !== 'https:') return null;
+    if (hostname !== 'instagram.com' && hostname !== 'www.instagram.com') return null;
+
+    const parts = url.pathname.split('/').filter(Boolean);
+    if (parts.length !== 2) return null;
+
+    const kind = parts[0].toLowerCase();
+    if (kind !== 'p' && kind !== 'reel' && kind !== 'tv') return null;
+
+    const shortcode = normalizeControlledInstagramShortcode(parts[1] || '');
+    if (!shortcode) return null;
+
+    return {
+      kind,
+      shortcode,
+      url: `https://www.instagram.com/${kind}/${shortcode}/`,
+      embedUrl: `https://www.instagram.com/${kind}/${shortcode}/embed`,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function getXPostIdFromStatusUrl(value: string): string {
   const statusUrl = getPublicViralVideoXStatusUrl(value);
   if (!statusUrl) return '';
@@ -197,6 +238,20 @@ function resolveControlledXEmbed(attrs: Record<string, string>): ControlledArtic
   if (getXPostIdFromStatusUrl(url) !== postId) return null;
 
   return { postId, url };
+}
+
+function resolveControlledInstagramEmbed(attrs: Record<string, string>): ControlledArticleInstagramEmbed | null {
+  if (attrs['data-np-block'] !== CONTROLLED_INSTAGRAM_BLOCK) return null;
+
+  const shortcode = normalizeControlledInstagramShortcode(attrs['data-np-shortcode'] || '');
+  if (!shortcode) return null;
+
+  const post = getInstagramPostFromUrl(attrs['data-np-url'] || '');
+  if (!post) return null;
+
+  if (post.shortcode !== shortcode) return null;
+
+  return post;
 }
 
 function resolveControlledYouTubeEmbed(attrs: Record<string, string>): ControlledArticleYouTubeEmbed | null {
@@ -333,6 +388,27 @@ function normalizeControlledXMarkers(value: string): string {
   });
 }
 
+function buildControlledInstagramHtml(attrs: Record<string, string>): string | null {
+  if (attrs['data-np-block'] !== CONTROLLED_INSTAGRAM_BLOCK) return null;
+
+  const embed = resolveControlledInstagramEmbed(attrs);
+  if (!embed) return '';
+
+  return `<div class="np-instagram-embed" data-np-block="instagram" data-np-shortcode="${escapeHtml(embed.shortcode)}" data-np-url="${escapeHtml(embed.url)}"></div>`;
+}
+
+function normalizeControlledInstagramMarkers(value: string): string {
+  return String(value || '').replace(/<div\b(?=[^>]*data-np-block\s*=\s*(?:"instagram"|'instagram'|instagram))[^>]*(?:\/>|>[\s\S]*?<\/div>)/gi, (match) => {
+    if (!/\/>\s*$/i.test(match)) {
+      const openEndIndex = match.indexOf('>');
+      const closeStartIndex = match.toLowerCase().lastIndexOf('</div>');
+      if (openEndIndex < 0 || closeStartIndex < 0 || match.slice(openEndIndex + 1, closeStartIndex).trim()) return '';
+    }
+    const html = buildControlledInstagramHtml(parseTagAttributes(match));
+    return html === null ? match : html;
+  });
+}
+
 export function parseControlledInlineImageBlock(html: string): ControlledArticleInlineImage | null {
   const source = String(html || '').trim();
   const figureMatch = source.match(/^<figure\b([^>]*)>([\s\S]*)<\/figure>$/i);
@@ -387,6 +463,17 @@ export function parseControlledXBlock(html: string): ControlledArticleXEmbed | n
   if (attrs['data-np-block'] !== CONTROLLED_X_BLOCK) return null;
 
   return resolveControlledXEmbed(attrs);
+}
+
+export function parseControlledInstagramBlock(html: string): ControlledArticleInstagramEmbed | null {
+  const source = String(html || '').trim();
+  const divMatch = source.match(/^<div\b([^>]*)>\s*<\/div>$/i);
+  if (!divMatch) return null;
+
+  const attrs = parseTagAttributes(`<div${divMatch[1]}>`);
+  if (attrs['data-np-block'] !== CONTROLLED_INSTAGRAM_BLOCK) return null;
+
+  return resolveControlledInstagramEmbed(attrs);
 }
 
 function isHeadingLikeLine(value: string): boolean {
@@ -446,7 +533,7 @@ export function splitArticleBodyBlocks(html: string): string[] {
   if (!source) return [];
 
   const blocks: string[] = [];
-  const re = /<(p|figure)\b[^>]*>[\s\S]*?<\/\1>|<div\b(?=[^>]*data-np-block\s*=\s*(?:"youtube"|'youtube'|youtube|"x"|'x'|x))[^>]*>[\s\S]*?<\/div>/gi;
+  const re = /<(p|figure)\b[^>]*>[\s\S]*?<\/\1>|<div\b(?=[^>]*data-np-block\s*=\s*(?:"youtube"|'youtube'|youtube|"x"|'x'|x|"instagram"|'instagram'|instagram))[^>]*>[\s\S]*?<\/div>/gi;
   let lastIndex = 0;
   let match: RegExpExecArray | null = null;
 
@@ -490,7 +577,7 @@ export function formatArticleBodyHtml(rawContent: string): string {
   if (!normalized) return '';
 
   const htmlish = hasAnyHtml(normalized);
-  const markedContent = normalizeControlledXMarkers(normalizeControlledYouTubeMarkers(normalizeControlledInlineImageMarkers(normalized)));
+  const markedContent = normalizeControlledInstagramMarkers(normalizeControlledXMarkers(normalizeControlledYouTubeMarkers(normalizeControlledInlineImageMarkers(normalized))));
   const preSanitized = htmlish && hasBlockHtml(markedContent) ? markedContent : paragraphizeTextContent(markedContent);
 
   return sanitizeHtml(preSanitized, {
@@ -538,12 +625,13 @@ export function formatArticleBodyHtml(rawContent: string): string {
         'data-np-media-id',
       ],
       div: [
-        { name: 'class', values: ['np-youtube-embed', 'np-x-embed'] },
-        { name: 'data-np-block', values: ['youtube', 'x'] },
+        { name: 'class', values: ['np-youtube-embed', 'np-x-embed', 'np-instagram-embed'] },
+        { name: 'data-np-block', values: ['youtube', 'x', 'instagram'] },
         'data-np-video-id',
         'data-np-url',
         'data-np-embed-url',
         'data-np-post-id',
+        'data-np-shortcode',
       ],
       figcaption: [{ name: 'class', values: ['np-inline-image__caption'] }],
       span: [
@@ -567,6 +655,10 @@ export function formatArticleBodyHtml(rawContent: string): string {
       if (frame.tag === 'div' && frame.attribs['data-np-block'] === CONTROLLED_X_BLOCK) {
         if (!resolveControlledXEmbed(frame.attribs)) return 'excludeTag';
       }
+      if (frame.tag === 'div' && frame.attribs['data-np-block'] === CONTROLLED_INSTAGRAM_BLOCK) {
+        if (!resolveControlledInstagramEmbed(frame.attribs)) return 'excludeTag';
+      }
+      if (frame.tag === 'blockquote' && /(?:^|\s)instagram-media(?:\s|$)/i.test(String(frame.attribs.class || ''))) return 'excludeTag';
       if (frame.tag === 'figcaption' && frame.attribs.class !== 'np-inline-image__caption') return 'excludeTag';
       return false;
     },

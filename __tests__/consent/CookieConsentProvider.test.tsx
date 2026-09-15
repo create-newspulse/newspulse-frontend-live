@@ -882,4 +882,20 @@ describe('CookieConsentProvider', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Allow Embedded Media' }));
     expect(await screen.findByTitle('YouTube video')).toBeTruthy();
   });
+
+  test('Instagram iframe is blocked without embedded-media consent and loads after permission', async () => {
+    renderWithProviders(
+      <div style={{ width: 320, height: 544 }}>
+        <EmbeddedMediaConsentGate title="Instagram post">
+          <iframe title="Instagram post" src="https://www.instagram.com/p/C0ffee_Post1/embed" />
+        </EmbeddedMediaConsentGate>
+      </div>
+    );
+
+    expect(await screen.findByTestId('embedded-media-placeholder')).toBeTruthy();
+    expect(screen.queryByTitle('Instagram post')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Allow Embedded Media' }));
+    expect(await screen.findByTitle('Instagram post')).toBeTruthy();
+  });
 });

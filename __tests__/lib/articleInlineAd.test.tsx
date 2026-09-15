@@ -1,4 +1,4 @@
-import { formatArticleBodyHtml, parseControlledInlineImageBlock, parseControlledXBlock, parseControlledYouTubeBlock, splitArticleBodyBlocks, stripDuplicateOpeningParagraph } from '../../lib/articleBody';
+import { formatArticleBodyHtml, parseControlledInlineImageBlock, parseControlledInstagramBlock, parseControlledXBlock, parseControlledYouTubeBlock, splitArticleBodyBlocks, stripDuplicateOpeningParagraph } from '../../lib/articleBody';
 import { splitArticleHtmlForInlineAd } from '../../lib/articleInlineAd';
 
 describe('splitArticleHtmlForInlineAd', () => {
@@ -300,6 +300,94 @@ describe('formatArticleBodyHtml', () => {
       'https://x.com/i/status/2050104453630718079',
       'https://x.com/i/status/2050104453630718079',
       'https://x.com/i/status/2050104453630718079',
+    ]);
+  });
+
+  it('preserves a valid Instagram /p/ marker as a controlled embed block', () => {
+    const html = formatArticleBodyHtml('<div data-np-block="instagram" data-np-shortcode="C0ffee_Post1" data-np-url="https://www.instagram.com/p/C0ffee_Post1/" data-np-embed-url="https://evil.example/embed"></div>');
+    const embed = parseControlledInstagramBlock(html);
+
+    expect(html).toContain('class="np-instagram-embed"');
+    expect(html).toContain('data-np-block="instagram"');
+    expect(html).toContain('data-np-shortcode="C0ffee_Post1"');
+    expect(html).not.toContain('data-np-embed-url');
+    expect(html).not.toContain('evil.example');
+    expect(embed).toEqual({
+      kind: 'p',
+      shortcode: 'C0ffee_Post1',
+      url: 'https://www.instagram.com/p/C0ffee_Post1/',
+      embedUrl: 'https://www.instagram.com/p/C0ffee_Post1/embed',
+    });
+  });
+
+  it('preserves valid Instagram reel and tv markers with internally generated embed URLs', () => {
+    const reelHtml = formatArticleBodyHtml('<div data-np-block="instagram" data-np-shortcode="Reel_Code9" data-np-url="https://instagram.com/reel/Reel_Code9/"></div>');
+    const tvHtml = formatArticleBodyHtml('<div data-np-block="instagram" data-np-shortcode="Tv_Code99" data-np-url="https://www.instagram.com/tv/Tv_Code99/"></div>');
+
+    expect(parseControlledInstagramBlock(reelHtml)).toEqual({
+      kind: 'reel',
+      shortcode: 'Reel_Code9',
+      url: 'https://www.instagram.com/reel/Reel_Code9/',
+      embedUrl: 'https://www.instagram.com/reel/Reel_Code9/embed',
+    });
+    expect(parseControlledInstagramBlock(tvHtml)?.embedUrl).toBe('https://www.instagram.com/tv/Tv_Code99/embed');
+    expect(reelHtml).not.toContain('data-np-embed-url');
+    expect(tvHtml).not.toContain('data-np-embed-url');
+  });
+
+  it('rejects malformed Instagram markers and marker URL mismatches', () => {
+    const missingShortcode = formatArticleBodyHtml('<div data-np-block="instagram" data-np-url="https://www.instagram.com/p/C0ffee_Post1/"></div>');
+    const badShortcode = formatArticleBodyHtml('<div data-np-block="instagram" data-np-shortcode="bad.code" data-np-url="https://www.instagram.com/p/bad.code/"></div>');
+    const mismatchedShortcode = formatArticleBodyHtml('<div data-np-block="instagram" data-np-shortcode="C0ffee_Post1" data-np-url="https://www.instagram.com/p/Other_Code1/"></div>');
+    const nonEmpty = formatArticleBodyHtml('<div data-np-block="instagram" data-np-shortcode="C0ffee_Post1" data-np-url="https://www.instagram.com/p/C0ffee_Post1/"><blockquote class="instagram-media">raw embed</blockquote></div>');
+
+    expect(missingShortcode).toBe('');
+    expect(badShortcode).toBe('');
+    expect(mismatchedShortcode).toBe('');
+    expect(nonEmpty).toBe('');
+  });
+
+  it('rejects unsafe Instagram URLs and unsupported Instagram paths', () => {
+    const lookalike = formatArticleBodyHtml('<div data-np-block="instagram" data-np-shortcode="C0ffee_Post1" data-np-url="https://instagram.com.example.com/p/C0ffee_Post1/"></div>');
+    const javascriptUrl = formatArticleBodyHtml('<div data-np-block="instagram" data-np-shortcode="C0ffee_Post1" data-np-url="javascript:alert(1)"></div>');
+    const dataUrl = formatArticleBodyHtml('<div data-np-block="instagram" data-np-shortcode="C0ffee_Post1" data-np-url="data:text/html,boom"></div>');
+    const profileUrl = formatArticleBodyHtml('<div data-np-block="instagram" data-np-shortcode="newspulse" data-np-url="https://www.instagram.com/newspulse/"></div>');
+    const storyUrl = formatArticleBodyHtml('<div data-np-block="instagram" data-np-shortcode="C0ffee_Post1" data-np-url="https://www.instagram.com/stories/newspulse/C0ffee_Post1/"></div>');
+
+    expect(lookalike).toBe('');
+    expect(javascriptUrl).toBe('');
+    expect(dataUrl).toBe('');
+    expect(profileUrl).toBe('');
+    expect(storyUrl).toBe('');
+  });
+
+  it('does not preserve raw Instagram blockquote/script HTML as a controlled embed', () => {
+    const html = formatArticleBodyHtml('<p>Before Instagram.</p><blockquote class="instagram-media"><a href="https://www.instagram.com/p/C0ffee_Post1/">View post</a></blockquote><script src="https://www.instagram.com/embed.js"></script><p>After Instagram.</p>');
+
+    expect(html).toContain('<p>Before Instagram.</p>');
+    expect(html).toContain('<p>After Instagram.</p>');
+    expect(html).not.toContain('instagram-media');
+    expect(html).not.toContain('<script');
+    expect(html).not.toContain('embed.js');
+    expect(parseControlledInstagramBlock(html)).toBeNull();
+  });
+
+  it('keeps EN, HI, and GU controlled Instagram variants on the same shortcode and URL', () => {
+    const variants = ['en', 'hi', 'gu'].map(() => {
+      const html = formatArticleBodyHtml('<div data-np-block="instagram" data-np-shortcode="C0ffee_Post1" data-np-url="https://www.instagram.com/p/C0ffee_Post1/"></div>');
+      return parseControlledInstagramBlock(html);
+    });
+
+    expect(variants.map((variant) => variant?.shortcode)).toEqual(['C0ffee_Post1', 'C0ffee_Post1', 'C0ffee_Post1']);
+    expect(variants.map((variant) => variant?.url)).toEqual([
+      'https://www.instagram.com/p/C0ffee_Post1/',
+      'https://www.instagram.com/p/C0ffee_Post1/',
+      'https://www.instagram.com/p/C0ffee_Post1/',
+    ]);
+    expect(variants.map((variant) => variant?.embedUrl)).toEqual([
+      'https://www.instagram.com/p/C0ffee_Post1/embed',
+      'https://www.instagram.com/p/C0ffee_Post1/embed',
+      'https://www.instagram.com/p/C0ffee_Post1/embed',
     ]);
   });
 });
