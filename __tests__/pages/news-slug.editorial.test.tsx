@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
-import NewsSlugDetailPage, { ArticleInstagramEmbed, ArticleXEmbed, ArticleYouTubeEmbed, getServerSideProps } from '../../pages/news/[slug]';
+import NewsSlugDetailPage, { ArticleFacebookEmbed, ArticleInstagramEmbed, ArticleXEmbed, ArticleYouTubeEmbed, getServerSideProps } from '../../pages/news/[slug]';
 import { formatArticleBodyHtml } from '../../lib/articleBody';
 import { fetchPublicNews } from '../../lib/publicNewsApi';
 import { hasRenderedTwitterWidgetFrame, loadTwitterWidgetsIn } from '../../lib/xWidgets';
@@ -470,6 +470,163 @@ describe('pages/news/[slug] editorial detail', () => {
 
       expect(screen.getByTitle('Instagram post').getAttribute('src')).toBe('https://www.instagram.com/p/C0ffee_Post1/embed');
       expect(document.querySelector('figure.np-instagram-embed')?.getAttribute('data-np-shortcode')).toBe('C0ffee_Post1');
+    }
+  });
+
+  test('renders controlled Facebook /posts/ embeds with consent gate and responsive shell', async () => {
+    const safeHtml = formatArticleBodyHtml('<p>Complete article content</p><div data-np-block="facebook" data-np-url="https://www.facebook.com/NewsPulseIndia/posts/pfbid02SafePost123"></div><p>After Facebook paragraph.</p>');
+
+    render(
+      <NewsSlugDetailPage
+        messages={{}}
+        locale="en"
+        lang="en"
+        slug="special-story"
+        siteUrl="https://www.newspulse.co.in"
+        article={editorialArticle() as any}
+        safeHtml={safeHtml}
+        topStories={[]}
+        relatedStories={[]}
+        error={null}
+        pending={false}
+      />
+    );
+
+    const consentGate = screen.getByTestId('embedded-media-consent-gate');
+    const iframe = screen.getByTitle('Facebook post') as HTMLIFrameElement;
+    const figure = iframe.closest('figure');
+    const frame = iframe.closest('.np-facebook-embed__frame') as HTMLElement | null;
+
+    expect(screen.getByText('Complete article content')).toBeTruthy();
+    expect(screen.getByText('After Facebook paragraph.')).toBeTruthy();
+    expect(consentGate.getAttribute('data-title')).toBe('Facebook post');
+    expect(consentGate.className).toContain('np-facebook-embed__consent');
+    expect(iframe.getAttribute('src')).toBe('https://www.facebook.com/plugins/post.php?href=https%3A%2F%2Fwww.facebook.com%2FNewsPulseIndia%2Fposts%2Fpfbid02SafePost123&show_text=true&width=500');
+    expect(iframe.getAttribute('loading')).toBe('lazy');
+    expect(iframe.getAttribute('allow')).toContain('web-share');
+    expect(iframe.getAttribute('referrerpolicy')).toBe('strict-origin-when-cross-origin');
+    expect(figure?.className).toContain('np-facebook-embed');
+    expect(figure?.getAttribute('data-np-block')).toBe('facebook');
+    expect(frame).toBeTruthy();
+  });
+
+  test('renders controlled Facebook permalink embeds from validated marker URLs', async () => {
+    const safeHtml = formatArticleBodyHtml('<div data-np-block="facebook" data-np-url="https://www.facebook.com/permalink.php?story_fbid=pfbid02SafeStory123&id=123456789012345"></div>');
+
+    render(
+      <NewsSlugDetailPage
+        messages={{}}
+        locale="en"
+        lang="en"
+        slug="special-story"
+        siteUrl="https://www.newspulse.co.in"
+        article={editorialArticle() as any}
+        safeHtml={safeHtml}
+        topStories={[]}
+        relatedStories={[]}
+        error={null}
+        pending={false}
+      />
+    );
+
+    expect(screen.getByTitle('Facebook post').getAttribute('src')).toBe('https://www.facebook.com/plugins/post.php?href=https%3A%2F%2Fwww.facebook.com%2Fpermalink.php%3Fstory_fbid%3Dpfbid02SafeStory123%26id%3D123456789012345&show_text=true&width=500');
+  });
+
+  test('does not render Facebook iframe resources for articles without controlled Facebook blocks', async () => {
+    render(
+      <NewsSlugDetailPage
+        messages={{}}
+        locale="en"
+        lang="en"
+        slug="special-story"
+        siteUrl="https://www.newspulse.co.in"
+        article={editorialArticle() as any}
+        safeHtml="<p>Complete article content</p>"
+        topStories={[]}
+        relatedStories={[]}
+        error={null}
+        pending={false}
+      />
+    );
+
+    expect(screen.queryByTitle('Facebook post')).toBeNull();
+    expect(document.querySelector('figure.np-facebook-embed')).toBeNull();
+  });
+
+  test('renders the controlled Facebook fallback with the validated external link on failure', async () => {
+    const stateSpy = jest.spyOn(React, 'useState');
+    stateSpy.mockImplementationOnce(() => [true, jest.fn()] as any);
+
+    render(
+      <ArticleFacebookEmbed
+        embed={{
+          kind: 'post',
+          embedUrl: 'https://www.facebook.com/plugins/post.php?href=https%3A%2F%2Fwww.facebook.com%2FNewsPulseIndia%2Fposts%2Fpfbid02SafePost123&show_text=true&width=500',
+          url: 'https://www.facebook.com/NewsPulseIndia/posts/pfbid02SafePost123',
+        }}
+      />
+    );
+
+    expect(screen.getByText('Facebook post unavailable')).toBeTruthy();
+    const fallbackLink = screen.getByRole('link', { name: 'Open on Facebook' });
+    expect(fallbackLink.getAttribute('href')).toBe('https://www.facebook.com/NewsPulseIndia/posts/pfbid02SafePost123');
+    expect(fallbackLink.getAttribute('target')).toBe('_blank');
+    expect(fallbackLink.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(screen.queryByTitle('Facebook post')).toBeNull();
+
+    stateSpy.mockRestore();
+  });
+
+  test('shows the controlled Facebook fallback when the post-consent iframe does not load', async () => {
+    jest.useFakeTimers();
+
+    try {
+      render(
+        <ArticleFacebookEmbed
+          embed={{
+            kind: 'post',
+            embedUrl: 'https://www.facebook.com/plugins/post.php?href=https%3A%2F%2Fwww.facebook.com%2FNewsPulseIndia%2Fposts%2Fpfbid02SafePost123&show_text=true&width=500',
+            url: 'https://www.facebook.com/NewsPulseIndia/posts/pfbid02SafePost123',
+          }}
+        />
+      );
+
+      expect(screen.getByTitle('Facebook post')).toBeTruthy();
+
+      await act(async () => {
+        jest.advanceTimersByTime(12000);
+      });
+
+      expect(screen.getByText('Facebook post unavailable')).toBeTruthy();
+      expect(screen.getByRole('link', { name: 'Open on Facebook' }).getAttribute('href')).toBe('https://www.facebook.com/NewsPulseIndia/posts/pfbid02SafePost123');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('renders EN, HI, and GU Facebook markers identically', async () => {
+    for (const language of ['en', 'hi', 'gu'] as const) {
+      cleanup();
+      const safeHtml = formatArticleBodyHtml('<div data-np-block="facebook" data-np-url="https://www.facebook.com/NewsPulseIndia/posts/pfbid02SafePost123"></div>');
+
+      render(
+        <NewsSlugDetailPage
+          messages={{}}
+          locale={language}
+          lang={language}
+          slug="special-story"
+          siteUrl="https://www.newspulse.co.in"
+          article={editorialArticle({ language }) as any}
+          safeHtml={safeHtml}
+          topStories={[]}
+          relatedStories={[]}
+          error={null}
+          pending={false}
+        />
+      );
+
+      expect(screen.getByTitle('Facebook post').getAttribute('src')).toBe('https://www.facebook.com/plugins/post.php?href=https%3A%2F%2Fwww.facebook.com%2FNewsPulseIndia%2Fposts%2Fpfbid02SafePost123&show_text=true&width=500');
+      expect(document.querySelector('figure.np-facebook-embed')?.getAttribute('data-np-block')).toBe('facebook');
     }
   });
 

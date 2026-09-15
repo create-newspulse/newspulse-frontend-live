@@ -898,4 +898,20 @@ describe('CookieConsentProvider', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Allow Embedded Media' }));
     expect(await screen.findByTitle('Instagram post')).toBeTruthy();
   });
+
+  test('Facebook iframe is blocked without embedded-media consent and loads after permission', async () => {
+    renderWithProviders(
+      <div style={{ width: 320, height: 512 }}>
+        <EmbeddedMediaConsentGate title="Facebook post">
+          <iframe title="Facebook post" src="https://www.facebook.com/plugins/post.php?href=https%3A%2F%2Fwww.facebook.com%2FNewsPulseIndia%2Fposts%2Fpfbid02SafePost123&show_text=true&width=500" />
+        </EmbeddedMediaConsentGate>
+      </div>
+    );
+
+    expect(await screen.findByTestId('embedded-media-placeholder')).toBeTruthy();
+    expect(screen.queryByTitle('Facebook post')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Allow Embedded Media' }));
+    expect(await screen.findByTitle('Facebook post')).toBeTruthy();
+  });
 });

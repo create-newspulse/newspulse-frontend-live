@@ -6,11 +6,14 @@ const CONTROLLED_INLINE_IMAGE_BLOCK = 'inline-image';
 const CONTROLLED_YOUTUBE_BLOCK = 'youtube';
 const CONTROLLED_X_BLOCK = 'x';
 const CONTROLLED_INSTAGRAM_BLOCK = 'instagram';
+const CONTROLLED_FACEBOOK_BLOCK = 'facebook';
 const CONTROLLED_INLINE_IMAGE_MEDIA_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{2,79}$/;
 const CONTROLLED_INLINE_IMAGE_DIMENSION_RE = /^[1-9][0-9]{0,4}$/;
 const CONTROLLED_YOUTUBE_VIDEO_ID_RE = /^[A-Za-z0-9_-]{6,}$/;
 const CONTROLLED_X_POST_ID_RE = /^\d{5,}$/;
 const CONTROLLED_INSTAGRAM_SHORTCODE_RE = /^[A-Za-z0-9_-]{5,64}$/;
+const CONTROLLED_FACEBOOK_PATH_PART_RE = /^[A-Za-z0-9._-]{3,160}$/;
+const CONTROLLED_FACEBOOK_POST_ID_RE = /^[A-Za-z0-9._:-]{5,240}$/;
 
 export type ControlledArticleInlineImage = {
   src: string;
@@ -36,6 +39,12 @@ export type ControlledArticleXEmbed = {
 export type ControlledArticleInstagramEmbed = {
   shortcode: string;
   kind: 'p' | 'reel' | 'tv';
+  url: string;
+  embedUrl: string;
+};
+
+export type ControlledArticleFacebookEmbed = {
+  kind: 'post' | 'permalink';
   url: string;
   embedUrl: string;
 };
@@ -212,6 +221,49 @@ function getInstagramPostFromUrl(value: string): { kind: ControlledArticleInstag
   }
 }
 
+function buildFacebookPluginEmbedUrl(validatedUrl: string): string {
+  const embedUrl = new URL('https://www.facebook.com/plugins/post.php');
+  embedUrl.searchParams.set('href', validatedUrl);
+  embedUrl.searchParams.set('show_text', 'true');
+  embedUrl.searchParams.set('width', '500');
+  return embedUrl.toString();
+}
+
+function getFacebookPostFromUrl(value: string): ControlledArticleFacebookEmbed | null {
+  try {
+    const url = new URL(String(value || '').trim());
+    const hostname = url.hostname.toLowerCase();
+    if (url.protocol !== 'https:') return null;
+    if (hostname !== 'facebook.com' && hostname !== 'www.facebook.com') return null;
+
+    const parts = url.pathname.split('/').filter(Boolean);
+
+    if (parts.length === 3 && parts[1].toLowerCase() === 'posts') {
+      const owner = parts[0] || '';
+      const postId = parts[2] || '';
+      if (!CONTROLLED_FACEBOOK_PATH_PART_RE.test(owner)) return null;
+      if (!CONTROLLED_FACEBOOK_POST_ID_RE.test(postId)) return null;
+
+      const canonicalUrl = `https://www.facebook.com/${owner}/posts/${postId}`;
+      return { kind: 'post', url: canonicalUrl, embedUrl: buildFacebookPluginEmbedUrl(canonicalUrl) };
+    }
+
+    if (parts.length === 1 && parts[0].toLowerCase() === 'permalink.php') {
+      const storyFbid = String(url.searchParams.get('story_fbid') || '').trim();
+      const id = String(url.searchParams.get('id') || '').trim();
+      if (!CONTROLLED_FACEBOOK_POST_ID_RE.test(storyFbid)) return null;
+      if (!/^\d{5,40}$/.test(id)) return null;
+
+      const canonicalUrl = `https://www.facebook.com/permalink.php?story_fbid=${encodeURIComponent(storyFbid)}&id=${encodeURIComponent(id)}`;
+      return { kind: 'permalink', url: canonicalUrl, embedUrl: buildFacebookPluginEmbedUrl(canonicalUrl) };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function getXPostIdFromStatusUrl(value: string): string {
   const statusUrl = getPublicViralVideoXStatusUrl(value);
   if (!statusUrl) return '';
@@ -252,6 +304,11 @@ function resolveControlledInstagramEmbed(attrs: Record<string, string>): Control
   if (post.shortcode !== shortcode) return null;
 
   return post;
+}
+
+function resolveControlledFacebookEmbed(attrs: Record<string, string>): ControlledArticleFacebookEmbed | null {
+  if (attrs['data-np-block'] !== CONTROLLED_FACEBOOK_BLOCK) return null;
+  return getFacebookPostFromUrl(attrs['data-np-url'] || '');
 }
 
 function resolveControlledYouTubeEmbed(attrs: Record<string, string>): ControlledArticleYouTubeEmbed | null {
@@ -409,6 +466,27 @@ function normalizeControlledInstagramMarkers(value: string): string {
   });
 }
 
+function buildControlledFacebookHtml(attrs: Record<string, string>): string | null {
+  if (attrs['data-np-block'] !== CONTROLLED_FACEBOOK_BLOCK) return null;
+
+  const embed = resolveControlledFacebookEmbed(attrs);
+  if (!embed) return '';
+
+  return `<div class="np-facebook-embed" data-np-block="facebook" data-np-url="${escapeHtml(embed.url)}"></div>`;
+}
+
+function normalizeControlledFacebookMarkers(value: string): string {
+  return String(value || '').replace(/<div\b(?=[^>]*data-np-block\s*=\s*(?:"facebook"|'facebook'|facebook))[^>]*(?:\/>|>[\s\S]*?<\/div>)/gi, (match) => {
+    if (!/\/>\s*$/i.test(match)) {
+      const openEndIndex = match.indexOf('>');
+      const closeStartIndex = match.toLowerCase().lastIndexOf('</div>');
+      if (openEndIndex < 0 || closeStartIndex < 0 || match.slice(openEndIndex + 1, closeStartIndex).trim()) return '';
+    }
+    const html = buildControlledFacebookHtml(parseTagAttributes(match));
+    return html === null ? match : html;
+  });
+}
+
 export function parseControlledInlineImageBlock(html: string): ControlledArticleInlineImage | null {
   const source = String(html || '').trim();
   const figureMatch = source.match(/^<figure\b([^>]*)>([\s\S]*)<\/figure>$/i);
@@ -476,6 +554,17 @@ export function parseControlledInstagramBlock(html: string): ControlledArticleIn
   return resolveControlledInstagramEmbed(attrs);
 }
 
+export function parseControlledFacebookBlock(html: string): ControlledArticleFacebookEmbed | null {
+  const source = String(html || '').trim();
+  const divMatch = source.match(/^<div\b([^>]*)>\s*<\/div>$/i);
+  if (!divMatch) return null;
+
+  const attrs = parseTagAttributes(`<div${divMatch[1]}>`);
+  if (attrs['data-np-block'] !== CONTROLLED_FACEBOOK_BLOCK) return null;
+
+  return resolveControlledFacebookEmbed(attrs);
+}
+
 function isHeadingLikeLine(value: string): boolean {
   const line = String(value || '').trim();
   if (!line) return false;
@@ -533,7 +622,7 @@ export function splitArticleBodyBlocks(html: string): string[] {
   if (!source) return [];
 
   const blocks: string[] = [];
-  const re = /<(p|figure)\b[^>]*>[\s\S]*?<\/\1>|<div\b(?=[^>]*data-np-block\s*=\s*(?:"youtube"|'youtube'|youtube|"x"|'x'|x|"instagram"|'instagram'|instagram))[^>]*>[\s\S]*?<\/div>/gi;
+  const re = /<(p|figure)\b[^>]*>[\s\S]*?<\/\1>|<div\b(?=[^>]*data-np-block\s*=\s*(?:"youtube"|'youtube'|youtube|"x"|'x'|x|"instagram"|'instagram'|instagram|"facebook"|'facebook'|facebook))[^>]*>[\s\S]*?<\/div>/gi;
   let lastIndex = 0;
   let match: RegExpExecArray | null = null;
 
@@ -577,7 +666,8 @@ export function formatArticleBodyHtml(rawContent: string): string {
   if (!normalized) return '';
 
   const htmlish = hasAnyHtml(normalized);
-  const markedContent = normalizeControlledInstagramMarkers(normalizeControlledXMarkers(normalizeControlledYouTubeMarkers(normalizeControlledInlineImageMarkers(normalized))));
+  const markedContent = normalizeControlledFacebookMarkers(normalizeControlledInstagramMarkers(normalizeControlledXMarkers(normalizeControlledYouTubeMarkers(normalizeControlledInlineImageMarkers(normalized)))));
+  if (htmlish && /data-np-block\s*=/i.test(normalized) && /^<\/div>\s*$/i.test(markedContent.trim())) return '';
   const preSanitized = htmlish && hasBlockHtml(markedContent) ? markedContent : paragraphizeTextContent(markedContent);
 
   return sanitizeHtml(preSanitized, {
@@ -625,8 +715,8 @@ export function formatArticleBodyHtml(rawContent: string): string {
         'data-np-media-id',
       ],
       div: [
-        { name: 'class', values: ['np-youtube-embed', 'np-x-embed', 'np-instagram-embed'] },
-        { name: 'data-np-block', values: ['youtube', 'x', 'instagram'] },
+        { name: 'class', values: ['np-youtube-embed', 'np-x-embed', 'np-instagram-embed', 'np-facebook-embed'] },
+        { name: 'data-np-block', values: ['youtube', 'x', 'instagram', 'facebook'] },
         'data-np-video-id',
         'data-np-url',
         'data-np-embed-url',
@@ -658,6 +748,10 @@ export function formatArticleBodyHtml(rawContent: string): string {
       if (frame.tag === 'div' && frame.attribs['data-np-block'] === CONTROLLED_INSTAGRAM_BLOCK) {
         if (!resolveControlledInstagramEmbed(frame.attribs)) return 'excludeTag';
       }
+      if (frame.tag === 'div' && frame.attribs['data-np-block'] === CONTROLLED_FACEBOOK_BLOCK) {
+        if (!resolveControlledFacebookEmbed(frame.attribs)) return 'excludeTag';
+      }
+      if (/^(?:div|blockquote)$/i.test(frame.tag) && /(?:^|\s)(?:fb-post|fb-video|fb-xfbml-parse-ignore)(?:\s|$)/i.test(String(frame.attribs.class || ''))) return 'excludeTag';
       if (frame.tag === 'blockquote' && /(?:^|\s)instagram-media(?:\s|$)/i.test(String(frame.attribs.class || ''))) return 'excludeTag';
       if (frame.tag === 'figcaption' && frame.attribs.class !== 'np-inline-image__caption') return 'excludeTag';
       return false;

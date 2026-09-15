@@ -62,7 +62,7 @@ describe('next.config backend separation', () => {
     expect(config.images.qualities).toEqual([74, 75, 76, 78, 90]);
   });
 
-  it('allows controlled Instagram article iframes without enabling Instagram scripts or broad CSP sources', async () => {
+  it('allows controlled Instagram and Facebook article iframes without enabling third-party embed scripts or broad CSP sources', async () => {
     process.env.NODE_ENV = 'production';
     process.env.VERCEL_ENV = 'production';
     const config = require('../next.config.js');
@@ -75,8 +75,13 @@ describe('next.config backend separation', () => {
     }));
 
     expect(directives['frame-src']).toContain('https://www.instagram.com');
+  expect(directives['frame-src']).toContain('https://www.facebook.com');
     expect(directives['script-src']).not.toContain('https://www.instagram.com');
     expect(directives['script-src']).not.toContain('https://www.instagram.com/embed.js');
+  expect(directives['script-src']).not.toContain('https://www.facebook.com');
+  expect(directives['script-src']).not.toContain('https://connect.facebook.net');
+  expect(directives['connect-src']).not.toContain('https://www.facebook.com');
+  expect(directives['connect-src']).not.toContain('https://connect.facebook.net');
     expect(directives['frame-src']).not.toContain('*');
     expect(directives['script-src']).not.toContain('*');
     expect(directives['script-src']).not.toContain('https:');

@@ -257,8 +257,8 @@ const nextConfig = {
       // ✅ IMPORTANT: allow backend API requests (this fixes your blocked fetch)
       `connect-src 'self'${backend ? ` ${backend}` : ''} https://www.googletagmanager.com https://www.google-analytics.com https://firebaseinstallations.googleapis.com https://fcmregistrations.googleapis.com https://firebase.googleapis.com https://www.googleapis.com https://syndication.twitter.com ws: wss:`,
 
-      // Frames: allow our own pages plus approved YouTube, X/Twitter and controlled Instagram embed origins.
-      "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://platform.twitter.com https://www.instagram.com",
+      // Frames: allow our own pages plus approved YouTube, X/Twitter, controlled Instagram and controlled Facebook embed origins.
+      "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://platform.twitter.com https://www.instagram.com https://www.facebook.com",
 
       // Older browsers may still consult child-src for frame/embed loads.
       "child-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://platform.twitter.com",

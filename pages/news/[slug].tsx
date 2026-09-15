@@ -8,7 +8,7 @@ import AdSlot from '../../src/components/ads/AdSlot';
 import CategoryHeader from '../../src/components/category/CategoryHeader';
 import { getCategoryQueryKey, getCategoryRouteKey } from '../../lib/categoryKeys';
 import { filterPubliclyPublishedArticles, getLocalizedArticleFields, STRICT_LOCALE_POLICY, type RouteLocale } from '../../lib/localizedArticleFields';
-import { formatArticleBodyHtml, parseControlledInlineImageBlock, parseControlledInstagramBlock, parseControlledXBlock, parseControlledYouTubeBlock, splitArticleBodyBlocks, stripDuplicateOpeningParagraph, type ControlledArticleInlineImage, type ControlledArticleInstagramEmbed, type ControlledArticleXEmbed, type ControlledArticleYouTubeEmbed } from '../../lib/articleBody';
+import { formatArticleBodyHtml, parseControlledFacebookBlock, parseControlledInlineImageBlock, parseControlledInstagramBlock, parseControlledXBlock, parseControlledYouTubeBlock, splitArticleBodyBlocks, stripDuplicateOpeningParagraph, type ControlledArticleFacebookEmbed, type ControlledArticleInlineImage, type ControlledArticleInstagramEmbed, type ControlledArticleXEmbed, type ControlledArticleYouTubeEmbed } from '../../lib/articleBody';
 import { fetchPublicNewsGroup, unwrapArticle, type Article } from '../../lib/publicNewsApi';
 import { subscribePublicDataRefresh } from '../../lib/publicDataRefresh';
 import { pickFreshestArticleForLocale, shouldReplaceArticleWithFreshCandidate } from '../../lib/translationGroupSync';
@@ -278,6 +278,68 @@ export function ArticleInstagramEmbed({ embed }: ArticleInstagramEmbedProps) {
         ) : (
           <EmbeddedMediaConsentGate title="Instagram post" className="np-instagram-embed__consent" placeholderClassName="rounded-lg">
             <ArticleInstagramEmbedFrame embed={embed} onFailed={markFailed} />
+          </EmbeddedMediaConsentGate>
+        )}
+      </div>
+    </figure>
+  );
+}
+
+type ArticleFacebookEmbedProps = {
+  embed: ControlledArticleFacebookEmbed;
+};
+
+function ArticleFacebookEmbedFrame({ embed, onFailed }: ArticleFacebookEmbedProps & { onFailed: () => void }) {
+  const timerRef = React.useRef<number | undefined>(undefined);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    timerRef.current = window.setTimeout(onFailed, 12000);
+    return () => {
+      if (timerRef.current) window.clearTimeout(timerRef.current);
+    };
+  }, [embed.embedUrl, onFailed]);
+
+  return (
+    <iframe
+      className="np-facebook-embed__iframe"
+      title="Facebook post"
+      src={embed.embedUrl}
+      loading="lazy"
+      allow="encrypted-media; picture-in-picture; web-share"
+      referrerPolicy="strict-origin-when-cross-origin"
+      onLoad={() => {
+        if (timerRef.current) window.clearTimeout(timerRef.current);
+      }}
+      onError={onFailed}
+    />
+  );
+}
+
+export function ArticleFacebookEmbed({ embed }: ArticleFacebookEmbedProps) {
+  const [failed, setFailed] = React.useState(false);
+
+  React.useEffect(() => {
+    setFailed(false);
+  }, [embed.embedUrl, embed.url]);
+
+  const markFailed = React.useCallback(() => {
+    setFailed(true);
+  }, []);
+
+  return (
+    <figure className="not-prose np-facebook-embed" data-np-block="facebook">
+      <div className="np-facebook-embed__frame">
+        {failed ? (
+          <div className="np-facebook-embed__fallback" role="note">
+            <span>Facebook post unavailable</span>
+            <a href={embed.url} target="_blank" rel="noopener noreferrer">
+              Open on Facebook
+            </a>
+          </div>
+        ) : (
+          <EmbeddedMediaConsentGate title="Facebook post" className="np-facebook-embed__consent" placeholderClassName="rounded-lg">
+            <ArticleFacebookEmbedFrame embed={embed} onFailed={markFailed} />
           </EmbeddedMediaConsentGate>
         )}
       </div>
@@ -1002,6 +1064,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
                         const controlledYouTube = controlledImage ? null : parseControlledYouTubeBlock(block);
                         const controlledX = controlledImage || controlledYouTube ? null : parseControlledXBlock(block);
                         const controlledInstagram = controlledImage || controlledYouTube || controlledX ? null : parseControlledInstagramBlock(block);
+                        const controlledFacebook = controlledImage || controlledYouTube || controlledX || controlledInstagram ? null : parseControlledFacebookBlock(block);
 
                         return (
                           <React.Fragment key={`pblock-${idx}`}>
@@ -1013,6 +1076,8 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
                               <ArticleXEmbed embed={controlledX} />
                             ) : controlledInstagram ? (
                               <ArticleInstagramEmbed embed={controlledInstagram} />
+                            ) : controlledFacebook ? (
+                              <ArticleFacebookEmbed embed={controlledFacebook} />
                             ) : (
                               <div dangerouslySetInnerHTML={{ __html: block }} />
                             )}
@@ -1400,6 +1465,72 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
 
           .article-body :where(.np-instagram-embed__iframe) {
             height: 30rem;
+          }
+        }
+
+        .article-body :where(.np-facebook-embed) {
+          clear: both;
+          display: block;
+          margin: 1.5rem auto;
+          max-width: 100%;
+          width: 100%;
+        }
+
+        .article-body :where(.np-facebook-embed__frame) {
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          max-width: 100%;
+          min-height: 32rem;
+          overflow: hidden;
+          position: relative;
+          width: 100%;
+        }
+
+        .article-body :where(.np-facebook-embed__consent) {
+          min-height: 32rem;
+          position: relative;
+          width: 100%;
+        }
+
+        .article-body :where(.np-facebook-embed__iframe) {
+          border: 0;
+          display: block;
+          height: 32rem;
+          max-width: 100%;
+          width: 100%;
+        }
+
+        .article-body :where(.np-facebook-embed__fallback) {
+          align-items: center;
+          color: #475569;
+          display: flex;
+          flex-direction: column;
+          font-size: 0.92rem;
+          gap: 0.55rem;
+          justify-content: center;
+          min-height: 32rem;
+          padding: 2rem;
+          text-align: center;
+          width: 100%;
+        }
+
+        .article-body :where(.np-facebook-embed__fallback a) {
+          color: #0f172a;
+          font-weight: 700;
+          text-decoration: underline;
+          text-underline-offset: 3px;
+        }
+
+        @media (max-width: 640px) {
+          .article-body :where(.np-facebook-embed__frame),
+          .article-body :where(.np-facebook-embed__consent),
+          .article-body :where(.np-facebook-embed__fallback) {
+            min-height: 28rem;
+          }
+
+          .article-body :where(.np-facebook-embed__iframe) {
+            height: 28rem;
           }
         }
 
