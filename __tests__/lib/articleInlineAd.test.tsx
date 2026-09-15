@@ -1,5 +1,13 @@
-import { formatArticleBodyHtml, parseControlledFacebookBlock, parseControlledInlineImageBlock, parseControlledInstagramBlock, parseControlledXBlock, parseControlledYouTubeBlock, splitArticleBodyBlocks, stripDuplicateOpeningParagraph } from '../../lib/articleBody';
+import { formatArticleBodyHtml, parseControlledFacebookBlock, parseControlledGalleryBlock, parseControlledInlineImageBlock, parseControlledInstagramBlock, parseControlledXBlock, parseControlledYouTubeBlock, splitArticleBodyBlocks, stripDuplicateOpeningParagraph } from '../../lib/articleBody';
 import { splitArticleHtmlForInlineAd } from '../../lib/articleInlineAd';
+
+function inlineImageMarker(mediaId: string, src = `https://cdn.newspulse.co.in/images/${mediaId}.jpg`, caption = `Caption ${mediaId}`): string {
+  return `<div data-np-block="inline-image" data-np-media-id="${mediaId}" data-np-src="${src}" data-np-caption="${caption}" data-np-credit="News Pulse" data-np-width="1200" data-np-height="800"></div>`;
+}
+
+function inlineImageMarkerWithoutDimensions(mediaId: string, src: string, alt: string, caption = `Caption ${mediaId}`): string {
+  return `<div data-np-block="inline-image" data-np-media-id="${mediaId}" data-np-src="${src}" data-np-alt="${alt}" data-np-caption="${caption}" data-np-credit="News Pulse"></div>`;
+}
 
 describe('splitArticleHtmlForInlineAd', () => {
   it('inserts after the third body paragraph when the body has enough content', () => {
@@ -477,6 +485,148 @@ describe('formatArticleBodyHtml', () => {
       'https://www.facebook.com/plugins/post.php?href=https%3A%2F%2Fwww.facebook.com%2FNewsPulseIndia%2Fposts%2Fpfbid02SafePost123&show_text=true&width=500',
     ]);
   });
+
+  it('preserves a valid two-image gallery with non-24-hex media ids as a controlled block', () => {
+    const html = formatArticleBodyHtml(`<p>Before gallery.</p><div data-np-block="gallery">${inlineImageMarker('gallery_101', 'https://cdn.newspulse.co.in/images/gallery-1.jpg', 'Opening frame')}${inlineImageMarker('gallery_102', 'https://cdn.newspulse.co.in/images/gallery-2.jpg', 'Second frame')}</div><p>After gallery.</p>`);
+    const galleryBlock = splitArticleBodyBlocks(html).find((block) => block.includes('data-np-block="gallery"')) || '';
+    const gallery = parseControlledGalleryBlock(galleryBlock);
+
+    expect(html).toContain('<div class="np-gallery" data-np-block="gallery">');
+    expect(gallery?.images).toHaveLength(2);
+    expect(gallery?.images.map((image) => image.mediaId)).toEqual(['gallery_101', 'gallery_102']);
+    expect(gallery?.images.map((image) => image.src)).toEqual([
+      'https://cdn.newspulse.co.in/images/gallery-1.jpg',
+      'https://cdn.newspulse.co.in/images/gallery-2.jpg',
+    ]);
+    expect(gallery?.images.map((image) => image.caption)).toEqual(['Opening frame', 'Second frame']);
+    expect(gallery?.images.map((image) => image.credit)).toEqual(['Photo: News Pulse', 'Photo: News Pulse']);
+  });
+
+  it('preserves gallery images that omit dimensions without fabricating width or height', () => {
+    const html = formatArticleBodyHtml(`<div data-np-block="gallery">${inlineImageMarkerWithoutDimensions('gallery_no_dims_1', 'https://assets.newspulse.co.in/media-library/no-dims-1.jpg', 'No dimensions one', 'First no-dim image')}${inlineImageMarkerWithoutDimensions('gallery_no_dims_2', '/media-library/no-dims-2.jpg', 'No dimensions two', 'Second no-dim image')}</div>`);
+    const gallery = parseControlledGalleryBlock(html);
+
+    expect(gallery?.images).toHaveLength(2);
+    expect(gallery?.images.map((image) => image.mediaId)).toEqual(['gallery_no_dims_1', 'gallery_no_dims_2']);
+    expect(gallery?.images.map((image) => image.src)).toEqual([
+      'https://assets.newspulse.co.in/media-library/no-dims-1.jpg',
+      '/media-library/no-dims-2.jpg',
+    ]);
+    expect(gallery?.images.map((image) => image.alt)).toEqual(['No dimensions one', 'No dimensions two']);
+    expect(gallery?.images.map((image) => image.width)).toEqual([undefined, undefined]);
+    expect(gallery?.images.map((image) => image.height)).toEqual([undefined, undefined]);
+    expect(html).not.toContain('width=');
+    expect(html).not.toContain('height=');
+  });
+
+  it('preserves gallery images with empty alt attributes using the existing safe fallback text', () => {
+    const html = formatArticleBodyHtml(`<div data-np-block="gallery">${inlineImageMarkerWithoutDimensions('gallery_empty_alt_1', 'https://cdn.newspulse.co.in/images/empty-alt-1.jpg', '', 'Empty alt caption one')}${inlineImageMarkerWithoutDimensions('gallery_empty_alt_2', 'https://cdn.newspulse.co.in/images/empty-alt-2.jpg', '', 'Empty alt caption two')}</div>`);
+    const gallery = parseControlledGalleryBlock(html);
+
+    expect(gallery?.images).toHaveLength(2);
+    expect(gallery?.images.map((image) => image.mediaId)).toEqual(['gallery_empty_alt_1', 'gallery_empty_alt_2']);
+    expect(gallery?.images.map((image) => image.alt)).toEqual(['Empty alt caption one', 'Empty alt caption two']);
+    expect(gallery?.images.map((image) => image.caption)).toEqual(['Empty alt caption one', 'Empty alt caption two']);
+  });
+
+  it('accepts the same Media Library-compatible HTTPS asset URL for standalone inline images and gallery images', () => {
+    const mediaLibraryUrl = 'https://assets.newspulse.co.in/media-library/articles/phase-1c-gallery-image.jpg';
+    const standaloneHtml = formatArticleBodyHtml(inlineImageMarkerWithoutDimensions('media_library_standalone', mediaLibraryUrl, 'Media library standalone image', 'Media library standalone image'));
+    const galleryHtml = formatArticleBodyHtml(`<div data-np-block="gallery">${inlineImageMarkerWithoutDimensions('media_library_gallery_1', mediaLibraryUrl, 'Media library gallery image', 'Media library gallery image')}${inlineImageMarkerWithoutDimensions('media_library_gallery_2', 'https://assets.newspulse.co.in/media-library/articles/phase-1c-gallery-image-2.jpg', 'Media library gallery image two', 'Media library gallery image two')}</div>`);
+    const standaloneImage = parseControlledInlineImageBlock(standaloneHtml);
+    const gallery = parseControlledGalleryBlock(galleryHtml);
+
+    expect(standaloneImage?.src).toBe(mediaLibraryUrl);
+    expect(gallery?.images).toHaveLength(2);
+    expect(gallery?.images[0]?.src).toBe(mediaLibraryUrl);
+  });
+
+  it('preserves twenty-image galleries and keeps image order', () => {
+    const markers = Array.from({ length: 20 }, (_, index) => inlineImageMarker(`gallery_${String(index + 1).padStart(2, '0')}`)).join('');
+    const html = formatArticleBodyHtml(`<div data-np-block="gallery">${markers}</div>`);
+    const gallery = parseControlledGalleryBlock(html);
+
+    expect(gallery?.images).toHaveLength(20);
+    expect(gallery?.images[0]?.mediaId).toBe('gallery_01');
+    expect(gallery?.images[19]?.mediaId).toBe('gallery_20');
+  });
+
+  it('rejects galleries with too few or too many images', () => {
+    const oneImage = formatArticleBodyHtml(`<div data-np-block="gallery">${inlineImageMarker('gallery_one')}</div>`);
+    const twentyOneImages = formatArticleBodyHtml(`<div data-np-block="gallery">${Array.from({ length: 21 }, (_, index) => inlineImageMarker(`gallery_${index + 1}`)).join('')}</div>`);
+
+    expect(oneImage).toBe('');
+    expect(twentyOneImages).toBe('');
+    expect(parseControlledGalleryBlock(oneImage)).toBeNull();
+    expect(parseControlledGalleryBlock(twentyOneImages)).toBeNull();
+  });
+
+  it('rejects galleries with duplicate or missing media ids', () => {
+    const duplicateMediaId = formatArticleBodyHtml(`<div data-np-block="gallery">${inlineImageMarker('gallery_dup')}${inlineImageMarker('gallery_dup', 'https://cdn.newspulse.co.in/images/other.jpg')}</div>`);
+    const missingMediaId = formatArticleBodyHtml(`<div data-np-block="gallery"><div data-np-block="inline-image" data-np-src="https://cdn.newspulse.co.in/images/no-id.jpg" data-np-caption="No id"></div>${inlineImageMarker('gallery_ok')}</div>`);
+
+    expect(duplicateMediaId).toBe('');
+    expect(missingMediaId).toBe('');
+    expect(parseControlledGalleryBlock(duplicateMediaId)).toBeNull();
+    expect(parseControlledGalleryBlock(missingMediaId)).toBeNull();
+  });
+
+  it('rejects malformed gallery content without breaking surrounding article text', () => {
+    const html = formatArticleBodyHtml(`<p>Before gallery.</p><div data-np-block="gallery">${inlineImageMarker('gallery_safe_1')}<p>Injected caption outside a figure.</p>${inlineImageMarker('gallery_safe_2')}</div><p>After gallery.</p>`);
+
+    expect(html).toContain('<p>Before gallery.</p>');
+    expect(html).toContain('<p>After gallery.</p>');
+    expect(html).not.toContain('data-np-block="gallery"');
+    expect(html).not.toContain('Injected caption outside a figure');
+    expect(parseControlledGalleryBlock(html)).toBeNull();
+  });
+
+  it('rejects nested gallery markup as one malformed gallery block', () => {
+    const html = formatArticleBodyHtml(`<p>Before gallery.</p><div data-np-block="gallery">${inlineImageMarker('gallery_safe_1')}<div><figure data-np-block="inline-image" data-np-media-id="gallery_nested"><img src="https://cdn.newspulse.co.in/images/nested.jpg" /></figure></div>${inlineImageMarker('gallery_safe_2')}</div><p>After gallery.</p>`);
+
+    expect(html).toContain('<p>Before gallery.</p>');
+    expect(html).toContain('<p>After gallery.</p>');
+    expect(html).not.toContain('data-np-block="gallery"');
+    expect(html).not.toContain('gallery_nested');
+    expect(html).not.toContain('gallery_safe_1');
+    expect(html).not.toContain('gallery_safe_2');
+  });
+
+  it('strips raw script and iframe HTML inside malformed galleries', () => {
+    const html = formatArticleBodyHtml(`<p>Before gallery.</p><div data-np-block="gallery">${inlineImageMarker('gallery_safe_1')}<iframe src="https://example.com/embed"></iframe><script>alert(1)</script>${inlineImageMarker('gallery_safe_2')}</div><p>After gallery.</p>`);
+
+    expect(html).toContain('<p>Before gallery.</p>');
+    expect(html).toContain('<p>After gallery.</p>');
+    expect(html).not.toContain('data-np-block="gallery"');
+    expect(html).not.toContain('<iframe');
+    expect(html).not.toContain('<script');
+    expect(html).not.toContain('alert(1)');
+  });
+
+  it('strips raw object and embed HTML inside malformed galleries', () => {
+    const html = formatArticleBodyHtml(`<p>Before gallery.</p><div data-np-block="gallery">${inlineImageMarker('gallery_safe_1')}<object data="https://example.com/widget.swf"></object><embed src="https://example.com/widget.swf" />${inlineImageMarker('gallery_safe_2')}</div><p>After gallery.</p>`);
+
+    expect(html).toContain('<p>Before gallery.</p>');
+    expect(html).toContain('<p>After gallery.</p>');
+    expect(html).not.toContain('data-np-block="gallery"');
+    expect(html).not.toContain('<object');
+    expect(html).not.toContain('<embed');
+    expect(html).not.toContain('widget.swf');
+  });
+
+  it('keeps standalone inline images rendering after gallery normalization', () => {
+    const html = formatArticleBodyHtml(inlineImageMarker('standalone_101', 'https://cdn.newspulse.co.in/images/standalone.jpg', 'Standalone image'));
+
+    expect(parseControlledInlineImageBlock(html)).toEqual({
+      mediaId: 'standalone_101',
+      src: 'https://cdn.newspulse.co.in/images/standalone.jpg',
+      alt: 'Standalone image',
+      caption: 'Standalone image',
+      credit: 'Photo: News Pulse',
+      width: '1200',
+      height: '800',
+    });
+  });
 });
 
 describe('stripDuplicateOpeningParagraph', () => {
@@ -570,6 +720,16 @@ describe('splitArticleBodyBlocks', () => {
     expect(splitArticleBodyBlocks('<p>Before.</p><div class="np-facebook-embed" data-np-block="facebook" data-np-url="https://www.facebook.com/NewsPulseIndia/posts/pfbid02SafePost123"></div><p>After.</p>')).toEqual([
       '<p>Before.</p>',
       '<div class="np-facebook-embed" data-np-block="facebook" data-np-url="https://www.facebook.com/NewsPulseIndia/posts/pfbid02SafePost123"></div>',
+      '<p>After.</p>',
+    ]);
+  });
+
+  it('keeps controlled galleries as their own article body blocks', () => {
+    const gallery = `<div class="np-gallery" data-np-block="gallery"><figure class="np-inline-image" data-np-block="inline-image" data-np-media-id="gallery_101"><img class="np-inline-image__media" src="https://cdn.newspulse.co.in/gallery-1.jpg" alt="One" loading="lazy" decoding="async" /></figure><figure class="np-inline-image" data-np-block="inline-image" data-np-media-id="gallery_102"><img class="np-inline-image__media" src="https://cdn.newspulse.co.in/gallery-2.jpg" alt="Two" loading="lazy" decoding="async" /></figure></div>`;
+
+    expect(splitArticleBodyBlocks(`<p>Before.</p>${gallery}<p>After.</p>`)).toEqual([
+      '<p>Before.</p>',
+      gallery,
       '<p>After.</p>',
     ]);
   });

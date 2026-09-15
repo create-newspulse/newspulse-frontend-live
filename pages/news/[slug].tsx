@@ -8,7 +8,7 @@ import AdSlot from '../../src/components/ads/AdSlot';
 import CategoryHeader from '../../src/components/category/CategoryHeader';
 import { getCategoryQueryKey, getCategoryRouteKey } from '../../lib/categoryKeys';
 import { filterPubliclyPublishedArticles, getLocalizedArticleFields, STRICT_LOCALE_POLICY, type RouteLocale } from '../../lib/localizedArticleFields';
-import { formatArticleBodyHtml, parseControlledFacebookBlock, parseControlledInlineImageBlock, parseControlledInstagramBlock, parseControlledXBlock, parseControlledYouTubeBlock, splitArticleBodyBlocks, stripDuplicateOpeningParagraph, type ControlledArticleFacebookEmbed, type ControlledArticleInlineImage, type ControlledArticleInstagramEmbed, type ControlledArticleXEmbed, type ControlledArticleYouTubeEmbed } from '../../lib/articleBody';
+import { formatArticleBodyHtml, parseControlledFacebookBlock, parseControlledGalleryBlock, parseControlledInlineImageBlock, parseControlledInstagramBlock, parseControlledXBlock, parseControlledYouTubeBlock, splitArticleBodyBlocks, stripDuplicateOpeningParagraph, type ControlledArticleFacebookEmbed, type ControlledArticleGallery, type ControlledArticleInlineImage, type ControlledArticleInstagramEmbed, type ControlledArticleXEmbed, type ControlledArticleYouTubeEmbed } from '../../lib/articleBody';
 import { fetchPublicNewsGroup, unwrapArticle, type Article } from '../../lib/publicNewsApi';
 import { subscribePublicDataRefresh } from '../../lib/publicDataRefresh';
 import { pickFreshestArticleForLocale, shouldReplaceArticleWithFreshCandidate } from '../../lib/translationGroupSync';
@@ -102,6 +102,84 @@ export function ArticleInlineImage({ image }: ArticleInlineImageProps) {
         </figcaption>
       ) : null}
     </figure>
+  );
+}
+
+type ArticleGalleryImageProps = {
+  image: ControlledArticleInlineImage;
+  featured?: boolean;
+};
+
+function ArticleGalleryImage({ image, featured = false }: ArticleGalleryImageProps) {
+  const [failed, setFailed] = React.useState(false);
+  const numericWidth = image.width ? Number(image.width) : undefined;
+  const numericHeight = image.height ? Number(image.height) : undefined;
+  const hasDimensions = Boolean(numericWidth && numericHeight);
+  const frameStyle: React.CSSProperties | undefined = hasDimensions
+    ? { aspectRatio: `${numericWidth} / ${numericHeight}` }
+    : undefined;
+  const altText = image.alt || image.caption || 'News Pulse article gallery image';
+
+  return (
+    <figure className={`np-gallery__item${featured ? ' np-gallery__item--featured' : ''}`} data-np-media-id={image.mediaId || undefined}>
+      <div className="np-gallery__frame" style={frameStyle}>
+        {failed ? (
+          <div className="np-gallery__fallback" role="img" aria-label={altText}>
+            Image unavailable
+          </div>
+        ) : (
+          <img
+            className="np-gallery__media"
+            src={image.src}
+            alt={altText}
+            width={numericWidth}
+            height={numericHeight}
+            loading="lazy"
+            decoding="async"
+            onError={() => setFailed(true)}
+          />
+        )}
+      </div>
+
+      {image.caption || image.credit ? (
+        <figcaption className="np-gallery__caption">
+          {image.caption ? <span className="np-gallery__caption-text">{image.caption}</span> : null}
+          {image.credit ? <span className="np-gallery__credit">{image.credit}</span> : null}
+        </figcaption>
+      ) : null}
+    </figure>
+  );
+}
+
+type ArticleGalleryProps = {
+  gallery: ControlledArticleGallery;
+  lang: 'en' | 'hi' | 'gu';
+};
+
+const GALLERY_LABELS: Record<'en' | 'hi' | 'gu', string> = {
+  en: 'Photo Gallery',
+  hi: 'फोटो गैलरी',
+  gu: 'ફોટો ગેલેરી',
+};
+
+export function ArticleGallery({ gallery, lang }: ArticleGalleryProps) {
+  const images = Array.isArray(gallery.images) ? gallery.images : [];
+  if (images.length < 2 || images.length > 20) return null;
+
+  const headingId = `article-gallery-${images.map((image) => image.mediaId || image.src).join('-')}`.replace(/[^A-Za-z0-9_-]+/g, '-').slice(0, 96);
+
+  return (
+    <section className="not-prose np-gallery" data-np-block="gallery" aria-labelledby={headingId}>
+      <h2 id={headingId} className="np-gallery__heading">{GALLERY_LABELS[lang] || GALLERY_LABELS.en}</h2>
+      <ArticleGalleryImage image={images[0]} featured />
+      {images.length > 1 ? (
+        <div className="np-gallery__grid np-gallery__grid--responsive">
+          {images.slice(1).map((image) => (
+            <ArticleGalleryImage key={image.mediaId || image.src} image={image} />
+          ))}
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -1065,6 +1143,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
                         const controlledX = controlledImage || controlledYouTube ? null : parseControlledXBlock(block);
                         const controlledInstagram = controlledImage || controlledYouTube || controlledX ? null : parseControlledInstagramBlock(block);
                         const controlledFacebook = controlledImage || controlledYouTube || controlledX || controlledInstagram ? null : parseControlledFacebookBlock(block);
+                        const controlledGallery = controlledImage || controlledYouTube || controlledX || controlledInstagram || controlledFacebook ? null : parseControlledGalleryBlock(block);
 
                         return (
                           <React.Fragment key={`pblock-${idx}`}>
@@ -1078,6 +1157,8 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
                               <ArticleInstagramEmbed embed={controlledInstagram} />
                             ) : controlledFacebook ? (
                               <ArticleFacebookEmbed embed={controlledFacebook} />
+                            ) : controlledGallery ? (
+                              <ArticleGallery gallery={controlledGallery} lang={lang} />
                             ) : (
                               <div dangerouslySetInnerHTML={{ __html: block }} />
                             )}
@@ -1282,6 +1363,99 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
         .article-body :where(.np-inline-image__credit) {
           color: #64748b;
           font-weight: 600;
+        }
+
+        .article-body :where(.np-gallery) {
+          clear: both;
+          display: block;
+          margin: 1.75rem 0;
+          max-width: 100%;
+          width: 100%;
+        }
+
+        .article-body :where(.np-gallery__heading) {
+          color: #0f172a;
+          font-size: 1.05rem;
+          font-weight: 800;
+          letter-spacing: 0;
+          line-height: 1.35;
+          margin: 0 0 0.85rem;
+        }
+
+        .article-body :where(.np-gallery__item) {
+          display: block;
+          margin: 0;
+          min-width: 0;
+          width: 100%;
+        }
+
+        .article-body :where(.np-gallery__item--featured) {
+          margin-bottom: 1rem;
+        }
+
+        .article-body :where(.np-gallery__grid) {
+          display: grid;
+          gap: 1rem;
+          grid-template-columns: 1fr;
+          max-width: 100%;
+          width: 100%;
+        }
+
+        .article-body :where(.np-gallery__frame) {
+          align-items: center;
+          background: #f1f5f9;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          display: flex;
+          justify-content: center;
+          max-width: 100%;
+          overflow: hidden;
+          width: 100%;
+        }
+
+        .article-body :where(.np-gallery__media) {
+          display: block;
+          height: auto;
+          max-height: 70vh;
+          max-width: 100%;
+          object-fit: contain;
+          width: 100%;
+        }
+
+        .article-body :where(.np-gallery__fallback) {
+          align-items: center;
+          color: #64748b;
+          display: flex;
+          font-size: 0.92rem;
+          justify-content: center;
+          min-height: 12rem;
+          padding: 2rem;
+          text-align: center;
+          width: 100%;
+        }
+
+        .article-body :where(.np-gallery__caption) {
+          color: #475569;
+          display: grid;
+          font-size: 0.82rem;
+          gap: 0.18rem;
+          line-height: 1.55;
+          margin-top: 0.55rem;
+        }
+
+        .article-body :where(.np-gallery__caption-text) {
+          color: #334155;
+        }
+
+        .article-body :where(.np-gallery__credit) {
+          color: #64748b;
+          font-weight: 600;
+        }
+
+        @media (min-width: 768px) {
+          .article-body :where(.np-gallery__grid) {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
         }
 
         .article-body :where(.np-youtube-embed) {

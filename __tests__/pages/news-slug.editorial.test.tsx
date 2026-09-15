@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
-import NewsSlugDetailPage, { ArticleFacebookEmbed, ArticleInstagramEmbed, ArticleXEmbed, ArticleYouTubeEmbed, getServerSideProps } from '../../pages/news/[slug]';
+import NewsSlugDetailPage, { ArticleFacebookEmbed, ArticleGallery, ArticleInstagramEmbed, ArticleXEmbed, ArticleYouTubeEmbed, getServerSideProps } from '../../pages/news/[slug]';
 import { formatArticleBodyHtml } from '../../lib/articleBody';
 import { fetchPublicNews } from '../../lib/publicNewsApi';
 import { hasRenderedTwitterWidgetFrame, loadTwitterWidgetsIn } from '../../lib/xWidgets';
@@ -107,6 +107,10 @@ function editorialArticle(overrides: Record<string, any> = {}) {
     imageCredit: 'News Pulse Photo Desk',
     ...overrides,
   };
+}
+
+function galleryImageMarker(mediaId: string, src: string, caption: string, credit = 'News Pulse / Staff') {
+  return `<div data-np-block="inline-image" data-np-media-id="${mediaId}" data-np-src="${src}" data-np-caption="${caption}" data-np-credit="${credit}" data-np-width="1200" data-np-height="800"></div>`;
 }
 
 describe('pages/news/[slug] editorial detail', () => {
@@ -271,6 +275,125 @@ describe('pages/news/[slug] editorial detail', () => {
 
     expect(screen.getByText('Image unavailable')).toBeTruthy();
     expect(screen.getByText('Photo: News Pulse / Staff')).toBeTruthy();
+  });
+
+  test('renders controlled photo galleries with featured image, responsive grid, order, captions, and credits', async () => {
+    const safeHtml = formatArticleBodyHtml(`<p>Before gallery.</p><div data-np-block="gallery">${galleryImageMarker('gallery_101', 'https://cdn.newspulse.co.in/images/gallery-1.jpg', 'Opening frame')}${galleryImageMarker('gallery_102', 'https://cdn.newspulse.co.in/images/gallery-2.jpg', 'Second frame')}${galleryImageMarker('gallery_103', 'https://cdn.newspulse.co.in/images/gallery-3.jpg', 'Third frame')}</div><p>After gallery.</p>`);
+
+    render(
+      <NewsSlugDetailPage
+        messages={{}}
+        locale="en"
+        lang="en"
+        slug="special-story"
+        siteUrl="https://www.newspulse.co.in"
+        article={editorialArticle() as any}
+        safeHtml={safeHtml}
+        topStories={[]}
+        relatedStories={[]}
+        error={null}
+        pending={false}
+      />
+    );
+
+    const gallery = document.querySelector('section.np-gallery') as HTMLElement | null;
+    const figures = gallery?.querySelectorAll('figure.np-gallery__item');
+    const images = gallery?.querySelectorAll('img.np-gallery__media');
+    const grid = gallery?.querySelector('.np-gallery__grid') as HTMLElement | null;
+
+    expect(screen.getByText('Before gallery.')).toBeTruthy();
+    expect(screen.getByText('After gallery.')).toBeTruthy();
+    expect(screen.getByText('Photo Gallery')).toBeTruthy();
+    expect(gallery?.getAttribute('data-np-block')).toBe('gallery');
+    expect(figures).toHaveLength(3);
+    expect(figures?.[0]?.className).toContain('np-gallery__item--featured');
+    expect(grid?.className).toContain('np-gallery__grid--responsive');
+    expect(grid?.querySelectorAll('figure.np-gallery__item')).toHaveLength(2);
+    expect(images?.[0]?.getAttribute('src')).toBe('https://cdn.newspulse.co.in/images/gallery-1.jpg');
+    expect(images?.[1]?.getAttribute('src')).toBe('https://cdn.newspulse.co.in/images/gallery-2.jpg');
+    expect(images?.[2]?.getAttribute('src')).toBe('https://cdn.newspulse.co.in/images/gallery-3.jpg');
+    expect(images?.[0]?.getAttribute('loading')).toBe('lazy');
+    expect(images?.[0]?.getAttribute('decoding')).toBe('async');
+    expect((images?.[0]?.closest('.np-gallery__frame') as HTMLElement | null)?.getAttribute('style')).toContain('aspect-ratio: 1200 / 800');
+    expect(screen.getByText('Opening frame')).toBeTruthy();
+    expect(screen.getByText('Second frame')).toBeTruthy();
+    expect(screen.getByText('Third frame')).toBeTruthy();
+    expect(screen.getAllByText('Photo: News Pulse / Staff')).toHaveLength(3);
+    expect(screen.queryByTestId('embedded-media-consent-gate')).toBeNull();
+  });
+
+  test('renders controlled photo galleries safely when marker alt is empty', async () => {
+    const safeHtml = formatArticleBodyHtml('<div data-np-block="gallery"><div data-np-block="inline-image" data-np-media-id="gallery_empty_alt_render_1" data-np-src="https://cdn.newspulse.co.in/images/empty-alt-render-1.jpg" data-np-alt="" data-np-caption="Empty alt render caption one"></div><div data-np-block="inline-image" data-np-media-id="gallery_empty_alt_render_2" data-np-src="https://cdn.newspulse.co.in/images/empty-alt-render-2.jpg" data-np-alt="" data-np-caption="Empty alt render caption two"></div></div>');
+
+    render(
+      <NewsSlugDetailPage
+        messages={{}}
+        locale="en"
+        lang="en"
+        slug="special-story"
+        siteUrl="https://www.newspulse.co.in"
+        article={editorialArticle() as any}
+        safeHtml={safeHtml}
+        topStories={[]}
+        relatedStories={[]}
+        error={null}
+        pending={false}
+      />
+    );
+
+    const firstImage = screen.getByAltText('Empty alt render caption one') as HTMLImageElement;
+    const secondImage = screen.getByAltText('Empty alt render caption two') as HTMLImageElement;
+
+    expect(screen.getByText('Photo Gallery')).toBeTruthy();
+    expect(firstImage.getAttribute('src')).toBe('https://cdn.newspulse.co.in/images/empty-alt-render-1.jpg');
+    expect(secondImage.getAttribute('src')).toBe('https://cdn.newspulse.co.in/images/empty-alt-render-2.jpg');
+    expect(document.querySelectorAll('figure.np-gallery__item')).toHaveLength(2);
+    expect(screen.queryByTestId('embedded-media-consent-gate')).toBeNull();
+
+    fireEvent.error(firstImage);
+
+    expect(screen.getByText('Image unavailable')).toBeTruthy();
+    expect(screen.getByAltText('Empty alt render caption two')).toBeTruthy();
+  });
+
+  test('renders localized controlled gallery labels for EN, HI, and GU', () => {
+    const gallery = {
+      images: [
+        { mediaId: 'gallery_101', src: 'https://cdn.newspulse.co.in/images/gallery-1.jpg', caption: 'Opening frame', credit: 'Photo: News Pulse' },
+        { mediaId: 'gallery_102', src: 'https://cdn.newspulse.co.in/images/gallery-2.jpg', caption: 'Second frame', credit: 'Photo: News Pulse' },
+      ],
+    };
+
+    for (const [language, label] of [['en', 'Photo Gallery'], ['hi', 'फोटो गैलरी'], ['gu', 'ફોટો ગેલેરી']] as const) {
+      cleanup();
+      render(<ArticleGallery gallery={gallery} lang={language} />);
+      expect(screen.getByText(label)).toBeTruthy();
+      expect(document.querySelector('section.np-gallery')?.getAttribute('data-np-block')).toBe('gallery');
+    }
+  });
+
+  test('keeps a controlled gallery visible when one image fails', () => {
+    render(
+      <ArticleGallery
+        lang="en"
+        gallery={{
+          images: [
+            { mediaId: 'gallery_101', src: 'https://cdn.newspulse.co.in/images/gallery-1.jpg', alt: 'Gallery image one', caption: 'Opening frame' },
+            { mediaId: 'gallery_102', src: 'https://cdn.newspulse.co.in/images/gallery-2.jpg', alt: 'Gallery image two', caption: 'Second frame' },
+            { mediaId: 'gallery_103', src: 'https://cdn.newspulse.co.in/images/gallery-3.jpg', alt: 'Gallery image three', caption: 'Third frame' },
+          ],
+        }}
+      />
+    );
+
+    const images = document.querySelectorAll('img.np-gallery__media');
+    fireEvent.error(images[1]);
+
+    expect(screen.getByText('Photo Gallery')).toBeTruthy();
+    expect(screen.getByText('Image unavailable')).toBeTruthy();
+    expect(screen.getByAltText('Gallery image one')).toBeTruthy();
+    expect(screen.getByAltText('Gallery image three')).toBeTruthy();
+    expect(document.querySelectorAll('figure.np-gallery__item')).toHaveLength(3);
   });
 
   test('renders controlled YouTube article embeds with consent gate responsive shell and fallback', async () => {

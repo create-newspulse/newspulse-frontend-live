@@ -7,6 +7,7 @@ const CONTROLLED_YOUTUBE_BLOCK = 'youtube';
 const CONTROLLED_X_BLOCK = 'x';
 const CONTROLLED_INSTAGRAM_BLOCK = 'instagram';
 const CONTROLLED_FACEBOOK_BLOCK = 'facebook';
+const CONTROLLED_GALLERY_BLOCK = 'gallery';
 const CONTROLLED_INLINE_IMAGE_MEDIA_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{2,79}$/;
 const CONTROLLED_INLINE_IMAGE_DIMENSION_RE = /^[1-9][0-9]{0,4}$/;
 const CONTROLLED_YOUTUBE_VIDEO_ID_RE = /^[A-Za-z0-9_-]{6,}$/;
@@ -47,6 +48,10 @@ export type ControlledArticleFacebookEmbed = {
   kind: 'post' | 'permalink';
   url: string;
   embedUrl: string;
+};
+
+export type ControlledArticleGallery = {
+  images: ControlledArticleInlineImage[];
 };
 
 function decodeEntities(value: string): string {
@@ -401,6 +406,30 @@ function buildControlledInlineImageHtml(attrs: Record<string, string>): string |
   return `<figure ${figureAttrs}><img ${imageAttrs} />${figcaptionHtml}</figure>`;
 }
 
+function buildControlledInlineImageFigureHtml(image: ControlledArticleInlineImage): string {
+  const figureAttrs = [
+    'class="np-inline-image"',
+    'data-np-block="inline-image"',
+    image.mediaId ? `data-np-media-id="${escapeHtml(image.mediaId)}"` : '',
+  ].filter(Boolean).join(' ');
+  const imageAttrs = [
+    'class="np-inline-image__media"',
+    `src="${escapeHtml(image.src)}"`,
+    `alt="${escapeHtml(image.alt || image.caption || 'News Pulse article image')}"`,
+    image.width ? `width="${escapeHtml(image.width)}"` : '',
+    image.height ? `height="${escapeHtml(image.height)}"` : '',
+    'loading="lazy"',
+    'decoding="async"',
+  ].filter(Boolean).join(' ');
+  const captionHtml = image.caption ? `<span class="np-inline-image__caption-text" data-np-caption="true">${escapeHtml(image.caption)}</span>` : '';
+  const creditHtml = image.credit ? `<span class="np-inline-image__credit" data-np-credit="true">${escapeHtml(image.credit)}</span>` : '';
+  const figcaptionHtml = captionHtml || creditHtml
+    ? `<figcaption class="np-inline-image__caption">${captionHtml}${creditHtml}</figcaption>`
+    : '';
+
+  return `<figure ${figureAttrs}><img ${imageAttrs} />${figcaptionHtml}</figure>`;
+}
+
 function normalizeControlledInlineImageMarkers(value: string): string {
   return String(value || '').replace(/<(figure|div|span)\b(?=[^>]*data-np-block\s*=\s*(?:"inline-image"|'inline-image'|inline-image))[^>]*(?:\/>|>\s*<\/\1>)/gi, (match) => {
     const html = buildControlledInlineImageHtml(parseTagAttributes(match));
@@ -487,6 +516,89 @@ function normalizeControlledFacebookMarkers(value: string): string {
   });
 }
 
+function resolveControlledGalleryBlock(source: string): ControlledArticleGallery | null {
+  const divMatch = String(source || '').trim().match(/^<div\b([^>]*)>([\s\S]*)<\/div>$/i);
+  if (!divMatch) return null;
+
+  const attrs = parseTagAttributes(`<div${divMatch[1]}>`);
+  if (attrs['data-np-block'] !== CONTROLLED_GALLERY_BLOCK) return null;
+
+  const inner = String(divMatch[2] || '');
+  const figures: ControlledArticleInlineImage[] = [];
+  const seenMediaIds = new Set<string>();
+  const figureRe = /<figure\b[^>]*>[\s\S]*?<\/figure>/gi;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null = null;
+
+  while ((match = figureRe.exec(inner))) {
+    if (inner.slice(lastIndex, match.index).trim()) return null;
+    const image = parseControlledInlineImageBlock(match[0]);
+    if (!image?.mediaId) return null;
+    if (seenMediaIds.has(image.mediaId)) return null;
+    seenMediaIds.add(image.mediaId);
+    figures.push(image);
+    lastIndex = figureRe.lastIndex;
+  }
+
+  if (inner.slice(lastIndex).trim()) return null;
+  if (figures.length < 2 || figures.length > 20) return null;
+
+  return { images: figures };
+}
+
+function buildControlledGalleryHtml(source: string): string {
+  const gallery = resolveControlledGalleryBlock(source);
+  if (!gallery) return '';
+  return `<div class="np-gallery" data-np-block="gallery">${gallery.images.map(buildControlledInlineImageFigureHtml).join('')}</div>`;
+}
+
+function findClosingDivIndex(source: string, fromIndex: number): number {
+  const divTagRe = /<\/?div\b[^>]*>/gi;
+  divTagRe.lastIndex = fromIndex;
+  let depth = 1;
+  let match: RegExpExecArray | null = null;
+
+  while ((match = divTagRe.exec(source))) {
+    if (/^<div\b/i.test(match[0])) {
+      depth += 1;
+    } else {
+      depth -= 1;
+      if (depth === 0) return divTagRe.lastIndex;
+    }
+  }
+
+  return -1;
+}
+
+function normalizeControlledGalleryMarkers(value: string): string {
+  const source = String(value || '');
+  const galleryOpenRe = /<div\b(?=[^>]*data-np-block\s*=\s*(?:"gallery"|'gallery'|gallery))[^>]*>/gi;
+  let output = '';
+  let lastIndex = 0;
+  let match: RegExpExecArray | null = null;
+
+  while ((match = galleryOpenRe.exec(source))) {
+    const closeIndex = findClosingDivIndex(source, galleryOpenRe.lastIndex);
+    output += source.slice(lastIndex, match.index);
+
+    if (closeIndex < 0) {
+      lastIndex = source.length;
+      break;
+    }
+
+    output += buildControlledGalleryHtml(source.slice(match.index, closeIndex));
+    lastIndex = closeIndex;
+    galleryOpenRe.lastIndex = closeIndex;
+  }
+
+  output += source.slice(lastIndex);
+  return output;
+}
+
+function stripInvalidControlledGalleries(value: string): string {
+  return String(value || '').replace(/<div\b(?=[^>]*data-np-block\s*=\s*(?:"gallery"|'gallery'|gallery))[^>]*>[\s\S]*?<\/div>/gi, (match) => (resolveControlledGalleryBlock(match) ? match : ''));
+}
+
 export function parseControlledInlineImageBlock(html: string): ControlledArticleInlineImage | null {
   const source = String(html || '').trim();
   const figureMatch = source.match(/^<figure\b([^>]*)>([\s\S]*)<\/figure>$/i);
@@ -565,6 +677,10 @@ export function parseControlledFacebookBlock(html: string): ControlledArticleFac
   return resolveControlledFacebookEmbed(attrs);
 }
 
+export function parseControlledGalleryBlock(html: string): ControlledArticleGallery | null {
+  return resolveControlledGalleryBlock(html);
+}
+
 function isHeadingLikeLine(value: string): boolean {
   const line = String(value || '').trim();
   if (!line) return false;
@@ -622,7 +738,7 @@ export function splitArticleBodyBlocks(html: string): string[] {
   if (!source) return [];
 
   const blocks: string[] = [];
-  const re = /<(p|figure)\b[^>]*>[\s\S]*?<\/\1>|<div\b(?=[^>]*data-np-block\s*=\s*(?:"youtube"|'youtube'|youtube|"x"|'x'|x|"instagram"|'instagram'|instagram|"facebook"|'facebook'|facebook))[^>]*>[\s\S]*?<\/div>/gi;
+  const re = /<div\b(?=[^>]*data-np-block\s*=\s*(?:"gallery"|'gallery'|gallery))[^>]*>[\s\S]*?<\/div>|<(p|figure)\b[^>]*>[\s\S]*?<\/\1>|<div\b(?=[^>]*data-np-block\s*=\s*(?:"youtube"|'youtube'|youtube|"x"|'x'|x|"instagram"|'instagram'|instagram|"facebook"|'facebook'|facebook))[^>]*>[\s\S]*?<\/div>/gi;
   let lastIndex = 0;
   let match: RegExpExecArray | null = null;
 
@@ -666,11 +782,11 @@ export function formatArticleBodyHtml(rawContent: string): string {
   if (!normalized) return '';
 
   const htmlish = hasAnyHtml(normalized);
-  const markedContent = normalizeControlledFacebookMarkers(normalizeControlledInstagramMarkers(normalizeControlledXMarkers(normalizeControlledYouTubeMarkers(normalizeControlledInlineImageMarkers(normalized)))));
+  const markedContent = normalizeControlledGalleryMarkers(normalizeControlledFacebookMarkers(normalizeControlledInstagramMarkers(normalizeControlledXMarkers(normalizeControlledYouTubeMarkers(normalizeControlledInlineImageMarkers(normalized))))));
   if (htmlish && /data-np-block\s*=/i.test(normalized) && /^<\/div>\s*$/i.test(markedContent.trim())) return '';
   const preSanitized = htmlish && hasBlockHtml(markedContent) ? markedContent : paragraphizeTextContent(markedContent);
 
-  return sanitizeHtml(preSanitized, {
+  const sanitized = sanitizeHtml(preSanitized, {
     disallowedTagsMode: 'discard',
     allowedTags: [
       'p',
@@ -715,8 +831,8 @@ export function formatArticleBodyHtml(rawContent: string): string {
         'data-np-media-id',
       ],
       div: [
-        { name: 'class', values: ['np-youtube-embed', 'np-x-embed', 'np-instagram-embed', 'np-facebook-embed'] },
-        { name: 'data-np-block', values: ['youtube', 'x', 'instagram', 'facebook'] },
+        { name: 'class', values: ['np-youtube-embed', 'np-x-embed', 'np-instagram-embed', 'np-facebook-embed', 'np-gallery'] },
+        { name: 'data-np-block', values: ['youtube', 'x', 'instagram', 'facebook', 'gallery'] },
         'data-np-video-id',
         'data-np-url',
         'data-np-embed-url',
@@ -760,4 +876,6 @@ export function formatArticleBodyHtml(rawContent: string): string {
       a: sanitizeHtml.simpleTransform('a', { rel: 'noopener noreferrer', target: '_blank' }),
     },
   });
+
+  return stripInvalidControlledGalleries(sanitized);
 }
