@@ -1,7 +1,7 @@
 import React from 'react';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
-import NewsSlugDetailPage, { ArticleFacebookEmbed, ArticleGallery, ArticleInstagramEmbed, ArticleXEmbed, ArticleYouTubeEmbed, getServerSideProps } from '../../pages/news/[slug]';
+import NewsSlugDetailPage, { ArticleFacebookEmbed, ArticleGallery, ArticleInlineImage, ArticleInstagramEmbed, ArticleXEmbed, ArticleYouTubeEmbed, getServerSideProps } from '../../pages/news/[slug]';
 import { formatArticleBodyHtml } from '../../lib/articleBody';
 import { fetchPublicNews } from '../../lib/publicNewsApi';
 import { hasRenderedTwitterWidgetFrame, loadTwitterWidgetsIn } from '../../lib/xWidgets';
@@ -113,8 +113,23 @@ function galleryImageMarker(mediaId: string, src: string, caption: string, credi
   return `<div data-np-block="inline-image" data-np-media-id="${mediaId}" data-np-src="${src}" data-np-caption="${caption}" data-np-credit="${credit}" data-np-width="1200" data-np-height="800"></div>`;
 }
 
+function inlineImageLayoutMarker(mediaId: string, layout?: string) {
+  const layoutAttr = layout === undefined ? '' : ` data-np-layout="${layout}"`;
+  return `<div data-np-block="inline-image" data-np-media-id="${mediaId}" data-np-src="https://cdn.newspulse.co.in/images/${mediaId}.jpg" data-np-alt="Layout ${mediaId}" data-np-caption="Layout ${mediaId}" data-np-credit="News Pulse / Staff"${layoutAttr}></div>`;
+}
+
 function adminGalleryImageFigure(mediaId: string, src: string, caption: string, credit: string) {
   return `<figure data-np-block="inline-image" data-np-media-id="${mediaId}"><img src="${src}" alt=""><figcaption data-np-caption="true">${caption}</figcaption><div data-np-credit="true">${credit}</div></figure>`;
+}
+
+function lightboxGallery() {
+  return {
+    images: [
+      { mediaId: 'gallery_lightbox_1', src: 'https://cdn.newspulse.co.in/images/lightbox-1.jpg', alt: 'Opening frame', caption: 'Opening caption', credit: 'Credit: Reuters', width: '1200', height: '800' },
+      { mediaId: 'gallery_lightbox_2', src: 'https://cdn.newspulse.co.in/images/lightbox-2.jpg', alt: 'Second frame', caption: 'Second caption', credit: 'Photo: ANI', width: '1000', height: '700' },
+      { mediaId: 'gallery_lightbox_3', src: 'https://cdn.newspulse.co.in/images/lightbox-3.jpg', alt: 'Third frame', caption: 'Third caption', credit: 'Photo Credit: Getty Images', width: '900', height: '600' },
+    ],
+  };
 }
 
 describe('pages/news/[slug] editorial detail', () => {
@@ -128,6 +143,9 @@ describe('pages/news/[slug] editorial detail', () => {
 
   afterEach(() => {
     cleanup();
+    document.documentElement.style.overflow = '';
+    document.body.style.overflow = '';
+    document.body.style.overscrollBehavior = '';
   });
 
   test('renders editorial detail fields without mixing author role and editorial type', async () => {
@@ -281,6 +299,156 @@ describe('pages/news/[slug] editorial detail', () => {
     expect(screen.getByText('Photo: News Pulse / Staff')).toBeTruthy();
   });
 
+  test('keeps standalone inline-image caption before normalized credit', () => {
+    render(
+      <ArticleInlineImage
+        image={{
+          mediaId: 'caption_order_1',
+          src: 'https://cdn.newspulse.co.in/images/caption-order.jpg',
+          alt: 'Caption order image',
+          caption: 'Caption describing what is shown',
+          credit: 'Credit: Reuters',
+        }}
+      />
+    );
+
+    const figure = screen.getByAltText('Caption order image').closest('figure') as HTMLElement | null;
+    const figcaption = figure?.querySelector('figcaption') as HTMLElement | null;
+    const children = Array.from(figcaption?.children || []);
+
+    expect(screen.getByText('Caption describing what is shown')).toBeTruthy();
+    expect(screen.getByText('Photo: Reuters')).toBeTruthy();
+    expect(children[0]?.className).toBe('np-inline-image__caption-text');
+    expect(children[1]?.className).toBe('np-inline-image__credit');
+  });
+
+  test('normalizes duplicate standalone and Gallery photo credit prefixes at render time', () => {
+    render(
+      <div>
+        <ArticleInlineImage image={{ src: 'https://cdn.newspulse.co.in/images/prefix-inline.jpg', alt: 'Inline prefix image', credit: 'Photo: Credit: Reuters' }} />
+        <ArticleGallery
+          lang="en"
+          gallery={{
+            images: [
+              { mediaId: 'gallery_prefix_1', src: 'https://cdn.newspulse.co.in/images/prefix-gallery-1.jpg', alt: 'Gallery prefix one', caption: 'Gallery prefix one', credit: 'Credit: Credit: ANI' },
+              { mediaId: 'gallery_prefix_2', src: 'https://cdn.newspulse.co.in/images/prefix-gallery-2.jpg', alt: 'Gallery prefix two', caption: 'Gallery prefix two', credit: 'Photo: Photo: Getty Images' },
+            ],
+          }}
+        />
+      </div>
+    );
+
+    expect(screen.getByText('Photo: Reuters')).toBeTruthy();
+    expect(screen.getByText('Photo: ANI')).toBeTruthy();
+    expect(screen.getByText('Photo: Getty Images')).toBeTruthy();
+    expect(document.body.textContent).not.toContain('Photo: Credit:');
+    expect(document.body.textContent).not.toContain('Credit: Credit:');
+    expect(document.body.textContent).not.toContain('Photo: Photo:');
+  });
+
+  test('renders Gujarati and Hindi image captions without forced uppercase or letter spacing', () => {
+    render(
+      <div>
+        <ArticleInlineImage image={{ src: 'https://cdn.newspulse.co.in/images/gu-caption.jpg', alt: 'Gujarati caption image', caption: 'ગુજરાતી ફોટો કૅપ્શન લાંબી લાઇનમાં સ્વાભાવિક રીતે વળે છે', credit: 'Photo Credit: સ્ટાફ' }} />
+        <ArticleGallery
+          lang="hi"
+          gallery={{
+            images: [
+              { mediaId: 'hindi_caption_1', src: 'https://cdn.newspulse.co.in/images/hi-caption-1.jpg', alt: 'Hindi caption one', caption: 'हिंदी फोटो कैप्शन कई शब्दों के साथ स्वाभाविक रूप से दिखता है', credit: 'Credit: एजेंसी' },
+              { mediaId: 'hindi_caption_2', src: 'https://cdn.newspulse.co.in/images/hi-caption-2.jpg', alt: 'Hindi caption two', caption: 'दूसरी गैलरी तस्वीर का कैप्शन', credit: 'Photo: डेस्क' },
+            ],
+          }}
+        />
+      </div>
+    );
+
+    expect(screen.getByText('ગુજરાતી ફોટો કૅપ્શન લાંબી લાઇનમાં સ્વાભાવિક રીતે વળે છે')).toBeTruthy();
+    expect(screen.getByText('Photo: સ્ટાફ')).toBeTruthy();
+    expect(screen.getByText('हिंदी फोटो कैप्शन कई शब्दों के साथ स्वाभाविक रूप से दिखता है')).toBeTruthy();
+    expect(screen.getByText('Photo: एजेंसी')).toBeTruthy();
+  });
+
+  test('keeps long caption text safely wrapped within image captions', () => {
+    render(
+      <ArticleInlineImage
+        image={{
+          src: 'https://cdn.newspulse.co.in/images/long-caption.jpg',
+          alt: 'Long caption image',
+          caption: 'This is a long editorial caption with an exceptionallylongunbrokenphotolocationidentifierthatmustnotcreatescrollbars in the article image caption.',
+          credit: 'Photo: News Pulse',
+        }}
+      />
+    );
+    const figcaption = screen.getByText(/exceptionallylongunbroken/).closest('figcaption') as HTMLElement | null;
+
+    expect(figcaption?.className).toBe('np-inline-image__caption');
+  });
+
+  test('omits standalone and Gallery figcaption wrappers when caption and credit are blank', () => {
+    render(
+      <div>
+        <ArticleInlineImage image={{ src: 'https://cdn.newspulse.co.in/images/no-caption.jpg', alt: 'No caption image', caption: '   ', credit: ' Photo:   ' }} />
+        <ArticleGallery
+          lang="en"
+          gallery={{
+            images: [
+              { mediaId: 'blank_gallery_1', src: 'https://cdn.newspulse.co.in/images/blank-gallery-1.jpg', alt: 'Blank gallery one', caption: '   ', credit: 'Credit:' },
+              { mediaId: 'blank_gallery_2', src: 'https://cdn.newspulse.co.in/images/blank-gallery-2.jpg', alt: 'Blank gallery two' },
+            ],
+          }}
+        />
+      </div>
+    );
+
+    expect(screen.getByAltText('No caption image').closest('figure')?.querySelector('figcaption')).toBeNull();
+    expect(screen.getByAltText('Blank gallery one').closest('figure')?.querySelector('figcaption')).toBeNull();
+    expect(screen.getByAltText('Blank gallery two').closest('figure')?.querySelector('figcaption')).toBeNull();
+  });
+
+  test('renders standalone inline-image layout classes while keeping mobile-safe CSS and captions attached', async () => {
+    const safeHtml = formatArticleBodyHtml(`<p>Before layouts.</p>${inlineImageLayoutMarker('layout_normal', 'normal')}${inlineImageLayoutMarker('layout_wide', 'wide')}${inlineImageLayoutMarker('layout_full', 'full')}<p>After layouts.</p>`);
+
+    render(
+      <NewsSlugDetailPage
+        messages={{}}
+        locale="en"
+        lang="en"
+        slug="special-story"
+        siteUrl="https://www.newspulse.co.in"
+        article={editorialArticle() as any}
+        safeHtml={safeHtml}
+        topStories={[]}
+        relatedStories={[]}
+        error={null}
+        pending={false}
+      />
+    );
+
+    const normalFigure = screen.getByAltText('Layout layout_normal').closest('figure') as HTMLElement | null;
+    const wideFigure = screen.getByAltText('Layout layout_wide').closest('figure') as HTMLElement | null;
+    const fullFigure = screen.getByAltText('Layout layout_full').closest('figure') as HTMLElement | null;
+    const styleText = Array.from(document.querySelectorAll('style')).map((style) => style.textContent || '').join('\n');
+
+    expect(normalFigure?.className).toContain('np-inline-image--normal');
+    expect(normalFigure?.getAttribute('data-np-layout')).toBe('normal');
+    expect(wideFigure?.className).toContain('np-inline-image--wide');
+    expect(wideFigure?.getAttribute('data-np-layout')).toBe('wide');
+    expect(fullFigure?.className).toContain('np-inline-image--full');
+    expect(fullFigure?.getAttribute('data-np-layout')).toBe('full');
+    expect(wideFigure?.querySelector('.np-inline-image__caption')?.textContent).toContain('Layout layout_wide');
+    expect(fullFigure?.querySelector('.np-inline-image__caption')?.textContent).toContain('Photo: News Pulse / Staff');
+    expect(styleText).toContain('.np-inline-image--normal');
+    expect(styleText).toContain('@media (min-width: 768px)');
+    expect(styleText).toContain('.np-inline-image--wide');
+    expect(styleText).toContain('.np-inline-image--full');
+    expect(styleText).toContain('max-width: 100%');
+    expect(styleText).toContain('font-size: 0.95rem');
+    expect(styleText).toContain('font-size: 0.78rem');
+    expect(styleText).toContain('overflow-wrap: anywhere');
+    expect(styleText).toContain('letter-spacing: 0');
+    expect(styleText).not.toContain('text-transform: uppercase');
+  });
+
   test('renders controlled photo galleries with featured image, responsive grid, order, captions, and credits', async () => {
     const safeHtml = formatArticleBodyHtml(`<p>Before gallery.</p><div data-np-block="gallery">${galleryImageMarker('gallery_101', 'https://cdn.newspulse.co.in/images/gallery-1.jpg', 'Opening frame')}${galleryImageMarker('gallery_102', 'https://cdn.newspulse.co.in/images/gallery-2.jpg', 'Second frame')}${galleryImageMarker('gallery_103', 'https://cdn.newspulse.co.in/images/gallery-3.jpg', 'Third frame')}</div><p>After gallery.</p>`);
 
@@ -326,6 +494,165 @@ describe('pages/news/[slug] editorial detail', () => {
     expect(screen.queryByTestId('embedded-media-consent-gate')).toBeNull();
   });
 
+  test('keeps Gallery rendering unaffected by child inline-image layout attributes', async () => {
+    const safeHtml = formatArticleBodyHtml(`<div data-np-block="gallery">${inlineImageLayoutMarker('gallery_layout_full', 'full')}${inlineImageLayoutMarker('gallery_layout_wide', 'wide')}</div>`);
+
+    render(
+      <NewsSlugDetailPage
+        messages={{}}
+        locale="en"
+        lang="en"
+        slug="special-story"
+        siteUrl="https://www.newspulse.co.in"
+        article={editorialArticle() as any}
+        safeHtml={safeHtml}
+        topStories={[]}
+        relatedStories={[]}
+        error={null}
+        pending={false}
+      />
+    );
+
+    const gallery = document.querySelector('section.np-gallery') as HTMLElement | null;
+
+    expect(screen.getByText('Photo Gallery')).toBeTruthy();
+    expect(gallery?.querySelectorAll('figure.np-gallery__item')).toHaveLength(2);
+    expect(gallery?.querySelector('.np-inline-image--full')).toBeNull();
+    expect(gallery?.querySelector('.np-inline-image--wide')).toBeNull();
+    expect(screen.queryByTestId('embedded-media-consent-gate')).toBeNull();
+  });
+
+  test('opens Gallery lightbox from the first image with caption, credit, focus, and scroll lock', () => {
+    document.body.style.overflow = 'clip';
+    render(<ArticleGallery gallery={lightboxGallery()} lang="en" />);
+
+    const opener = screen.getByRole('button', { name: /Photo Gallery: Opening frame 1 \/ 3/ });
+    fireEvent.click(opener);
+
+    const dialog = screen.getByRole('dialog', { name: 'Photo Gallery 1 / 3' });
+    const closeButton = within(dialog).getByRole('button', { name: 'Close' });
+
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect(document.body.style.overflow).toBe('hidden');
+    expect(document.documentElement.style.overflow).toBe('hidden');
+    expect(document.activeElement).toBe(closeButton);
+    expect(within(dialog).getByAltText('Opening frame').getAttribute('src')).toBe('https://cdn.newspulse.co.in/images/lightbox-1.jpg');
+    expect(within(dialog).getByText('Opening caption')).toBeTruthy();
+    expect(within(dialog).getByText('Photo: Reuters')).toBeTruthy();
+    expect((within(dialog).getByRole('button', { name: 'Previous' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(dialog).getByRole('button', { name: 'Next' }) as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(closeButton);
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.body.style.overflow).toBe('clip');
+    expect(document.activeElement).toBe(opener);
+  });
+
+  test('opens another Gallery image at the correct index and navigates without wraparound', () => {
+    render(<ArticleGallery gallery={lightboxGallery()} lang="en" />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Photo Gallery: Third frame 3 \/ 3/ }));
+
+    let dialog = screen.getByRole('dialog', { name: 'Photo Gallery 3 / 3' });
+    expect(within(dialog).getByAltText('Third frame').getAttribute('src')).toBe('https://cdn.newspulse.co.in/images/lightbox-3.jpg');
+    expect(within(dialog).getByText('Photo: Getty Images')).toBeTruthy();
+    expect((within(dialog).getByRole('button', { name: 'Next' }) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.keyDown(document, { key: 'ArrowRight' });
+    expect(screen.getByRole('dialog', { name: 'Photo Gallery 3 / 3' })).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: 'ArrowLeft' });
+    dialog = screen.getByRole('dialog', { name: 'Photo Gallery 2 / 3' });
+    expect(within(dialog).getByAltText('Second frame')).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: 'ArrowLeft' });
+    dialog = screen.getByRole('dialog', { name: 'Photo Gallery 1 / 3' });
+    expect((within(dialog).getByRole('button', { name: 'Previous' }) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.keyDown(document, { key: 'ArrowLeft' });
+    expect(screen.getByRole('dialog', { name: 'Photo Gallery 1 / 3' })).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: 'ArrowRight' });
+    expect(screen.getByRole('dialog', { name: 'Photo Gallery 2 / 3' })).toBeTruthy();
+  });
+
+  test('closes Gallery lightbox with Escape and returns focus to the opener', () => {
+    render(<ArticleGallery gallery={lightboxGallery()} lang="en" />);
+
+    const opener = screen.getByRole('button', { name: /Photo Gallery: Second frame 2 \/ 3/ });
+    fireEvent.click(opener);
+
+    expect(screen.getByRole('dialog', { name: 'Photo Gallery 2 / 3' })).toBeTruthy();
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(opener);
+  });
+
+  test('keeps Gallery lightbox usable after selected image failure', () => {
+    render(<ArticleGallery gallery={lightboxGallery()} lang="en" />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Photo Gallery: Opening frame 1 \/ 3/ }));
+    let dialog = screen.getByRole('dialog', { name: 'Photo Gallery 1 / 3' });
+    fireEvent.error(within(dialog).getByAltText('Opening frame'));
+
+    expect(within(dialog).getByText('Image unavailable')).toBeTruthy();
+    expect(within(dialog).getByText('Opening caption')).toBeTruthy();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Next' }));
+    dialog = screen.getByRole('dialog', { name: 'Photo Gallery 2 / 3' });
+
+    expect(within(dialog).getByAltText('Second frame')).toBeTruthy();
+    expect(within(dialog).getByText('Second caption')).toBeTruthy();
+    expect(within(dialog).getByText('Photo: ANI')).toBeTruthy();
+  });
+
+  test('omits Gallery lightbox caption wrapper when caption and credit are absent', () => {
+    render(
+      <ArticleGallery
+        lang="en"
+        gallery={{
+          images: [
+            { mediaId: 'gallery_blank_lightbox_1', src: 'https://cdn.newspulse.co.in/images/blank-lightbox-1.jpg', alt: 'Blank lightbox one' },
+            { mediaId: 'gallery_blank_lightbox_2', src: 'https://cdn.newspulse.co.in/images/blank-lightbox-2.jpg', alt: 'Blank lightbox two' },
+          ],
+        }}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Photo Gallery: Blank lightbox one 1 \/ 2/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Photo Gallery 1 / 2' });
+
+    expect(dialog.querySelector('.np-gallery-lightbox__caption')).toBeNull();
+  });
+
+  test('localizes Gallery lightbox labels for English, Hindi, and Gujarati', () => {
+    for (const [language, expected] of [
+      ['en', { gallery: 'Photo Gallery', close: 'Close', previous: 'Previous', next: 'Next' }],
+      ['hi', { gallery: 'फोटो गैलरी', close: 'बंद करें', previous: 'पिछला', next: 'अगला' }],
+      ['gu', { gallery: 'ફોટો ગેલેરી', close: 'બંધ કરો', previous: 'પાછલું', next: 'આગળ' }],
+    ] as const) {
+      cleanup();
+      render(<ArticleGallery gallery={lightboxGallery()} lang={language} />);
+      fireEvent.click(screen.getByRole('button', { name: new RegExp(`${expected.gallery}: Opening frame 1 / 3`) }));
+
+      const dialog = screen.getByRole('dialog', { name: `${expected.gallery} 1 / 3` });
+      expect(within(dialog).getByRole('button', { name: expected.close })).toBeTruthy();
+      expect(within(dialog).getByRole('button', { name: expected.previous })).toBeTruthy();
+      expect(within(dialog).getByRole('button', { name: expected.next })).toBeTruthy();
+    }
+  });
+
+  test('does not add Gallery lightbox behavior to standalone inline images', () => {
+    render(<ArticleInlineImage image={{ src: 'https://cdn.newspulse.co.in/images/standalone-no-lightbox.jpg', alt: 'Standalone no lightbox', caption: 'Standalone caption', credit: 'Photo: Desk' }} />);
+
+    fireEvent.click(screen.getByAltText('Standalone no lightbox'));
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.querySelector('.np-gallery__trigger')).toBeNull();
+  });
+
   test('renders Admin canonical gallery captions and credits visibly after normalization', async () => {
     const safeHtml = formatArticleBodyHtml(`<p>Before gallery.</p><div data-np-block="gallery">${adminGalleryImageFigure('gallery_101', 'https://cdn.newspulse.co.in/images/example-1.jpg', 'Emmy Awards caption', 'Credit: Reuters')}${adminGalleryImageFigure('gallery_102', 'https://cdn.newspulse.co.in/images/example-2.jpg', 'Second gallery caption', 'Credit: AP')}</div><p>After gallery.</p>`);
 
@@ -347,9 +674,9 @@ describe('pages/news/[slug] editorial detail', () => {
 
     expect(screen.getByText('Photo Gallery')).toBeTruthy();
     expect(screen.getByText('Emmy Awards caption')).toBeTruthy();
-    expect(screen.getByText('Credit: Reuters')).toBeTruthy();
+    expect(screen.getByText('Photo: Reuters')).toBeTruthy();
     expect(screen.getByText('Second gallery caption')).toBeTruthy();
-    expect(screen.getByText('Credit: AP')).toBeTruthy();
+    expect(screen.getByText('Photo: AP')).toBeTruthy();
     expect(screen.queryByTestId('embedded-media-consent-gate')).toBeNull();
   });
 

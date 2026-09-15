@@ -64,6 +64,18 @@ type ArticleInlineImageProps = {
   image: ControlledArticleInlineImage;
 };
 
+function formatVisiblePhotoCredit(value?: string): string {
+  let credit = String(value || '').replace(/\s+/g, ' ').trim();
+  while (/^(?:photo\s+credit|photo|credit)\s*:/i.test(credit)) {
+    credit = credit.replace(/^(?:photo\s+credit|photo|credit)\s*:\s*/i, '').trim();
+  }
+  return credit ? `Photo: ${credit}` : '';
+}
+
+function formatVisibleCaption(value?: string): string {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
 export function ArticleInlineImage({ image }: ArticleInlineImageProps) {
   const [failed, setFailed] = React.useState(false);
   const numericWidth = image.width ? Number(image.width) : undefined;
@@ -72,10 +84,14 @@ export function ArticleInlineImage({ image }: ArticleInlineImageProps) {
   const frameStyle: React.CSSProperties | undefined = hasDimensions
     ? { aspectRatio: `${numericWidth} / ${numericHeight}` }
     : undefined;
-  const altText = image.alt || image.caption || 'News Pulse article image';
+  const visibleCaption = formatVisibleCaption(image.caption);
+  const altText = image.alt || visibleCaption || 'News Pulse article image';
+  const layout = image.layout === 'wide' || image.layout === 'full' ? image.layout : 'normal';
+  const layoutClassName = `not-prose np-inline-image np-inline-image--${layout}`;
+  const visibleCredit = formatVisiblePhotoCredit(image.credit);
 
   return (
-    <figure className="not-prose np-inline-image" data-np-block="inline-image" data-np-media-id={image.mediaId || undefined}>
+    <figure className={layoutClassName} data-np-block="inline-image" data-np-media-id={image.mediaId || undefined} data-np-layout={layout}>
       <div className="np-inline-image__frame" style={frameStyle}>
         {failed ? (
           <div className="np-inline-image__fallback" role="img" aria-label={altText}>
@@ -95,10 +111,10 @@ export function ArticleInlineImage({ image }: ArticleInlineImageProps) {
         )}
       </div>
 
-      {image.caption || image.credit ? (
+      {visibleCaption || visibleCredit ? (
         <figcaption className="np-inline-image__caption">
-          {image.caption ? <span className="np-inline-image__caption-text">{image.caption}</span> : null}
-          {image.credit ? <span className="np-inline-image__credit">{image.credit}</span> : null}
+          {visibleCaption ? <span className="np-inline-image__caption-text">{visibleCaption}</span> : null}
+          {visibleCredit ? <span className="np-inline-image__credit">{visibleCredit}</span> : null}
         </figcaption>
       ) : null}
     </figure>
@@ -108,9 +124,12 @@ export function ArticleInlineImage({ image }: ArticleInlineImageProps) {
 type ArticleGalleryImageProps = {
   image: ControlledArticleInlineImage;
   featured?: boolean;
+  index?: number;
+  onOpen?: (index: number, opener: HTMLButtonElement) => void;
+  openLabel?: string;
 };
 
-function ArticleGalleryImage({ image, featured = false }: ArticleGalleryImageProps) {
+function ArticleGalleryImage({ image, featured = false, index = 0, onOpen, openLabel }: ArticleGalleryImageProps) {
   const [failed, setFailed] = React.useState(false);
   const numericWidth = image.width ? Number(image.width) : undefined;
   const numericHeight = image.height ? Number(image.height) : undefined;
@@ -118,11 +137,19 @@ function ArticleGalleryImage({ image, featured = false }: ArticleGalleryImagePro
   const frameStyle: React.CSSProperties | undefined = hasDimensions
     ? { aspectRatio: `${numericWidth} / ${numericHeight}` }
     : undefined;
-  const altText = image.alt || image.caption || 'News Pulse article gallery image';
+  const visibleCaption = formatVisibleCaption(image.caption);
+  const altText = image.alt || visibleCaption || 'News Pulse article gallery image';
+  const visibleCredit = formatVisiblePhotoCredit(image.credit);
 
   return (
     <figure className={`np-gallery__item${featured ? ' np-gallery__item--featured' : ''}`} data-np-media-id={image.mediaId || undefined}>
-      <div className="np-gallery__frame" style={frameStyle}>
+      <button
+        type="button"
+        className="np-gallery__frame np-gallery__trigger"
+        style={frameStyle}
+        aria-label={openLabel || altText}
+        onClick={(event) => onOpen?.(index, event.currentTarget)}
+      >
         {failed ? (
           <div className="np-gallery__fallback" role="img" aria-label={altText}>
             Image unavailable
@@ -139,12 +166,12 @@ function ArticleGalleryImage({ image, featured = false }: ArticleGalleryImagePro
             onError={() => setFailed(true)}
           />
         )}
-      </div>
+      </button>
 
-      {image.caption || image.credit ? (
+      {visibleCaption || visibleCredit ? (
         <figcaption className="np-gallery__caption">
-          {image.caption ? <span className="np-gallery__caption-text">{image.caption}</span> : null}
-          {image.credit ? <span className="np-gallery__credit">{image.credit}</span> : null}
+          {visibleCaption ? <span className="np-gallery__caption-text">{visibleCaption}</span> : null}
+          {visibleCredit ? <span className="np-gallery__credit">{visibleCredit}</span> : null}
         </figcaption>
       ) : null}
     </figure>
@@ -162,23 +189,202 @@ const GALLERY_LABELS: Record<'en' | 'hi' | 'gu', string> = {
   gu: 'ફોટો ગેલેરી',
 };
 
+const GALLERY_LIGHTBOX_LABELS: Record<'en' | 'hi' | 'gu', { close: string; previous: string; next: string }> = {
+  en: { close: 'Close', previous: 'Previous', next: 'Next' },
+  hi: { close: 'बंद करें', previous: 'पिछला', next: 'अगला' },
+  gu: { close: 'બંધ કરો', previous: 'પાછલું', next: 'આગળ' },
+};
+
+type ArticleGalleryLightboxProps = {
+  images: ControlledArticleInlineImage[];
+  activeIndex: number;
+  lang: 'en' | 'hi' | 'gu';
+  onClose: () => void;
+  onSelectIndex: (index: number) => void;
+};
+
+function getFocusableDialogElements(dialog: HTMLElement | null): HTMLElement[] {
+  if (!dialog) return [];
+  return Array.from(dialog.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'))
+    .filter((element) => !element.hasAttribute('disabled') && element.getAttribute('aria-hidden') !== 'true');
+}
+
+function ArticleGalleryLightbox({ images, activeIndex, lang, onClose, onSelectIndex }: ArticleGalleryLightboxProps) {
+  const [failedImages, setFailedImages] = React.useState<Record<string, boolean>>({});
+  const dialogRef = React.useRef<HTMLDivElement | null>(null);
+  const closeButtonRef = React.useRef<HTMLButtonElement | null>(null);
+  const labels = GALLERY_LIGHTBOX_LABELS[lang] || GALLERY_LIGHTBOX_LABELS.en;
+  const galleryLabel = GALLERY_LABELS[lang] || GALLERY_LABELS.en;
+  const activeImage = images[activeIndex];
+  const visibleCaption = formatVisibleCaption(activeImage?.caption);
+  const visibleCredit = formatVisiblePhotoCredit(activeImage?.credit);
+  const altText = activeImage?.alt || visibleCaption || 'News Pulse article gallery image';
+  const imageKey = activeImage?.mediaId || activeImage?.src || String(activeIndex);
+  const canGoPrevious = activeIndex > 0;
+  const canGoNext = activeIndex < images.length - 1;
+
+  React.useEffect(() => {
+    const previousRootOverflow = document.documentElement.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousBodyOverscrollBehavior = document.body.style.overscrollBehavior;
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    document.body.style.overscrollBehavior = 'none';
+    closeButtonRef.current?.focus();
+
+    return () => {
+      document.documentElement.style.overflow = previousRootOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+      document.body.style.overscrollBehavior = previousBodyOverscrollBehavior;
+    };
+  }, []);
+
+  React.useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        if (canGoPrevious) onSelectIndex(activeIndex - 1);
+        return;
+      }
+
+      if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        if (canGoNext) onSelectIndex(activeIndex + 1);
+        return;
+      }
+
+      if (event.key === 'Tab') {
+        const focusableElements = getFocusableDialogElements(dialogRef.current);
+        if (!focusableElements.length) {
+          event.preventDefault();
+          return;
+        }
+
+        const firstElement = focusableElements[0];
+        const lastElement = focusableElements[focusableElements.length - 1];
+        if (event.shiftKey && document.activeElement === firstElement) {
+          event.preventDefault();
+          lastElement.focus();
+        } else if (!event.shiftKey && document.activeElement === lastElement) {
+          event.preventDefault();
+          firstElement.focus();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [activeIndex, canGoNext, canGoPrevious, onClose, onSelectIndex]);
+
+  if (!activeImage) return null;
+
+  return (
+    <div
+      ref={dialogRef}
+      className="np-gallery-lightbox"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${galleryLabel} ${activeIndex + 1} / ${images.length}`}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div className="np-gallery-lightbox__panel">
+        <div className="np-gallery-lightbox__header">
+          <div className="np-gallery-lightbox__title">{galleryLabel}</div>
+          <div className="np-gallery-lightbox__count">{activeIndex + 1} / {images.length}</div>
+          <button ref={closeButtonRef} type="button" className="np-gallery-lightbox__close" aria-label={labels.close} onClick={onClose}>
+            ×
+          </button>
+        </div>
+
+        <div className="np-gallery-lightbox__stage">
+          <button type="button" className="np-gallery-lightbox__nav np-gallery-lightbox__nav--previous" aria-label={labels.previous} onClick={() => canGoPrevious && onSelectIndex(activeIndex - 1)} disabled={!canGoPrevious}>
+            ‹
+          </button>
+
+          <figure className="np-gallery-lightbox__figure">
+            <div className="np-gallery-lightbox__media-frame">
+              {failedImages[imageKey] ? (
+                <div className="np-gallery-lightbox__fallback" role="img" aria-label={altText}>
+                  Image unavailable
+                </div>
+              ) : (
+                <img
+                  className="np-gallery-lightbox__media"
+                  src={activeImage.src}
+                  alt={altText}
+                  width={numericWidthFromImage(activeImage)}
+                  height={numericHeightFromImage(activeImage)}
+                  loading="eager"
+                  decoding="async"
+                  onError={() => setFailedImages((current) => ({ ...current, [imageKey]: true }))}
+                />
+              )}
+            </div>
+            {visibleCaption || visibleCredit ? (
+              <figcaption className="np-gallery-lightbox__caption">
+                {visibleCaption ? <span className="np-gallery-lightbox__caption-text">{visibleCaption}</span> : null}
+                {visibleCredit ? <span className="np-gallery-lightbox__credit">{visibleCredit}</span> : null}
+              </figcaption>
+            ) : null}
+          </figure>
+
+          <button type="button" className="np-gallery-lightbox__nav np-gallery-lightbox__nav--next" aria-label={labels.next} onClick={() => canGoNext && onSelectIndex(activeIndex + 1)} disabled={!canGoNext}>
+            ›
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function numericWidthFromImage(image: ControlledArticleInlineImage): number | undefined {
+  return image.width ? Number(image.width) : undefined;
+}
+
+function numericHeightFromImage(image: ControlledArticleInlineImage): number | undefined {
+  return image.height ? Number(image.height) : undefined;
+}
+
 export function ArticleGallery({ gallery, lang }: ArticleGalleryProps) {
   const images = Array.isArray(gallery.images) ? gallery.images : [];
+  const [activeLightboxIndex, setActiveLightboxIndex] = React.useState<number | null>(null);
+  const openerRef = React.useRef<HTMLButtonElement | null>(null);
+
+  const closeLightbox = React.useCallback(() => {
+    setActiveLightboxIndex(null);
+    openerRef.current?.focus();
+  }, []);
+
+  const openLightbox = React.useCallback((index: number, opener: HTMLButtonElement) => {
+    openerRef.current = opener;
+    setActiveLightboxIndex(index);
+  }, []);
+
   if (images.length < 2 || images.length > 20) return null;
 
   const headingId = `article-gallery-${images.map((image) => image.mediaId || image.src).join('-')}`.replace(/[^A-Za-z0-9_-]+/g, '-').slice(0, 96);
+  const galleryLabel = GALLERY_LABELS[lang] || GALLERY_LABELS.en;
 
   return (
     <section className="not-prose np-gallery" data-np-block="gallery" aria-labelledby={headingId}>
-      <h2 id={headingId} className="np-gallery__heading">{GALLERY_LABELS[lang] || GALLERY_LABELS.en}</h2>
-      <ArticleGalleryImage image={images[0]} featured />
+      <h2 id={headingId} className="np-gallery__heading">{galleryLabel}</h2>
+      <ArticleGalleryImage image={images[0]} featured index={0} onOpen={openLightbox} openLabel={`${galleryLabel}: ${images[0]?.alt || images[0]?.caption || 'Open image'} 1 / ${images.length}`} />
       {images.length > 1 ? (
         <div className="np-gallery__grid np-gallery__grid--responsive">
-          {images.slice(1).map((image) => (
-            <ArticleGalleryImage key={image.mediaId || image.src} image={image} />
+          {images.slice(1).map((image, index) => (
+            <ArticleGalleryImage key={image.mediaId || image.src} image={image} index={index + 1} onOpen={openLightbox} openLabel={`${galleryLabel}: ${image.alt || image.caption || 'Open image'} ${index + 2} / ${images.length}`} />
           ))}
         </div>
       ) : null}
+      {activeLightboxIndex !== null ? <ArticleGalleryLightbox images={images} activeIndex={activeLightboxIndex} lang={lang} onClose={closeLightbox} onSelectIndex={setActiveLightboxIndex} /> : null}
     </section>
   );
 }
@@ -1315,6 +1521,27 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
           width: 100%;
         }
 
+        .article-body :where(.np-inline-image--normal) {
+          max-width: 100%;
+          width: 100%;
+        }
+
+        @media (min-width: 768px) {
+          .article-body :where(.np-inline-image--wide) {
+            margin-left: -0.75rem;
+            margin-right: -0.75rem;
+            max-width: calc(100% + 1.5rem);
+            width: calc(100% + 1.5rem);
+          }
+
+          .article-body :where(.np-inline-image--full) {
+            margin-left: -1.5rem;
+            margin-right: -1.5rem;
+            max-width: calc(100% + 3rem);
+            width: calc(100% + 3rem);
+          }
+        }
+
         .article-body :where(.np-inline-image__frame) {
           align-items: center;
           background: #f1f5f9;
@@ -1350,19 +1577,28 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
         .article-body :where(.np-inline-image__caption) {
           color: #475569;
           display: grid;
-          font-size: 0.82rem;
-          gap: 0.18rem;
-          line-height: 1.55;
-          margin-top: 0.55rem;
+          gap: 0.12rem;
+          line-height: 1.6;
+          margin-top: 0.45rem;
+          max-width: 100%;
+          overflow-wrap: anywhere;
+          text-align: left;
         }
 
         .article-body :where(.np-inline-image__caption-text) {
-          color: #334155;
+          color: #475569;
+          font-size: 0.95rem;
+          font-weight: 400;
+          letter-spacing: 0;
+          line-height: 1.6;
         }
 
         .article-body :where(.np-inline-image__credit) {
           color: #64748b;
-          font-weight: 600;
+          font-size: 0.78rem;
+          font-weight: 500;
+          letter-spacing: 0;
+          line-height: 1.45;
         }
 
         .article-body :where(.np-gallery) {
@@ -1413,6 +1649,20 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
           width: 100%;
         }
 
+        .article-body :where(.np-gallery__trigger) {
+          appearance: none;
+          color: inherit;
+          cursor: zoom-in;
+          font: inherit;
+          padding: 0;
+          text-align: inherit;
+        }
+
+        .article-body :where(.np-gallery__trigger:focus-visible) {
+          outline: 3px solid rgba(37, 99, 235, 0.75);
+          outline-offset: 3px;
+        }
+
         .article-body :where(.np-gallery__media) {
           display: block;
           height: auto;
@@ -1437,19 +1687,205 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
         .article-body :where(.np-gallery__caption) {
           color: #475569;
           display: grid;
-          font-size: 0.82rem;
-          gap: 0.18rem;
-          line-height: 1.55;
-          margin-top: 0.55rem;
+          gap: 0.12rem;
+          line-height: 1.6;
+          margin-top: 0.45rem;
+          max-width: 100%;
+          overflow-wrap: anywhere;
+          text-align: left;
         }
 
         .article-body :where(.np-gallery__caption-text) {
-          color: #334155;
+          color: #475569;
+          font-size: 0.95rem;
+          font-weight: 400;
+          letter-spacing: 0;
+          line-height: 1.6;
         }
 
         .article-body :where(.np-gallery__credit) {
           color: #64748b;
+          font-size: 0.78rem;
+          font-weight: 500;
+          letter-spacing: 0;
+          line-height: 1.45;
+        }
+
+        .np-gallery-lightbox {
+          align-items: center;
+          background: rgba(2, 6, 23, 0.9);
+          color: #f8fafc;
+          display: flex;
+          inset: 0;
+          justify-content: center;
+          min-height: 100dvh;
+          overflow-x: hidden;
+          overflow-y: auto;
+          padding: 0.75rem;
+          position: fixed;
+          z-index: 9999;
+        }
+
+        .np-gallery-lightbox__panel {
+          display: grid;
+          gap: 0.75rem;
+          max-width: min(100%, 1080px);
+          outline: none;
+          width: 100%;
+        }
+
+        .np-gallery-lightbox__header {
+          align-items: center;
+          display: grid;
+          gap: 0.75rem;
+          grid-template-columns: 1fr auto auto;
+          min-width: 0;
+        }
+
+        .np-gallery-lightbox__title {
+          color: #f8fafc;
+          font-size: 0.95rem;
+          font-weight: 700;
+          letter-spacing: 0;
+          line-height: 1.4;
+          min-width: 0;
+        }
+
+        .np-gallery-lightbox__count {
+          color: #cbd5e1;
+          font-size: 0.82rem;
           font-weight: 600;
+          line-height: 1.4;
+        }
+
+        .np-gallery-lightbox__close,
+        .np-gallery-lightbox__nav {
+          align-items: center;
+          appearance: none;
+          background: rgba(15, 23, 42, 0.72);
+          border: 1px solid rgba(226, 232, 240, 0.26);
+          border-radius: 999px;
+          color: #f8fafc;
+          cursor: pointer;
+          display: inline-flex;
+          font: inherit;
+          height: 2.75rem;
+          justify-content: center;
+          line-height: 1;
+          min-width: 2.75rem;
+          padding: 0;
+        }
+
+        .np-gallery-lightbox__close {
+          font-size: 1.35rem;
+        }
+
+        .np-gallery-lightbox__nav {
+          font-size: 1.8rem;
+        }
+
+        .np-gallery-lightbox__close:focus-visible,
+        .np-gallery-lightbox__nav:focus-visible {
+          outline: 3px solid rgba(255, 255, 255, 0.86);
+          outline-offset: 3px;
+        }
+
+        .np-gallery-lightbox__nav:disabled {
+          cursor: default;
+          opacity: 0.35;
+        }
+
+        .np-gallery-lightbox__stage {
+          align-items: center;
+          display: grid;
+          gap: 0.75rem;
+          grid-template-columns: minmax(2.75rem, auto) minmax(0, 1fr) minmax(2.75rem, auto);
+          max-width: 100%;
+          width: 100%;
+        }
+
+        .np-gallery-lightbox__figure {
+          display: grid;
+          gap: 0.55rem;
+          margin: 0;
+          min-width: 0;
+          width: 100%;
+        }
+
+        .np-gallery-lightbox__media-frame {
+          align-items: center;
+          display: flex;
+          justify-content: center;
+          min-height: min(58vh, 34rem);
+          min-width: 0;
+          width: 100%;
+        }
+
+        .np-gallery-lightbox__media {
+          display: block;
+          height: auto;
+          max-height: min(76vh, calc(100dvh - 10rem));
+          max-width: 100%;
+          object-fit: contain;
+          width: auto;
+        }
+
+        .np-gallery-lightbox__fallback {
+          align-items: center;
+          background: rgba(15, 23, 42, 0.72);
+          border: 1px solid rgba(226, 232, 240, 0.22);
+          border-radius: 8px;
+          color: #cbd5e1;
+          display: flex;
+          font-size: 0.95rem;
+          justify-content: center;
+          min-height: min(58vh, 34rem);
+          padding: 2rem;
+          text-align: center;
+          width: 100%;
+        }
+
+        .np-gallery-lightbox__caption {
+          color: #e2e8f0;
+          display: grid;
+          gap: 0.12rem;
+          line-height: 1.6;
+          margin: 0 auto;
+          max-width: min(100%, 920px);
+          overflow-wrap: anywhere;
+          text-align: left;
+          width: 100%;
+        }
+
+        .np-gallery-lightbox__caption-text {
+          color: #e2e8f0;
+          font-size: 0.95rem;
+          font-weight: 400;
+          letter-spacing: 0;
+          line-height: 1.6;
+        }
+
+        .np-gallery-lightbox__credit {
+          color: #cbd5e1;
+          font-size: 0.78rem;
+          font-weight: 500;
+          letter-spacing: 0;
+          line-height: 1.45;
+        }
+
+        @media (max-width: 520px) {
+          .np-gallery-lightbox {
+            padding: 0.75rem 0.5rem;
+          }
+
+          .np-gallery-lightbox__stage {
+            gap: 0.45rem;
+          }
+
+          .np-gallery-lightbox__media-frame,
+          .np-gallery-lightbox__fallback {
+            min-height: min(52vh, 30rem);
+          }
         }
 
         @media (min-width: 768px) {

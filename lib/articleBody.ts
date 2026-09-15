@@ -16,6 +16,8 @@ const CONTROLLED_INSTAGRAM_SHORTCODE_RE = /^[A-Za-z0-9_-]{5,64}$/;
 const CONTROLLED_FACEBOOK_PATH_PART_RE = /^[A-Za-z0-9._-]{3,160}$/;
 const CONTROLLED_FACEBOOK_POST_ID_RE = /^[A-Za-z0-9._:-]{5,240}$/;
 
+export type ControlledArticleInlineImageLayout = 'normal' | 'wide' | 'full';
+
 export type ControlledArticleInlineImage = {
   src: string;
   mediaId?: string;
@@ -24,6 +26,7 @@ export type ControlledArticleInlineImage = {
   credit?: string;
   width?: string;
   height?: string;
+  layout?: ControlledArticleInlineImageLayout;
 };
 
 export type ControlledArticleYouTubeEmbed = {
@@ -368,6 +371,11 @@ function formatPhotoCredit(value: string): string {
   return /^photo\s*:/i.test(credit) ? credit : `Photo: ${credit}`;
 }
 
+function normalizeControlledInlineImageLayout(value: string): ControlledArticleInlineImageLayout {
+  const layout = String(value || '').trim().toLowerCase();
+  return layout === 'wide' || layout === 'full' ? layout : 'normal';
+}
+
 function buildControlledInlineImageHtml(attrs: Record<string, string>): string | null {
   if (attrs['data-np-block'] !== CONTROLLED_INLINE_IMAGE_BLOCK) return null;
 
@@ -382,11 +390,13 @@ function buildControlledInlineImageHtml(attrs: Record<string, string>): string |
   const alt = normalizeControlledText(attrs['data-np-alt'] || caption || 'News Pulse article image');
   const width = normalizeControlledDimension(attrs['data-np-width'] || '');
   const height = normalizeControlledDimension(attrs['data-np-height'] || '');
+  const layout = normalizeControlledInlineImageLayout(attrs['data-np-layout'] || '');
 
   const figureAttrs = [
     'class="np-inline-image"',
     'data-np-block="inline-image"',
     mediaId ? `data-np-media-id="${escapeHtml(mediaId)}"` : '',
+    layout !== 'normal' ? `data-np-layout="${layout}"` : '',
   ].filter(Boolean).join(' ');
   const imageAttrs = [
     'class="np-inline-image__media"',
@@ -411,6 +421,7 @@ function buildControlledInlineImageFigureHtml(image: ControlledArticleInlineImag
     'class="np-inline-image"',
     'data-np-block="inline-image"',
     image.mediaId ? `data-np-media-id="${escapeHtml(image.mediaId)}"` : '',
+    image.layout && image.layout !== 'normal' ? `data-np-layout="${image.layout}"` : '',
   ].filter(Boolean).join(' ');
   const imageAttrs = [
     'class="np-inline-image__media"',
@@ -566,7 +577,7 @@ function resolveControlledGalleryBlock(source: string): ControlledArticleGallery
 function buildControlledGalleryHtml(source: string): string {
   const gallery = resolveControlledGalleryBlock(source);
   if (!gallery) return '';
-  return `<div class="np-gallery" data-np-block="gallery">${gallery.images.map(buildControlledInlineImageFigureHtml).join('')}</div>`;
+  return `<div class="np-gallery" data-np-block="gallery">${gallery.images.map((image) => buildControlledInlineImageFigureHtml({ ...image, layout: 'normal' })).join('')}</div>`;
 }
 
 function findClosingDivIndex(source: string, fromIndex: number): number {
@@ -642,6 +653,7 @@ export function parseControlledInlineImageBlock(html: string): ControlledArticle
   const credit = canonicalCredit ?? legacyCredit ?? '';
   const width = normalizeControlledDimension(imageAttrs.width || '');
   const height = normalizeControlledDimension(imageAttrs.height || '');
+  const layout = normalizeControlledInlineImageLayout(figureAttrs['data-np-layout'] || '');
 
   return {
     src,
@@ -651,6 +663,7 @@ export function parseControlledInlineImageBlock(html: string): ControlledArticle
     ...(credit ? { credit } : {}),
     ...(width ? { width } : {}),
     ...(height ? { height } : {}),
+    layout,
   };
 }
 
@@ -850,6 +863,7 @@ export function formatArticleBodyHtml(rawContent: string): string {
         { name: 'class', values: ['np-inline-image'] },
         { name: 'data-np-block', values: ['inline-image'] },
         'data-np-media-id',
+        { name: 'data-np-layout', values: ['wide', 'full'] },
       ],
       div: [
         { name: 'class', values: ['np-youtube-embed', 'np-x-embed', 'np-instagram-embed', 'np-facebook-embed', 'np-gallery'] },
