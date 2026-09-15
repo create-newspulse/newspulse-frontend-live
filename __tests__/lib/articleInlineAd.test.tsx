@@ -9,6 +9,12 @@ function inlineImageMarkerWithoutDimensions(mediaId: string, src: string, alt: s
   return `<div data-np-block="inline-image" data-np-media-id="${mediaId}" data-np-src="${src}" data-np-alt="${alt}" data-np-caption="${caption}" data-np-credit="News Pulse"></div>`;
 }
 
+function adminInlineImageFigure(mediaId: string, src: string, caption = 'Emmy Awards caption', credit = 'Credit: Reuters'): string {
+  const captionHtml = caption === '__omit__' ? '' : `<figcaption data-np-caption="true">${caption}</figcaption>`;
+  const creditHtml = credit === '__omit__' ? '' : `<div data-np-credit="true">${credit}</div>`;
+  return `<figure data-np-block="inline-image" data-np-media-id="${mediaId}"><img src="${src}" alt="">${captionHtml}${creditHtml}</figure>`;
+}
+
 describe('splitArticleHtmlForInlineAd', () => {
   it('inserts after the third body paragraph when the body has enough content', () => {
     const placement = splitArticleHtmlForInlineAd(
@@ -500,6 +506,65 @@ describe('formatArticleBodyHtml', () => {
     ]);
     expect(gallery?.images.map((image) => image.caption)).toEqual(['Opening frame', 'Second frame']);
     expect(gallery?.images.map((image) => image.credit)).toEqual(['Photo: News Pulse', 'Photo: News Pulse']);
+  });
+
+  it('extracts Admin canonical figcaption captions and div credits from gallery images', () => {
+    const html = formatArticleBodyHtml(`<div data-np-block="gallery">${adminInlineImageFigure('gallery_101', 'https://cdn.newspulse.co.in/images/example-1.jpg', 'Emmy Awards caption', 'Credit: Reuters')}${adminInlineImageFigure('gallery_102', 'https://cdn.newspulse.co.in/images/example-2.jpg', 'Second gallery caption', 'Credit: AP')}</div>`);
+    const gallery = parseControlledGalleryBlock(html);
+
+    expect(html).toContain('<div class="np-gallery" data-np-block="gallery">');
+    expect(html).toContain('<span class="np-inline-image__caption-text" data-np-caption="true">Emmy Awards caption</span>');
+    expect(html).toContain('<span class="np-inline-image__credit" data-np-credit="true">Credit: Reuters</span>');
+    expect(gallery?.images.map((image) => image.caption)).toEqual(['Emmy Awards caption', 'Second gallery caption']);
+    expect(gallery?.images.map((image) => image.credit)).toEqual(['Credit: Reuters', 'Credit: AP']);
+  });
+
+  it('supports Admin canonical caption-only and credit-only gallery images', () => {
+    const html = formatArticleBodyHtml(`<div data-np-block="gallery">${adminInlineImageFigure('gallery_caption_only', 'https://cdn.newspulse.co.in/images/caption-only.jpg', 'Caption only text', '__omit__')}${adminInlineImageFigure('gallery_credit_only', 'https://cdn.newspulse.co.in/images/credit-only.jpg', '__omit__', 'Credit: Getty')}</div>`);
+    const gallery = parseControlledGalleryBlock(html);
+
+    expect(gallery?.images).toHaveLength(2);
+    expect(gallery?.images[0]).toMatchObject({ mediaId: 'gallery_caption_only', caption: 'Caption only text' });
+    expect(gallery?.images[0]?.credit).toBeUndefined();
+    expect(gallery?.images[1]).toMatchObject({ mediaId: 'gallery_credit_only', credit: 'Credit: Getty' });
+    expect(gallery?.images[1]?.caption).toBeUndefined();
+  });
+
+  it('omits blank Admin canonical gallery captions and credits safely', () => {
+    const html = formatArticleBodyHtml(`<div data-np-block="gallery">${adminInlineImageFigure('gallery_blank_caption', 'https://cdn.newspulse.co.in/images/blank-caption.jpg', '   ', 'Credit: Reuters')}${adminInlineImageFigure('gallery_blank_credit', 'https://cdn.newspulse.co.in/images/blank-credit.jpg', 'Caption remains', '   ')}</div>`);
+    const gallery = parseControlledGalleryBlock(html);
+
+    expect(gallery?.images).toHaveLength(2);
+    expect(gallery?.images[0]?.caption).toBeUndefined();
+    expect(gallery?.images[0]?.credit).toBe('Credit: Reuters');
+    expect(gallery?.images[1]?.caption).toBe('Caption remains');
+    expect(gallery?.images[1]?.credit).toBeUndefined();
+    expect(html).not.toContain('<span class="np-inline-image__caption-text" data-np-caption="true">   </span>');
+    expect(html).not.toContain('<span class="np-inline-image__credit" data-np-credit="true">   </span>');
+  });
+
+  it('keeps legacy span caption and credit parsing for gallery images', () => {
+    const legacyFigure = (mediaId: string, src: string, caption: string, credit: string) => `<figure class="np-inline-image" data-np-block="inline-image" data-np-media-id="${mediaId}"><img class="np-inline-image__media" src="${src}" alt="${caption}" loading="lazy" decoding="async" /><figcaption class="np-inline-image__caption"><span class="np-inline-image__caption-text" data-np-caption="true">${caption}</span><span class="np-inline-image__credit" data-np-credit="true">${credit}</span></figcaption></figure>`;
+    const html = formatArticleBodyHtml(`<div data-np-block="gallery">${legacyFigure('gallery_legacy_1', 'https://cdn.newspulse.co.in/images/legacy-1.jpg', 'Legacy caption one', 'Photo: Legacy one')}${legacyFigure('gallery_legacy_2', 'https://cdn.newspulse.co.in/images/legacy-2.jpg', 'Legacy caption two', 'Photo: Legacy two')}</div>`);
+    const gallery = parseControlledGalleryBlock(html);
+
+    expect(gallery?.images.map((image) => image.caption)).toEqual(['Legacy caption one', 'Legacy caption two']);
+    expect(gallery?.images.map((image) => image.credit)).toEqual(['Photo: Legacy one', 'Photo: Legacy two']);
+  });
+
+  it('normalizes standalone Admin canonical inline-image figures with caption and credit', () => {
+    const html = formatArticleBodyHtml(adminInlineImageFigure('standalone_admin_101', 'https://cdn.newspulse.co.in/images/admin-standalone.jpg', 'Standalone Admin caption', 'Credit: Reuters'));
+    const image = parseControlledInlineImageBlock(html);
+
+    expect(html).toContain('<span class="np-inline-image__caption-text" data-np-caption="true">Standalone Admin caption</span>');
+    expect(html).toContain('<span class="np-inline-image__credit" data-np-credit="true">Credit: Reuters</span>');
+    expect(image).toEqual({
+      mediaId: 'standalone_admin_101',
+      src: 'https://cdn.newspulse.co.in/images/admin-standalone.jpg',
+      alt: 'Standalone Admin caption',
+      caption: 'Standalone Admin caption',
+      credit: 'Credit: Reuters',
+    });
   });
 
   it('preserves gallery images that omit dimensions without fabricating width or height', () => {

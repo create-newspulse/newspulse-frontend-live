@@ -113,6 +113,10 @@ function galleryImageMarker(mediaId: string, src: string, caption: string, credi
   return `<div data-np-block="inline-image" data-np-media-id="${mediaId}" data-np-src="${src}" data-np-caption="${caption}" data-np-credit="${credit}" data-np-width="1200" data-np-height="800"></div>`;
 }
 
+function adminGalleryImageFigure(mediaId: string, src: string, caption: string, credit: string) {
+  return `<figure data-np-block="inline-image" data-np-media-id="${mediaId}"><img src="${src}" alt=""><figcaption data-np-caption="true">${caption}</figcaption><div data-np-credit="true">${credit}</div></figure>`;
+}
+
 describe('pages/news/[slug] editorial detail', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -319,6 +323,33 @@ describe('pages/news/[slug] editorial detail', () => {
     expect(screen.getByText('Second frame')).toBeTruthy();
     expect(screen.getByText('Third frame')).toBeTruthy();
     expect(screen.getAllByText('Photo: News Pulse / Staff')).toHaveLength(3);
+    expect(screen.queryByTestId('embedded-media-consent-gate')).toBeNull();
+  });
+
+  test('renders Admin canonical gallery captions and credits visibly after normalization', async () => {
+    const safeHtml = formatArticleBodyHtml(`<p>Before gallery.</p><div data-np-block="gallery">${adminGalleryImageFigure('gallery_101', 'https://cdn.newspulse.co.in/images/example-1.jpg', 'Emmy Awards caption', 'Credit: Reuters')}${adminGalleryImageFigure('gallery_102', 'https://cdn.newspulse.co.in/images/example-2.jpg', 'Second gallery caption', 'Credit: AP')}</div><p>After gallery.</p>`);
+
+    render(
+      <NewsSlugDetailPage
+        messages={{}}
+        locale="en"
+        lang="en"
+        slug="special-story"
+        siteUrl="https://www.newspulse.co.in"
+        article={editorialArticle() as any}
+        safeHtml={safeHtml}
+        topStories={[]}
+        relatedStories={[]}
+        error={null}
+        pending={false}
+      />
+    );
+
+    expect(screen.getByText('Photo Gallery')).toBeTruthy();
+    expect(screen.getByText('Emmy Awards caption')).toBeTruthy();
+    expect(screen.getByText('Credit: Reuters')).toBeTruthy();
+    expect(screen.getByText('Second gallery caption')).toBeTruthy();
+    expect(screen.getByText('Credit: AP')).toBeTruthy();
     expect(screen.queryByTestId('embedded-media-consent-gate')).toBeNull();
   });
 

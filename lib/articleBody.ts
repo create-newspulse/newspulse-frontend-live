@@ -430,8 +430,25 @@ function buildControlledInlineImageFigureHtml(image: ControlledArticleInlineImag
   return `<figure ${figureAttrs}><img ${imageAttrs} />${figcaptionHtml}</figure>`;
 }
 
+function findControlledMarkedText(source: string, tagNames: string[], markerName: 'data-np-caption' | 'data-np-credit'): string | null {
+  for (const tagName of tagNames) {
+    const markerRe = new RegExp(`<${tagName}\\b([^>]*)>([\\s\\S]*?)<\\/${tagName}>`, 'gi');
+    let match: RegExpExecArray | null = null;
+
+    while ((match = markerRe.exec(source))) {
+      const attrs = parseTagAttributes(`<${tagName}${match[1]}>`);
+      if (attrs[markerName] === 'true') return normalizeControlledText(match[2] || '');
+    }
+  }
+
+  return null;
+}
+
 function normalizeControlledInlineImageMarkers(value: string): string {
-  return String(value || '').replace(/<(figure|div|span)\b(?=[^>]*data-np-block\s*=\s*(?:"inline-image"|'inline-image'|inline-image))[^>]*(?:\/>|>\s*<\/\1>)/gi, (match) => {
+  return String(value || '').replace(/<figure\b(?=[^>]*data-np-block\s*=\s*(?:"inline-image"|'inline-image'|inline-image))[^>]*>[\s\S]*?<\/figure>/gi, (match) => {
+    const image = parseControlledInlineImageBlock(match);
+    return image ? buildControlledInlineImageFigureHtml(image) : match;
+  }).replace(/<(figure|div|span)\b(?=[^>]*data-np-block\s*=\s*(?:"inline-image"|'inline-image'|inline-image))[^>]*(?:\s*\/\s*>|>\s*<\/\1>)/gi, (match) => {
     const html = buildControlledInlineImageHtml(parseTagAttributes(match));
     return html === null ? match : html;
   });
@@ -617,8 +634,12 @@ export function parseControlledInlineImageBlock(html: string): ControlledArticle
   const mediaId = String(figureAttrs['data-np-media-id'] || '').trim();
   if (mediaId && !CONTROLLED_INLINE_IMAGE_MEDIA_ID_RE.test(mediaId)) return null;
 
-  const captionMatch = source.match(/<span\b[^>]*data-np-caption="true"[^>]*>([\s\S]*?)<\/span>/i);
-  const creditMatch = source.match(/<span\b[^>]*data-np-credit="true"[^>]*>([\s\S]*?)<\/span>/i);
+  const canonicalCaption = findControlledMarkedText(source, ['figcaption'], 'data-np-caption');
+  const legacyCaption = canonicalCaption === null ? findControlledMarkedText(source, ['span'], 'data-np-caption') : null;
+  const canonicalCredit = findControlledMarkedText(source, ['div'], 'data-np-credit');
+  const legacyCredit = canonicalCredit === null ? findControlledMarkedText(source, ['span'], 'data-np-credit') : null;
+  const caption = canonicalCaption ?? legacyCaption ?? '';
+  const credit = canonicalCredit ?? legacyCredit ?? '';
   const width = normalizeControlledDimension(imageAttrs.width || '');
   const height = normalizeControlledDimension(imageAttrs.height || '');
 
@@ -626,8 +647,8 @@ export function parseControlledInlineImageBlock(html: string): ControlledArticle
     src,
     ...(mediaId ? { mediaId } : {}),
     ...(imageAttrs.alt ? { alt: normalizeControlledText(imageAttrs.alt) } : {}),
-    ...(captionMatch ? { caption: normalizeControlledText(captionMatch[1] || '') } : {}),
-    ...(creditMatch ? { credit: normalizeControlledText(creditMatch[1] || '') } : {}),
+    ...(caption ? { caption } : {}),
+    ...(credit ? { credit } : {}),
     ...(width ? { width } : {}),
     ...(height ? { height } : {}),
   };
