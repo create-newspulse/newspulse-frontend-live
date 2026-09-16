@@ -48,7 +48,7 @@ export type ControlledArticleInstagramEmbed = {
 };
 
 export type ControlledArticleFacebookEmbed = {
-  kind: 'post' | 'permalink';
+  kind: 'post' | 'permalink' | 'reel';
   url: string;
   embedUrl: string;
 };
@@ -254,6 +254,14 @@ function getFacebookPostFromUrl(value: string): ControlledArticleFacebookEmbed |
 
       const canonicalUrl = `https://www.facebook.com/${owner}/posts/${postId}`;
       return { kind: 'post', url: canonicalUrl, embedUrl: buildFacebookPluginEmbedUrl(canonicalUrl) };
+    }
+
+    if (parts.length === 2 && parts[0].toLowerCase() === 'reel') {
+      const reelId = parts[1] || '';
+      if (!CONTROLLED_FACEBOOK_POST_ID_RE.test(reelId)) return null;
+
+      const canonicalUrl = `https://www.facebook.com/reel/${reelId}`;
+      return { kind: 'reel', url: canonicalUrl, embedUrl: buildFacebookPluginEmbedUrl(canonicalUrl) };
     }
 
     if (parts.length === 1 && parts[0].toLowerCase() === 'permalink.php') {

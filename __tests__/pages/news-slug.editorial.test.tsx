@@ -1013,6 +1013,30 @@ describe('pages/news/[slug] editorial detail', () => {
     expect(screen.getByTitle('Facebook post').getAttribute('src')).toBe('https://www.facebook.com/plugins/post.php?href=https%3A%2F%2Fwww.facebook.com%2Fpermalink.php%3Fstory_fbid%3Dpfbid02SafeStory123%26id%3D123456789012345&show_text=true&width=500');
   });
 
+  test('renders controlled Facebook Reel embeds from validated canonical marker URLs', async () => {
+    const safeHtml = formatArticleBodyHtml('<div data-np-block="facebook" data-np-url="https://www.facebook.com/reel/1234567890123456"></div>');
+
+    render(
+      <NewsSlugDetailPage
+        messages={{}}
+        locale="en"
+        lang="en"
+        slug="special-story"
+        siteUrl="https://www.newspulse.co.in"
+        article={editorialArticle() as any}
+        safeHtml={safeHtml}
+        topStories={[]}
+        relatedStories={[]}
+        error={null}
+        pending={false}
+      />
+    );
+
+    const iframe = screen.getByTitle('Facebook post') as HTMLIFrameElement;
+    expect(iframe.getAttribute('src')).toBe('https://www.facebook.com/plugins/post.php?href=https%3A%2F%2Fwww.facebook.com%2Freel%2F1234567890123456&show_text=true&width=500');
+    expect(iframe.closest('figure')?.getAttribute('data-np-block')).toBe('facebook');
+  });
+
   test('does not render Facebook iframe resources for articles without controlled Facebook blocks', async () => {
     render(
       <NewsSlugDetailPage
@@ -1053,6 +1077,27 @@ describe('pages/news/[slug] editorial detail', () => {
     expect(fallbackLink.getAttribute('href')).toBe('https://www.facebook.com/NewsPulseIndia/posts/pfbid02SafePost123');
     expect(fallbackLink.getAttribute('target')).toBe('_blank');
     expect(fallbackLink.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(screen.queryByTitle('Facebook post')).toBeNull();
+
+    stateSpy.mockRestore();
+  });
+
+  test('renders the controlled Facebook fallback with a validated Reel link on failure', async () => {
+    const stateSpy = jest.spyOn(React, 'useState');
+    stateSpy.mockImplementationOnce(() => [true, jest.fn()] as any);
+
+    render(
+      <ArticleFacebookEmbed
+        embed={{
+          kind: 'reel',
+          embedUrl: 'https://www.facebook.com/plugins/post.php?href=https%3A%2F%2Fwww.facebook.com%2Freel%2F1234567890123456&show_text=true&width=500',
+          url: 'https://www.facebook.com/reel/1234567890123456',
+        }}
+      />
+    );
+
+    expect(screen.getByText('Facebook post unavailable')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Open on Facebook' }).getAttribute('href')).toBe('https://www.facebook.com/reel/1234567890123456');
     expect(screen.queryByTitle('Facebook post')).toBeNull();
 
     stateSpy.mockRestore();

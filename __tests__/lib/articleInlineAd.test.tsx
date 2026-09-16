@@ -472,6 +472,21 @@ describe('formatArticleBodyHtml', () => {
     });
   });
 
+  it('preserves a valid Facebook Reel marker as a controlled embed block', () => {
+    const html = formatArticleBodyHtml('<div data-np-block="facebook" data-np-url="https://www.facebook.com/reel/1234567890123456" data-np-embed-url="https://evil.example/plugin"></div>');
+    const embed = parseControlledFacebookBlock(html);
+
+    expect(html).toContain('class="np-facebook-embed"');
+    expect(html).toContain('data-np-url="https://www.facebook.com/reel/1234567890123456"');
+    expect(html).not.toContain('data-np-embed-url');
+    expect(html).not.toContain('evil.example');
+    expect(embed).toEqual({
+      kind: 'reel',
+      url: 'https://www.facebook.com/reel/1234567890123456',
+      embedUrl: 'https://www.facebook.com/plugins/post.php?href=https%3A%2F%2Fwww.facebook.com%2Freel%2F1234567890123456&show_text=true&width=500',
+    });
+  });
+
   it('rejects malformed and unsupported Facebook markers', () => {
     const missingUrl = formatArticleBodyHtml('<div data-np-block="facebook"></div>');
     const nonEmpty = formatArticleBodyHtml('<div data-np-block="facebook" data-np-url="https://www.facebook.com/NewsPulseIndia/posts/pfbid02SafePost123"><div class="fb-post">raw SDK</div></div>');
@@ -479,6 +494,8 @@ describe('formatArticleBodyHtml', () => {
     const profileUrl = formatArticleBodyHtml('<div data-np-block="facebook" data-np-url="https://www.facebook.com/NewsPulseIndia"></div>');
     const photoUrl = formatArticleBodyHtml('<div data-np-block="facebook" data-np-url="https://www.facebook.com/photo.php?fbid=1234567890"></div>');
     const pluginUrl = formatArticleBodyHtml('<div data-np-block="facebook" data-np-url="https://www.facebook.com/plugins/post.php?href=https%3A%2F%2Fwww.facebook.com%2FNewsPulseIndia%2Fposts%2Fpfbid02SafePost123"></div>');
+    const malformedReel = formatArticleBodyHtml('<div data-np-block="facebook" data-np-url="https://www.facebook.com/reel/abc"></div>');
+    const shareReel = formatArticleBodyHtml('<div data-np-block="facebook" data-np-url="https://www.facebook.com/share/r/1234567890123456/"></div>');
 
     expect(missingUrl).toBe('');
     expect(nonEmpty).toBe('');
@@ -486,6 +503,8 @@ describe('formatArticleBodyHtml', () => {
     expect(profileUrl).toBe('');
     expect(photoUrl).toBe('');
     expect(pluginUrl).toBe('');
+    expect(malformedReel).toBe('');
+    expect(shareReel).toBe('');
   });
 
   it('rejects lookalike domains and unsafe Facebook URLs', () => {
@@ -528,6 +547,25 @@ describe('formatArticleBodyHtml', () => {
     expect(parseControlledXBlock(blocks[1])).toBeTruthy();
     expect(parseControlledInstagramBlock(blocks[2])).toBeTruthy();
     expect(parseControlledFacebookBlock(blocks[3])).toBeTruthy();
+  });
+
+  it('keeps YouTube, X, Instagram, Gallery, and inline images unaffected beside a Facebook Reel', () => {
+    const html = formatArticleBodyHtml([
+      '<div data-np-block="youtube" data-np-video-id="AbCdEfGhIjK" data-np-url="https://www.youtube.com/watch?v=AbCdEfGhIjK"></div>',
+      '<div data-np-block="x" data-np-post-id="2050104453630718079" data-np-url="https://x.com/i/status/2050104453630718079"></div>',
+      '<div data-np-block="instagram" data-np-shortcode="C0ffee_Post1" data-np-url="https://www.instagram.com/p/C0ffee_Post1/"></div>',
+      inlineImageMarker('mixed_inline_1', 'https://cdn.newspulse.co.in/images/mixed-inline.jpg', 'Mixed inline image'),
+      `<div data-np-block="gallery">${inlineImageMarker('mixed_gallery_1')}${inlineImageMarker('mixed_gallery_2')}</div>`,
+      '<div data-np-block="facebook" data-np-url="https://www.facebook.com/reel/1234567890123456"></div>',
+    ].join(''));
+    const blocks = splitArticleBodyBlocks(html);
+
+    expect(parseControlledYouTubeBlock(blocks.find((block) => block.includes('data-np-block="youtube"')) || '')?.embedUrl).toBe('https://www.youtube-nocookie.com/embed/AbCdEfGhIjK?rel=0&modestbranding=1&playsinline=1');
+    expect(parseControlledXBlock(blocks.find((block) => block.includes('data-np-block="x"')) || '')?.url).toBe('https://x.com/i/status/2050104453630718079');
+    expect(parseControlledInstagramBlock(blocks.find((block) => block.includes('data-np-block="instagram"')) || '')?.embedUrl).toBe('https://www.instagram.com/p/C0ffee_Post1/embed');
+    expect(parseControlledInlineImageBlock(blocks.find((block) => block.includes('mixed_inline_1')) || '')?.src).toBe('https://cdn.newspulse.co.in/images/mixed-inline.jpg');
+    expect(parseControlledGalleryBlock(blocks.find((block) => block.includes('data-np-block="gallery"')) || '')?.images).toHaveLength(2);
+    expect(parseControlledFacebookBlock(blocks.find((block) => block.includes('data-np-block="facebook"')) || '')?.kind).toBe('reel');
   });
 
   it('keeps EN, HI, and GU controlled Facebook variants on the same validated URL', () => {
