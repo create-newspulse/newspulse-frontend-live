@@ -1,3 +1,12 @@
+export type PublicSrbRegistration = {
+  organization: string;
+  publisher: string;
+  status: string;
+  registrationNumber: string;
+  issueDate: string;
+  validUntil: string;
+};
+
 export type PublicComplianceSettings = {
   founderName: string;
   grievanceOfficerName: string;
@@ -12,6 +21,16 @@ export type PublicComplianceSettings = {
   showPublisherEntity: boolean;
   showFounderPublisher: boolean;
   showChiefEditor: boolean;
+  currentSrbRegistration: PublicSrbRegistration;
+};
+
+export const DEFAULT_PUBLIC_SRB_REGISTRATION: PublicSrbRegistration = {
+  organization: 'Working Journalist Media Council (WJMC)',
+  publisher: 'News Pulse (Digital)',
+  status: 'Registered',
+  registrationNumber: 'WJMC/7489/462-26',
+  issueDate: '2026-09-14',
+  validUntil: '2027-09-14',
 };
 
 export const DEFAULT_PUBLIC_COMPLIANCE_SETTINGS: PublicComplianceSettings = {
@@ -28,6 +47,7 @@ export const DEFAULT_PUBLIC_COMPLIANCE_SETTINGS: PublicComplianceSettings = {
   showPublisherEntity: true,
   showFounderPublisher: false,
   showChiefEditor: true,
+  currentSrbRegistration: DEFAULT_PUBLIC_SRB_REGISTRATION,
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -66,6 +86,28 @@ function pickBoolean(source: Record<string, unknown> | null, keys: string[]): bo
   return null;
 }
 
+function pickRecord(source: Record<string, unknown> | null, keys: string[]): Record<string, unknown> | null {
+  if (!source) return null;
+  for (const key of keys) {
+    const value = source[key];
+    if (isRecord(value)) return value;
+  }
+  return null;
+}
+
+function normalizeSrbRegistration(source: Record<string, unknown> | null): PublicSrbRegistration {
+  const currentSrbRegistration = pickRecord(source, ['currentSrbRegistration', 'srbRegistration', 'currentSrb']);
+
+  return {
+    organization: pickText(currentSrbRegistration, ['organization', 'srbName', 'selfRegulatoryBody', 'selfRegulatoryBodyName']) || DEFAULT_PUBLIC_SRB_REGISTRATION.organization,
+    publisher: pickText(currentSrbRegistration, ['publisher', 'publisherName', 'digitalPublisher', 'registeredPublisher']) || DEFAULT_PUBLIC_SRB_REGISTRATION.publisher,
+    status: pickText(currentSrbRegistration, ['status', 'registrationStatus']) || DEFAULT_PUBLIC_SRB_REGISTRATION.status,
+    registrationNumber: pickText(currentSrbRegistration, ['registrationNumber', 'registrationNo', 'srbRegistrationNo', 'registrationId', 'certificateNumber']) || DEFAULT_PUBLIC_SRB_REGISTRATION.registrationNumber,
+    issueDate: pickText(currentSrbRegistration, ['issueDate', 'issuedOn', 'registrationDate', 'validFrom']) || DEFAULT_PUBLIC_SRB_REGISTRATION.issueDate,
+    validUntil: pickText(currentSrbRegistration, ['validUntil', 'expiresOn', 'expiryDate', 'validTo']) || DEFAULT_PUBLIC_SRB_REGISTRATION.validUntil,
+  };
+}
+
 export function normalizePublicComplianceSettings(payload: unknown): PublicComplianceSettings {
   const root = isRecord(payload) ? payload : null;
   const data = root && isRecord(root.data) ? root.data : null;
@@ -90,6 +132,7 @@ export function normalizePublicComplianceSettings(payload: unknown): PublicCompl
   const showPublisherEntity = pickBoolean(settings, ['showPublisherEntity']);
   const showFounderPublisher = pickBoolean(settings, ['showFounderPublisher']);
   const showChiefEditor = pickBoolean(settings, ['showChiefEditor']);
+  const currentSrbRegistration = normalizeSrbRegistration(settings);
 
   return {
     founderName: founderName || DEFAULT_PUBLIC_COMPLIANCE_SETTINGS.founderName,
@@ -105,6 +148,7 @@ export function normalizePublicComplianceSettings(payload: unknown): PublicCompl
     showPublisherEntity: showPublisherEntity ?? DEFAULT_PUBLIC_COMPLIANCE_SETTINGS.showPublisherEntity,
     showFounderPublisher: showFounderPublisher ?? DEFAULT_PUBLIC_COMPLIANCE_SETTINGS.showFounderPublisher,
     showChiefEditor: showChiefEditor ?? DEFAULT_PUBLIC_COMPLIANCE_SETTINGS.showChiefEditor,
+    currentSrbRegistration,
   };
 }
 

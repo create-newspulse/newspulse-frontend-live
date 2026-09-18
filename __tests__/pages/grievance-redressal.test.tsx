@@ -18,7 +18,13 @@ const defaultComplianceSettings = {
   showChiefEditor: true,
 };
 
-let complianceSettingsResponse = { ...defaultComplianceSettings };
+type TestComplianceSettings = typeof defaultComplianceSettings & {
+  currentSrbRegistration?: Record<string, string>;
+  srbRegistration?: Record<string, string>;
+  srbRegistrationHistory?: Array<Record<string, string>>;
+};
+
+let complianceSettingsResponse: TestComplianceSettings = { ...defaultComplianceSettings };
 
 const cardTitlePattern = /^(Publisher \/ Entity|Founder \/ Publisher|Chief Editor|Grievance Officer|Editorial \/ Content Grievance|Privacy \/ DPDP Request)$/;
 
@@ -79,14 +85,19 @@ describe('pages/grievance-redressal', () => {
     expect(screen.queryByText('Response Timeline')).toBeNull();
     expect(screen.queryByText('Designation')).toBeNull();
     expect(screen.getByRole('heading', { name: 'Level II – Self-Regulatory Body' })).toBeTruthy();
-    expect(screen.getByText('Working Journalist Media Council (WJMC)')).toBeTruthy();
-    expect(screen.getByText('News Pulse (Digital) is registered with the Working Journalist Media Council (WJMC) under its Level II Self-Regulatory Body framework for publishers of news.')).toBeTruthy();
+    expect(screen.getAllByText('Working Journalist Media Council (WJMC)').length).toBeGreaterThan(0);
+    expect(screen.getByText('Organization:')).toBeTruthy();
+    expect(screen.getByText('Publisher:')).toBeTruthy();
+    expect(screen.getByText('News Pulse (Digital)')).toBeTruthy();
+    expect(screen.getByText('Status:')).toBeTruthy();
+    expect(screen.getByText('Registered')).toBeTruthy();
+    expect(screen.getByText((_, node) => node?.tagName.toLowerCase() === 'p' && node.textContent?.replace(/\s+/g, ' ').trim() === 'News Pulse (Digital) is registered with the Working Journalist Media Council (WJMC) under its Level II Self-Regulatory Body framework for publishers of news.')).toBeTruthy();
     expect(screen.getByText('Registration No.:')).toBeTruthy();
     expect(screen.getByText('WJMC/7489/462-26')).toBeTruthy();
     expect(screen.getByText('Issue Date:')).toBeTruthy();
-    expect(screen.getByText('14 September 2026')).toBeTruthy();
+    expect(screen.getByText('14-09-2026')).toBeTruthy();
     expect(screen.getByText('Valid Until:')).toBeTruthy();
-    expect(screen.getByText('14 September 2027')).toBeTruthy();
+    expect(screen.getByText('14-09-2027')).toBeTruthy();
 
     const cardTitles = screen.getAllByText(cardTitlePattern).map((node) => node.textContent);
     expect(cardTitles).toEqual([
@@ -123,6 +134,80 @@ describe('pages/grievance-redressal', () => {
     expect(screen.getByText('Timeline')).toBeTruthy();
     expect(screen.getByText('Response timeline')).toBeTruthy();
     expect(document.getElementById('grievance-form')).toBeNull();
+  });
+
+  it('renders the backend current SRB registration without exposing history or private fields', async () => {
+    complianceSettingsResponse = {
+      ...defaultComplianceSettings,
+      srbRegistration: {
+        organization: 'Backend Media Council',
+        publisher: 'Backend Publisher (Digital)',
+        status: 'Active',
+        registrationNumber: 'BMC/2027/42',
+        issueDate: '2027-01-01',
+        validUntil: '2027-12-31',
+        certificateUrl: '/private/certificates/bmc.pdf',
+        privateAddress: 'Private SRB Office Address',
+      },
+      srbRegistrationHistory: [
+        {
+          organization: 'Old Media Council',
+          registrationNo: 'OLD/2026/99',
+        },
+      ],
+    };
+
+    render(<GrievanceRedressalPage />);
+    expect(await screen.findByRole('heading', { name: 'Level II – Self-Regulatory Body' })).toBeTruthy();
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Backend Media Council').length).toBeGreaterThan(0);
+    });
+
+    expect(screen.getByText('Backend Publisher (Digital)')).toBeTruthy();
+    expect(screen.getByText('Active')).toBeTruthy();
+    expect(screen.getByText('BMC/2027/42')).toBeTruthy();
+    expect(screen.getByText('01-01-2027')).toBeTruthy();
+    expect(screen.getByText('31-12-2027')).toBeTruthy();
+    expect(screen.getByText((_, node) => node?.tagName.toLowerCase() === 'p' && node.textContent?.replace(/\s+/g, ' ').trim() === 'Backend Publisher (Digital) is registered with the Backend Media Council under its Level II Self-Regulatory Body framework for publishers of news.')).toBeTruthy();
+    expect(screen.queryByText('WJMC/7489/462-26')).toBeNull();
+    expect(screen.queryByText('Old Media Council')).toBeNull();
+    expect(screen.queryByText('OLD/2026/99')).toBeNull();
+    expect(screen.queryByText('/private/certificates/bmc.pdf')).toBeNull();
+    expect(screen.queryByText('Private SRB Office Address')).toBeNull();
+  });
+
+  it('normalizes legacy SRB registration number aliases without exposing history', async () => {
+    complianceSettingsResponse = {
+      ...defaultComplianceSettings,
+      currentSrbRegistration: {
+        organization: 'Legacy Media Council',
+        publisher: 'Legacy Publisher (Digital)',
+        status: 'Active',
+        registrationNo: 'LEGACY/2027/42',
+        issueDate: '14 September 2026',
+        validUntil: '2027-09-14',
+      },
+      srbRegistrationHistory: [
+        {
+          organization: 'Historical Media Council',
+          registrationNumber: 'HISTORY/2026/99',
+        },
+      ],
+    };
+
+    render(<GrievanceRedressalPage />);
+    expect(await screen.findByRole('heading', { name: 'Level II – Self-Regulatory Body' })).toBeTruthy();
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Legacy Media Council').length).toBeGreaterThan(0);
+    });
+
+    expect(screen.getByText('LEGACY/2027/42')).toBeTruthy();
+    expect(screen.getByText('14-09-2026')).toBeTruthy();
+    expect(screen.getByText('14-09-2027')).toBeTruthy();
+    expect(screen.queryByText('Historical Media Council')).toBeNull();
+    expect(screen.queryByText('HISTORY/2026/99')).toBeNull();
   });
 
   it('hides all optional identity cards when admin public display controls are false', async () => {

@@ -10,6 +10,37 @@ const privacyEmail = 'privacy@newspulse.co.in';
 const submitSuccessMessage = 'Your grievance has been submitted successfully. Our team will review it as per the applicable timeline.';
 const grievanceResponseStatement = 'News Pulse will acknowledge receipt of a grievance within 24 hours. The Grievance Officer will take a decision on the grievance and communicate the decision to the complainant within 15 days of registration of the grievance, in accordance with the applicable rules.';
 const declarationText = 'I hereby declare that the information furnished above is true, correct, and complete to the best of my knowledge and belief.';
+const monthNumbers: Record<string, string> = {
+  january: '01',
+  february: '02',
+  march: '03',
+  april: '04',
+  may: '05',
+  june: '06',
+  july: '07',
+  august: '08',
+  september: '09',
+  october: '10',
+  november: '11',
+  december: '12',
+};
+
+function formatSrbDisplayDate(value: string): string {
+  const trimmed = value.trim();
+  const indianDateMatch = /^(\d{2})-(\d{2})-(\d{4})$/.exec(trimmed);
+  if (indianDateMatch) return trimmed;
+
+  const isoDateMatch = /^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/.exec(trimmed);
+  if (isoDateMatch) return `${isoDateMatch[3]}-${isoDateMatch[2]}-${isoDateMatch[1]}`;
+
+  const longDateMatch = /^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/.exec(trimmed);
+  if (longDateMatch) {
+    const month = monthNumbers[longDateMatch[2].toLowerCase()];
+    if (month) return `${longDateMatch[1].padStart(2, '0')}-${month}-${longDateMatch[3]}`;
+  }
+
+  return trimmed;
+}
 
 function getReturnedGrievanceId(result: unknown): string {
   if (!result || typeof result !== 'object') return '';
@@ -68,6 +99,9 @@ export default function GrievanceRedressalPage() {
   const chiefEditor = complianceSettings.chiefEditorName || chiefEditorFallback;
   const entityName = complianceSettings.publisherEntity;
   const websiteUrl = complianceSettings.websiteUrl;
+  const currentSrbRegistration = complianceSettings.currentSrbRegistration;
+  const currentSrbIssueDate = formatSrbDisplayDate(currentSrbRegistration.issueDate);
+  const currentSrbValidUntil = formatSrbDisplayDate(currentSrbRegistration.validUntil);
   const submitErrorMessage = `We could not submit your grievance right now. Please email ${grievanceEmail} directly.`;
 
   function updateField<K extends keyof GrievanceFormState>(field: K, value: GrievanceFormState[K]) {
@@ -260,24 +294,36 @@ export default function GrievanceRedressalPage() {
             <div className="max-w-3xl">
               <PageEyebrow tone="slate">Self-regulatory registration</PageEyebrow>
               <h2 className="mt-4 text-2xl font-black tracking-tight text-slate-950">Level II – Self-Regulatory Body</h2>
-              <div className="mt-4 text-base font-black tracking-tight text-slate-950">Working Journalist Media Council (WJMC)</div>
+              <div className="mt-4 text-base font-black tracking-tight text-slate-950">{currentSrbRegistration.organization}</div>
               <p className="mt-3 text-sm leading-7 text-slate-600">
-                News Pulse (Digital) is registered with the Working Journalist Media Council (WJMC) under its Level II Self-Regulatory Body framework for publishers of news.
+                {currentSrbRegistration.publisher} is registered with the {currentSrbRegistration.organization} under its Level II Self-Regulatory Body framework for publishers of news.
               </p>
             </div>
 
             <div className="grid gap-3 text-sm leading-7 text-slate-600 sm:min-w-[260px]">
               <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/85 px-4 py-3.5 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.22)]">
+                <div className="font-black text-slate-950">Organization:</div>
+                <div className="mt-1">{currentSrbRegistration.organization}</div>
+              </div>
+              <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/85 px-4 py-3.5 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.22)]">
+                <div className="font-black text-slate-950">Publisher:</div>
+                <div className="mt-1">{currentSrbRegistration.publisher}</div>
+              </div>
+              <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/85 px-4 py-3.5 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.22)]">
+                <div className="font-black text-slate-950">Status:</div>
+                <div className="mt-1">{currentSrbRegistration.status}</div>
+              </div>
+              <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/85 px-4 py-3.5 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.22)]">
                 <div className="font-black text-slate-950">Registration No.:</div>
-                <div className="mt-1">WJMC/7489/462-26</div>
+                <div className="mt-1">{currentSrbRegistration.registrationNumber}</div>
               </div>
               <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/85 px-4 py-3.5 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.22)]">
                 <div className="font-black text-slate-950">Issue Date:</div>
-                <div className="mt-1">14 September 2026</div>
+                <div className="mt-1">{currentSrbIssueDate}</div>
               </div>
               <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/85 px-4 py-3.5 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.22)]">
                 <div className="font-black text-slate-950">Valid Until:</div>
-                <div className="mt-1">14 September 2027</div>
+                <div className="mt-1">{currentSrbValidUntil}</div>
               </div>
             </div>
           </div>
