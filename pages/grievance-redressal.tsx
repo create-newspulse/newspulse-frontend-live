@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clock3, Globe, Mail, ShieldCheck, UserRound } from 'lucide-react';
+import { Clock3, Mail, ShieldCheck, UserRound } from 'lucide-react';
 import PublicBusinessPageLayout, { ContactPill, PageEyebrow, SectionHeading, SurfacePanel } from '../components/public/PublicBusinessPageLayout';
 import { usePublicComplianceSettings } from '../hooks/usePublicComplianceSettings';
 
@@ -65,7 +65,6 @@ export default function GrievanceRedressalPage() {
   const founderName = complianceSettings.founderName;
   const grievanceOfficer = complianceSettings.grievanceOfficerName || grievanceOfficerFallback;
   const grievanceEmail = complianceSettings.grievanceEmail;
-  const grievanceLocation = complianceSettings.grievanceOfficerLocation;
   const chiefEditor = complianceSettings.chiefEditorName || chiefEditorFallback;
   const entityName = complianceSettings.publisherEntity;
   const websiteUrl = complianceSettings.websiteUrl;
@@ -230,12 +229,13 @@ export default function GrievanceRedressalPage() {
 
       <section className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {[
-          { icon: ShieldCheck, title: 'Publisher / Entity', body: entityName },
-          { icon: UserRound, title: 'Founder / Publisher', body: founderName },
-          { icon: UserRound, title: 'Chief Editor', body: chiefEditor },
+          { icon: ShieldCheck, title: 'Publisher / Entity', body: entityName, visible: complianceSettings.showPublisherEntity },
+          { icon: UserRound, title: 'Founder / Publisher', body: founderName, visible: complianceSettings.showFounderPublisher },
+          { icon: UserRound, title: 'Chief Editor', body: chiefEditor, visible: complianceSettings.showChiefEditor },
           {
             icon: UserRound,
             title: 'Grievance Officer',
+            visible: true,
             body: (
               <div className="space-y-1">
                 <div className="font-semibold text-slate-800">{grievanceOfficer}</div>
@@ -243,16 +243,45 @@ export default function GrievanceRedressalPage() {
               </div>
             ),
           },
-          { icon: Mail, title: 'Editorial / Content Grievance', body: grievanceEmail },
-          { icon: Mail, title: 'Privacy / DPDP Request', body: privacyEmail },
-          { icon: Globe, title: 'Location', body: grievanceLocation },
-        ].map((item) => (
+          { icon: Mail, title: 'Editorial / Content Grievance', body: grievanceEmail, visible: true },
+          { icon: Mail, title: 'Privacy / DPDP Request', body: privacyEmail, visible: true },
+        ].filter((item) => item.visible).map((item) => (
           <SurfacePanel key={item.title} className="p-5">
             <item.icon className="h-6 w-6 text-slate-700" />
             <div className="mt-4 text-lg font-black tracking-tight text-slate-950">{item.title}</div>
             <div className="mt-2 text-sm leading-7 text-slate-600">{item.body}</div>
           </SurfacePanel>
         ))}
+      </section>
+
+      <section className="mt-8">
+        <SurfacePanel className="p-5 sm:p-8">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div className="max-w-3xl">
+              <PageEyebrow tone="slate">Self-regulatory registration</PageEyebrow>
+              <h2 className="mt-4 text-2xl font-black tracking-tight text-slate-950">Level II – Self-Regulatory Body</h2>
+              <div className="mt-4 text-base font-black tracking-tight text-slate-950">Working Journalist Media Council (WJMC)</div>
+              <p className="mt-3 text-sm leading-7 text-slate-600">
+                News Pulse (Digital) is registered with the Working Journalist Media Council (WJMC) under its Level II Self-Regulatory Body framework for publishers of news.
+              </p>
+            </div>
+
+            <div className="grid gap-3 text-sm leading-7 text-slate-600 sm:min-w-[260px]">
+              <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/85 px-4 py-3.5 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.22)]">
+                <div className="font-black text-slate-950">Registration No.:</div>
+                <div className="mt-1">WJMC/7489/462-26</div>
+              </div>
+              <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/85 px-4 py-3.5 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.22)]">
+                <div className="font-black text-slate-950">Issue Date:</div>
+                <div className="mt-1">14 September 2026</div>
+              </div>
+              <div className="rounded-[22px] border border-slate-200/80 bg-slate-50/85 px-4 py-3.5 shadow-[0_12px_28px_-24px_rgba(15,23,42,0.22)]">
+                <div className="font-black text-slate-950">Valid Until:</div>
+                <div className="mt-1">14 September 2027</div>
+              </div>
+            </div>
+          </div>
+        </SurfacePanel>
       </section>
 
       {showForm ? (
@@ -464,10 +493,9 @@ export default function GrievanceRedressalPage() {
                     For direct communication, use:
                   </p>
                   <div className="mt-3 space-y-1 text-sm font-semibold text-slate-800">
-                    <div>{entityName}</div>
-                    <div>{founderName}</div>
+                    {complianceSettings.showPublisherEntity ? <div>{entityName}</div> : null}
+                    {complianceSettings.showFounderPublisher ? <div>{founderName}</div> : null}
                     <div>{grievanceOfficer}</div>
-                    <div>{grievanceLocation}</div>
                     <div>{grievanceEmail}</div>
                     <div>{websiteUrl}</div>
                   </div>

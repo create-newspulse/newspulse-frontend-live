@@ -4,25 +4,33 @@ import GrievanceRedressalPage from '../../pages/grievance-redressal';
 
 const grievanceResponseStatement = 'News Pulse will acknowledge receipt of a grievance within 24 hours. The Grievance Officer will take a decision on the grievance and communicate the decision to the complainant within 15 days of registration of the grievance, in accordance with the applicable rules.';
 
+const defaultComplianceSettings = {
+  founderName: 'Kiran Parmar',
+  grievanceOfficerName: 'Shailesh Rathod',
+  grievanceOfficerDesignation: 'Senior Grievance Officer',
+  grievanceEmail: 'grievance@newspulse.co.in',
+  grievanceOfficerLocation: 'India',
+  chiefEditorName: 'Shailesh Rathod',
+  publisherEntity: 'News Pulse Media',
+  websiteUrl: 'https://www.newspulse.co.in',
+  showPublisherEntity: true,
+  showFounderPublisher: true,
+  showChiefEditor: true,
+};
+
+let complianceSettingsResponse = { ...defaultComplianceSettings };
+
+const cardTitlePattern = /^(Publisher \/ Entity|Founder \/ Publisher|Chief Editor|Grievance Officer|Editorial \/ Content Grievance|Privacy \/ DPDP Request)$/;
+
 describe('pages/grievance-redressal', () => {
   beforeEach(() => {
     jest.resetAllMocks();
+    complianceSettingsResponse = { ...defaultComplianceSettings };
     (global as any).fetch = jest.fn().mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input).startsWith('/api/public/compliance-settings')) {
         return {
           ok: true,
-          json: async () => ({
-            settings: {
-              founderName: 'Kiran Parmar',
-              grievanceOfficerName: 'Shailesh Rathod',
-              grievanceOfficerDesignation: 'Senior Grievance Officer',
-              grievanceEmail: 'grievance@newspulse.co.in',
-              grievanceOfficerLocation: 'India',
-              chiefEditorName: 'Shailesh Rathod',
-              publisherEntity: 'News Pulse Media',
-              websiteUrl: 'https://www.newspulse.co.in',
-            },
-          }),
+          json: async () => ({ settings: complianceSettingsResponse }),
         };
       }
 
@@ -59,26 +67,37 @@ describe('pages/grievance-redressal', () => {
       screen.getByText('News Pulse is committed to responsible publishing, transparency, and timely resolution of valid complaints related to content, corrections, copyright, privacy, or legal concerns.')
     ).toBeTruthy();
 
+    await waitFor(() => {
+      expect(screen.getAllByText('Kiran Parmar').length).toBeGreaterThan(0);
+    });
     expect(screen.getAllByText('News Pulse Media').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Kiran Parmar').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Official grievance contact').length).toBeGreaterThan(0);
     expect(screen.queryByText('Senior Grievance Officer')).toBeNull();
-    expect(screen.getAllByText('India').length).toBeGreaterThan(0);
+    expect(screen.queryByText('India')).toBeNull();
     expect(screen.getAllByText('grievance@newspulse.co.in').length).toBeGreaterThan(0);
     expect(screen.getByText('Chief Editor')).toBeTruthy();
     expect(screen.queryByText('Response Timeline')).toBeNull();
     expect(screen.queryByText('Designation')).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Level II – Self-Regulatory Body' })).toBeTruthy();
+    expect(screen.getByText('Working Journalist Media Council (WJMC)')).toBeTruthy();
+    expect(screen.getByText('News Pulse (Digital) is registered with the Working Journalist Media Council (WJMC) under its Level II Self-Regulatory Body framework for publishers of news.')).toBeTruthy();
+    expect(screen.getByText('Registration No.:')).toBeTruthy();
+    expect(screen.getByText('WJMC/7489/462-26')).toBeTruthy();
+    expect(screen.getByText('Issue Date:')).toBeTruthy();
+    expect(screen.getByText('14 September 2026')).toBeTruthy();
+    expect(screen.getByText('Valid Until:')).toBeTruthy();
+    expect(screen.getByText('14 September 2027')).toBeTruthy();
 
-    const cardTitles = screen.getAllByText(
-      /^(Publisher \/ Entity|Founder \/ Publisher|Chief Editor|Grievance Officer|Location)$/
-    ).map((node) => node.textContent);
-    expect(cardTitles.slice(0, 5)).toEqual([
+    const cardTitles = screen.getAllByText(cardTitlePattern).map((node) => node.textContent);
+    expect(cardTitles).toEqual([
       'Publisher / Entity',
       'Founder / Publisher',
       'Chief Editor',
       'Grievance Officer',
-      'Location',
+      'Editorial / Content Grievance',
+      'Privacy / DPDP Request',
     ]);
+    expect(screen.queryByText('Location')).toBeNull();
 
     expect(screen.queryByLabelText('Full Name')).toBeNull();
     expect(screen.queryByLabelText('Email Address')).toBeNull();
@@ -92,7 +111,7 @@ describe('pages/grievance-redressal', () => {
     await waitFor(() => {
       expect(screen.getAllByText('Shailesh Rathod').length).toBeGreaterThan(1);
     });
-    expect(screen.getAllByText('India')).toHaveLength(1);
+    expect(screen.queryByText('India')).toBeNull();
 
     expect(screen.getAllByRole('link', { name: 'grievance@newspulse.co.in' })[0]?.getAttribute('href')).toBe('#grievance-form');
     expect(screen.getByRole('link', { name: 'Email the News Pulse grievance officer' }).getAttribute('href')).toBe('#grievance-form');
@@ -104,6 +123,75 @@ describe('pages/grievance-redressal', () => {
     expect(screen.getByText('Timeline')).toBeTruthy();
     expect(screen.getByText('Response timeline')).toBeTruthy();
     expect(document.getElementById('grievance-form')).toBeNull();
+  });
+
+  it('hides all optional identity cards when admin public display controls are false', async () => {
+    complianceSettingsResponse = {
+      ...defaultComplianceSettings,
+      showPublisherEntity: false,
+      showFounderPublisher: false,
+      showChiefEditor: false,
+    };
+
+    render(<GrievanceRedressalPage />);
+    expect(await screen.findByRole('heading', { name: 'Grievance Redressal' })).toBeTruthy();
+
+    await waitFor(() => {
+      expect(screen.queryByText('Publisher / Entity')).toBeNull();
+      expect(screen.queryByText('Chief Editor')).toBeNull();
+    });
+
+    expect(screen.queryByText('Founder / Publisher')).toBeNull();
+    expect(screen.queryByText('News Pulse Media')).toBeNull();
+    expect(screen.queryByText('Kiran Parmar')).toBeNull();
+    expect(screen.getByText('Grievance Officer')).toBeTruthy();
+    expect(screen.getAllByText('grievance@newspulse.co.in').length).toBeGreaterThan(0);
+    expect(screen.getByText('Editorial / Content Grievance')).toBeTruthy();
+    expect(screen.getByText('Privacy / DPDP Request')).toBeTruthy();
+    expect(screen.queryByText('Location')).toBeNull();
+    expect(screen.queryByText('India')).toBeNull();
+
+    fireEvent.click(screen.getAllByRole('link', { name: 'grievance@newspulse.co.in' })[0]);
+
+    expect(screen.getByText('Official contact')).toBeTruthy();
+    expect(screen.queryByText('News Pulse Media')).toBeNull();
+    expect(screen.queryByText('Kiran Parmar')).toBeNull();
+    expect(screen.getAllByText('Shailesh Rathod').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('grievance@newspulse.co.in').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Location')).toBeNull();
+    expect(screen.queryByText('India')).toBeNull();
+  });
+
+  it.each([
+    ['publisher only', true, false, false, ['Publisher / Entity'], ['Founder / Publisher', 'Chief Editor']],
+    ['founder only', false, true, false, ['Founder / Publisher'], ['Publisher / Entity', 'Chief Editor']],
+    ['chief editor only', false, false, true, ['Chief Editor'], ['Publisher / Entity', 'Founder / Publisher']],
+  ])('respects mixed admin public display controls: %s', async (_label, showPublisherEntity, showFounderPublisher, showChiefEditor, visibleTitles, hiddenTitles) => {
+    complianceSettingsResponse = {
+      ...defaultComplianceSettings,
+      showPublisherEntity,
+      showFounderPublisher,
+      showChiefEditor,
+    };
+
+    render(<GrievanceRedressalPage />);
+    expect(await screen.findByRole('heading', { name: 'Grievance Redressal' })).toBeTruthy();
+
+    await waitFor(() => {
+      for (const title of visibleTitles) {
+        expect(screen.getByText(title)).toBeTruthy();
+      }
+      for (const title of hiddenTitles) {
+        expect(screen.queryByText(title)).toBeNull();
+      }
+    });
+
+    expect(screen.getByText('Grievance Officer')).toBeTruthy();
+    expect(screen.getAllByText('grievance@newspulse.co.in').length).toBeGreaterThan(0);
+    expect(screen.getByText('Editorial / Content Grievance')).toBeTruthy();
+    expect(screen.getByText('Privacy / DPDP Request')).toBeTruthy();
+    expect(screen.queryByText('Location')).toBeNull();
+    expect(screen.queryByText('India')).toBeNull();
   });
 
   it('opens, smooth-scrolls to, and focuses the grievance form when the CTA is clicked', async () => {
