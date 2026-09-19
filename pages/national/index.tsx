@@ -26,6 +26,8 @@ import { formatPublicArticleLocation } from '../../lib/publicLocation';
 
 type AnyStory = any;
 
+type NationalPageLang = 'en' | 'hi' | 'gu';
+
 type NationalLiveTickerItem = {
   _id: string;
   title?: string;
@@ -33,6 +35,9 @@ type NationalLiveTickerItem = {
   kind?: 'live' | 'story' | string;
   href?: string;
 };
+
+const NATIONAL_CARD_TEXT_MAX_CHARS = 420;
+const NATIONAL_SEARCH_TEXT_MAX_CHARS = 900;
 
 function resolveLangFromPathname(pathname: unknown): 'en' | 'hi' | 'gu' {
   const p = String(pathname || '').toLowerCase();
@@ -202,6 +207,128 @@ function storyExcerpt(story: AnyStory): string {
   return text.length > 220 ? `${text.slice(0, 220)}…` : text;
 }
 
+function cleanArticleText(raw: unknown): string {
+  return String(raw || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function truncateArticleText(raw: unknown, maxChars: number): string {
+  const text = cleanArticleText(raw);
+  if (!text) return '';
+  return text.length > maxChars ? `${text.slice(0, maxChars).trim()}…` : text;
+}
+
+function setIfPresent(target: Record<string, any>, key: string, value: unknown) {
+  if (value === undefined || value === null) return;
+  if (typeof value === 'string' && !value.trim()) return;
+  target[key] = value;
+}
+
+function copyFields(target: Record<string, any>, source: AnyStory, keys: string[]) {
+  for (const key of keys) setIfPresent(target, key, source?.[key]);
+}
+
+export function compactNationalArticleForProps(story: AnyStory, lang: NationalPageLang): AnyStory {
+  const localized = localizeArticle(story, lang);
+  const title = String(localized.title || story?.title || story?.headline || story?.name || '').trim();
+  const contentSnippet = truncateArticleText(localized.content || story?.content || story?.body || story?.html || storyExcerpt(story), NATIONAL_CARD_TEXT_MAX_CHARS);
+  const summary = storyExcerpt(story) || contentSnippet;
+  const searchText = truncateArticleText(
+    [
+      title,
+      story?.excerpt,
+      story?.summary,
+      story?.description,
+      localized.content,
+      story?.content,
+      story?.body,
+      story?.html,
+      story?.location,
+      story?.locationLabel,
+      story?.locationText,
+      story?.city,
+      story?.district,
+      story?.state,
+      story?.region,
+      Array.isArray(story?.tags) ? story.tags.join(' ') : story?.tags,
+    ].filter(Boolean).join(' '),
+    NATIONAL_SEARCH_TEXT_MAX_CHARS
+  );
+
+  const compact: Record<string, any> = {};
+
+  copyFields(compact, story, [
+    '_id',
+    'id',
+    'slug',
+    'slugs',
+    'slug_en',
+    'slug_hi',
+    'slug_gu',
+    'slugEn',
+    'slugHi',
+    'slugGu',
+    'translationGroupId',
+    'translationKey',
+    'status',
+    'isPublished',
+    'published',
+    'language',
+    'lang',
+    'sourceLang',
+    'sourceLanguage',
+    'category',
+    'categoryName',
+    'section',
+    'subcategory',
+    'topic',
+    'tags',
+    'publishedAt',
+    'createdAt',
+    'updatedAt',
+    'reads',
+    'readCount',
+    'viewCount',
+  ]);
+
+  setIfPresent(compact, 'title', title);
+  setIfPresent(compact, 'content', contentSnippet);
+  setIfPresent(compact, 'summary', summary);
+  setIfPresent(compact, 'searchText', searchText);
+  setIfPresent(compact, 'coverImageUrl', resolveCoverImageUrl(story, { lang }));
+  setIfPresent(compact, 'location', storyLocation(story));
+
+  return compact;
+}
+
+function compactNationalArticlesForProps(stories: AnyStory[], lang: NationalPageLang): AnyStory[] {
+  return (Array.isArray(stories) ? stories : []).map((story) => compactNationalArticleForProps(story, lang));
+}
+
+function compactNationalTickerItemsForProps(items: AnyStory[], lang: NationalPageLang): NationalLiveTickerItem[] {
+  return (Array.isArray(items) ? items : [])
+    .map((item, index) => {
+      const id = String(item?._id || item?.id || item?.key || item?.slug || `ticker-${index}`).trim();
+      const { title } = localizeArticle(item, lang);
+      const compact: NationalLiveTickerItem = { _id: id };
+      setIfPresent(compact as Record<string, any>, 'title', title || item?.title || item?.text || item?.headline || item?.name);
+      setIfPresent(compact as Record<string, any>, 'tags', item?.tags);
+      setIfPresent(compact as Record<string, any>, 'kind', item?.kind);
+      setIfPresent(compact as Record<string, any>, 'href', item?.href);
+      return id ? compact : null;
+    })
+    .filter(Boolean)
+    .slice(0, 5) as NationalLiveTickerItem[];
+}
+
 function storyLocation(story: AnyStory): string {
   return formatPublicArticleLocation(story) || 'India';
 }
@@ -224,7 +351,7 @@ function matchesTopic(story: AnyStory, topic: TopicChip): boolean {
 function matchRegion(story: AnyStory, regionName: string) {
   const n = normalize(regionName);
   if (!n) return false;
-  const text = normalize(`${story?.title || ''} ${story?.excerpt || ''} ${story?.summary || ''} ${story?.content || ''} ${story?.location || ''} ${(story?.tags || []).join?.(' ') || story?.tags || ''}`);
+  const text = normalize(`${story?.title || ''} ${story?.excerpt || ''} ${story?.summary || ''} ${story?.content || ''} ${story?.searchText || ''} ${story?.location || ''} ${(story?.tags || []).join?.(' ') || story?.tags || ''}`);
   if (!text) return false;
   return new RegExp(`(^|\s)${n}(\s|$)`).test(text) || text.includes(n);
 }
@@ -659,7 +786,7 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
 
     if (q) {
       list = list.filter((s) => {
-        const text = normalize(`${s?.title || ''} ${s?.excerpt || ''} ${s?.summary || ''} ${s?.content || ''}`);
+        const text = normalize(`${s?.title || ''} ${s?.excerpt || ''} ${s?.summary || ''} ${s?.content || ''} ${s?.searchText || ''}`);
         return text.includes(q);
       });
     }
@@ -943,7 +1070,7 @@ export const getStaticProps: GetStaticProps = async ({ locale }) => {
       try {
         const resp = await fetchPublicNews({ category: 'national', language: lang, limit: 5 });
         if (resp?.error) return [];
-        return Array.isArray(resp?.items) ? resp.items.slice(0, 5) : [];
+        return Array.isArray(resp?.items) ? compactNationalTickerItemsForProps(resp.items, lang) : [];
       } catch {
         return [];
       }
@@ -952,7 +1079,7 @@ export const getStaticProps: GetStaticProps = async ({ locale }) => {
     return {
       props: {
         lang,
-        data: Array.isArray(items) ? items : [],
+        data: compactNationalArticlesForProps(items, lang),
         breaking,
         messages,
       },
