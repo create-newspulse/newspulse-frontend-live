@@ -82,23 +82,14 @@ const nextConfig = {
   // without redirect avoids this class of issue entirely.
   skipTrailingSlashRedirect: true,
 
-  // Unblock Vercel builds when ESLint crashes during next build (circular JSON bug)
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-
   // Fix for Vercel deployment and workspace detection
   outputFileTracingRoot: __dirname,
 
   images: {
     qualities: [74, 75, 76, 78, 90],
-    domains: Array.from(
-      new Set(
-        ['res.cloudinary.com', 'newspulse-backend-real.onrender.com', getBackendHostname()].filter(Boolean)
-      )
-    ),
     remotePatterns: [
       { protocol: 'https', hostname: 'res.cloudinary.com', pathname: '/**' },
+      { protocol: 'https', hostname: 'newspulse-backend-real.onrender.com', pathname: '/**' },
       { protocol: 'https', hostname: 'cdn.newsapi.org', pathname: '/**' },
       { protocol: 'https', hostname: 'images.unsplash.com', pathname: '/**' },
       { protocol: 'https', hostname: 'media.licdn.com', pathname: '/**' },
