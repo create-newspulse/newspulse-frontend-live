@@ -1,6 +1,7 @@
 import React from 'react';
 import { useRouter } from 'next/router';
 import { Analytics } from '@vercel/analytics/next';
+import { SpeedInsights } from '@vercel/speed-insights/next';
 import * as gtag from '../lib/gtag';
 import { LanguageProvider, getMessagesForLang, normalizeLang, useI18n } from '../src/i18n/LanguageProvider';
 import { PublicSettingsProvider } from '../src/context/PublicSettingsContext';
@@ -296,6 +297,7 @@ function MyApp({ Component, pageProps }) {
                 <FirebaseForegroundMessaging />
                 <I18nBridge Component={Component} pageProps={pageProps} />
                 <Analytics />
+                <SpeedInsights />
               </CookieConsentProvider>
             </LanguageProvider>
           </FeatureFlagProvider>
