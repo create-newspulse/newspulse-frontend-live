@@ -1,8 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 
-import sitemapHandler from '../../../pages/api/sitemap';
-import newsSitemapHandler from '../../../pages/api/news-sitemap';
+let sitemapHandler: typeof import('../../../pages/api/sitemap').default;
+let newsSitemapHandler: typeof import('../../../pages/api/news-sitemap').default;
 
 jest.mock('../../../lib/publicApiBase', () => ({
   getPublicApiBaseUrl: jest.fn(() => 'https://backend.test'),
@@ -63,7 +63,10 @@ function articleFixture(overrides: Record<string, any> = {}) {
 
 describe('SEO sitemap routes', () => {
   beforeEach(() => {
+    jest.resetModules();
     jest.clearAllMocks();
+    sitemapHandler = require('../../../pages/api/sitemap').default;
+    newsSitemapHandler = require('../../../pages/api/news-sitemap').default;
   });
 
   test('main sitemap returns valid XML and excludes admin/API/draft/deleted URLs', async () => {
@@ -85,6 +88,36 @@ describe('SEO sitemap routes', () => {
     expect(res.body).not.toContain('/api');
     expect(res.body).not.toContain('draft-story');
     expect(res.body).not.toContain('deleted-story');
+  });
+
+  test('main sitemap sends a bounded upstream fetch and reuses the warm cache', async () => {
+    global.fetch = jest.fn().mockResolvedValue(jsonResponse({ items: [articleFixture()] })) as any;
+
+    const first = createRes();
+    await sitemapHandler(createReq(), first);
+
+    const second = createRes();
+    await sitemapHandler(createReq(), second);
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect((global.fetch as jest.Mock).mock.calls[0][0]).toBe('https://backend.test/api/public/news?limit=500&strictLocale=1');
+    expect((global.fetch as jest.Mock).mock.calls[0][1]?.signal).toBeDefined();
+    expect(first.headers['Cache-Control']).toBe('public, s-maxage=300, stale-while-revalidate=600');
+    expect(first.headers['Vercel-CDN-Cache-Control']).toBe('public, s-maxage=300, stale-while-revalidate=600');
+    expect(second.body).toBe(first.body);
+  });
+
+  test('main sitemap falls back to static public URLs when upstream fails cold', async () => {
+    global.fetch = jest.fn().mockRejectedValue(new Error('timeout')) as any;
+
+    const res = createRes();
+    await sitemapHandler(createReq(), res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain('<loc>https://www.newspulse.co.in/</loc>');
+    expect(res.body).not.toContain('/admin');
+    expect(res.body).not.toContain('/api');
+    expect(res.headers['Cache-Control']).toBe('public, s-maxage=60, stale-while-revalidate=60');
   });
 
   test('news sitemap returns valid XML and excludes old or draft content', async () => {

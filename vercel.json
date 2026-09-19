@@ -24,6 +24,9 @@
     "NEXT_PUBLIC_SITE_URL": "https://www.newspulse.co.in"
   },
   "functions": {
+    "pages/api/sitemap.ts": {
+      "maxDuration": 30
+    },
     "pages/api/**/*.ts": {
       "maxDuration": 10
     }
