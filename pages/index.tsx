@@ -20,8 +20,8 @@ import { useBookmarks } from "../hooks/useBookmarks";
 import { resolveArticleSlug } from "../lib/articleSlugs";
 import { buildNewsUrl, isNavigableNewsHref } from "../lib/newsRoutes";
 import {
-  buildHomeSpotlightItems,
   buildHomepageSponsoredFeatureIdentitySet,
+  fetchHomeSpotlightArticles,
   fetchHomeSpotlightSectionArticles,
   HOME_FRESH_SOURCE_LIMIT,
   HOME_SPOTLIGHT_RENDER_FILTER_KEYS,
@@ -3903,6 +3903,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
   }, apiLang));
   const [homepageSponsoredFeature, setHomepageSponsoredFeature] = useState<HomepageSponsoredFeature | null>(initialHomepageSponsoredFeature);
   const [homeSectionNews, setHomeSectionNews] = useState<Record<string, Article[]>>({});
+  const [homeSpotlightItems, setHomeSpotlightItems] = useState<any[] | null>(null);
   const [homepagePublicRefreshTick, setHomepagePublicRefreshTick] = useState(0);
   const [hydrated, setHydrated] = useState(false);
 
@@ -4104,16 +4105,24 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
 
     if (!isBackgroundRefresh) {
       setHomeSectionNews({});
+      setHomeSpotlightItems(null);
     }
 
     (async () => {
-      const sectionArticlesByKey = await fetchHomeSpotlightSectionArticles({ lang: apiLang, signal: controller.signal });
+      const [sectionResult, spotlightResult] = await Promise.allSettled([
+        fetchHomeSpotlightSectionArticles({ lang: apiLang, signal: controller.signal }),
+        fetchHomeSpotlightArticles({ lang: apiLang, signal: controller.signal }),
+      ]);
 
       if (controller.signal.aborted) return;
+      const sectionArticlesByKey = sectionResult.status === 'fulfilled' ? sectionResult.value : {};
+      const spotlightArticles = spotlightResult.status === 'fulfilled' ? spotlightResult.value : [];
       setHomeSectionNews(sectionArticlesByKey as Record<string, Article[]>);
+      setHomeSpotlightItems(spotlightArticles.map((article) => articleToFeedItem(article as any, apiLang)));
     })().catch(() => {
       if (controller.signal.aborted) return;
       setHomeSectionNews({});
+      setHomeSpotlightItems([]);
     });
 
     return () => controller.abort();
@@ -4552,13 +4561,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
     }).filter((section) => section.items.length > 0);
   }, [apiLang, homeSectionNews, homepageLeadIdentitySet, t]);
 
-  const spotlightItems = React.useMemo(() => buildHomeSpotlightItems({
-    latestArticles: latestRawStories,
-    sectionArticlesByKey: homeSectionNews,
-    lang: apiLang,
-    articleToFeedItem: (article) => articleToFeedItem(article, apiLang),
-    extraExcludedIdentitySet: homepageSponsoredFeatureIdentitySet,
-  }), [apiLang, homeSectionNews, homepageSponsoredFeatureIdentitySet, latestRawStories]);
+  const spotlightItems = Array.isArray(homeSpotlightItems) ? homeSpotlightItems : [];
 
   const renderedEditorialSections = React.useMemo(
     () => editorialSections.filter((section) => !HOME_SPOTLIGHT_RENDER_FILTER_KEYS.includes(section.key as (typeof HOME_SPOTLIGHT_RENDER_FILTER_KEYS)[number])),

@@ -4,7 +4,6 @@ import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 
 import NewsPulseCategoryShell from '../../components/NewsPulseCategoryShell';
-import { HOME_SPOTLIGHT_SECTION_KEYS } from '../../lib/homeSpotlight';
 import { fetchHomepageSponsoredFeature } from '../../lib/publicSponsoredFeature';
 import { fetchPublicNews } from '../../lib/publicNewsApi';
 
@@ -115,10 +114,14 @@ function firstSpotlightImageSrc(): string {
   return String(screen.getByTestId('home-spotlight').getAttribute('data-first-image-src') || '');
 }
 
-function mockPublicNews(options: { categories?: Record<string, any[]>; global?: any[] } = {}) {
+function mockPublicNews(options: { categories?: Record<string, any[]>; global?: any[]; spotlight?: any[] } = {}) {
   fetchPublicNewsMock.mockImplementation(async (request: any = {}) => {
-    if (request.category) return { items: options.categories?.[String(request.category)] || [] };
-    return { items: options.global || [] };
+    const items = request.extraQuery?.spotlight === '1'
+      ? options.spotlight ?? options.global ?? []
+      : request.category
+        ? options.categories?.[String(request.category)] || []
+        : options.global || [];
+    return { items: items.filter((item: any) => item?.status !== 'draft') };
   });
 }
 
@@ -181,7 +184,7 @@ describe('NewsPulseCategoryShell', () => {
     });
   });
 
-  test('loads Home-style global spotlight when category latestItems are empty', async () => {
+  test('loads canonical backend Spotlight when category latestItems are empty', async () => {
     mockPublicNews({
       global: [
         publicArticle('global-lead', 'national', '2026-09-05T10:00:00.000Z'),
@@ -201,9 +204,13 @@ describe('NewsPulseCategoryShell', () => {
     });
 
     expect(fetchPublicNewsMock).toHaveBeenCalledWith(expect.objectContaining({ language: 'en', limit: 40 }));
-    expect(fetchPublicNewsMock).toHaveBeenCalledWith(expect.objectContaining({ category: 'science-technology', language: 'en', limit: 18 }));
-    expect(firstSpotlightCategory()).toBe('business');
-    expect(firstSpotlightTitle()).toBe('business story global-business');
+    expect(fetchPublicNewsMock).toHaveBeenCalledWith(expect.objectContaining({
+      language: 'en',
+      limit: 8,
+      extraQuery: { spotlight: '1', strictLocale: '1' },
+    }));
+    expect(firstSpotlightCategory()).toBe('national');
+    expect(firstSpotlightTitle()).toBe('national story global-lead');
   });
 
   test('passes the same resolved article image into shared Spotlight items', async () => {
@@ -211,6 +218,8 @@ describe('NewsPulseCategoryShell', () => {
     mockPublicNews({
       global: [
         publicArticle('global-lead', 'national', '2026-09-05T10:00:00.000Z'),
+      ],
+      spotlight: [
         {
           ...publicArticle('target-article', 'regional', '2026-09-05T09:00:00.000Z'),
           imageUrl,
@@ -235,6 +244,10 @@ describe('NewsPulseCategoryShell', () => {
     mockPublicNews({
       global: [
         publicArticle('global-lead', 'national', '2026-09-05T10:00:00.000Z'),
+        draftArticle('draft-regional', 'regional', '2026-09-05T09:30:00.000Z'),
+        publicArticle('published-regional', 'regional', '2026-09-05T09:00:00.000Z'),
+      ],
+      spotlight: [
         draftArticle('draft-regional', 'regional', '2026-09-05T09:30:00.000Z'),
         publicArticle('published-regional', 'regional', '2026-09-05T09:00:00.000Z'),
       ],
@@ -279,7 +292,7 @@ describe('NewsPulseCategoryShell', () => {
     expect(screen.queryByTestId('home-spotlight')).toBeNull();
   });
 
-  test('does not filter shared Spotlight by activeCategory', async () => {
+  test('does not filter canonical Spotlight by activeCategory', async () => {
     mockPublicNews({
       categories: {
         international: [publicArticle('international-section', 'international', '2026-09-05T07:00:00.000Z')],
@@ -298,17 +311,17 @@ describe('NewsPulseCategoryShell', () => {
     );
 
     await waitFor(() => {
-      expect(firstSpotlightCategory()).toBe('business');
+      expect(firstSpotlightCategory()).toBe('national');
     });
 
     const categoryCalls = fetchPublicNewsMock.mock.calls
       .map(([request]) => request?.category)
       .filter(Boolean);
-    expect(new Set(categoryCalls)).toEqual(new Set(HOME_SPOTLIGHT_SECTION_KEYS));
-    expect(firstSpotlightTitle()).toBe('business story global-business');
+    expect(categoryCalls).toEqual([]);
+    expect(firstSpotlightTitle()).toBe('national story global-lead');
   });
 
-  test('uses the same homepage sponsored-feature exclusion as Home Spotlight', async () => {
+  test('preserves canonical Spotlight order without sponsored-feature re-selection', async () => {
     fetchHomepageSponsoredFeatureMock.mockResolvedValue({ linkedArticleId: 'global-business' });
     mockPublicNews({
       global: [
@@ -325,9 +338,10 @@ describe('NewsPulseCategoryShell', () => {
     );
 
     await waitFor(() => {
-      expect(firstSpotlightCategory()).toBe('regional');
+      expect(firstSpotlightCategory()).toBe('national');
     });
-    expect(firstSpotlightTitle()).toBe('regional story global-regional');
+    expect(firstSpotlightTitle()).toBe('national story global-lead');
+    expect(fetchHomepageSponsoredFeatureMock).not.toHaveBeenCalled();
   });
 
   test('renders only one shared Spotlight module', async () => {
@@ -370,12 +384,11 @@ describe('NewsPulseCategoryShell', () => {
     const source = fs.readFileSync(path.join(process.cwd(), 'pages/index.tsx'), 'utf8');
     const sharedSource = fs.readFileSync(path.join(process.cwd(), 'lib/homeSpotlight.ts'), 'utf8');
 
-    expect(source).toContain('buildHomeSpotlightItems({');
+    expect(source).toContain('fetchHomeSpotlightArticles({ lang: apiLang');
     expect(source).toContain('fetchHomeSpotlightSectionArticles({ lang: apiLang');
     expect(source).toContain('SharedHomeSpotlightCarousel');
     expect(source).toContain('items={spotlightItems}');
-    expect(sharedSource).toContain('export const HOME_SPOTLIGHT_SOURCE_LIMIT = 18;');
-    expect(sharedSource).toMatch(/fetchPublicNews\(\{\s*category:\s*sectionKey,\s*language:\s*options\.lang,\s*limit:\s*HOME_SPOTLIGHT_SOURCE_LIMIT,/);
+    expect(sharedSource).toMatch(/fetchPublicNews\(\{\s*language:\s*options\.lang,\s*limit:\s*HOME_SPOTLIGHT_MAX_ITEMS,\s*extraQuery:\s*\{ spotlight:\s*'1', strictLocale:\s*'1' \}/);
   });
 
   test('allows a page to preserve its existing right rail inside the shared shell', async () => {

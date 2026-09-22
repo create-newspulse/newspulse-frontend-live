@@ -202,6 +202,21 @@ export function buildHomeSpotlightItems(options: {
   return selectHomeSpotlightFeedItems(feedItems, excludedIdentitySet);
 }
 
+export async function fetchHomeSpotlightArticles(options: {
+  lang: HomeSpotlightLang;
+  signal?: AbortSignal;
+}): Promise<Article[]> {
+  const response = await fetchPublicNews({
+    language: options.lang,
+    limit: HOME_SPOTLIGHT_MAX_ITEMS,
+    extraQuery: { spotlight: '1', strictLocale: '1' },
+    signal: options.signal,
+  });
+
+  if (response.error) return [];
+  return Array.isArray(response.items) ? response.items.slice(0, HOME_SPOTLIGHT_MAX_ITEMS) : [];
+}
+
 export async function fetchHomeSpotlightSectionArticles(options: {
   lang: HomeSpotlightLang;
   signal: AbortSignal;

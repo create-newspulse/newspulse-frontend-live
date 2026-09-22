@@ -10,15 +10,10 @@ import { DEFAULT_NORMALIZED_PUBLIC_SETTINGS } from '../src/lib/publicSettings';
 import { filterPubliclyPublishedArticles } from '../lib/localizedArticleFields';
 import { fetchPublicNews, type Article } from '../lib/publicNewsApi';
 import {
-	buildHomeSpotlightItems,
-	buildHomepageSponsoredFeatureIdentitySet,
-	collectHomeSpotlightIdentifiers,
-	fetchHomeSpotlightSectionArticles,
+	fetchHomeSpotlightArticles,
 	HOME_FRESH_SOURCE_LIMIT,
 	isHomeSpotlightSponsoredContent,
-	selectHomeSpotlightFeedItems,
 } from '../lib/homeSpotlight';
-import { fetchHomepageSponsoredFeature } from '../lib/publicSponsoredFeature';
 
 type NewsPulseCategoryShellProps = {
 	activeCategory: string;
@@ -63,28 +58,6 @@ function safeJsonParse(raw: string): any {
 	} catch {
 		return null;
 	}
-}
-
-function readCachedHomeSpotlightItems(lang: HomeRightRailLang): any[] {
-	if (typeof window === 'undefined') return [];
-
-	const stores = [window.localStorage, window.sessionStorage];
-	for (const store of stores) {
-		try {
-			const raw = store.getItem(HOME_STORY_CACHE_KEY);
-			const cache = raw ? safeJsonParse(raw) : null;
-			if (!cache || typeof cache !== 'object') continue;
-			if (cache.lang && cache.lang !== lang) continue;
-
-			const excludedIdentitySet = new Set<string>();
-			collectHomeSpotlightIdentifiers(cache.topStory, lang).forEach((value) => excludedIdentitySet.add(value));
-			const freshStories = filterPubliclyPublishedArticles(cache.freshStories);
-			const items = selectHomeSpotlightFeedItems(freshStories, excludedIdentitySet);
-			if (items.length) return items;
-		} catch {}
-	}
-
-	return [];
 }
 
 function readCachedHomeLatestItems(lang: HomeRightRailLang): any[] {
@@ -132,23 +105,20 @@ export default function NewsPulseCategoryShell({ activeCategory, latestItems, la
 	React.useEffect(() => {
 		let cancelled = false;
 		const cachedItems = readCachedHomeLatestItems(lang);
-		const cachedGlobalSpotlightItems = readCachedHomeSpotlightItems(lang);
 		if (!rightRail) setGlobalLatestItems(cachedItems.length ? cachedItems : null);
-		setHomeSpotlightItems(cachedGlobalSpotlightItems.length ? cachedGlobalSpotlightItems : null);
+		setHomeSpotlightItems(null);
 
 		const controller = new AbortController();
 		const loadHomeSharedNews = async () => {
-			const [latestResult, sectionResult, sponsoredFeatureResult] = await Promise.allSettled([
+			const [latestResult, spotlightResult] = await Promise.allSettled([
 				fetchPublicNews({ language: lang, limit: HOME_FRESH_SOURCE_LIMIT, signal: controller.signal }),
-				fetchHomeSpotlightSectionArticles({ lang, signal: controller.signal }),
-				fetchHomepageSponsoredFeature({ lang, placement: 'homepage', signal: controller.signal }),
+				fetchHomeSpotlightArticles({ lang, signal: controller.signal }),
 			]);
 			if (cancelled || controller.signal.aborted) return;
 
 			const latestResp = latestResult.status === 'fulfilled' ? latestResult.value : null;
 			const latestArticles = filterPubliclyPublishedArticles(latestResp?.items);
-			const sectionArticlesByKey = sectionResult.status === 'fulfilled' ? sectionResult.value : {};
-			const sponsoredFeature = sponsoredFeatureResult.status === 'fulfilled' ? sponsoredFeatureResult.value : null;
+			const spotlightArticles = spotlightResult.status === 'fulfilled' ? spotlightResult.value : [];
 
 			if (!rightRail) {
 				const editorialLatestItems = latestArticles
@@ -157,21 +127,13 @@ export default function NewsPulseCategoryShell({ activeCategory, latestItems, la
 				setGlobalLatestItems(editorialLatestItems.length ? editorialLatestItems : cachedItems.length ? cachedItems : null);
 			}
 
-			const spotlightItems = buildHomeSpotlightItems({
-				latestArticles,
-				sectionArticlesByKey,
-				lang,
-				articleToFeedItem: (article: Article) => articleToHomeRightRailFeedItem(article as any, lang),
-				extraExcludedIdentitySet: buildHomepageSponsoredFeatureIdentitySet(sponsoredFeature),
-			});
-			const fallbackItems = spotlightItems.length ? spotlightItems : cachedGlobalSpotlightItems.length ? cachedGlobalSpotlightItems : [];
-			setHomeSpotlightItems(fallbackItems);
+			setHomeSpotlightItems(spotlightArticles.map((article: Article) => articleToHomeRightRailFeedItem(article as any, lang)));
 		};
 
 		void loadHomeSharedNews().catch(() => {
 			if (cancelled) return;
 			if (!rightRail && cachedItems.length) setGlobalLatestItems(cachedItems);
-			setHomeSpotlightItems(cachedGlobalSpotlightItems.length ? cachedGlobalSpotlightItems : []);
+			setHomeSpotlightItems([]);
 		});
 
 		return () => {
