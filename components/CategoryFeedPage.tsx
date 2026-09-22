@@ -42,6 +42,9 @@ function categoryKeyToI18nKey(categoryKey: string): string | null {
   if (k === 'editorial') return 'categories.editorial';
   if (k === 'youth' || k === 'youth-pulse') return 'categories.youthPulse';
   if (k === 'inspiration' || k === 'inspiration-hub') return 'categories.inspirationHub';
+  if (k === 'faith-culture') return 'categories.faithCulture';
+  if (k === 'pulse-dialogue') return 'categories.pulseDialogue';
+  if (k === 'tech-gadgets') return 'categories.techGadgets';
 
   return null;
 }
@@ -92,6 +95,21 @@ const CATEGORY_DESK_COPY: Record<string, { eyebrow: string; title: string; descr
     title: 'Web Stories',
     description: 'Quick, visual and immersive stories from News Pulse.',
   },
+  'faith-culture': {
+    eyebrow: 'FAITH & CULTURE DESK',
+    title: 'Faith & Culture Pulse',
+    description: 'Latest faith, culture, heritage and community stories from News Pulse.',
+  },
+  'pulse-dialogue': {
+    eyebrow: 'PULSE DIALOGUE DESK',
+    title: 'Pulse Dialogue',
+    description: 'Conversations, interviews and public dialogue from News Pulse.',
+  },
+  'tech-gadgets': {
+    eyebrow: 'TECH & GADGETS DESK',
+    title: 'Tech & Gadgets Pulse',
+    description: 'Latest technology, gadgets, digital life and innovation stories from News Pulse.',
+  },
 };
 
 const EDITORIAL_SEARCH_COPY: Record<string, { searchPlaceholder: string }> = {
@@ -115,6 +133,9 @@ const LOAD_MORE_LABELS: Record<string, string> = {
   glamour: 'Load More Glamour Stories',
   editorial: 'Load More Editorials',
   'web-stories': 'Load More Web Stories',
+  'faith-culture': 'Load More Faith & Culture Stories',
+  'pulse-dialogue': 'Load More Pulse Dialogue Stories',
+  'tech-gadgets': 'Load More Tech & Gadgets Stories',
 };
 
 const CATEGORY_FEED_BATCH_SIZE = 30;

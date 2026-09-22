@@ -147,7 +147,10 @@
     "editorial": "Editorial",
     "youthPulse": "Youth Pulse",
     "inspirationHub": "Inspiration Hub",
-    "communityReporter": "Community Reporter"
+    "communityReporter": "Community Reporter",
+    "faithCulture": "Faith & Culture",
+    "pulseDialogue": "Pulse Dialogue",
+    "techGadgets": "Tech & Gadgets"
   },
   "home": {
     "previewNotice": "Public site settings could not be loaded. Showing default layout.",

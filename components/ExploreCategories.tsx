@@ -14,7 +14,10 @@ import {
   Leaf,
   Sparkles,
   BookOpen,
+  Landmark,
+  MessageSquareText,
   PenLine,
+  Smartphone,
   GraduationCap,
   Users,
   Video,
@@ -22,6 +25,7 @@ import {
 } from "lucide-react";
 
 import { usePublicFounderToggles } from "../hooks/usePublicFounderToggles";
+import { useI18n } from "../src/i18n/LanguageProvider";
 
 const NAV = [
   { href: "/breaking", label: "Breaking", subtitle: "Latest urgent updates", icon: Flame, tone: "breaking", toneKey: "breaking" },
@@ -30,16 +34,34 @@ const NAV = [
   { href: "/international", label: "International", subtitle: "Global top stories", icon: Globe, tone: "international", toneKey: "international" },
   { href: "/business", label: "Business", subtitle: "Markets and economy", icon: Briefcase, tone: "business", toneKey: "business" },
   { href: "/science-technology", label: "Science & Technology", subtitle: "Innovation and tech", icon: Cpu, tone: "tech", toneKey: "tech" },
+  { href: "/tech-gadgets", label: "Tech & Gadgets", subtitle: "Devices and digital life", icon: Smartphone, tone: "gadgets", toneKey: "gadgets" },
   { href: "/sports", label: "Sports", subtitle: "Matches and results", icon: Trophy, tone: "sports", toneKey: "sports" },
   { href: "/lifestyle", label: "Lifestyle", subtitle: "Health, style and living", icon: Leaf, tone: "lifestyle", toneKey: "lifestyle" },
+  { href: "/faith-culture", label: "Faith & Culture", subtitle: "Faith, heritage and culture", icon: Landmark, tone: "faith", toneKey: "faith" },
   { href: "/glamour", label: "Glamour", subtitle: "Bollywood and celebrity buzz", icon: Sparkles, tone: "glamour", toneKey: "glamour" },
   { href: "/web-stories", label: "Web Stories", subtitle: "Quick visual stories", icon: BookOpen, tone: "stories", toneKey: "stories" },
   { href: "/viral-videos", label: "Viral Videos", subtitle: "Trending clips and viral moments", icon: Video, tone: "viral", toneKey: "viral" },
   { href: "/editorial", label: "Editorial", subtitle: "Opinions, analysis and insight", icon: PenLine, tone: "editorial", toneKey: "editorial" },
+  { href: "/pulse-dialogue", label: "Pulse Dialogue", subtitle: "Conversations and public voices", icon: MessageSquareText, tone: "dialogue", toneKey: "dialogue" },
   { href: "/youth-pulse", label: "Youth Pulse", subtitle: "Students, careers and youth trends", icon: GraduationCap, tone: "youth", toneKey: "youth", badge: "NEW" },
   { href: "/inspiration-hub", label: "Inspiration Hub", subtitle: "Positive stories and motivation", icon: Sparkles, tone: "youth", toneKey: "inspiration" },
   { href: "/community-reporter", label: "Community Reporter", subtitle: "Public voices and local reports", icon: Users, tone: "community", toneKey: "community" },
 ] as const;
+
+function labelKeyForCategoryHref(href: string): string | null {
+  const slug = String(href || '').replace(/^\//, '');
+  if (slug === 'science-technology') return 'categories.scienceTechnology';
+  if (slug === 'web-stories') return 'categories.webStories';
+  if (slug === 'viral-videos') return 'categories.viralVideos';
+  if (slug === 'youth-pulse') return 'categories.youthPulse';
+  if (slug === 'inspiration-hub') return 'categories.inspirationHub';
+  if (slug === 'community-reporter') return 'categories.communityReporter';
+  if (slug === 'faith-culture') return 'categories.faithCulture';
+  if (slug === 'pulse-dialogue') return 'categories.pulseDialogue';
+  if (slug === 'tech-gadgets') return 'categories.techGadgets';
+  if (slug === 'regional/gujarat') return 'categories.regional';
+  return slug ? `categories.${slug}` : null;
+}
 
 type CardTone = {
   wrap: string;
@@ -171,6 +193,30 @@ const TONE: Record<string, CardTone> = {
     activeRing: "ring-orange-200",
     leftBar: "bg-orange-500",
   },
+  faith: {
+    wrap: "bg-stone-50 border-stone-200 hover:bg-stone-50/80",
+    iconWrap: "bg-stone-100 border-stone-200 text-stone-700",
+    text: "text-stone-800",
+    arrow: "text-stone-500",
+    activeRing: "ring-stone-200",
+    leftBar: "bg-stone-500",
+  },
+  dialogue: {
+    wrap: "bg-fuchsia-50 border-fuchsia-200 hover:bg-fuchsia-50/80",
+    iconWrap: "bg-fuchsia-100 border-fuchsia-200 text-fuchsia-700",
+    text: "text-fuchsia-800",
+    arrow: "text-fuchsia-500",
+    activeRing: "ring-fuchsia-200",
+    leftBar: "bg-fuchsia-500",
+  },
+  gadgets: {
+    wrap: "bg-cyan-50 border-cyan-200 hover:bg-cyan-50/80",
+    iconWrap: "bg-cyan-100 border-cyan-200 text-cyan-700",
+    text: "text-cyan-800",
+    arrow: "text-cyan-500",
+    activeRing: "ring-cyan-200",
+    leftBar: "bg-cyan-500",
+  },
 };
 
 const DEFAULT_TONE: CardTone = {
@@ -187,6 +233,7 @@ const DEFAULT_TONE: CardTone = {
 // { href:"/breaking", label:"Breaking", icon:Flame, toneKey:"breaking" }
 
 export function ExploreCategories({ pathname = "/" }: { pathname?: string }) {
+  const { t } = useI18n();
   const { toggles } = usePublicFounderToggles();
   const navItems = React.useMemo(
     () => (toggles.communityReporterClosed ? NAV.filter((item) => item.href !== "/community-reporter") : NAV),
@@ -209,9 +256,11 @@ export function ExploreCategories({ pathname = "/" }: { pathname?: string }) {
 
       <div className="grid gap-3 p-4 sm:p-5">
         {navItems.map((item) => {
-          const t = TONE[(item as any).toneKey] ?? DEFAULT_TONE;
+          const tone = TONE[(item as any).toneKey] ?? DEFAULT_TONE;
           const active = pathname.startsWith(item.href);
           const Icon = (item as any).icon as LucideIcon;
+          const labelKey = labelKeyForCategoryHref(item.href);
+          const label = labelKey ? t(labelKey) : item.label;
 
           return (
             <Link
@@ -220,26 +269,26 @@ export function ExploreCategories({ pathname = "/" }: { pathname?: string }) {
               className={[
                 "group relative flex min-h-[78px] items-start gap-3 rounded-[24px] border px-4 py-3.5 transition duration-200 sm:min-h-[82px]",
                 "bg-white/90 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.36)] hover:-translate-y-[1px]",
-                active ? `border-black/20 shadow-[0_24px_48px_-34px_rgba(15,23,42,0.42)] ring-2 ${t.activeRing}` : "border-black/10 hover:border-black/15",
+                active ? `border-black/20 shadow-[0_24px_48px_-34px_rgba(15,23,42,0.42)] ring-2 ${tone.activeRing}` : "border-black/10 hover:border-black/15",
               ].join(" ")}
             >
               {/* left color bar */}
-              <span className={["absolute left-0 top-3 bottom-3 w-1 rounded-full", t.leftBar].join(" ")} />
+              <span className={["absolute left-0 top-3 bottom-3 w-1 rounded-full", tone.leftBar].join(" ")} />
 
               {/* icon bubble */}
-              <span className={["mt-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-2xl border", t.iconWrap].join(" ")}>
+              <span className={["mt-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-2xl border", tone.iconWrap].join(" ")}>
                 <Icon className="w-5 h-5" />
               </span>
 
               <span className="min-w-0 flex-1 self-stretch pr-2">
                 <span className="flex min-w-0 flex-wrap items-center gap-2">
-                  <span className={["min-w-0 truncate text-[15px] font-bold leading-tight tracking-tight", t.text].join(" ")}>{item.label}</span>
+                  <span className={["min-w-0 truncate text-[15px] font-bold leading-tight tracking-tight", tone.text].join(" ")}>{label}</span>
                 {(item as any).badge ? (
                   <span
                     className={[
                       "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.16em]",
                       "bg-white/70 border-black/10",
-                      t.text,
+                      tone.text,
                     ].join(" ")}
                   >
                     {(item as any).badge}
@@ -249,7 +298,7 @@ export function ExploreCategories({ pathname = "/" }: { pathname?: string }) {
                 <span className="mt-1 block text-[12px] font-medium leading-[1.35] text-slate-600">{(item as any).subtitle}</span>
               </span>
 
-              <ArrowRight className={["ml-auto mt-0.5 h-5 w-5 shrink-0 self-center", t.arrow].join(" ")} />
+              <ArrowRight className={["ml-auto mt-0.5 h-5 w-5 shrink-0 self-center", tone.arrow].join(" ")} />
             </Link>
           );
         })}

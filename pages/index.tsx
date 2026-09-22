@@ -76,14 +76,17 @@ import {
   Globe,
   GraduationCap,
   Home,
+  Landmark,
   Leaf,
   Menu,
+  MessageSquareText,
   PenLine,
   Play,
   Radio,
   Search,
   Settings,
   Sparkles,
+  Smartphone,
   Trophy,
   Users,
   Video,
@@ -175,12 +178,15 @@ const CATEGORIES = [
   { key: "international", label: "International", Icon: Globe },
   { key: "business", label: "Business", Icon: Briefcase },
   { key: "science-technology", label: "Science & Technology", Icon: Cpu },
+  { key: "tech-gadgets", label: "Tech & Gadgets", Icon: Smartphone },
   { key: "sports", label: "Sports", Icon: Trophy },
   { key: "lifestyle", label: "Lifestyle", Icon: Leaf },
+  { key: "faith-culture", label: "Faith & Culture", Icon: Landmark },
   { key: "glamour", label: "Glamour", Icon: Sparkles },
   { key: "web-stories", label: "Web Stories", Icon: BookOpen },
   { key: "viral-videos", label: "Viral Videos", Icon: Video },
   { key: "editorial", label: "Editorial", Icon: PenLine },
+  { key: "pulse-dialogue", label: "Pulse Dialogue", Icon: MessageSquareText },
   { key: "youth", label: "Youth Pulse", Icon: GraduationCap, badge: "NEW" },
   { key: "inspiration", label: "Inspiration Hub", Icon: Sparkles },
   { key: "community", label: "Community Reporter", Icon: Users },
@@ -202,6 +208,9 @@ const CATEGORY_ROUTES: Record<string, string> = {
   youth: "/youth-pulse",
   community: "/community-reporter",
   inspiration: "/inspiration-hub",
+  "faith-culture": "/faith-culture",
+  "pulse-dialogue": "/pulse-dialogue",
+  "tech-gadgets": "/tech-gadgets",
 };
 
 const HOME_EDITORIAL_SECTIONS = [
@@ -351,6 +360,30 @@ const CATEGORY_THEME: Record<string, { base: string; icon: string; hover: string
     ring: "focus-visible:ring-2 focus-visible:ring-orange-300/50",
     active: "bg-orange-100 ring-2 ring-orange-300/50",
     dot: "bg-orange-500/80",
+  },
+  'faith-culture': {
+    base: "bg-stone-50 border-stone-200 text-stone-700",
+    icon: "bg-stone-100 border-stone-200 text-stone-700",
+    hover: "hover:bg-stone-100",
+    ring: "focus-visible:ring-2 focus-visible:ring-stone-300/50",
+    active: "bg-stone-100 ring-2 ring-stone-300/50",
+    dot: "bg-stone-500/80",
+  },
+  'pulse-dialogue': {
+    base: "bg-fuchsia-50 border-fuchsia-200 text-fuchsia-700",
+    icon: "bg-fuchsia-100 border-fuchsia-200 text-fuchsia-700",
+    hover: "hover:bg-fuchsia-100",
+    ring: "focus-visible:ring-2 focus-visible:ring-fuchsia-300/50",
+    active: "bg-fuchsia-100 ring-2 ring-fuchsia-300/50",
+    dot: "bg-fuchsia-500/80",
+  },
+  'tech-gadgets': {
+    base: "bg-cyan-50 border-cyan-200 text-cyan-700",
+    icon: "bg-cyan-100 border-cyan-200 text-cyan-700",
+    hover: "hover:bg-cyan-100",
+    ring: "focus-visible:ring-2 focus-visible:ring-cyan-300/50",
+    active: "bg-cyan-100 ring-2 ring-cyan-300/50",
+    dot: "bg-cyan-500/80",
   },
   __default: {
     base: "bg-slate-50 border-slate-200 text-slate-700",
@@ -955,6 +988,9 @@ function labelKeyForCategory(key: string): string {
   if (key === 'youth') return 'categories.youthPulse';
   if (key === 'inspiration') return 'categories.inspirationHub';
   if (key === 'community') return 'categories.communityReporter';
+  if (key === 'faith-culture') return 'categories.faithCulture';
+  if (key === 'pulse-dialogue') return 'categories.pulseDialogue';
+  if (key === 'tech-gadgets') return 'categories.techGadgets';
   return `categories.${key}`;
 }
 
@@ -1746,6 +1782,9 @@ function TopCategoriesStrip({ theme, activeKey, onPick, founderToggles }: any) {
     if (key === 'youth') return 'categories.youthPulse';
     if (key === 'inspiration') return 'categories.inspirationHub';
     if (key === 'community') return 'categories.communityReporter';
+    if (key === 'faith-culture') return 'categories.faithCulture';
+    if (key === 'pulse-dialogue') return 'categories.pulseDialogue';
+    if (key === 'tech-gadgets') return 'categories.techGadgets';
     return `categories.${key}`;
   };
 
@@ -1765,6 +1804,9 @@ function TopCategoriesStrip({ theme, activeKey, onPick, founderToggles }: any) {
     youth: { en: 'Students, careers and youth trends' },
     inspiration: { en: 'Positive stories and motivation' },
     community: { en: 'Public voices and local reports' },
+    'faith-culture': { en: 'Faith, heritage and culture' },
+    'pulse-dialogue': { en: 'Conversations and public voices' },
+    'tech-gadgets': { en: 'Devices and digital life' },
   };
 
   return (
@@ -1951,6 +1993,9 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick, founderToggle
     if (key === 'youth') return 'categories.youthPulse';
     if (key === 'inspiration') return 'categories.inspirationHub';
     if (key === 'community') return 'categories.communityReporter';
+    if (key === 'faith-culture') return 'categories.faithCulture';
+    if (key === 'pulse-dialogue') return 'categories.pulseDialogue';
+    if (key === 'tech-gadgets') return 'categories.techGadgets';
     return `categories.${key}`;
   };
 
@@ -1981,6 +2026,15 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick, founderToggle
     'community-reporter': { en: 'Public voices and local reports' },
     communityReporter: { en: 'Public voices and local reports' },
     community_reporter: { en: 'Public voices and local reports' },
+    'faith-culture': { en: 'Faith, heritage and culture' },
+    faithCulture: { en: 'Faith, heritage and culture' },
+    faith_culture: { en: 'Faith, heritage and culture' },
+    'pulse-dialogue': { en: 'Conversations and public voices' },
+    pulseDialogue: { en: 'Conversations and public voices' },
+    pulse_dialogue: { en: 'Conversations and public voices' },
+    'tech-gadgets': { en: 'Devices and digital life' },
+    techGadgets: { en: 'Devices and digital life' },
+    tech_gadgets: { en: 'Devices and digital life' },
   };
 
   const getCategorySubtitle = (key: string) => {
@@ -2128,6 +2182,30 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick, founderToggle
       arrow: "text-orange-500",
       activeRing: "ring-orange-200",
       leftBar: "bg-orange-500",
+    },
+    "faith-culture": {
+      wrap: "bg-stone-50 border-stone-200 hover:bg-stone-50/80",
+      iconWrap: "bg-stone-100 border-stone-200 text-stone-700",
+      text: "text-stone-800",
+      arrow: "text-stone-500",
+      activeRing: "ring-stone-200",
+      leftBar: "bg-stone-500",
+    },
+    "pulse-dialogue": {
+      wrap: "bg-fuchsia-50 border-fuchsia-200 hover:bg-fuchsia-50/80",
+      iconWrap: "bg-fuchsia-100 border-fuchsia-200 text-fuchsia-700",
+      text: "text-fuchsia-800",
+      arrow: "text-fuchsia-500",
+      activeRing: "ring-fuchsia-200",
+      leftBar: "bg-fuchsia-500",
+    },
+    "tech-gadgets": {
+      wrap: "bg-cyan-50 border-cyan-200 hover:bg-cyan-50/80",
+      iconWrap: "bg-cyan-100 border-cyan-200 text-cyan-700",
+      text: "text-cyan-800",
+      arrow: "text-cyan-500",
+      activeRing: "ring-cyan-200",
+      leftBar: "bg-cyan-500",
     },
   };
 
