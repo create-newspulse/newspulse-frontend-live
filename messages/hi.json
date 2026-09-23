@@ -55,6 +55,34 @@
     "pulseDialogue": "पल्स संवाद",
     "techGadgets": "टेक और गैजेट्स"
   },
+  "pulseDialogue": {
+    "exploreSubtitle": "विचार और स्वतंत्र आवाज़ें",
+    "landing": {
+      "description": "लेखकों, विद्वानों, विशेषज्ञों और स्वतंत्र आवाज़ों के विचार, निबंध, संवाद और दृष्टिकोण।",
+      "featuredDialogue": "प्रमुख संवाद",
+      "latestContributions": "नवीनतम योगदान"
+    },
+    "formats": {
+      "column": "स्तंभ",
+      "guestColumn": "अतिथि स्तंभ",
+      "essay": "निबंध",
+      "viewpoint": "दृष्टिकोण",
+      "conversation": "संवाद",
+      "interview": "साक्षात्कार",
+      "literaryEssay": "साहित्यिक निबंध",
+      "cultureIdeas": "संस्कृति और विचार",
+      "expertPerspective": "विशेषज्ञ दृष्टिकोण",
+      "openLetter": "खुला पत्र"
+    },
+    "article": {
+      "by": "द्वारा",
+      "contributorDisclosure": "योगदानकर्ता प्रकटीकरण",
+      "editorNote": "संपादक की टिप्पणी",
+      "contributorDisclaimer": "योगदानकर्ता अस्वीकरण",
+      "aboutContributor": "योगदानकर्ता के बारे में",
+      "defaultDisclaimer": "इस योगदान में व्यक्त विचार लेखक के हैं और आवश्यक नहीं कि वे न्यूज़ पल्स की संपादकीय स्थिति का प्रतिनिधित्व करें।"
+    }
+  },
   "sections": {
     "exploreCategories": "श्रेणियाँ देखें",
     "spotlight": "स्पॉटलाइट",

@@ -55,6 +55,34 @@
     "pulseDialogue": "Pulse Dialogue",
     "techGadgets": "Tech & Gadgets"
   },
+  "pulseDialogue": {
+    "exploreSubtitle": "Ideas and independent voices",
+    "landing": {
+      "description": "Ideas, essays, conversations and perspectives from writers, scholars, experts and independent voices.",
+      "featuredDialogue": "Featured Dialogue",
+      "latestContributions": "Latest Contributions"
+    },
+    "formats": {
+      "column": "Column",
+      "guestColumn": "Guest Column",
+      "essay": "Essay",
+      "viewpoint": "Viewpoint",
+      "conversation": "Conversation",
+      "interview": "Interview",
+      "literaryEssay": "Literary Essay",
+      "cultureIdeas": "Culture & Ideas",
+      "expertPerspective": "Expert Perspective",
+      "openLetter": "Open Letter"
+    },
+    "article": {
+      "by": "By",
+      "contributorDisclosure": "Contributor Disclosure",
+      "editorNote": "Editor's Note",
+      "contributorDisclaimer": "Contributor Disclaimer",
+      "aboutContributor": "About the Contributor",
+      "defaultDisclaimer": "The views expressed in this contribution are those of the author and do not necessarily represent the editorial position of News Pulse."
+    }
+  },
   "sections": {
     "exploreCategories": "Explore Categories",
     "spotlight": "Spotlight",

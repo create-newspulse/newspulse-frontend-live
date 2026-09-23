@@ -48,6 +48,45 @@ describe('public SEO helpers', () => {
     expect((seo?.newsArticleJsonLd?.publisher as any)?.name).toBe('News Pulse Media');
   });
 
+  test('Pulse Dialogue SEO uses the public contributor as Person author while publisher remains News Pulse', () => {
+    const seo = buildArticleSeoMetadata({
+      ...article,
+      category: 'pulse-dialogue',
+      authorName: 'News Pulse Desk User',
+      pulseDialogue: {
+        dialogueFormat: 'guest_column',
+        bylineSnapshot: {
+          name: 'Dr Asha Mehta',
+          designation: 'Urban Planner',
+          affiliation: 'Civic Futures',
+          photo: { url: '/contributors/asha.jpg', alt: 'Dr Asha Mehta portrait' },
+        },
+        contributor: {
+          name: 'Current Contributor',
+          internalEmail: 'private@example.com',
+          internalNotes: 'Private note',
+          rightsConsent: true,
+        },
+      },
+    } as any, 'en', 'https://www.newspulse.co.in');
+
+    const author = seo?.newsArticleJsonLd?.author as any;
+
+    expect(seo?.authorName).toBe('Dr Asha Mehta');
+    expect(author).toEqual(expect.objectContaining({
+      '@type': 'Person',
+      name: 'Dr Asha Mehta',
+      image: 'https://www.newspulse.co.in/contributors/asha.jpg',
+      affiliation: { '@type': 'Organization', name: 'Civic Futures' },
+    }));
+    expect((seo?.newsArticleJsonLd?.publisher as any)?.name).toBe('News Pulse Media');
+    const serialized = JSON.stringify(seo?.newsArticleJsonLd);
+    expect(serialized).not.toContain('News Pulse Desk User');
+    expect(serialized).not.toContain('private@example.com');
+    expect(serialized).not.toContain('Private note');
+    expect(serialized).not.toContain('rightsConsent');
+  });
+
   test('language canonical URLs are correct and hreflang appears only for existing translations', () => {
     expect(getArticleCanonicalUrl(article, 'hi', 'https://www.newspulse.co.in')).toBe('https://www.newspulse.co.in/hi/news/hindi-real-headline');
     expect(getArticleCanonicalUrl({ ...article, seo: { canonicalUrl: 'https://www.newspulse.co.in/news/global-canonical' } }, 'hi', 'https://www.newspulse.co.in')).toBe('https://www.newspulse.co.in/hi/news/hindi-real-headline');

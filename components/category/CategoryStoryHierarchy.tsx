@@ -21,6 +21,9 @@ export type CategoryStoryHierarchyItem = {
   readingTime?: string;
   authorName?: string;
   authorDesignation?: string;
+  contributorPhotoSrc?: string;
+  contributorPhotoAlt?: string;
+  contributorAffiliation?: string;
   raw?: unknown;
 };
 
@@ -128,6 +131,27 @@ function TitleLink({ item, className }: { item: CategoryStoryHierarchyItem; clas
   );
 }
 
+function ContributorLine({ item, compact = false }: { item: CategoryStoryHierarchyItem; compact?: boolean }) {
+  if (!item.authorName && !item.contributorPhotoSrc) return null;
+  return (
+    <div className={classNames('flex min-w-0 items-center gap-2 text-newsPulse-navy', compact ? 'mt-2 text-xs' : 'mt-3 text-sm')}>
+      {item.contributorPhotoSrc ? (
+        <img
+          src={item.contributorPhotoSrc}
+          alt={item.contributorPhotoAlt || item.authorName || 'Contributor'}
+          className={classNames('shrink-0 rounded-full border border-slate-200 bg-slate-100 object-cover', compact ? 'h-7 w-7' : 'h-9 w-9')}
+          loading="lazy"
+        />
+      ) : null}
+      <div className="min-w-0">
+        {item.authorName ? <div className="font-semibold">By {item.authorName}</div> : null}
+        {item.authorDesignation ? <div className="truncate text-newsPulse-slate">{item.authorDesignation}</div> : null}
+        {!compact && item.contributorAffiliation ? <div className="truncate text-newsPulse-slate">{item.contributorAffiliation}</div> : null}
+      </div>
+    </div>
+  );
+}
+
 function TopStoryCard({ item, topLabel, renderTopActions }: { item: CategoryStoryHierarchyItem; topLabel: string; renderTopActions?: (item: CategoryStoryHierarchyItem) => React.ReactNode }) {
   return (
     <section className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_22px_48px_-38px_rgba(15,23,42,0.34)]">
@@ -149,12 +173,7 @@ function TopStoryCard({ item, topLabel, renderTopActions }: { item: CategoryStor
             <TitleLink item={item} className="block" />
           </h2>
           {item.summary ? <p className="mt-3 line-clamp-3 text-sm leading-6 text-newsPulse-slate">{item.summary}</p> : null}
-          {item.authorName ? (
-            <div className="mt-3 text-sm text-newsPulse-navy">
-              <div className="font-semibold">By {item.authorName}</div>
-              {item.authorDesignation ? <div className="text-newsPulse-slate">{item.authorDesignation}</div> : null}
-            </div>
-          ) : null}
+          <ContributorLine item={item} />
         </div>
       </div>
 
@@ -184,7 +203,7 @@ function KeyStoryCard({ item, editorial = false }: { item: CategoryStoryHierarch
           {item.title}
         </h3>
         {editorial && item.summary ? <p className="mt-2 line-clamp-3 text-sm leading-6 text-newsPulse-slate">{item.summary}</p> : null}
-        {item.authorName ? <div className="mt-3 text-sm font-semibold text-newsPulse-navy">By {item.authorName}</div> : null}
+        <ContributorLine item={item} compact />
       </div>
     </article>
   );
@@ -202,7 +221,7 @@ function LatestRow({ item, editorial = false }: { item: CategoryStoryHierarchyIt
           {item.title}
         </h3>
         {item.summary ? <p className="mt-1 line-clamp-2 text-sm leading-6 text-newsPulse-slate">{item.summary}</p> : null}
-        {editorial && item.authorName ? <div className="mt-2 text-xs font-semibold text-newsPulse-slate">By {item.authorName}</div> : null}
+        {(editorial && item.authorName) || item.contributorPhotoSrc ? <ContributorLine item={item} compact /> : null}
       </div>
       {!editorial ? (
         <StoryImage storyId={item.id} src={item.imageSrc || COVER_PLACEHOLDER_SRC} alt={item.titleText} variant="mini" fitMode={item.imageFitMode || 'cover'} fallbackSrc={COVER_PLACEHOLDER_SRC} className="w-[92px] border border-slate-200/80 sm:w-[116px]" />

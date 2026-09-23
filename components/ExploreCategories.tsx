@@ -261,6 +261,7 @@ export function ExploreCategories({ pathname = "/" }: { pathname?: string }) {
           const Icon = (item as any).icon as LucideIcon;
           const labelKey = labelKeyForCategoryHref(item.href);
           const label = labelKey ? t(labelKey) : item.label;
+          const subtitle = item.href === '/pulse-dialogue' ? t('pulseDialogue.exploreSubtitle') : (item as any).subtitle;
 
           return (
             <Link
@@ -295,7 +296,7 @@ export function ExploreCategories({ pathname = "/" }: { pathname?: string }) {
                   </span>
                 ) : null}
                 </span>
-                <span className="mt-1 block text-[12px] font-medium leading-[1.35] text-slate-600">{(item as any).subtitle}</span>
+                <span className="mt-1 block text-[12px] font-medium leading-[1.35] text-slate-600">{subtitle}</span>
               </span>
 
               <ArrowRight className={["ml-auto mt-0.5 h-5 w-5 shrink-0 self-center", tone.arrow].join(" ")} />

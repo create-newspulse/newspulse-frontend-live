@@ -20,7 +20,15 @@ jest.mock('../../src/i18n/LanguageProvider', () => ({
       'common.untitled': 'Untitled',
       'home.youthPulseTrending': 'Youth Pulse Trending',
       'categories.viralVideos': 'Viral Videos',
+      'categories.pulseDialogue': 'Pulse Dialogue',
       'brand.name': 'News Pulse',
+      'pulseDialogue.formats.guestColumn': 'Guest Column',
+      'pulseDialogue.article.by': 'By',
+      'pulseDialogue.article.contributorDisclosure': 'Contributor Disclosure',
+      'pulseDialogue.article.editorNote': "Editor's Note",
+      'pulseDialogue.article.contributorDisclaimer': 'Contributor Disclaimer',
+      'pulseDialogue.article.aboutContributor': 'About the Contributor',
+      'pulseDialogue.article.defaultDisclaimer': 'The views expressed in this contribution are those of the author and do not necessarily represent the editorial position of News Pulse.',
     } as Record<string, string>)[key] || key,
   }),
 }));
@@ -258,6 +266,75 @@ describe('pages/news/[slug] editorial detail', () => {
     );
 
     expect(screen.getByTestId('article-hero-image').getAttribute('src')).toBe(imageUrl);
+  });
+
+  test('renders Pulse Dialogue contributor attribution and optional public sections without using staff fallback', async () => {
+    render(
+      <NewsSlugDetailPage
+        messages={{}}
+        locale="en"
+        lang="en"
+        slug="city-dialogue"
+        siteUrl="https://www.newspulse.co.in"
+        article={editorialArticle({
+          _id: 'pulse-article-1',
+          category: 'pulse-dialogue',
+          title: 'A City Dialogue',
+          summary: 'A signed public contribution.',
+          slug: 'city-dialogue',
+          authorName: 'News Pulse Desk User',
+          authorDesignation: 'Staff Editor',
+          coverImageUrl: '/covers/city-dialogue.jpg',
+          readingTime: 4,
+          pulseDialogue: {
+            dialogueFormat: 'guest_column',
+            series: 'Civic Lens',
+            contributorDisclosure: 'The contributor works with civic groups.',
+            editorNote: 'Edited for clarity and length.',
+            contributorDisclaimer: 'default',
+            showAboutContributor: true,
+            bylineSnapshot: {
+              name: 'Dr Asha Mehta',
+              designation: 'Urban Planner',
+              affiliation: 'Civic Futures',
+              photo: { url: '/contributors/asha.jpg', alt: 'Dr Asha Mehta portrait' },
+            },
+            contributor: {
+              shortBio: 'Asha writes about Indian cities and public spaces.',
+              internalEmail: 'private@example.com',
+              internalNotes: 'Private note',
+            },
+          },
+        }) as any}
+        safeHtml="<p>Pulse Dialogue article body.</p>"
+        topStories={[]}
+        relatedStories={[]}
+        error={null}
+        pending={false}
+      />
+    );
+
+    expect(screen.getByText('Pulse Dialogue')).toBeTruthy();
+    expect(screen.getByText('Guest Column')).toBeTruthy();
+    expect(screen.getByText('Civic Lens')).toBeTruthy();
+    expect(screen.getByText(/By\s+Dr Asha Mehta/)).toBeTruthy();
+    expect(screen.getByText('Urban Planner')).toBeTruthy();
+    expect(screen.getByText('Civic Futures')).toBeTruthy();
+    expect(screen.getByAltText('Dr Asha Mehta portrait').getAttribute('src')).toBe('/contributors/asha.jpg');
+    expect(screen.getByTestId('article-hero-image').getAttribute('src')).toBe('/covers/city-dialogue.jpg');
+    expect(screen.getByText('Contributor Disclosure')).toBeTruthy();
+    expect(screen.getByText('The contributor works with civic groups.')).toBeTruthy();
+    expect(screen.getByText("Editor's Note")).toBeTruthy();
+    expect(screen.getByText('Edited for clarity and length.')).toBeTruthy();
+    expect(screen.getByText('Contributor Disclaimer')).toBeTruthy();
+    expect(screen.getByText('The views expressed in this contribution are those of the author and do not necessarily represent the editorial position of News Pulse.')).toBeTruthy();
+    expect(screen.getByText('About the Contributor')).toBeTruthy();
+    expect(screen.getByText('Asha writes about Indian cities and public spaces.')).toBeTruthy();
+    expect(screen.getByText('Pulse Dialogue article body.')).toBeTruthy();
+    expect(document.body.textContent).not.toContain('News Pulse Desk User');
+    expect(document.body.textContent).not.toContain('Staff Editor');
+    expect(document.body.textContent).not.toContain('private@example.com');
+    expect(document.body.textContent).not.toContain('Private note');
   });
 
   test('renders controlled inline article images responsively with caption, credit, and fallback', async () => {

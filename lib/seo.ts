@@ -6,6 +6,7 @@ import {
   getLocalizedSeoValue,
   getStoredSeoValue,
 } from './editorialDisplay';
+import { getPulseDialogueMetadata } from './pulseDialogue';
 import {
   getLocalizedArticleFields,
   getPublicArticleStatus,
@@ -241,12 +242,22 @@ export function buildArticleSeoMetadata(article: unknown, langInput: unknown, si
   const ogDescription = truncate(getLocalizedSeoValue(item, lang, 'ogDescription', 'openGraphDescription', 'socialDescription') || description, 220);
   const heroImage = getLocalizedSeoValue(item, lang, 'ogImage', 'openGraphImage', 'twitterImage', 'image') || resolveCoverImageUrl(item, { lang }) || '';
   const ogImage = absolutePublicUrl(heroImage, siteUrl);
-  const authorName = cleanText(getArticleAuthorName(item));
+  const pulseDialogue = getPulseDialogueMetadata(item);
+  const authorName = cleanText(pulseDialogue?.contributorName || getArticleAuthorName(item));
+  const authorImage = absolutePublicUrl(pulseDialogue?.contributorPhotoUrl || '', siteUrl);
+  const authorAffiliation = cleanText(pulseDialogue?.contributorAffiliation || '');
   const publishedAt = articlePublishedAt(item);
   const modifiedAt = articleModifiedAt(item);
   const section = getArticleSection(item, lang);
   const alternates = getArticleAlternates(item, siteUrl);
   const logoUrl = absolutePublicUrl(NEWS_PULSE_LOGO_PATH, siteUrl);
+
+  const authorJsonLd = authorName ? removeUndefined({
+    '@type': 'Person',
+    name: authorName,
+    image: authorImage || undefined,
+    affiliation: authorAffiliation ? { '@type': 'Organization', name: authorAffiliation } : undefined,
+  }) : undefined;
 
   const newsArticleJsonLd: Record<string, unknown> = {
     '@context': 'https://schema.org',
@@ -265,7 +276,7 @@ export function buildArticleSeoMetadata(article: unknown, langInput: unknown, si
     image: ogImage ? [ogImage] : undefined,
     datePublished: publishedAt || undefined,
     dateModified: modifiedAt || publishedAt || undefined,
-    author: authorName ? { '@type': 'Person', name: authorName } : undefined,
+    author: authorJsonLd,
   };
 
   const breadcrumbJsonLd: Record<string, unknown> = {

@@ -55,6 +55,34 @@
     "pulseDialogue": "પલ્સ સંવાદ",
     "techGadgets": "ટેક અને ગેજેટ્સ"
   },
+  "pulseDialogue": {
+    "exploreSubtitle": "વિચારો અને સ્વતંત્ર અવાજો",
+    "landing": {
+      "description": "લેખકો, વિદ્વાનો, નિષ્ણાતો અને સ્વતંત્ર અવાજોના વિચારો, નિબંધો, સંવાદો અને દૃષ્ટિકોણ.",
+      "featuredDialogue": "મુખ્ય સંવાદ",
+      "latestContributions": "તાજેતરના યોગદાન"
+    },
+    "formats": {
+      "column": "કૉલમ",
+      "guestColumn": "અતિથિ કૉલમ",
+      "essay": "નિબંધ",
+      "viewpoint": "દૃષ્ટિકોણ",
+      "conversation": "સંવાદ",
+      "interview": "મુલાકાત",
+      "literaryEssay": "સાહિત્યિક નિબંધ",
+      "cultureIdeas": "સંસ્કૃતિ અને વિચારો",
+      "expertPerspective": "નિષ્ણાત દૃષ્ટિકોણ",
+      "openLetter": "ખુલ્લો પત્ર"
+    },
+    "article": {
+      "by": "દ્વારા",
+      "contributorDisclosure": "યોગદાનકર્તા ખુલાસો",
+      "editorNote": "સંપાદકની નોંધ",
+      "contributorDisclaimer": "યોગદાનકર્તા અસ્વીકરણ",
+      "aboutContributor": "યોગદાનકર્તા વિશે",
+      "defaultDisclaimer": "આ યોગદાનમાં વ્યક્ત થયેલા વિચારો લેખકના છે અને જરૂરી નથી કે તે ન્યૂઝ પલ્સની સંપાદકીય સ્થિતિનું પ્રતિનિધિત્વ કરે."
+    }
+  },
   "sections": {
     "exploreCategories": "વિભાગો શોધો",
     "spotlight": "સ્પોટલાઇટ",

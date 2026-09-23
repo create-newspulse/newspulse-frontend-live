@@ -13,6 +13,7 @@ import { debugStoryCard, getStoryId, getStoryReactKey } from '../lib/storyIdenti
 import { formatEditorialDateTime, resolveStoryDateIso } from '../lib/storyDateTime';
 import StoryImage, { TopStoryImage } from '../src/components/story/StoryImage';
 import { getArticleAuthorDesignation, getArticleAuthorName, getArticleReadingTime, getEditorialTypeLabel, isEditorialArticle } from '../lib/editorialDisplay';
+import { getPulseDialogueFormatLabel, getPulseDialogueMetadata } from '../lib/pulseDialogue';
 import NewsPulseCategoryShell from './NewsPulseCategoryShell';
 import CategoryDeskHeader from '../src/components/category/CategoryDeskHeader';
 import CategoryStoryHierarchy, { type CategoryStoryHierarchyItem } from './category/CategoryStoryHierarchy';
@@ -211,6 +212,9 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
     title: `${localizedTitle || title} Pulse`,
     description: `Latest ${String(localizedTitle || title).toLowerCase()} stories from News Pulse.`,
   };
+  const resolvedDeskCopy = routeCategoryKey === 'pulse-dialogue'
+    ? { ...deskCopy, description: t('pulseDialogue.landing.description') }
+    : deskCopy;
 
   // Allow deep-linking into a filtered view (used by article-page category header search).
   React.useEffect(() => {
@@ -400,9 +404,9 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
 
   const renderHeader = () => (
     <CategoryDeskHeader
-      eyebrow={deskCopy.eyebrow}
-      title={deskCopy.title}
-      description={deskCopy.description}
+      eyebrow={resolvedDeskCopy.eyebrow}
+      title={resolvedDeskCopy.title}
+      description={resolvedDeskCopy.description}
     >
       {editorialSearch}
     </CategoryDeskHeader>
@@ -415,6 +419,8 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
     const title = localized.title || t('categoryPage.untitled');
     const image = resolveCoverImageUrl(a) || COVER_PLACEHOLDER_SRC;
     const editorialLabel = routeCategoryKey === 'editorial' || isEditorialArticle(a) ? getEditorialTypeLabel(a) : '';
+    const pulseDialogue = routeCategoryKey === 'pulse-dialogue' ? getPulseDialogueMetadata(a) : null;
+    const pulseFormatLabel = pulseDialogue ? getPulseDialogueFormatLabel(pulseDialogue.dialogueFormat, t) : '';
 
     return {
       id,
@@ -428,9 +434,11 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
       image,
       fitMode: resolveCoverFitMode(a, { src: image, altText: title }),
       editorialLabel,
-      authorName: editorialLabel ? getArticleAuthorName(a) : '',
-      authorDesignation: editorialLabel ? getArticleAuthorDesignation(a) : '',
-      readingTime: editorialLabel ? getArticleReadingTime(a) : '',
+      pulseDialogue,
+      pulseFormatLabel,
+      authorName: pulseDialogue?.contributorName || (editorialLabel ? getArticleAuthorName(a) : ''),
+      authorDesignation: pulseDialogue?.contributorDesignation || (editorialLabel ? getArticleAuthorDesignation(a) : ''),
+      readingTime: editorialLabel || pulseDialogue ? getArticleReadingTime(a) : '',
     };
   };
 
@@ -447,13 +455,16 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
         summaryText: card.summary,
         imageSrc: card.image,
         imageFitMode: card.fitMode,
-        label: card.editorialLabel || pageTitle,
-        meta: [],
+        label: card.pulseFormatLabel || card.editorialLabel || pageTitle,
+        meta: card.pulseDialogue?.series ? [card.pulseDialogue.series] : [],
         dateIso: card.dateIso,
         dateLabel: card.when,
         readingTime: card.readingTime,
         authorName: card.authorName,
         authorDesignation: card.authorDesignation,
+        contributorPhotoSrc: card.pulseDialogue?.contributorPhotoUrl || '',
+        contributorPhotoAlt: card.pulseDialogue?.contributorPhotoAlt || card.authorName,
+        contributorAffiliation: card.pulseDialogue?.contributorAffiliation || '',
         raw: article,
       } satisfies CategoryStoryHierarchyItem;
     })
@@ -590,7 +601,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
         {useCategoryShell ? (
           <div className="border-b border-newsPulse-slate/20 px-4 py-4">
             <div className="text-[11px] font-black uppercase tracking-[0.22em] text-newsPulse-blue/80">{pageTitle}</div>
-            <div className="mt-1 text-lg font-extrabold tracking-tight text-newsPulse-navy">Fresh Stories</div>
+            <div className="mt-1 text-lg font-extrabold tracking-tight text-newsPulse-navy">{routeCategoryKey === 'pulse-dialogue' ? t('pulseDialogue.landing.latestContributions') : 'Fresh Stories'}</div>
           </div>
         ) : null}
         <ul className={useCategoryShell ? 'grid gap-4 p-3 sm:grid-cols-2' : 'grid gap-5 sm:grid-cols-2 lg:grid-cols-3'}>
@@ -617,9 +628,9 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
       <CategoryStoryHierarchy
         items={hierarchyItems}
         categoryLabel={routeCategoryKey === 'web-stories' ? 'Web Stories' : pageTitle}
-        topLabel={routeCategoryKey === 'web-stories' ? 'Featured Web Story' : isEditorialPage ? 'Featured Editorial' : 'Top Story'}
+        topLabel={routeCategoryKey === 'pulse-dialogue' ? t('pulseDialogue.landing.featuredDialogue') : routeCategoryKey === 'web-stories' ? 'Featured Web Story' : isEditorialPage ? 'Featured Editorial' : 'Top Story'}
         keyLabel={isEditorialPage ? 'Key Editorials' : 'Key Stories'}
-        latestLabel={isEditorialPage ? 'Recent Editorials' : routeCategoryKey === 'web-stories' ? 'Web Stories' : 'Latest'}
+        latestLabel={routeCategoryKey === 'pulse-dialogue' ? t('pulseDialogue.landing.latestContributions') : isEditorialPage ? 'Recent Editorials' : routeCategoryKey === 'web-stories' ? 'Web Stories' : 'Latest'}
         loadMoreLabel={LOAD_MORE_LABELS[routeCategoryKey] || `Load More ${pageTitle} Stories`}
         emptyTitle={t('categoryPage.noStoriesYet')}
         loading={!loaded}

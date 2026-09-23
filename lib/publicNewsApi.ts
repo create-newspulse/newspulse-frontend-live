@@ -28,6 +28,42 @@ export type ArticleBase = {
   publishedAt?: string;
   category?: string;
   language?: string;
+  pulseDialogue?: {
+    contributorId?: string | null;
+    dialogueFormat?: string | null;
+    series?: string | null;
+    bylineDesignationOverride?: string | null;
+    bylineSnapshot?: {
+      name?: string | null;
+      designation?: string | null;
+      affiliation?: string | null;
+      photo?: {
+        url?: string | null;
+        publicId?: string | null;
+        alt?: string | null;
+      } | null;
+    } | null;
+    contributorDisclosure?: string | null;
+    editorNote?: string | null;
+    contributorDisclaimer?: string | null;
+    showAboutContributor?: boolean | null;
+    contributor?: {
+      id?: string | null;
+      name?: string | null;
+      canonicalName?: string | null;
+      photo?: {
+        url?: string | null;
+        publicId?: string | null;
+        alt?: string | null;
+      } | null;
+      publicDesignation?: string | null;
+      affiliation?: string | null;
+      shortBio?: string | null;
+      slug?: string | null;
+      website?: string | null;
+      socialLinks?: Record<string, string> | null;
+    } | null;
+  } | null;
 };
 
 export type Article = ArticleBase & {

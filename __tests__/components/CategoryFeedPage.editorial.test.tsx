@@ -26,8 +26,23 @@ jest.mock('../../src/i18n/LanguageProvider', () => ({
       'categoryPage.publicFeedProtected': 'Public feed is protected.',
       'categoryPage.ensureBackendRunning': 'Ensure backend is running.',
       'errors.fetchFailed': 'Fetch failed',
+      'categories.pulseDialogue': 'Pulse Dialogue',
+      'pulseDialogue.landing.description': 'Signed public contributions from outside voices, clearly labelled and edited by News Pulse.',
+      'pulseDialogue.landing.featuredDialogue': 'Featured Dialogue',
+      'pulseDialogue.landing.latestContributions': 'Latest Contributions',
+      'pulseDialogue.formats.guestColumn': 'Guest Column',
     } as Record<string, string>)[key] || key,
   }),
+}));
+
+jest.mock('../../components/NewsPulseCategoryShell', () => ({
+  __esModule: true,
+  default: ({ topContent, children }: { topContent?: React.ReactNode; children: React.ReactNode }) => (
+    <main>
+      {topContent}
+      {children}
+    </main>
+  ),
 }));
 
 jest.mock('next/router', () => ({
@@ -39,7 +54,7 @@ jest.mock('next/router', () => ({
 
 jest.mock('../../src/components/story/StoryImage', () => ({
   __esModule: true,
-  default: ({ alt }: { alt: string }) => <img alt={alt} />,
+  default: ({ alt, src }: { alt: string; src?: string }) => <img alt={alt} src={src} />,
 }));
 
 function mockArticle(overrides: Record<string, any>) {
@@ -60,6 +75,11 @@ function mockArticle(overrides: Record<string, any>) {
 function renderEditorialPage(items: any[]) {
   (fetchPublicNews as jest.Mock).mockResolvedValue({ items, meta: {}, endpoint: '/api/public/news' });
   return render(<CategoryFeedPage title="Editorial" categoryKey="editorial" />);
+}
+
+function renderPulseDialoguePage(items: any[]) {
+  (fetchPublicNews as jest.Mock).mockResolvedValue({ items, meta: {}, endpoint: '/api/public/news' });
+  return render(<CategoryFeedPage title="Pulse Dialogue" categoryKey="pulse-dialogue" useCategoryShell />);
 }
 
 describe('CategoryFeedPage editorial listing', () => {
@@ -173,5 +193,72 @@ describe('CategoryFeedPage editorial listing', () => {
     expect(screen.getByText('News Pulse opinions, analysis, perspectives and in-depth commentary.')).toBeTruthy();
     expect(screen.getByPlaceholderText(placeholder)).toBeTruthy();
     expect(await screen.findByText('No stories yet.')).toBeTruthy();
+  });
+
+  test('renders Pulse Dialogue landing copy and contributor metadata without replacing the article cover', async () => {
+    renderPulseDialoguePage([
+      mockArticle({
+        _id: 'pulse-1',
+        category: 'pulse-dialogue',
+        slug: 'city-dialogue',
+        title: 'A City Dialogue',
+        summary: 'A signed public contribution.',
+        coverImageUrl: '/covers/city-dialogue.jpg',
+        authorName: 'News Pulse Desk',
+        readingTime: 4,
+        pulseDialogue: {
+          dialogueFormat: 'guest_column',
+          series: 'Civic Lens',
+          bylineSnapshot: {
+            name: 'Dr Asha Mehta',
+            designation: 'Urban Planner',
+            affiliation: 'Civic Futures',
+            photo: { url: '/contributors/asha.jpg', alt: 'Dr Asha Mehta portrait' },
+          },
+          contributor: {
+            shortBio: 'Writes on cities.',
+          },
+        },
+      }),
+      ...Array.from({ length: 5 }, (_, index) => mockArticle({
+        _id: `pulse-extra-${index + 2}`,
+        category: 'pulse-dialogue',
+        slug: `extra-dialogue-${index + 2}`,
+        title: `Extra Dialogue ${index + 2}`,
+        pulseDialogue: {
+          dialogueFormat: 'guest_column',
+          bylineSnapshot: { name: `Contributor ${index + 2}` },
+        },
+      })),
+    ]);
+
+    expect(await screen.findByText('A City Dialogue')).toBeTruthy();
+    expect(screen.getByText('Signed public contributions from outside voices, clearly labelled and edited by News Pulse.')).toBeTruthy();
+    expect(screen.getByText('Featured Dialogue')).toBeTruthy();
+    expect(screen.getByText('Latest Contributions')).toBeTruthy();
+    expect(screen.getAllByText('Guest Column').length).toBeGreaterThan(0);
+    expect(screen.getByText('Civic Lens')).toBeTruthy();
+    expect(screen.getByText(/By\s+Dr Asha Mehta/)).toBeTruthy();
+    expect(screen.getByText('Urban Planner')).toBeTruthy();
+    expect(screen.getByText('Civic Futures')).toBeTruthy();
+    expect(screen.getByAltText('Dr Asha Mehta portrait').getAttribute('src')).toBe('/contributors/asha.jpg');
+    expect(screen.getByAltText('A City Dialogue').getAttribute('src')).toBe('/covers/city-dialogue.jpg');
+    expect(screen.queryByText('By News Pulse Desk')).toBeNull();
+  });
+
+  test('keeps Pulse Dialogue cards safe when contributor metadata is missing', async () => {
+    renderPulseDialoguePage([
+      mockArticle({
+        _id: 'pulse-missing',
+        category: 'pulse-dialogue',
+        slug: 'missing-contributor',
+        title: 'Dialogue Without Public Contributor',
+        pulseDialogue: null,
+        authorName: 'News Pulse Desk',
+      }),
+    ]);
+
+    expect(await screen.findByText('Dialogue Without Public Contributor')).toBeTruthy();
+    expect(screen.queryByText('By News Pulse Desk')).toBeNull();
   });
 });

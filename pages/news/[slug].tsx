@@ -27,6 +27,7 @@ import { hasRenderedTwitterWidgetFrame, loadTwitterWidgetsIn } from '../../lib/x
 import {
   getArticleAuthorDesignation,
   getArticleAuthorName,
+  getArticleReadingTime,
   getEditorialTypeLabel,
   getImageAltText,
   getImageCaption,
@@ -42,6 +43,12 @@ import {
   resolvePublicSiteUrl,
   safeJsonLd,
 } from '../../lib/seo';
+import {
+  getPulseDialogueFormatLabel,
+  getPulseDialogueMetadata,
+  resolvePulseDialogueDisclaimer,
+  type PulseDialogueMetadata,
+} from '../../lib/pulseDialogue';
 
 type ArticleDisplayAdProps = {
   slotId: 'ARTICLE_INLINE' | 'ARTICLE_END';
@@ -803,6 +810,76 @@ function RelatedStoryShell({
   );
 }
 
+function PulseDialogueArticleByline({ metadata, byLabel }: { metadata: PulseDialogueMetadata; byLabel: string }) {
+  if (!metadata.contributorName && !metadata.contributorPhotoUrl) return null;
+
+  return (
+    <div className="flex min-w-0 items-center gap-3 text-sm text-slate-800">
+      {metadata.contributorPhotoUrl ? (
+        <img
+          src={metadata.contributorPhotoUrl}
+          alt={metadata.contributorPhotoAlt || metadata.contributorName || 'Contributor'}
+          className="h-12 w-12 shrink-0 rounded-full border border-slate-200 bg-slate-100 object-cover"
+          loading="lazy"
+        />
+      ) : null}
+      <div className="min-w-0">
+        {metadata.contributorName ? (
+          <div className="font-bold text-slate-900">{byLabel} {metadata.contributorName}</div>
+        ) : null}
+        {metadata.contributorDesignation ? <div className="text-slate-600">{metadata.contributorDesignation}</div> : null}
+        {metadata.contributorAffiliation ? <div className="text-slate-600">{metadata.contributorAffiliation}</div> : null}
+      </div>
+    </div>
+  );
+}
+
+function PulseDialogueInfoBlock({ label, children }: { label: string; children: React.ReactNode }) {
+  if (!children) return null;
+  return (
+    <section className="not-prose rounded-2xl border border-slate-200 bg-slate-50/70 p-4 text-slate-800">
+      <div className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-newsPulse-blue">{label}</div>
+      <div className="mt-2 text-sm leading-6 text-slate-700">{children}</div>
+    </section>
+  );
+}
+
+function PulseDialogueArticleExtras({ metadata, t }: { metadata: PulseDialogueMetadata; t: (key: string) => string }) {
+  const disclaimer = resolvePulseDialogueDisclaimer(metadata.contributorDisclaimer, t);
+  const showAbout = Boolean(metadata.showAboutContributor && (metadata.contributorName || metadata.contributorShortBio));
+
+  if (!metadata.contributorDisclosure && !metadata.editorNote && !disclaimer && !showAbout) return null;
+
+  return (
+    <div className="grid gap-3">
+      {metadata.contributorDisclosure ? (
+        <PulseDialogueInfoBlock label={t('pulseDialogue.article.contributorDisclosure')}>
+          {metadata.contributorDisclosure}
+        </PulseDialogueInfoBlock>
+      ) : null}
+
+      {metadata.editorNote ? (
+        <PulseDialogueInfoBlock label={t('pulseDialogue.article.editorNote')}>
+          {metadata.editorNote}
+        </PulseDialogueInfoBlock>
+      ) : null}
+
+      {disclaimer ? (
+        <PulseDialogueInfoBlock label={t('pulseDialogue.article.contributorDisclaimer')}>
+          {disclaimer}
+        </PulseDialogueInfoBlock>
+      ) : null}
+
+      {showAbout ? (
+        <PulseDialogueInfoBlock label={t('pulseDialogue.article.aboutContributor')}>
+          {metadata.contributorName ? <div className="font-bold text-slate-900">{metadata.contributorName}</div> : null}
+          {metadata.contributorShortBio ? <div className={metadata.contributorName ? 'mt-1' : ''}>{metadata.contributorShortBio}</div> : null}
+        </PulseDialogueInfoBlock>
+      ) : null}
+    </div>
+  );
+}
+
 function debugNewsDetailResolution(stage: string, payload: Record<string, unknown>) {
   if (process.env.NODE_ENV === 'production') return;
   console.info('[pages/news/[slug]]', { stage, ...payload });
@@ -1032,8 +1109,17 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
   const categoryLabel = React.useMemo(() => categoryLabelFromKey(categoryKey), [categoryKey]);
   const displayCategoryLabel = React.useMemo(() => cleanText(localized.categoryLabel) || categoryLabel, [categoryLabel, localized.categoryLabel]);
   const editorialLabel = React.useMemo(() => (isEditorialArticle(resolvedArticle) ? getEditorialTypeLabel(resolvedArticle) : ''), [resolvedArticle]);
+  const pulseDialogueMetadata = React.useMemo(() => getPulseDialogueMetadata(resolvedArticle), [resolvedArticle]);
+  const pulseDialogueFormatLabel = React.useMemo(
+    () => pulseDialogueMetadata ? getPulseDialogueFormatLabel(pulseDialogueMetadata.dialogueFormat, t) : '',
+    [pulseDialogueMetadata, t]
+  );
+  const isPulseDialogueDetail = categoryKey === 'pulse-dialogue' || Boolean(pulseDialogueMetadata);
   const authorName = React.useMemo(() => getArticleAuthorName(resolvedArticle), [resolvedArticle]);
   const authorDesignation = React.useMemo(() => getArticleAuthorDesignation(resolvedArticle), [resolvedArticle]);
+  const visibleAuthorName = isPulseDialogueDetail ? (pulseDialogueMetadata?.contributorName || '') : authorName;
+  const visibleAuthorDesignation = isPulseDialogueDetail ? (pulseDialogueMetadata?.contributorDesignation || '') : authorDesignation;
+  const pulseReadingTime = React.useMemo(() => pulseDialogueMetadata ? getArticleReadingTime(resolvedArticle) : '', [pulseDialogueMetadata, resolvedArticle]);
   const imageCaption = React.useMemo(() => getImageCaption(resolvedArticle, lang), [lang, resolvedArticle]);
   const imageCredit = React.useMemo(() => getImageCredit(resolvedArticle, lang), [lang, resolvedArticle]);
   const imageAltText = React.useMemo(() => cleanText(getImageAltText(resolvedArticle, lang)) || displayTitle, [displayTitle, lang, resolvedArticle]);
@@ -1133,7 +1219,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
         {articleSeo?.twitterImage ? <meta name="twitter:image" content={articleSeo.twitterImage} /> : null}
         {publishedDate ? <meta property="article:published_time" content={publishedDate} /> : null}
         {updatedDate ? <meta property="article:modified_time" content={updatedDate} /> : null}
-        {authorName ? <meta name="author" content={authorName} /> : null}
+        {visibleAuthorName ? <meta name="author" content={visibleAuthorName} /> : null}
         {articleSeo?.newsArticleJsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(articleSeo.newsArticleJsonLd) }} /> : null}
         {articleSeo?.breadcrumbJsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(articleSeo.breadcrumbJsonLd) }} /> : null}
       </Head>
@@ -1185,6 +1271,24 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
                         <span className="inline-flex items-center rounded-full border border-newsPulse-blue/20 bg-newsPulse-blue/10 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.16em] text-newsPulse-blue">
                           {editorialLabel}
                         </span>
+                      </div>
+                    ) : null}
+
+                    {pulseDialogueMetadata ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="inline-flex items-center rounded-full border border-newsPulse-blue/20 bg-newsPulse-blue/10 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.16em] text-newsPulse-blue">
+                          {tx('categories.pulseDialogue', 'Pulse Dialogue')}
+                        </span>
+                        {pulseDialogueFormatLabel ? (
+                          <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.16em] text-slate-700">
+                            {pulseDialogueFormatLabel}
+                          </span>
+                        ) : null}
+                        {pulseDialogueMetadata.series ? (
+                          <span className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                            {pulseDialogueMetadata.series}
+                          </span>
+                        ) : null}
                       </div>
                     ) : null}
 
@@ -1240,13 +1344,15 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
 
                     <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
                       <div className="min-w-0 text-xs font-semibold text-slate-500">
-                        {authorName ? (
+                        {pulseDialogueMetadata ? (
+                          <PulseDialogueArticleByline metadata={pulseDialogueMetadata} byLabel={t('pulseDialogue.article.by')} />
+                        ) : visibleAuthorName ? (
                           <div className="text-sm text-slate-800">
-                            <span className="font-bold">By {authorName}</span>
-                            {authorDesignation ? <span className="text-slate-500">, {authorDesignation}</span> : null}
+                            <span className="font-bold">By {visibleAuthorName}</span>
+                            {visibleAuthorDesignation ? <span className="text-slate-500">, {visibleAuthorDesignation}</span> : null}
                           </div>
                         ) : null}
-                        <div className={authorName ? 'mt-1' : ''}>
+                        <div className={visibleAuthorName || pulseDialogueMetadata?.contributorPhotoUrl ? 'mt-1' : ''}>
                           {publishedDate ? <span>Published {formatEditorialDateTime(publishedDate)}</span> : null}
                           {publishedDate && updatedDate ? ' • ' : null}
                           {updatedDate ? <span>Updated {formatEditorialDateTime(updatedDate)}</span> : null}
@@ -1254,6 +1360,8 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
                           {displayProvider ? displayProvider : null}
                           {displayProvider && displayGeneratedAt ? ' • ' : null}
                           {displayGeneratedAt ? displayGeneratedAt : null}
+                          {(publishedDate || updatedDate || displayProvider || displayGeneratedAt) && pulseReadingTime ? ' • ' : null}
+                          {pulseReadingTime ? <span>{pulseReadingTime}</span> : null}
                         </div>
                       </div>
 
@@ -1379,6 +1487,12 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
                     )}
                   </article>
                 </div>
+
+                {pulseDialogueMetadata ? (
+                  <div className="px-4 md:px-6 pb-6">
+                    <PulseDialogueArticleExtras metadata={pulseDialogueMetadata} t={t} />
+                  </div>
+                ) : null}
 
                 <div className="px-4 md:px-6 pb-6">
                   <ArticleDisplayAd slotId="ARTICLE_END" />
