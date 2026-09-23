@@ -57,6 +57,82 @@ describe('pulseDialogue helpers', () => {
     }));
   });
 
+  test('keeps byline snapshot photo priority with existing nested media asset shapes', () => {
+    const metadata = getPulseDialogueMetadata({
+      category: 'pulse-dialogue',
+      coverImageUrl: '/covers/topic-image.jpg',
+      pulseDialogue: {
+        contributorId: 'contributor-asset-1',
+        bylineSnapshot: {
+          name: 'Snapshot Contributor',
+          photo: {
+            asset: { url: '/contributors/snapshot-asset.jpg', alt: 'Snapshot asset portrait' },
+          },
+        },
+        contributor: {
+          name: 'Current Contributor',
+          photo: { url: '/contributors/current.jpg', alt: 'Current portrait' },
+        },
+      },
+    });
+
+    expect(metadata).toEqual(expect.objectContaining({
+      contributorName: 'Snapshot Contributor',
+      contributorPhotoUrl: '/contributors/snapshot-asset.jpg',
+      contributorPhotoAlt: 'Snapshot asset portrait',
+    }));
+  });
+
+  test('falls back to public contributor photo when snapshot photo is absent', () => {
+    const metadata = getPulseDialogueMetadata({
+      category: 'pulse-dialogue',
+      coverImageUrl: '/covers/topic-image.jpg',
+      pulseDialogue: {
+        contributorId: 'contributor-asset-2',
+        bylineSnapshot: {
+          name: 'Public Contributor',
+          designation: 'Policy Researcher',
+        },
+        contributor: {
+          name: 'Public Contributor',
+          photo: {
+            image: { secureUrl: '/contributors/public-safe.jpg', altText: 'Public contributor portrait' },
+          },
+        },
+      },
+    });
+
+    expect(metadata).toEqual(expect.objectContaining({
+      contributorName: 'Public Contributor',
+      contributorPhotoUrl: '/contributors/public-safe.jpg',
+      contributorPhotoAlt: 'Public contributor portrait',
+    }));
+  });
+
+  test('does not use article cover media as a contributor photo', () => {
+    const metadata = getPulseDialogueMetadata({
+      category: 'pulse-dialogue',
+      imageUrl: '/covers/story-topic.jpg',
+      coverImage: { url: '/covers/story-topic-object.jpg' },
+      pulseDialogue: {
+        contributorId: 'contributor-no-photo',
+        bylineSnapshot: {
+          name: 'No Photo Contributor',
+          designation: 'Civic Writer',
+        },
+        contributor: {
+          name: 'No Photo Contributor',
+        },
+      },
+    });
+
+    expect(metadata).toEqual(expect.objectContaining({
+      contributorName: 'No Photo Contributor',
+      contributorPhotoUrl: '',
+      contributorPhotoAlt: 'No Photo Contributor',
+    }));
+  });
+
   test('localizes known format labels and falls back safely', () => {
     expect(getPulseDialogueFormatLabel('guest_column', t)).toBe('Guest Column');
     expect(getPulseDialogueFormatLabel('open_letter')).toBe('Open Letter');

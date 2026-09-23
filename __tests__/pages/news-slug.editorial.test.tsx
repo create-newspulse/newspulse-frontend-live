@@ -337,6 +337,209 @@ describe('pages/news/[slug] editorial detail', () => {
     expect(document.body.textContent).not.toContain('Private note');
   });
 
+  test('renders public contributor photo fallback without using the article cover image as the byline photo', async () => {
+    render(
+      <NewsSlugDetailPage
+        messages={{}}
+        locale="en"
+        lang="en"
+        slug="public-photo-dialogue"
+        siteUrl="https://www.newspulse.co.in"
+        article={editorialArticle({
+          _id: 'pulse-article-public-photo',
+          category: 'pulse-dialogue',
+          title: 'A Public Photo Dialogue',
+          summary: 'A signed public contribution with public contributor media.',
+          slug: 'public-photo-dialogue',
+          coverImageUrl: '/covers/public-photo-dialogue.jpg',
+          pulseDialogue: {
+            bylineSnapshot: {
+              name: 'Mira Shah',
+              designation: 'Education Researcher',
+              affiliation: 'Learning Lab',
+            },
+            contributor: {
+              name: 'Mira Shah',
+              photo: {
+                image: { secureUrl: '/contributors/mira-public.jpg', altText: 'Mira Shah portrait' },
+              },
+            },
+          },
+        }) as any}
+        safeHtml="<p>Pulse Dialogue public photo article body.</p>"
+        topStories={[]}
+        relatedStories={[]}
+        error={null}
+        pending={false}
+      />
+    );
+
+    expect(screen.getByAltText('Mira Shah portrait').getAttribute('src')).toBe('/contributors/mira-public.jpg');
+    expect(screen.getByTestId('article-hero-image').getAttribute('src')).toBe('/covers/public-photo-dialogue.jpg');
+    expect(document.querySelectorAll('img[src="/covers/public-photo-dialogue.jpg"]')).toHaveLength(1);
+    expect(document.querySelectorAll('img[src="/contributors/mira-public.jpg"]')).toHaveLength(1);
+  });
+
+  test('keeps Pulse Dialogue no-photo byline layout clean', async () => {
+    render(
+      <NewsSlugDetailPage
+        messages={{}}
+        locale="en"
+        lang="en"
+        slug="no-photo-dialogue"
+        siteUrl="https://www.newspulse.co.in"
+        article={editorialArticle({
+          _id: 'pulse-article-no-photo',
+          category: 'pulse-dialogue',
+          title: 'A No Photo Dialogue',
+          summary: 'A signed public contribution without contributor media.',
+          slug: 'no-photo-dialogue',
+          coverImageUrl: '/covers/no-photo-dialogue.jpg',
+          pulseDialogue: {
+            bylineSnapshot: {
+              name: 'Rohan Desai',
+              designation: 'Civic Writer',
+              affiliation: 'Public Forum',
+            },
+            contributor: {
+              name: 'Rohan Desai',
+            },
+          },
+        }) as any}
+        safeHtml="<p>Pulse Dialogue no photo article body.</p>"
+        topStories={[]}
+        relatedStories={[]}
+        error={null}
+        pending={false}
+      />
+    );
+
+    expect(screen.getByText(/By\s+Rohan Desai/)).toBeTruthy();
+    expect(screen.getByText('Civic Writer')).toBeTruthy();
+    expect(screen.getByText('Public Forum')).toBeTruthy();
+    expect(screen.getByTestId('article-hero-image').getAttribute('src')).toBe('/covers/no-photo-dialogue.jpg');
+    expect(document.querySelectorAll('img[src="/covers/no-photo-dialogue.jpg"]')).toHaveLength(1);
+    expect(document.querySelector('img[alt="Rohan Desai"]')).toBeNull();
+  });
+
+  test('falls back to the clean no-photo layout when contributor photo loading fails', async () => {
+    render(
+      <NewsSlugDetailPage
+        messages={{}}
+        locale="en"
+        lang="en"
+        slug="broken-photo-dialogue"
+        siteUrl="https://www.newspulse.co.in"
+        article={editorialArticle({
+          _id: 'pulse-article-broken-photo',
+          category: 'pulse-dialogue',
+          title: 'A Broken Photo Dialogue',
+          summary: 'A signed public contribution with a failed contributor image.',
+          slug: 'broken-photo-dialogue',
+          pulseDialogue: {
+            bylineSnapshot: {
+              name: 'Nisha Rao',
+              designation: 'Public Policy Fellow',
+              photo: { url: '/contributors/missing-nisha.jpg', alt: 'Nisha Rao portrait' },
+            },
+          },
+        }) as any}
+        safeHtml="<p>Pulse Dialogue broken photo article body.</p>"
+        topStories={[]}
+        relatedStories={[]}
+        error={null}
+        pending={false}
+      />
+    );
+
+    const contributorPhoto = screen.getByAltText('Nisha Rao portrait');
+    fireEvent.error(contributorPhoto);
+
+    expect(screen.getByText(/By\s+Nisha Rao/)).toBeTruthy();
+    expect(screen.getByText('Public Policy Fellow')).toBeTruthy();
+    expect(screen.queryByAltText('Nisha Rao portrait')).toBeNull();
+  });
+
+  test('renders the same Pulse Dialogue contributor photo safely on EN, HI, and GU article routes', async () => {
+    for (const routeLang of ['en', 'hi', 'gu'] as const) {
+      const { unmount } = render(
+        <NewsSlugDetailPage
+          messages={{}}
+          locale={routeLang}
+          lang={routeLang}
+          slug={`${routeLang}-shared-photo-dialogue`}
+          siteUrl="https://www.newspulse.co.in"
+          article={editorialArticle({
+            _id: `pulse-article-shared-photo-${routeLang}`,
+            category: 'pulse-dialogue',
+            language: routeLang,
+            title: `Shared Photo Dialogue ${routeLang}`,
+            summary: `Shared contributor media ${routeLang}`,
+            slug: `${routeLang}-shared-photo-dialogue`,
+            pulseDialogue: {
+              bylineSnapshot: {
+                name: 'Shared Contributor',
+                designation: 'Public Voice',
+              },
+              contributor: {
+                name: 'Shared Contributor',
+                photo: {
+                  asset: { url: '/contributors/shared-dialogue.jpg', alt: 'Shared contributor portrait' },
+                },
+              },
+            },
+          }) as any}
+          safeHtml={`<p>Shared Pulse Dialogue body ${routeLang}.</p>`}
+          topStories={[]}
+          relatedStories={[]}
+          error={null}
+          pending={false}
+        />
+      );
+
+      expect(screen.getByAltText('Shared contributor portrait').getAttribute('src')).toBe('/contributors/shared-dialogue.jpg');
+      expect(screen.getByText(/By\s+Shared Contributor/)).toBeTruthy();
+      unmount();
+      cleanup();
+    }
+  });
+
+  test('leaves normal non-Pulse article rendering unchanged even when contributor-like data is present', async () => {
+    render(
+      <NewsSlugDetailPage
+        messages={{}}
+        locale="en"
+        lang="en"
+        slug="normal-story"
+        siteUrl="https://www.newspulse.co.in"
+        article={editorialArticle({
+          _id: 'normal-article-with-extra-data',
+          category: 'business',
+          title: 'Normal Business Story',
+          slug: 'normal-story',
+          authorName: 'Business Desk',
+          authorDesignation: 'News Pulse Business',
+          pulseDialogue: {
+            bylineSnapshot: {
+              name: 'Should Not Render',
+              photo: { url: '/contributors/not-pulse.jpg', alt: 'Not Pulse portrait' },
+            },
+          },
+        }) as any}
+        safeHtml="<p>Normal article body.</p>"
+        topStories={[]}
+        relatedStories={[]}
+        error={null}
+        pending={false}
+      />
+    );
+
+    expect(screen.getByText(/By\s+Business Desk/)).toBeTruthy();
+    expect(document.body.textContent).toContain('News Pulse Business');
+    expect(screen.queryByAltText('Not Pulse portrait')).toBeNull();
+    expect(document.body.textContent).not.toContain('Should Not Render');
+  });
+
   test('renders controlled inline article images responsively with caption, credit, and fallback', async () => {
     render(
       <NewsSlugDetailPage

@@ -2,8 +2,21 @@ import { getCategoryRouteKey } from './categoryKeys';
 
 export type PulseDialoguePhoto = {
   url?: string | null;
+  src?: string | null;
+  assetUrl?: string | null;
+  mediaUrl?: string | null;
+  secureUrl?: string | null;
+  secure_url?: string | null;
+  cloudinaryUrl?: string | null;
   publicId?: string | null;
   alt?: string | null;
+  altText?: string | null;
+  caption?: string | null;
+  asset?: PulseDialoguePhoto | null;
+  image?: PulseDialoguePhoto | null;
+  media?: PulseDialoguePhoto | PulseDialoguePhoto[] | null;
+  file?: PulseDialoguePhoto | null;
+  photo?: PulseDialoguePhoto | null;
 };
 
 export type PulseDialogueContributor = {
@@ -81,12 +94,38 @@ function isObject(value: unknown): value is Record<string, any> {
 
 function photoUrl(photo: unknown): string {
   if (!isObject(photo)) return '';
-  return cleanText(photo.url || photo.src || photo.assetUrl || photo.secureUrl);
+  const direct = cleanText(photo.url || photo.src || photo.assetUrl || photo.mediaUrl || photo.secureUrl || photo.secure_url || photo.cloudinaryUrl);
+  if (direct) return direct;
+  for (const nested of [photo.asset, photo.image, photo.media, photo.file, photo.photo]) {
+    if (Array.isArray(nested)) {
+      for (const item of nested) {
+        const url = photoUrl(item);
+        if (url) return url;
+      }
+      continue;
+    }
+    const url = photoUrl(nested);
+    if (url) return url;
+  }
+  return '';
 }
 
 function photoAlt(photo: unknown): string {
   if (!isObject(photo)) return '';
-  return cleanText(photo.alt || photo.altText);
+  const direct = cleanText(photo.alt || photo.altText || photo.caption);
+  if (direct) return direct;
+  for (const nested of [photo.asset, photo.image, photo.media, photo.file, photo.photo]) {
+    if (Array.isArray(nested)) {
+      for (const item of nested) {
+        const alt = photoAlt(item);
+        if (alt) return alt;
+      }
+      continue;
+    }
+    const alt = photoAlt(nested);
+    if (alt) return alt;
+  }
+  return '';
 }
 
 export function isPulseDialogueArticle(article: unknown): boolean {

@@ -811,16 +811,25 @@ function RelatedStoryShell({
 }
 
 function PulseDialogueArticleByline({ metadata, byLabel }: { metadata: PulseDialogueMetadata; byLabel: string }) {
-  if (!metadata.contributorName && !metadata.contributorPhotoUrl) return null;
+  const [photoFailed, setPhotoFailed] = React.useState(false);
+
+  React.useEffect(() => {
+    setPhotoFailed(false);
+  }, [metadata.contributorPhotoUrl]);
+
+  const showPhoto = Boolean(metadata.contributorPhotoUrl && !photoFailed);
+
+  if (!metadata.contributorName && !showPhoto) return null;
 
   return (
     <div className="flex min-w-0 items-center gap-3 text-sm text-slate-800">
-      {metadata.contributorPhotoUrl ? (
+      {showPhoto ? (
         <img
           src={metadata.contributorPhotoUrl}
           alt={metadata.contributorPhotoAlt || metadata.contributorName || 'Contributor'}
           className="h-12 w-12 shrink-0 rounded-full border border-slate-200 bg-slate-100 object-cover"
           loading="lazy"
+          onError={() => setPhotoFailed(true)}
         />
       ) : null}
       <div className="min-w-0">
