@@ -23,6 +23,7 @@ export type CategoryFeedPageProps = {
   categoryKey: string;
   extraQuery?: Record<string, string>;
   useCategoryShell?: boolean;
+  initialItems?: Article[];
 };
 
 function categoryKeyToI18nKey(categoryKey: string): string | null {
@@ -243,12 +244,16 @@ function hasMoreCategoryResults(resp: Awaited<ReturnType<typeof fetchPublicNews>
   return (Array.isArray(resp.items) ? resp.items.length : 0) >= requestedLimit;
 }
 
-export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCategoryShell = false }: CategoryFeedPageProps) {
+export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCategoryShell = false, initialItems }: CategoryFeedPageProps) {
   const router = useRouter();
   const { language } = useLanguage();
   const { t } = useI18n();
-  const [items, setItems] = useState<Article[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const initialCategoryItems = React.useMemo(
+    () => selectCategoryFeedArticles(initialItems, getCategoryQueryKey(categoryKey)),
+    [categoryKey, initialItems]
+  );
+  const [items, setItems] = useState<Article[]>(() => initialCategoryItems);
+  const [loaded, setLoaded] = useState(() => initialCategoryItems.length > 0);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
@@ -258,6 +263,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
   const loadingPageRef = React.useRef<number | null>(null);
   const activeFeedRequestRef = React.useRef('');
   const inFlightFeedRequestRef = React.useRef('');
+  const hasDisplayItemsRef = React.useRef(initialCategoryItems.length > 0);
 
   const queryKey = useMemo(() => JSON.stringify(extraQuery || {}), [extraQuery]);
   const routeCategoryKey = useMemo(() => getCategoryRouteKey(categoryKey), [categoryKey]);
@@ -282,6 +288,10 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
   const resolvedDeskCopy = routeCategoryKey === 'pulse-dialogue'
     ? { ...deskCopy, description: t('pulseDialogue.landing.description') }
     : deskCopy;
+
+  React.useEffect(() => {
+    if (items.length > 0) hasDisplayItemsRef.current = true;
+  }, [items.length]);
 
   // Allow deep-linking into a filtered view (used by article-page category header search).
   React.useEffect(() => {
@@ -397,6 +407,12 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
       if (controller.signal.aborted || activeFeedRequestRef.current !== requestKey) return;
 
       if (resp.error) {
+        if (hasDisplayItemsRef.current) {
+          setLoaded(true);
+          setHasMore(false);
+          setLoadMoreError(resp.error);
+          return;
+        }
         setError(resp.error);
         setItems([]);
         setLoaded(false);
@@ -431,6 +447,12 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
       setLoaded(true);
     })().catch(() => {
       if (controller.signal.aborted || activeFeedRequestRef.current !== requestKey) return;
+      if (hasDisplayItemsRef.current) {
+        setLoaded(true);
+        setHasMore(false);
+        setLoadMoreError(t('errors.fetchFailed'));
+        return;
+      }
       setError(t('errors.fetchFailed'));
       setItems([]);
       setLoaded(false);

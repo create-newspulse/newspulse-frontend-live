@@ -1,5 +1,5 @@
 import React from 'react';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 
 import CategoryFeedPage, { selectCategoryFeedArticles } from '../../components/CategoryFeedPage';
 import { fetchPublicNews } from '../../lib/publicNewsApi';
@@ -81,6 +81,10 @@ function renderEditorialPage(items: any[]) {
 function renderPulseDialoguePage(items: any[]) {
   (fetchPublicNews as jest.Mock).mockResolvedValue({ items, meta: {}, endpoint: '/api/public/news' });
   return render(<CategoryFeedPage title="Pulse Dialogue" categoryKey="pulse-dialogue" useCategoryShell />);
+}
+
+function renderPulseDialoguePageWithCurrentFetch(props: Partial<React.ComponentProps<typeof CategoryFeedPage>> = {}) {
+  return render(<CategoryFeedPage title="Pulse Dialogue" categoryKey="pulse-dialogue" useCategoryShell {...props} />);
 }
 
 function pulseDialogueArticle(index: number, overrides: Record<string, any> = {}) {
@@ -201,6 +205,86 @@ describe('CategoryFeedPage editorial listing', () => {
     ], 'pulse-dialogue');
 
     expect(selected.map((article) => article._id)).toEqual(['newer-dialogue', 'older-dialogue']);
+  });
+
+  test('renders Pulse Dialogue loading structure immediately instead of a blank story area', async () => {
+    let resolveFeed: (value: any) => void = () => undefined;
+    (fetchPublicNews as jest.Mock).mockReturnValue(new Promise((resolve) => { resolveFeed = resolve; }));
+
+    renderPulseDialoguePageWithCurrentFetch();
+
+    const loadingRegion = screen.getByTestId('category-story-loading');
+    expect(loadingRegion).toBeTruthy();
+    expect(screen.getAllByText('Pulse Dialogue').length).toBeGreaterThanOrEqual(2);
+    expect(fetchPublicNews).toHaveBeenCalledTimes(1);
+
+    resolveFeed({ items: [], meta: {}, endpoint: '/api/public/news' });
+    expect(await screen.findByText('No stories yet.')).toBeTruthy();
+  });
+
+  test('loaded Pulse Dialogue story replaces the loading skeleton', async () => {
+    (fetchPublicNews as jest.Mock).mockResolvedValue({
+      items: [pulseDialogueArticle(1, { title: 'Loaded Pulse Dialogue', coverImageUrl: '/covers/loaded-pulse.jpg' })],
+      meta: {},
+      endpoint: '/api/public/news',
+    });
+
+    renderPulseDialoguePageWithCurrentFetch();
+
+    expect(screen.getByTestId('category-story-loading')).toBeTruthy();
+    expect(await screen.findByText('Loaded Pulse Dialogue')).toBeTruthy();
+    expect(screen.queryByTestId('category-story-loading')).toBeNull();
+    expect(screen.getByAltText('Loaded Pulse Dialogue').getAttribute('src')).toBe('/covers/loaded-pulse.jpg');
+  });
+
+  test('valid initial Pulse Dialogue data renders immediately while client refresh is pending', () => {
+    (fetchPublicNews as jest.Mock).mockReturnValue(new Promise(() => undefined));
+
+    renderPulseDialoguePageWithCurrentFetch({
+      initialItems: [pulseDialogueArticle(1, { title: 'Initial Pulse Dialogue', coverImageUrl: '/covers/initial-pulse.jpg' })],
+    });
+
+    expect(screen.getByText('Initial Pulse Dialogue')).toBeTruthy();
+    expect(screen.queryByTestId('category-story-loading')).toBeNull();
+    expect(screen.getByAltText('Initial Pulse Dialogue').getAttribute('src')).toBe('/covers/initial-pulse.jpg');
+    expect(fetchPublicNews).toHaveBeenCalledTimes(1);
+  });
+
+  test('failed Pulse Dialogue fetch renders a safe non-blank error state', async () => {
+    (fetchPublicNews as jest.Mock).mockResolvedValue({ items: [], meta: {}, endpoint: '/api/public/news', error: 'API 503' });
+
+    renderPulseDialoguePageWithCurrentFetch();
+
+    expect(screen.getByTestId('category-story-loading')).toBeTruthy();
+    expect(await screen.findByText('Unable to load stories')).toBeTruthy();
+    expect(screen.getByText('API 503')).toBeTruthy();
+  });
+
+  test('empty Pulse Dialogue category state remains correct after loading completes', async () => {
+    renderPulseDialoguePage([]);
+
+    expect(screen.getByTestId('category-story-loading')).toBeTruthy();
+    expect(await screen.findByText('No stories yet.')).toBeTruthy();
+    expect(screen.queryByTestId('category-story-loading')).toBeNull();
+  });
+
+  test('Pulse Dialogue initial render performs one category feed request', async () => {
+    (fetchPublicNews as jest.Mock).mockResolvedValue({
+      items: [pulseDialogueArticle(1, { title: 'Single Request Dialogue' })],
+      meta: {},
+      endpoint: '/api/public/news',
+    });
+
+    renderPulseDialoguePageWithCurrentFetch();
+
+    expect(await screen.findByText('Single Request Dialogue')).toBeTruthy();
+    expect(fetchPublicNews).toHaveBeenCalledTimes(1);
+    expect(fetchPublicNews).toHaveBeenCalledWith(expect.objectContaining({
+      category: 'pulse-dialogue',
+      language: 'en',
+      limit: 30,
+      extraQuery: { strictLocale: '1' },
+    }));
   });
 
   test('displays a clean empty editorial state and fetches all published editorial records', async () => {

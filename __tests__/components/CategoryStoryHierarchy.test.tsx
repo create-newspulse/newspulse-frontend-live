@@ -99,6 +99,25 @@ describe('CategoryStoryHierarchy', () => {
     );
   });
 
+  test('renders a stable loading skeleton instead of a blank category story area', () => {
+    render(
+      <CategoryStoryHierarchy
+        items={[]}
+        categoryLabel="Pulse Dialogue"
+        latestLabel="Latest Contributions"
+        loadMoreLabel="Load More Pulse Dialogue Stories"
+        emptyTitle="No stories found"
+        loading
+      />
+    );
+
+    expect(screen.getByTestId('category-story-loading')).toBeTruthy();
+    expect(screen.getByText('Pulse Dialogue')).toBeTruthy();
+    expect(screen.getByText('Top Story, Key Stories and Latest updates')).toBeTruthy();
+    expect(screen.getByText('Latest Contributions')).toBeTruthy();
+    expect(screen.queryByText('No stories found')).toBeNull();
+  });
+
   test('automatically requests more stories when the sentinel approaches the viewport', () => {
     const onLoadMore = jest.fn();
     let observerCallback: IntersectionObserverCallback = () => undefined;

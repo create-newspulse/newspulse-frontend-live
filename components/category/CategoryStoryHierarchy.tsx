@@ -381,6 +381,76 @@ function LoadMoreBoundary({
   );
 }
 
+function SkeletonBlock({ className }: { className: string }) {
+  return <div className={classNames('animate-pulse rounded bg-slate-100', className)} />;
+}
+
+function CategoryStoryHierarchySkeleton({ categoryLabel, latestLabel }: { categoryLabel: string; latestLabel: string }) {
+  return (
+    <div className="grid gap-4" aria-busy="true" aria-label="Loading category stories" data-testid="category-story-loading">
+      <div className="mb-1 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div className="text-2xl font-black tracking-tight text-newsPulse-navy">{categoryLabel}</div>
+          <div className="text-sm text-newsPulse-slate">Top Story, Key Stories and Latest updates</div>
+        </div>
+      </div>
+
+      <section className="overflow-hidden rounded-[28px] border border-slate-200/80 bg-white shadow-[0_22px_48px_-38px_rgba(15,23,42,0.34)]">
+        <div className="p-3 sm:p-4">
+          <SkeletonBlock className="aspect-[16/9] w-full rounded-[30px]" />
+          <div className="mt-4">
+            <SkeletonBlock className="h-6 w-32 rounded-full" />
+            <SkeletonBlock className="mt-3 h-3 w-2/3" />
+            <SkeletonBlock className="mt-3 h-7 w-full" />
+            <SkeletonBlock className="mt-2 h-7 w-4/5" />
+            <SkeletonBlock className="mt-4 h-4 w-full" />
+            <SkeletonBlock className="mt-2 h-4 w-3/4" />
+            <div className="mt-4 flex items-center gap-2">
+              <SkeletonBlock className="h-9 w-9 rounded-full" />
+              <div className="min-w-0 flex-1">
+                <SkeletonBlock className="h-4 w-40" />
+                <SkeletonBlock className="mt-2 h-3 w-32" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-[28px] border border-slate-200/80 bg-white p-4 shadow-sm">
+        <SkeletonBlock className="h-3 w-28" />
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          {[0, 1].map((index) => (
+            <div key={index} className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+              <SkeletonBlock className="h-28 w-full rounded-none" />
+              <div className="p-4">
+                <SkeletonBlock className="h-3 w-24" />
+                <SkeletonBlock className="mt-3 h-5 w-full" />
+                <SkeletonBlock className="mt-2 h-5 w-3/4" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-[28px] border border-slate-200/80 bg-white p-4 shadow-sm">
+        <div className="text-[11px] font-black uppercase tracking-[0.18em] text-newsPulse-blue/80">{latestLabel}</div>
+        <div className="mt-3 grid gap-2">
+          {[0, 1, 2].map((index) => (
+            <div key={index} className="grid grid-cols-[1fr_92px] gap-3 rounded-2xl border border-slate-200/80 bg-white p-3 sm:grid-cols-[1fr_116px]">
+              <div className="min-w-0">
+                <SkeletonBlock className="h-3 w-28" />
+                <SkeletonBlock className="mt-3 h-5 w-full" />
+                <SkeletonBlock className="mt-2 h-4 w-2/3" />
+              </div>
+              <SkeletonBlock className="h-full min-h-[72px] w-[92px] sm:w-[116px]" />
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export default function CategoryStoryHierarchy({
   items,
   categoryLabel,
@@ -425,7 +495,7 @@ export default function CategoryStoryHierarchy({
     else onLoadMore?.();
   }, [latestStories.length, loadMoreStep, onLoadMore, variant, visibleLatestCount, webStoryCovers.length]);
 
-  if (loading && !stories.length) return null;
+  if (loading && !stories.length) return <CategoryStoryHierarchySkeleton categoryLabel={categoryLabel} latestLabel={latestLabel} />;
 
   if (!stories.length) {
     return (
