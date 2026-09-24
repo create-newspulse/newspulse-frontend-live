@@ -122,6 +122,26 @@ describe('/national page-data props', () => {
       title: 'National Story 01',
       tags: ['National', 'Delhi'],
     });
+    expect(result.revalidate).toBe(60);
     expect(jsonBytes(props)).toBeLessThan(128 * 1024);
+  });
+
+  test.each([
+    ['en'],
+    ['hi'],
+    ['gu'],
+  ])('getStaticProps returns safe %s props when build-time national fetches fail', async (locale) => {
+    global.fetch = jest.fn(() => Promise.reject(new Error('backend timeout')));
+
+    const result: any = await getStaticProps({ locale } as any);
+
+    expect(result).toMatchObject({
+      props: {
+        lang: locale,
+        data: [],
+        breaking: [],
+      },
+      revalidate: 60,
+    });
   });
 });

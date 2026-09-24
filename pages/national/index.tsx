@@ -38,6 +38,16 @@ type NationalLiveTickerItem = {
 
 const NATIONAL_CARD_TEXT_MAX_CHARS = 420;
 const NATIONAL_SEARCH_TEXT_MAX_CHARS = 900;
+const NATIONAL_STATIC_REVALIDATE_SECONDS = 60;
+const NATIONAL_BUILD_FETCH_TIMEOUT_MS = 8000;
+const NATIONAL_BUILD_TICKER_TIMEOUT_MS = 3500;
+
+function withTimeoutSignal<T>(timeoutMs: number, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  return run(controller.signal).finally(() => clearTimeout(timer));
+}
 
 function resolveLangFromPathname(pathname: unknown): 'en' | 'hi' | 'gu' {
   const p = String(pathname || '').toLowerCase();
@@ -1035,7 +1045,7 @@ export const getStaticProps: GetStaticProps = async ({ locale }) => {
   try {
     const apiBase = String(getPublicApiBaseUrl() || '').trim().replace(/\/+$/, '');
     if (!apiBase) {
-      return { props: { lang, data: [], breaking: [], messages } };
+      return { props: { lang, data: [], breaking: [], messages }, revalidate: NATIONAL_STATIC_REVALIDATE_SECONDS };
     }
 
     const limit = 40;
@@ -1046,14 +1056,17 @@ export const getStaticProps: GetStaticProps = async ({ locale }) => {
     params.set('limit', String(limit));
 
     const endpoint = `${apiBase}/api/public/news?${params.toString()}`;
-    const res = await fetch(endpoint, { headers: { Accept: 'application/json' } });
-    const json = await res.json().catch(() => null);
-    const items = Array.isArray(json?.items) ? json.items : Array.isArray(json?.articles) ? json.articles : Array.isArray(json?.data) ? json.data : [];
+    const items = await withTimeoutSignal(NATIONAL_BUILD_FETCH_TIMEOUT_MS, async (signal) => {
+      const res = await fetch(endpoint, { headers: { Accept: 'application/json' }, signal });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) return [];
+      return Array.isArray(json?.items) ? json.items : Array.isArray(json?.articles) ? json.articles : Array.isArray(json?.data) ? json.data : [];
+    }).catch(() => []);
 
     // LIVE UPDATES strip (national-only): use ticker endpoint with fallback to latest national stories.
     const breaking = await (async () => {
       try {
-        const items = await fetchNationalLiveStrip({ lang });
+        const items = await withTimeoutSignal(NATIONAL_BUILD_TICKER_TIMEOUT_MS, (signal) => fetchNationalLiveStrip({ lang, signal }));
         if (items.length) return items;
       } catch {
         // ignore
@@ -1061,14 +1074,14 @@ export const getStaticProps: GetStaticProps = async ({ locale }) => {
 
       // Fallback 1: existing live ticker feed.
       try {
-        const items = await fetchGenericLiveStrip({ lang });
+        const items = await withTimeoutSignal(NATIONAL_BUILD_TICKER_TIMEOUT_MS, (signal) => fetchGenericLiveStrip({ lang, signal }));
         if (items.length) return items;
       } catch {
         // ignore
       }
 
       try {
-        const resp = await fetchPublicNews({ category: 'national', language: lang, limit: 5 });
+        const resp = await withTimeoutSignal(NATIONAL_BUILD_TICKER_TIMEOUT_MS, (signal) => fetchPublicNews({ category: 'national', language: lang, limit: 5, signal }));
         if (resp?.error) return [];
         return Array.isArray(resp?.items) ? compactNationalTickerItemsForProps(resp.items, lang) : [];
       } catch {
@@ -1083,6 +1096,7 @@ export const getStaticProps: GetStaticProps = async ({ locale }) => {
         breaking,
         messages,
       },
+      revalidate: NATIONAL_STATIC_REVALIDATE_SECONDS,
     };
   } catch (err) {
     // eslint-disable-next-line no-console
@@ -1094,6 +1108,7 @@ export const getStaticProps: GetStaticProps = async ({ locale }) => {
         breaking: [],
         messages,
       },
+      revalidate: NATIONAL_STATIC_REVALIDATE_SECONDS,
     };
   }
 };
