@@ -24,6 +24,10 @@ export type PulseDialogueContributor = {
   name?: string | null;
   canonicalName?: string | null;
   photo?: PulseDialoguePhoto | null;
+  photoUrl?: string | null;
+  contributorPhotoUrl?: string | null;
+  photoAlt?: string | null;
+  contributorPhotoAlt?: string | null;
   publicDesignation?: string | null;
   affiliation?: string | null;
   shortBio?: string | null;
@@ -37,12 +41,18 @@ export type PulseDialogueBylineSnapshot = {
   designation?: string | null;
   affiliation?: string | null;
   photo?: PulseDialoguePhoto | null;
+  photoUrl?: string | null;
+  contributorPhotoUrl?: string | null;
+  photoAlt?: string | null;
+  contributorPhotoAlt?: string | null;
 };
 
 export type PulseDialoguePayload = {
   contributorId?: string | null;
   contributor?: PulseDialogueContributor | null;
   bylineSnapshot?: PulseDialogueBylineSnapshot | null;
+  contributorPhotoUrl?: string | null;
+  contributorPhotoAlt?: string | null;
   dialogueFormat?: string | null;
   series?: string | null;
   bylineDesignationOverride?: string | null;
@@ -93,8 +103,9 @@ function isObject(value: unknown): value is Record<string, any> {
 }
 
 function photoUrl(photo: unknown): string {
+  if (typeof photo === 'string') return cleanText(photo);
   if (!isObject(photo)) return '';
-  const direct = cleanText(photo.url || photo.src || photo.assetUrl || photo.mediaUrl || photo.secureUrl || photo.secure_url || photo.cloudinaryUrl);
+  const direct = cleanText(photo.url || photo.src || photo.photoUrl || photo.contributorPhotoUrl || photo.assetUrl || photo.mediaUrl || photo.secureUrl || photo.secure_url || photo.cloudinaryUrl);
   if (direct) return direct;
   for (const nested of [photo.asset, photo.image, photo.media, photo.file, photo.photo]) {
     if (Array.isArray(nested)) {
@@ -112,7 +123,7 @@ function photoUrl(photo: unknown): string {
 
 function photoAlt(photo: unknown): string {
   if (!isObject(photo)) return '';
-  const direct = cleanText(photo.alt || photo.altText || photo.caption);
+  const direct = cleanText(photo.alt || photo.altText || photo.photoAlt || photo.contributorPhotoAlt || photo.caption);
   if (direct) return direct;
   for (const nested of [photo.asset, photo.image, photo.media, photo.file, photo.photo]) {
     if (Array.isArray(nested)) {
@@ -176,7 +187,7 @@ export function getPulseDialogueMetadata(article: unknown): PulseDialogueMetadat
   const snapshot = isObject(pulse.bylineSnapshot) ? pulse.bylineSnapshot : {};
   const snapshotPhoto = snapshot.photo;
   const contributorPhoto = contributor.photo;
-  const resolvedPhotoUrl = photoUrl(snapshotPhoto) || photoUrl(contributorPhoto);
+  const resolvedPhotoUrl = photoUrl(snapshotPhoto) || photoUrl(snapshot) || photoUrl(pulse.contributorPhotoUrl) || photoUrl(contributorPhoto) || photoUrl(contributor);
   const contributorName = cleanText(snapshot.name) || cleanText(contributor.name) || cleanText(contributor.canonicalName);
 
   return {
@@ -188,7 +199,7 @@ export function getPulseDialogueMetadata(article: unknown): PulseDialogueMetadat
     contributorDesignation: cleanText(snapshot.designation) || cleanText(pulse.bylineDesignationOverride) || cleanText(contributor.publicDesignation),
     contributorAffiliation: cleanText(snapshot.affiliation) || cleanText(contributor.affiliation),
     contributorPhotoUrl: resolvedPhotoUrl,
-    contributorPhotoAlt: photoAlt(snapshotPhoto) || photoAlt(contributorPhoto) || contributorName,
+    contributorPhotoAlt: photoAlt(snapshotPhoto) || photoAlt(snapshot) || cleanText(pulse.contributorPhotoAlt) || photoAlt(contributorPhoto) || photoAlt(contributor) || contributorName,
     contributorShortBio: cleanText(contributor.shortBio),
     contributorDisclosure: cleanText(pulse.contributorDisclosure),
     editorNote: cleanText(pulse.editorNote),

@@ -42,7 +42,13 @@ export type ArticleBase = {
         publicId?: string | null;
         alt?: string | null;
       } | null;
+      photoUrl?: string | null;
+      contributorPhotoUrl?: string | null;
+      photoAlt?: string | null;
+      contributorPhotoAlt?: string | null;
     } | null;
+    contributorPhotoUrl?: string | null;
+    contributorPhotoAlt?: string | null;
     contributorDisclosure?: string | null;
     editorNote?: string | null;
     contributorDisclaimer?: string | null;
@@ -56,6 +62,10 @@ export type ArticleBase = {
         publicId?: string | null;
         alt?: string | null;
       } | null;
+      photoUrl?: string | null;
+      contributorPhotoUrl?: string | null;
+      photoAlt?: string | null;
+      contributorPhotoAlt?: string | null;
       publicDesignation?: string | null;
       affiliation?: string | null;
       shortBio?: string | null;

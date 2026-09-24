@@ -109,6 +109,34 @@ describe('pulseDialogue helpers', () => {
     }));
   });
 
+  test('resolves flattened public contributor photo URLs without using the cover image', () => {
+    const metadata = getPulseDialogueMetadata({
+      category: 'pulse-dialogue',
+      coverImageUrl: '/covers/dialogue-cover.jpg',
+      pulseDialogue: {
+        contributorId: 'flat-photo-1',
+        contributorPhotoUrl: '/contributors/flat-public.jpg',
+        contributorPhotoAlt: 'Flat public contributor portrait',
+        bylineSnapshot: {
+          name: 'Flat Photo Contributor',
+          designation: 'Independent Writer',
+        },
+        contributor: {
+          name: 'Current Contributor',
+          contributorPhotoUrl: '/contributors/current-flat.jpg',
+        },
+      },
+    });
+
+    expect(metadata).toEqual(expect.objectContaining({
+      contributorName: 'Flat Photo Contributor',
+      contributorDesignation: 'Independent Writer',
+      contributorPhotoUrl: '/contributors/flat-public.jpg',
+      contributorPhotoAlt: 'Flat public contributor portrait',
+    }));
+    expect(metadata?.contributorPhotoUrl).not.toBe('/covers/dialogue-cover.jpg');
+  });
+
   test('does not use article cover media as a contributor photo', () => {
     const metadata = getPulseDialogueMetadata({
       category: 'pulse-dialogue',

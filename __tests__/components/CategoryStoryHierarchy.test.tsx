@@ -11,6 +11,9 @@ jest.mock('next/link', () => ({
 jest.mock('../../src/components/story/StoryImage', () => ({
   __esModule: true,
   default: ({ alt, src }: { alt: string; src?: string }) => <img alt={alt} src={src} data-testid="story-image" />,
+  TopStoryImage: ({ alt, src, priority, fallbackSrc }: { alt: string; src?: string; priority?: boolean; fallbackSrc?: string }) => (
+    <img alt={alt} src={src} data-testid="top-story-image" data-priority={priority ? 'true' : 'false'} data-fallback-src={fallbackSrc} />
+  ),
 }));
 
 function story(index: number, overrides: Partial<CategoryStoryHierarchyItem> = {}): CategoryStoryHierarchyItem {
@@ -75,6 +78,25 @@ describe('CategoryStoryHierarchy', () => {
     expect(screen.getByRole('heading', { name: 'Story 1' })).toBeTruthy();
     expect(screen.queryByText('Duplicate Story 1')).toBeNull();
     expect(screen.getByText('Story 2')).toBeTruthy();
+  });
+
+  test('renders the lead cover with the shared Top Story image presentation only', () => {
+    render(
+      <CategoryStoryHierarchy
+        items={Array.from({ length: 6 }, (_, index) => story(index + 1))}
+        categoryLabel="National News"
+        loadMoreLabel="Load More National Stories"
+        emptyTitle="No stories found"
+      />
+    );
+
+    const leadImage = screen.getByTestId('top-story-image');
+    expect(leadImage.getAttribute('alt')).toBe('Story 1');
+    expect(leadImage.getAttribute('src')).toBe('/story-1.jpg');
+    expect(leadImage.getAttribute('data-priority')).toBe('true');
+    expect(screen.getAllByTestId('story-image').map((image) => image.getAttribute('alt'))).toEqual(
+      expect.arrayContaining(['Story 2', 'Story 5'])
+    );
   });
 
   test('automatically requests more stories when the sentinel approaches the viewport', () => {

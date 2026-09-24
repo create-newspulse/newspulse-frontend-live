@@ -1,7 +1,7 @@
 import React from 'react';
 import { cleanup, render, screen } from '@testing-library/react';
 
-import CategoryFeedPage from '../../components/CategoryFeedPage';
+import CategoryFeedPage, { selectCategoryFeedArticles } from '../../components/CategoryFeedPage';
 import { fetchPublicNews } from '../../lib/publicNewsApi';
 
 let mockLanguage = 'en';
@@ -55,6 +55,7 @@ jest.mock('next/router', () => ({
 jest.mock('../../src/components/story/StoryImage', () => ({
   __esModule: true,
   default: ({ alt, src }: { alt: string; src?: string }) => <img alt={alt} src={src} />,
+  TopStoryImage: ({ alt, src }: { alt: string; src?: string }) => <img alt={alt} src={src} data-testid="top-story-image" />,
 }));
 
 function mockArticle(overrides: Record<string, any>) {
@@ -82,6 +83,21 @@ function renderPulseDialoguePage(items: any[]) {
   return render(<CategoryFeedPage title="Pulse Dialogue" categoryKey="pulse-dialogue" useCategoryShell />);
 }
 
+function pulseDialogueArticle(index: number, overrides: Record<string, any> = {}) {
+  return mockArticle({
+    _id: `pulse-${index}`,
+    category: 'pulse-dialogue',
+    slug: `pulse-${index}`,
+    title: `Pulse Dialogue ${index}`,
+    publishedAt: `2026-01-${String(index).padStart(2, '0')}T10:00:00.000Z`,
+    pulseDialogue: {
+      dialogueFormat: 'guest_column',
+      bylineSnapshot: { name: `Contributor ${index}` },
+    },
+    ...overrides,
+  });
+}
+
 describe('CategoryFeedPage editorial listing', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -90,6 +106,101 @@ describe('CategoryFeedPage editorial listing', () => {
 
   afterEach(() => {
     cleanup();
+  });
+
+  test('selects the newest published same-category article as the category lead', () => {
+    const selected = selectCategoryFeedArticles([
+      mockArticle({ _id: 'older', title: 'Older Published', slug: 'older', category: 'business', publishedAt: '2026-01-01T10:00:00.000Z' }),
+      mockArticle({ _id: 'newer', title: 'Newer Published', slug: 'newer', category: 'business', publishedAt: '2026-01-03T10:00:00.000Z' }),
+    ], 'business');
+
+    expect(selected.map((article) => article._id)).toEqual(['newer', 'older']);
+  });
+
+  test('keeps older published category articles secondary when a newer article exists', () => {
+    const selected = selectCategoryFeedArticles([
+      mockArticle({ _id: 'article-a', category: 'national', publishedAt: '2026-01-01T10:00:00.000Z' }),
+      mockArticle({ _id: 'article-b', category: 'national', publishedAt: '2026-01-02T10:00:00.000Z' }),
+      mockArticle({ _id: 'article-c', category: 'national', publishedAt: '2026-01-03T10:00:00.000Z' }),
+    ], 'national');
+
+    expect(selected[0]._id).toBe('article-c');
+    expect(selected.slice(1).map((article) => article._id)).toEqual(['article-b', 'article-a']);
+  });
+
+  test('publishing a newer same-category article changes the lead', () => {
+    const before = selectCategoryFeedArticles([
+      mockArticle({ _id: 'pulse-a', category: 'pulse-dialogue', publishedAt: '2026-01-01T10:00:00.000Z' }),
+    ], 'pulse-dialogue');
+    const after = selectCategoryFeedArticles([
+      mockArticle({ _id: 'pulse-a', category: 'pulse-dialogue', publishedAt: '2026-01-01T10:00:00.000Z' }),
+      mockArticle({ _id: 'pulse-b', category: 'pulse-dialogue', publishedAt: '2026-01-04T10:00:00.000Z' }),
+    ], 'pulse-dialogue');
+
+    expect(before[0]._id).toBe('pulse-a');
+    expect(after[0]._id).toBe('pulse-b');
+    expect(after[1]._id).toBe('pulse-a');
+  });
+
+  test('does not promote an older article merely because updatedAt changed', () => {
+    const selected = selectCategoryFeedArticles([
+      mockArticle({
+        _id: 'old-edited',
+        category: 'sports',
+        publishedAt: '2026-01-01T10:00:00.000Z',
+        updatedAt: '2026-01-09T10:00:00.000Z',
+      }),
+      mockArticle({
+        _id: 'newer-published',
+        category: 'sports',
+        publishedAt: '2026-01-03T10:00:00.000Z',
+        updatedAt: '2026-01-03T11:00:00.000Z',
+      }),
+    ], 'sports');
+
+    expect(selected.map((article) => article._id)).toEqual(['newer-published', 'old-edited']);
+  });
+
+  test.each([
+    ['draft', { status: 'draft' }],
+    ['unpublished', { status: 'unpublished' }],
+    ['archived', { status: 'archived' }],
+    ['deleted', { status: 'published', deleted: true }],
+    ['future scheduled', { status: 'published', publishedAt: '2099-01-01T10:00:00.000Z' }],
+  ])('%s article does not become the category lead', (_label, overrides) => {
+    const selected = selectCategoryFeedArticles([
+      mockArticle({ _id: 'eligible', category: 'lifestyle', publishedAt: '2026-01-01T10:00:00.000Z' }),
+      mockArticle({ _id: 'ineligible', category: 'lifestyle', publishedAt: '2026-01-05T10:00:00.000Z', ...overrides }),
+    ], 'lifestyle');
+
+    expect(selected.map((article) => article._id)).toEqual(['eligible']);
+  });
+
+  test('does not mix articles from other categories into a category lead list', () => {
+    const selected = selectCategoryFeedArticles([
+      mockArticle({ _id: 'new-national', category: 'national', publishedAt: '2026-01-05T10:00:00.000Z' }),
+      mockArticle({ _id: 'business-lead', category: 'business', publishedAt: '2026-01-02T10:00:00.000Z' }),
+    ], 'business');
+
+    expect(selected.map((article) => article._id)).toEqual(['business-lead']);
+  });
+
+  test('returns no category lead candidates when the feed has no same-category articles', () => {
+    const selected = selectCategoryFeedArticles([
+      mockArticle({ _id: 'new-national', category: 'national', publishedAt: '2026-01-05T10:00:00.000Z' }),
+    ], 'business');
+
+    expect(selected).toEqual([]);
+  });
+
+  test('Pulse Dialogue follows the same newest published same-category lead behavior', () => {
+    const selected = selectCategoryFeedArticles([
+      mockArticle({ _id: 'older-dialogue', category: 'pulse-dialogue', publishedAt: '2026-01-01T10:00:00.000Z' }),
+      mockArticle({ _id: 'newer-dialogue', category: 'pulse-dialogue', publishedAt: '2026-01-06T10:00:00.000Z' }),
+      mockArticle({ _id: 'newer-national', category: 'national', publishedAt: '2026-01-07T10:00:00.000Z' }),
+    ], 'pulse-dialogue');
+
+    expect(selected.map((article) => article._id)).toEqual(['newer-dialogue', 'older-dialogue']);
   });
 
   test('displays a clean empty editorial state and fetches all published editorial records', async () => {
@@ -244,6 +355,111 @@ describe('CategoryFeedPage editorial listing', () => {
     expect(screen.getByAltText('Dr Asha Mehta portrait').getAttribute('src')).toBe('/contributors/asha.jpg');
     expect(screen.getByAltText('A City Dialogue').getAttribute('src')).toBe('/covers/city-dialogue.jpg');
     expect(screen.queryByText('By News Pulse Desk')).toBeNull();
+  });
+
+  test('renders a latest Pulse contribution contributor portrait without replacing the story image', async () => {
+    renderPulseDialoguePage([
+      pulseDialogueArticle(6, { title: 'Newest Lead Dialogue', coverImageUrl: '/covers/newest-lead.jpg' }),
+      pulseDialogueArticle(5),
+      pulseDialogueArticle(4),
+      pulseDialogueArticle(3),
+      pulseDialogueArticle(2),
+      pulseDialogueArticle(1, {
+        title: 'Latest Row Dialogue',
+        coverImageUrl: '/covers/latest-row.jpg',
+        pulseDialogue: {
+          dialogueFormat: 'guest_column',
+          bylineSnapshot: {
+            name: 'Latest Row Contributor',
+            designation: 'Independent Writer',
+            photo: { url: '/contributors/latest-row.jpg', alt: 'Latest row contributor portrait' },
+          },
+        },
+      }),
+    ]);
+
+    expect(await screen.findByText('Latest Row Dialogue')).toBeTruthy();
+    expect(screen.getByAltText('Latest row contributor portrait').getAttribute('src')).toBe('/contributors/latest-row.jpg');
+    expect(screen.getByAltText('Latest Row Dialogue').getAttribute('src')).toBe('/covers/latest-row.jpg');
+  });
+
+  test('uses contributor.photo fallback and never the cover image for Pulse contributor portraits', async () => {
+    renderPulseDialoguePage([
+      pulseDialogueArticle(1, {
+        title: 'Contributor Photo Fallback Dialogue',
+        coverImageUrl: '/covers/contributor-fallback-cover.jpg',
+        pulseDialogue: {
+          dialogueFormat: 'guest_column',
+          bylineSnapshot: {
+            name: 'Fallback Photo Contributor',
+            designation: 'Columnist',
+          },
+          contributor: {
+            name: 'Fallback Photo Contributor',
+            photo: { url: '/contributors/fallback-person.jpg', alt: 'Fallback person portrait' },
+          },
+        },
+      }),
+    ]);
+
+    expect(await screen.findByText('Contributor Photo Fallback Dialogue')).toBeTruthy();
+    expect(screen.getByAltText('Fallback person portrait').getAttribute('src')).toBe('/contributors/fallback-person.jpg');
+    expect(screen.getByAltText('Contributor Photo Fallback Dialogue').getAttribute('src')).toBe('/covers/contributor-fallback-cover.jpg');
+    expect(document.querySelector('img[src="/covers/contributor-fallback-cover.jpg"]')?.getAttribute('alt')).toBe('Contributor Photo Fallback Dialogue');
+  });
+
+  test('renders text-only Pulse latest attribution cleanly when contributor photo is missing', async () => {
+    renderPulseDialoguePage([
+      pulseDialogueArticle(6, { title: 'Lead Before Text Only' }),
+      pulseDialogueArticle(5),
+      pulseDialogueArticle(4),
+      pulseDialogueArticle(3),
+      pulseDialogueArticle(2),
+      pulseDialogueArticle(1, {
+        title: 'Text Only Latest Dialogue',
+        pulseDialogue: {
+          dialogueFormat: 'guest_column',
+          bylineSnapshot: {
+            name: 'Text Only Contributor',
+            designation: 'Independent Writer',
+          },
+        },
+      }),
+    ]);
+
+    expect(await screen.findByText('Text Only Latest Dialogue')).toBeTruthy();
+    expect(screen.getByText(/By\s+Text Only Contributor/)).toBeTruthy();
+    expect(screen.getByText('Independent Writer')).toBeTruthy();
+    expect(screen.queryByAltText('Text Only Contributor')).toBeNull();
+  });
+
+  test.each([
+    ['en', 'Shared English Dialogue', '/contributors/shared-person.jpg'],
+    ['hi', 'साझા સંવાદ', '/contributors/shared-person.jpg'],
+    ['gu', 'સાંઝો સંવાદ', '/contributors/shared-person.jpg'],
+  ])('renders Pulse contributor photo safely for %s category cards', async (language, title, photoUrl) => {
+    mockLanguage = language;
+    renderPulseDialoguePage([
+      pulseDialogueArticle(1, {
+        _id: `shared-${language}`,
+        language,
+        title,
+        slug: `shared-${language}`,
+        coverImageUrl: `/covers/shared-${language}.jpg`,
+        pulseDialogue: {
+          dialogueFormat: 'guest_column',
+          bylineSnapshot: {
+            name: 'Shared Contributor',
+            designation: 'Independent Writer',
+            photo: { url: photoUrl, alt: 'Shared contributor portrait' },
+          },
+        },
+      }),
+    ]);
+
+    expect(await screen.findByText(title)).toBeTruthy();
+    expect(screen.getByAltText('Shared contributor portrait').getAttribute('src')).toBe(photoUrl);
+    expect(screen.getByAltText(title).getAttribute('src')).toBe(`/covers/shared-${language}.jpg`);
   });
 
   test('keeps Pulse Dialogue cards safe when contributor metadata is missing', async () => {

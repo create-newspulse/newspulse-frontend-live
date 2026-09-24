@@ -134,6 +134,12 @@ describe('homepage Top Story freshness', () => {
     expect(source).toContain('<BookOpen className="h-3.5 w-3.5" /> {vm.readMinutes} {t(\'common.minutesShort\')}');
   });
 
+  test('homepage Top Story keeps the existing TopStoryImage presentation path', () => {
+    expect(source).toContain('import StoryImage, { TopStoryImage }');
+    expect(source).toContain('<TopStoryImage');
+    expect(source).not.toContain('CategoryStoryHierarchy');
+  });
+
   test('server-rendered homepage props contain the newest published Top Story and no-store cache headers', async () => {
     (fetchPublicNews as jest.Mock).mockResolvedValueOnce({
       items: [

@@ -166,6 +166,73 @@ function dedupeArticles(articles: Article[]): Article[] {
   return output;
 }
 
+function getCategoryPublishTimeValue(article: Article): number {
+  for (const value of [(article as any)?.publishedAt, (article as any)?.publishAt, (article as any)?.createdAt]) {
+    const raw = String(value || '').trim();
+    if (!raw) continue;
+    const parsed = Date.parse(raw);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  return 0;
+}
+
+function pushCategoryKeys(output: Set<string>, value: unknown) {
+  if (!value) return;
+  if (Array.isArray(value)) {
+    value.forEach((item) => pushCategoryKeys(output, item));
+    return;
+  }
+
+  if (typeof value === 'object') {
+    pushCategoryKeys(output, (value as any).key);
+    pushCategoryKeys(output, (value as any).slug);
+    pushCategoryKeys(output, (value as any).value);
+    pushCategoryKeys(output, (value as any).name);
+    pushCategoryKeys(output, (value as any).label);
+    return;
+  }
+
+  const key = getCategoryQueryKey(value);
+  if (key) output.add(key);
+}
+
+function getArticleCategoryKeys(article: Article): Set<string> {
+  const keys = new Set<string>();
+  pushCategoryKeys(keys, (article as any)?.category);
+  pushCategoryKeys(keys, (article as any)?.categoryKey);
+  pushCategoryKeys(keys, (article as any)?.primaryCategory);
+  pushCategoryKeys(keys, (article as any)?.section);
+  pushCategoryKeys(keys, (article as any)?.desk);
+  pushCategoryKeys(keys, (article as any)?.topic);
+  pushCategoryKeys(keys, (article as any)?.categories);
+  return keys;
+}
+
+function articleMatchesCategory(article: Article, categoryKey: string): boolean {
+  const targetKey = getCategoryQueryKey(categoryKey);
+  if (!targetKey) return true;
+  return getArticleCategoryKeys(article).has(targetKey);
+}
+
+function sortByNewestPublishTime(articles: Article[]): Article[] {
+  return articles.slice().sort((left, right) => {
+    const leftTime = getCategoryPublishTimeValue(left);
+    const rightTime = getCategoryPublishTimeValue(right);
+    if (leftTime !== rightTime) return rightTime - leftTime;
+    return String((left as any)?._id || (left as any)?.id || left?.slug || '')
+      .localeCompare(String((right as any)?._id || (right as any)?.id || right?.slug || ''));
+  });
+}
+
+export function selectCategoryFeedArticles(articles: Article[] | null | undefined, categoryKey: string): Article[] {
+  const publicArticles = filterPubliclyPublishedArticles(articles);
+  const targetKey = getCategoryQueryKey(categoryKey);
+  const categoryArticles = targetKey ? publicArticles.filter((article) => articleMatchesCategory(article, targetKey)) : publicArticles;
+  const scopedArticles = targetKey ? categoryArticles : publicArticles;
+  return dedupeArticles(sortByNewestPublishTime(scopedArticles));
+}
+
 function hasMoreCategoryResults(resp: Awaited<ReturnType<typeof fetchPublicNews>>, pageToLoad: number, requestedLimit: number): boolean {
   const total = typeof resp?.meta?.total === 'number' ? resp.meta.total : undefined;
   if (typeof total === 'number') return (Array.isArray(resp.items) ? resp.items.length : 0) < total;
@@ -280,7 +347,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
         return;
       }
 
-      const nextItems = dedupeArticles(filterPubliclyPublishedArticles(resp.items));
+      const nextItems = selectCategoryFeedArticles(resp.items, queryCategoryKey);
       setItems(nextItems);
       setPage(pageToLoad);
       setHasMore(hasMoreCategoryResults(resp, pageToLoad, requestedLimit));
@@ -359,7 +426,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
         });
       }
 
-      setItems(dedupeArticles(filterPubliclyPublishedArticles(resp.items)));
+      setItems(selectCategoryFeedArticles(resp.items, queryCategoryKey));
       setHasMore(hasMoreCategoryResults(resp, 1, CATEGORY_FEED_BATCH_SIZE));
       setLoaded(true);
     })().catch(() => {

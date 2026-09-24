@@ -3,7 +3,7 @@ import React from 'react';
 
 import { COVER_PLACEHOLDER_SRC } from '../../lib/coverImages';
 import { isNavigableNewsHref } from '../../lib/newsRoutes';
-import StoryImage from '../../src/components/story/StoryImage';
+import StoryImage, { TopStoryImage } from '../../src/components/story/StoryImage';
 
 export type CategoryStoryHierarchyItem = {
   id: string;
@@ -132,15 +132,25 @@ function TitleLink({ item, className }: { item: CategoryStoryHierarchyItem; clas
 }
 
 function ContributorLine({ item, compact = false }: { item: CategoryStoryHierarchyItem; compact?: boolean }) {
-  if (!item.authorName && !item.contributorPhotoSrc) return null;
+  const [photoFailed, setPhotoFailed] = React.useState(false);
+  const photoSrc = String(item.contributorPhotoSrc || '').trim();
+
+  React.useEffect(() => {
+    setPhotoFailed(false);
+  }, [photoSrc]);
+
+  const showPhoto = Boolean(photoSrc && !photoFailed);
+
+  if (!item.authorName && !showPhoto) return null;
   return (
     <div className={classNames('flex min-w-0 items-center gap-2 text-newsPulse-navy', compact ? 'mt-2 text-xs' : 'mt-3 text-sm')}>
-      {item.contributorPhotoSrc ? (
+      {showPhoto ? (
         <img
-          src={item.contributorPhotoSrc}
+          src={photoSrc}
           alt={item.contributorPhotoAlt || item.authorName || 'Contributor'}
           className={classNames('shrink-0 rounded-full border border-slate-200 bg-slate-100 object-cover', compact ? 'h-7 w-7' : 'h-9 w-9')}
           loading="lazy"
+          onError={() => setPhotoFailed(true)}
         />
       ) : null}
       <div className="min-w-0">
@@ -158,10 +168,10 @@ function TopStoryCard({ item, topLabel, renderTopActions }: { item: CategoryStor
       <div className="p-3 sm:p-4">
         {canOpen(item) ? (
           <Link href={item.href || '#'} className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-newsPulse-blue/40">
-            <StoryImage storyId={item.id} src={item.imageSrc || COVER_PLACEHOLDER_SRC} alt={item.titleText} variant="top" fitMode={item.imageFitMode || 'cover'} priority fallbackSrc={COVER_PLACEHOLDER_SRC} />
+            <TopStoryImage storyId={item.id} src={item.imageSrc || COVER_PLACEHOLDER_SRC} alt={item.titleText} priority fallbackSrc={COVER_PLACEHOLDER_SRC} />
           </Link>
         ) : (
-          <StoryImage storyId={item.id} src={item.imageSrc || COVER_PLACEHOLDER_SRC} alt={item.titleText} variant="top" fitMode={item.imageFitMode || 'cover'} priority fallbackSrc={COVER_PLACEHOLDER_SRC} />
+          <TopStoryImage storyId={item.id} src={item.imageSrc || COVER_PLACEHOLDER_SRC} alt={item.titleText} priority fallbackSrc={COVER_PLACEHOLDER_SRC} />
         )}
 
         <div className="mt-4">
@@ -221,7 +231,7 @@ function LatestRow({ item, editorial = false }: { item: CategoryStoryHierarchyIt
           {item.title}
         </h3>
         {item.summary ? <p className="mt-1 line-clamp-2 text-sm leading-6 text-newsPulse-slate">{item.summary}</p> : null}
-        {(editorial && item.authorName) || item.contributorPhotoSrc ? <ContributorLine item={item} compact /> : null}
+        {(editorial && item.authorName) || item.authorName || item.contributorPhotoSrc ? <ContributorLine item={item} compact /> : null}
       </div>
       {!editorial ? (
         <StoryImage storyId={item.id} src={item.imageSrc || COVER_PLACEHOLDER_SRC} alt={item.titleText} variant="mini" fitMode={item.imageFitMode || 'cover'} fallbackSrc={COVER_PLACEHOLDER_SRC} className="w-[92px] border border-slate-200/80 sm:w-[116px]" />
