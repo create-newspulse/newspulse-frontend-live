@@ -1,8 +1,10 @@
 import React from 'react';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { renderToString } from 'react-dom/server';
 
 import CategoryFeedPage, { selectCategoryFeedArticles } from '../../components/CategoryFeedPage';
 import { fetchPublicNews } from '../../lib/publicNewsApi';
+import { CATEGORY_FEED_REFRESH_MS, CATEGORY_FEED_TIMEOUT_MS } from '../../lib/categoryFeed';
 
 let mockLanguage = 'en';
 
@@ -110,6 +112,7 @@ describe('CategoryFeedPage editorial listing', () => {
 
   afterEach(() => {
     cleanup();
+    jest.useRealTimers();
   });
 
   test('selects the newest published same-category article as the category lead', () => {
@@ -237,7 +240,7 @@ describe('CategoryFeedPage editorial listing', () => {
     expect(screen.getByAltText('Loaded Pulse Dialogue').getAttribute('src')).toBe('/covers/loaded-pulse.jpg');
   });
 
-  test('valid initial Pulse Dialogue data renders immediately while client refresh is pending', () => {
+  test('valid initial Pulse Dialogue data renders immediately before the deferred client refresh', () => {
     (fetchPublicNews as jest.Mock).mockReturnValue(new Promise(() => undefined));
 
     renderPulseDialoguePageWithCurrentFetch({
@@ -247,7 +250,130 @@ describe('CategoryFeedPage editorial listing', () => {
     expect(screen.getByText('Initial Pulse Dialogue')).toBeTruthy();
     expect(screen.queryByTestId('category-story-loading')).toBeNull();
     expect(screen.getByAltText('Initial Pulse Dialogue').getAttribute('src')).toBe('/covers/initial-pulse.jpg');
+    expect(fetchPublicNews).not.toHaveBeenCalled();
+  });
+
+  test('valid initial category stories do not trigger an immediate duplicate hydration request', () => {
+    (fetchPublicNews as jest.Mock).mockImplementation(() => new Promise(() => {}));
+    renderPulseDialoguePageWithCurrentFetch({ initialItems: [pulseDialogueArticle(1)] });
+
+    expect(screen.getByText('Pulse Dialogue 1')).toBeTruthy();
+    expect(fetchPublicNews).not.toHaveBeenCalled();
+  });
+
+  test('a short seeded feed cannot trigger an immediate infinite-scroll request', () => {
+    const originalObserver = global.IntersectionObserver;
+    const observe = jest.fn();
+    global.IntersectionObserver = jest.fn(() => ({ observe, disconnect: jest.fn() })) as any;
+    try {
+      renderPulseDialoguePageWithCurrentFetch({ initialItems: [pulseDialogueArticle(1)] });
+      expect(observe).not.toHaveBeenCalled();
+      expect(fetchPublicNews).not.toHaveBeenCalled();
+    } finally {
+      cleanup();
+      global.IntersectionObserver = originalObserver;
+    }
+  });
+
+  test.each(['en', 'hi', 'gu'])('initial %s HTML contains the lead, contributor portrait and separate article cover without skeleton', (locale) => {
+    mockLanguage = locale;
+    const article = pulseDialogueArticle(1, {
+      language: locale, title: `${locale} Initial Dialogue`, coverImageUrl: '/covers/story.jpg',
+      pulseDialogue: {
+        dialogueFormat: 'guest_column', series: 'Civic Voices',
+        bylineSnapshot: { name: 'Initial Contributor', designation: 'Professor', affiliation: 'Test University', photoUrl: '/portraits/writer.jpg' },
+      },
+    });
+    const html = renderToString(<CategoryFeedPage title="Pulse Dialogue" categoryKey="pulse-dialogue" useCategoryShell initialItems={[article]} />);
+    expect(html).toContain(`${locale} Initial Dialogue`);
+    expect(html).toContain('Initial Contributor');
+    expect(html).toContain('Professor');
+    expect(html).toContain('Test University');
+    expect(html).toContain('Civic Voices');
+    expect(html).toContain('/portraits/writer.jpg');
+    expect(html).toContain('/covers/story.jpg');
+    expect(html).not.toContain('category-story-loading');
+    expect(fetchPublicNews).not.toHaveBeenCalled();
+  });
+
+  test('background refresh keeps the lead visible until a newer published story arrives', async () => {
+    jest.useFakeTimers();
+    let completeRefresh!: (response: any) => void;
+    (fetchPublicNews as jest.Mock).mockImplementation(() => new Promise((resolve) => { completeRefresh = resolve; }));
+    renderPulseDialoguePageWithCurrentFetch({ initialItems: [pulseDialogueArticle(1)] });
+    await act(async () => { await jest.advanceTimersByTimeAsync(CATEGORY_FEED_REFRESH_MS); });
     expect(fetchPublicNews).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Pulse Dialogue 1')).toBeTruthy();
+    expect(screen.queryByTestId('category-story-loading')).toBeNull();
+    await act(async () => { completeRefresh({ items: [pulseDialogueArticle(2), pulseDialogueArticle(1)], meta: {}, endpoint: '' }); });
+    expect(screen.getByTestId('top-story-image').getAttribute('alt')).toBe('Pulse Dialogue 2');
+    expect(screen.queryByTestId('category-story-loading')).toBeNull();
+  });
+
+  test('a timed-out refresh retains the lead and a later refresh can recover', async () => {
+    jest.useFakeTimers();
+    (fetchPublicNews as jest.Mock)
+      .mockImplementationOnce(() => new Promise(() => {}))
+      .mockResolvedValueOnce({ items: [pulseDialogueArticle(2)], meta: {}, endpoint: '' });
+    renderPulseDialoguePageWithCurrentFetch({ initialItems: [pulseDialogueArticle(1)] });
+    await act(async () => { await jest.advanceTimersByTimeAsync(CATEGORY_FEED_REFRESH_MS + CATEGORY_FEED_TIMEOUT_MS); });
+    expect(screen.getByText('Pulse Dialogue 1')).toBeTruthy();
+    expect(screen.queryByTestId('category-story-loading')).toBeNull();
+    await act(async () => { await jest.advanceTimersByTimeAsync(CATEGORY_FEED_REFRESH_MS - CATEGORY_FEED_TIMEOUT_MS); });
+    expect(screen.getByText('Pulse Dialogue 2')).toBeTruthy();
+    expect(fetchPublicNews).toHaveBeenCalledTimes(2);
+  });
+
+  test('without initial data a stalled client request stops showing a skeleton at its deadline', async () => {
+    jest.useFakeTimers();
+    (fetchPublicNews as jest.Mock).mockImplementation(() => new Promise(() => {}));
+    renderPulseDialoguePageWithCurrentFetch();
+    expect(screen.getByTestId('category-story-loading')).toBeTruthy();
+    await act(async () => { await jest.advanceTimersByTimeAsync(CATEGORY_FEED_TIMEOUT_MS); });
+    expect(screen.queryByTestId('category-story-loading')).toBeNull();
+    expect(screen.getByText('Unable to load stories')).toBeTruthy();
+  });
+
+  test('locale navigation never retains English filler or lets an obsolete request replace the new lead', async () => {
+    jest.useFakeTimers();
+    let completeEnglish!: (response: any) => void;
+    (fetchPublicNews as jest.Mock).mockImplementationOnce(() => new Promise((resolve) => { completeEnglish = resolve; }));
+    const view = renderPulseDialoguePageWithCurrentFetch({ initialItems: [pulseDialogueArticle(1, { title: 'English only' })] });
+    await act(async () => { await jest.advanceTimersByTimeAsync(CATEGORY_FEED_REFRESH_MS); });
+    mockLanguage = 'hi';
+    view.rerender(<CategoryFeedPage title="Pulse Dialogue" categoryKey="pulse-dialogue" useCategoryShell initialItems={[pulseDialogueArticle(2, { language: 'hi', title: 'Hindi only' })]} />);
+    expect(screen.queryByText('English only')).toBeNull();
+    expect(screen.getByText('Hindi only')).toBeTruthy();
+    await act(async () => { completeEnglish({ items: [pulseDialogueArticle(3, { title: 'Late English' })], meta: {}, endpoint: '' }); });
+    expect(screen.queryByText('Late English')).toBeNull();
+    expect(screen.getByText('Hindi only')).toBeTruthy();
+    expect(fetchPublicNews).toHaveBeenCalledTimes(1);
+  });
+
+  test('controlled 1000ms transport: unseeded lead waits 1000ms, seeded HTML has the lead at 0ms with no hydration request', async () => {
+    jest.useFakeTimers();
+    const initialItems = [pulseDialogueArticle(1)];
+    (fetchPublicNews as jest.Mock).mockImplementation(() => new Promise((resolve) => {
+      setTimeout(() => resolve({ items: initialItems, meta: {}, endpoint: '' }), 1000);
+    }));
+    const unseededHtml = renderToString(<CategoryFeedPage title="Pulse Dialogue" categoryKey="pulse-dialogue" useCategoryShell />);
+    expect(unseededHtml).not.toContain('Pulse Dialogue 1');
+    const before = renderPulseDialoguePageWithCurrentFetch();
+    expect(screen.queryByText('Pulse Dialogue 1')).toBeNull();
+    await act(async () => { await jest.advanceTimersByTimeAsync(999); });
+    expect(screen.queryByText('Pulse Dialogue 1')).toBeNull();
+    await act(async () => { await jest.advanceTimersByTimeAsync(1); });
+    expect(screen.getByText('Pulse Dialogue 1')).toBeTruthy();
+    expect(fetchPublicNews).toHaveBeenCalledTimes(1);
+    before.unmount();
+    (fetchPublicNews as jest.Mock).mockClear();
+
+    const seededHtml = renderToString(<CategoryFeedPage title="Pulse Dialogue" categoryKey="pulse-dialogue" useCategoryShell initialItems={initialItems} />);
+    expect(seededHtml).toContain('Pulse Dialogue 1');
+    renderPulseDialoguePageWithCurrentFetch({ initialItems });
+    expect(screen.getByText('Pulse Dialogue 1')).toBeTruthy();
+    await act(async () => { await jest.advanceTimersByTimeAsync(1000); });
+    expect(fetchPublicNews).not.toHaveBeenCalled();
   });
 
   test('failed Pulse Dialogue fetch renders a safe non-blank error state', async () => {

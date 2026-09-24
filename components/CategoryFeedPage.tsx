@@ -3,8 +3,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import React, { useMemo, useState } from 'react';
 import { getCategoryQueryKey, getCategoryRouteKey } from '../lib/categoryKeys';
-import { fetchPublicNews, type Article } from '../lib/publicNewsApi';
-import { filterPubliclyPublishedArticles, getLocalizedArticleFields, STRICT_LOCALE_POLICY } from '../lib/localizedArticleFields';
+import type { Article } from '../lib/publicNewsApi';
+import { CATEGORY_FEED_BATCH_SIZE, CATEGORY_FEED_REFRESH_MS, fetchCategoryFeed, selectCategoryFeedArticles } from '../lib/categoryFeed';
+import { getLocalizedArticleFields, STRICT_LOCALE_POLICY } from '../lib/localizedArticleFields';
 import { useLanguage } from '../utils/LanguageContext';
 import { useI18n } from '../src/i18n/LanguageProvider';
 import { buildNewsUrl, isNavigableNewsHref } from '../lib/newsRoutes';
@@ -140,101 +141,9 @@ const LOAD_MORE_LABELS: Record<string, string> = {
   'tech-gadgets': 'Load More Tech & Gadgets Stories',
 };
 
-const CATEGORY_FEED_BATCH_SIZE = 30;
+export { selectCategoryFeedArticles } from '../lib/categoryFeed';
 
-function getArticleStableKey(article: Article): string {
-  return String(
-    getStoryId(article) ||
-    (article as any)?.translationGroupId ||
-    article?.slug ||
-    ''
-  ).trim().toLowerCase();
-}
-
-function dedupeArticles(articles: Article[]): Article[] {
-  const seen = new Set<string>();
-  const output: Article[] = [];
-
-  for (const article of Array.isArray(articles) ? articles : []) {
-    const key = getArticleStableKey(article);
-    if (key) {
-      if (seen.has(key)) continue;
-      seen.add(key);
-    }
-    output.push(article);
-  }
-
-  return output;
-}
-
-function getCategoryPublishTimeValue(article: Article): number {
-  for (const value of [(article as any)?.publishedAt, (article as any)?.publishAt, (article as any)?.createdAt]) {
-    const raw = String(value || '').trim();
-    if (!raw) continue;
-    const parsed = Date.parse(raw);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-
-  return 0;
-}
-
-function pushCategoryKeys(output: Set<string>, value: unknown) {
-  if (!value) return;
-  if (Array.isArray(value)) {
-    value.forEach((item) => pushCategoryKeys(output, item));
-    return;
-  }
-
-  if (typeof value === 'object') {
-    pushCategoryKeys(output, (value as any).key);
-    pushCategoryKeys(output, (value as any).slug);
-    pushCategoryKeys(output, (value as any).value);
-    pushCategoryKeys(output, (value as any).name);
-    pushCategoryKeys(output, (value as any).label);
-    return;
-  }
-
-  const key = getCategoryQueryKey(value);
-  if (key) output.add(key);
-}
-
-function getArticleCategoryKeys(article: Article): Set<string> {
-  const keys = new Set<string>();
-  pushCategoryKeys(keys, (article as any)?.category);
-  pushCategoryKeys(keys, (article as any)?.categoryKey);
-  pushCategoryKeys(keys, (article as any)?.primaryCategory);
-  pushCategoryKeys(keys, (article as any)?.section);
-  pushCategoryKeys(keys, (article as any)?.desk);
-  pushCategoryKeys(keys, (article as any)?.topic);
-  pushCategoryKeys(keys, (article as any)?.categories);
-  return keys;
-}
-
-function articleMatchesCategory(article: Article, categoryKey: string): boolean {
-  const targetKey = getCategoryQueryKey(categoryKey);
-  if (!targetKey) return true;
-  return getArticleCategoryKeys(article).has(targetKey);
-}
-
-function sortByNewestPublishTime(articles: Article[]): Article[] {
-  return articles.slice().sort((left, right) => {
-    const leftTime = getCategoryPublishTimeValue(left);
-    const rightTime = getCategoryPublishTimeValue(right);
-    if (leftTime !== rightTime) return rightTime - leftTime;
-    return String((left as any)?._id || (left as any)?.id || left?.slug || '')
-      .localeCompare(String((right as any)?._id || (right as any)?.id || right?.slug || ''));
-  });
-}
-
-export function selectCategoryFeedArticles(articles: Article[] | null | undefined, categoryKey: string): Article[] {
-  const publicArticles = filterPubliclyPublishedArticles(articles);
-  const targetKey = getCategoryQueryKey(categoryKey);
-  const categoryArticles = targetKey ? publicArticles.filter((article) => articleMatchesCategory(article, targetKey)) : publicArticles;
-  const scopedArticles = targetKey ? categoryArticles : publicArticles;
-  return dedupeArticles(sortByNewestPublishTime(scopedArticles));
-}
-
-function hasMoreCategoryResults(resp: Awaited<ReturnType<typeof fetchPublicNews>>, pageToLoad: number, requestedLimit: number): boolean {
+function hasMoreCategoryResults(resp: Awaited<ReturnType<typeof fetchCategoryFeed>>, pageToLoad: number, requestedLimit: number): boolean {
   const total = typeof resp?.meta?.total === 'number' ? resp.meta.total : undefined;
   if (typeof total === 'number') return (Array.isArray(resp.items) ? resp.items.length : 0) < total;
 
@@ -249,18 +158,19 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
   const { language } = useLanguage();
   const { t } = useI18n();
   const initialCategoryItems = React.useMemo(
-    () => selectCategoryFeedArticles(initialItems, getCategoryQueryKey(categoryKey)),
-    [categoryKey, initialItems]
+    () => selectCategoryFeedArticles(initialItems, getCategoryQueryKey(categoryKey), language),
+    [categoryKey, initialItems, language]
   );
   const [items, setItems] = useState<Article[]>(() => initialCategoryItems);
   const [loaded, setLoaded] = useState(() => initialCategoryItems.length > 0);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
+  const [hasMore, setHasMore] = useState(() => initialCategoryItems.length >= CATEGORY_FEED_BATCH_SIZE);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const loadingPageRef = React.useRef<number | null>(null);
+  const pageRef = React.useRef(1);
+  const requestGenerationRef = React.useRef(0);
   const activeFeedRequestRef = React.useRef('');
   const inFlightFeedRequestRef = React.useRef('');
   const hasDisplayItemsRef = React.useRef(initialCategoryItems.length > 0);
@@ -289,10 +199,6 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
     ? { ...deskCopy, description: t('pulseDialogue.landing.description') }
     : deskCopy;
 
-  React.useEffect(() => {
-    if (items.length > 0) hasDisplayItemsRef.current = true;
-  }, [items.length]);
-
   // Allow deep-linking into a filtered view (used by article-page category header search).
   React.useEffect(() => {
     if (!router.isReady) return;
@@ -304,168 +210,103 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
   }, [router.isReady, router.query]);
 
   const filteredItems = useMemo(() => {
+    const scopedItems = selectCategoryFeedArticles(items, queryCategoryKey, language);
     const q = String(searchQuery || '').trim().toLowerCase();
-    if (!q) return items;
-    return (items || []).filter((a) => {
+    if (!q) return scopedItems;
+    return scopedItems.filter((a) => {
       const localized = getLocalizedArticleFields(a as any, language, STRICT_LOCALE_POLICY);
       if (!localized.isVisible) return false;
       const hay = `${localized.title || ''} ${localized.summary || ''}`.toLowerCase();
       return hay.includes(q);
     });
-  }, [items, language, searchQuery]);
+  }, [items, language, queryCategoryKey, searchQuery]);
 
-  const loadPage = React.useCallback(async (pageToLoad: number) => {
+  const loadPage = React.useCallback(async (pageToLoad: number, signal?: AbortSignal, background = false) => {
     const requestedLimit = pageToLoad * CATEGORY_FEED_BATCH_SIZE;
-    const requestKey = `${language}:${queryCategoryKey}:${queryKey}:${pageToLoad}`;
+    const requestKey = `${language}:${queryCategoryKey}:${queryKey}:${pageToLoad}:${requestGenerationRef.current}`;
+    if (background && inFlightFeedRequestRef.current) return;
     if (inFlightFeedRequestRef.current === requestKey) return;
 
-    loadingPageRef.current = pageToLoad;
     activeFeedRequestRef.current = requestKey;
     inFlightFeedRequestRef.current = requestKey;
 
     if (pageToLoad === 1) {
-      setLoaded(false);
+      setLoaded(hasDisplayItemsRef.current);
       setError(null);
       setLoadMoreError(null);
-      setHasMore(true);
-    } else {
+    } else if (!background) {
       setLoadingMore(true);
       setLoadMoreError(null);
     }
 
     try {
-      const resp = await fetchPublicNews({
+      const resp = await fetchCategoryFeed({
         category: String(queryCategoryKey || ''),
         language,
         limit: requestedLimit,
         extraQuery: fetchQuery,
-        signal: undefined,
+        signal,
       });
 
-      if (activeFeedRequestRef.current !== requestKey) return;
+      if (signal?.aborted || activeFeedRequestRef.current !== requestKey) return;
+      if (resp.error) throw new Error(resp.error);
 
-      if (resp.error) {
-        if (pageToLoad === 1) {
-          setError(resp.error);
-          setItems([]);
-          setLoaded(false);
-          setHasMore(false);
-        } else {
-          setLoadMoreError(resp.error);
-          setHasMore(true);
-        }
-        return;
-      }
-
-      const nextItems = selectCategoryFeedArticles(resp.items, queryCategoryKey);
+      const nextItems = selectCategoryFeedArticles(resp.items, queryCategoryKey, language);
+      hasDisplayItemsRef.current = nextItems.length > 0;
       setItems(nextItems);
+      pageRef.current = pageToLoad;
       setPage(pageToLoad);
       setHasMore(hasMoreCategoryResults(resp, pageToLoad, requestedLimit));
       setLoaded(true);
-    } catch {
-      if (activeFeedRequestRef.current !== requestKey) return;
-      if (pageToLoad === 1) {
-        setError(t('errors.fetchFailed'));
+      setLoadMoreError(null);
+    } catch (failure) {
+      if (signal?.aborted || activeFeedRequestRef.current !== requestKey) return;
+      const message = failure instanceof Error ? failure.message : t('errors.fetchFailed');
+      setLoaded(true);
+      if (!hasDisplayItemsRef.current) {
+        setError(message);
         setItems([]);
-        setLoaded(false);
         setHasMore(false);
       } else {
-        setLoadMoreError(t('errors.fetchFailed'));
-        setHasMore(true);
+        setLoadMoreError(message);
+        if (!background) setHasMore(true);
       }
     } finally {
       if (activeFeedRequestRef.current === requestKey) {
         setLoadingMore(false);
       }
-      if (loadingPageRef.current === pageToLoad) loadingPageRef.current = null;
       if (inFlightFeedRequestRef.current === requestKey) inFlightFeedRequestRef.current = '';
     }
   }, [fetchQuery, language, queryCategoryKey, queryKey, t]);
 
   React.useEffect(() => {
     const controller = new AbortController();
-    const requestKey = `${language}:${queryCategoryKey}:${queryKey}:1`;
-
-    activeFeedRequestRef.current = requestKey;
-  inFlightFeedRequestRef.current = requestKey;
-    loadingPageRef.current = 1;
-    setLoaded(false);
+    requestGenerationRef.current += 1;
+    activeFeedRequestRef.current = '';
+    inFlightFeedRequestRef.current = '';
+    hasDisplayItemsRef.current = initialCategoryItems.length > 0;
+    pageRef.current = 1;
+    setItems(initialCategoryItems);
+    setLoaded(initialCategoryItems.length > 0);
     setError(null);
     setLoadMoreError(null);
-    setHasMore(true);
+    setHasMore(initialCategoryItems.length >= CATEGORY_FEED_BATCH_SIZE);
     setPage(1);
 
-    (async () => {
-      const resp = await fetchPublicNews({
-        category: String(queryCategoryKey || ''),
-        language,
-        limit: CATEGORY_FEED_BATCH_SIZE,
-        extraQuery: fetchQuery,
-        signal: controller.signal,
-      });
-
-      if (controller.signal.aborted || activeFeedRequestRef.current !== requestKey) return;
-
-      if (resp.error) {
-        if (hasDisplayItemsRef.current) {
-          setLoaded(true);
-          setHasMore(false);
-          setLoadMoreError(resp.error);
-          return;
-        }
-        setError(resp.error);
-        setItems([]);
-        setLoaded(false);
-        setHasMore(false);
-        return;
-      }
-
-      if (process.env.NODE_ENV !== 'production') {
-        console.info('[CategoryFeedPage]', {
-          locale: language,
-          routeSlug: routeCategoryKey,
-          normalizedCategory: queryCategoryKey,
-          numberOfStoriesReturned: Array.isArray(resp.items) ? resp.items.length : 0,
-          storyIds: (Array.isArray(resp.items) ? resp.items : []).map((item) => String(item?._id || '').trim() || null),
-          translationGroupIds: (Array.isArray(resp.items) ? resp.items : []).map(
-            (item) => String((item as any)?.translationGroupId || '').trim() || null
-          ),
-          stories: (Array.isArray(resp.items) ? resp.items : []).map((item) => ({
-            id: String(item?._id || '').trim() || null,
-            translationGroupId: String((item as any)?.translationGroupId || '').trim() || null,
-            slug: String(item?.slug || '').trim() || null,
-            language: String((item as any)?.language || (item as any)?.lang || (item as any)?.sourceLanguage || '').trim() || null,
-            status: String((item as any)?.status || (item as any)?.state || '').trim() || null,
-            publishedAt: String((item as any)?.publishedAt || '').trim() || null,
-            translationStatus: (item as any)?.translationStatus ?? null,
-          })),
-        });
-      }
-
-      setItems(selectCategoryFeedArticles(resp.items, queryCategoryKey));
-      setHasMore(hasMoreCategoryResults(resp, 1, CATEGORY_FEED_BATCH_SIZE));
-      setLoaded(true);
-    })().catch(() => {
-      if (controller.signal.aborted || activeFeedRequestRef.current !== requestKey) return;
-      if (hasDisplayItemsRef.current) {
-        setLoaded(true);
-        setHasMore(false);
-        setLoadMoreError(t('errors.fetchFailed'));
-        return;
-      }
-      setError(t('errors.fetchFailed'));
-      setItems([]);
-      setLoaded(false);
-      setHasMore(false);
-    }).finally(() => {
-      if (loadingPageRef.current === 1) loadingPageRef.current = null;
-      if (inFlightFeedRequestRef.current === requestKey) inFlightFeedRequestRef.current = '';
-    });
+    if (!initialCategoryItems.length) void loadPage(1, controller.signal);
+    const refreshTimer = setInterval(() => {
+      if (document.visibilityState === 'hidden') return;
+      void loadPage(pageRef.current, controller.signal, true);
+    }, CATEGORY_FEED_REFRESH_MS);
 
     return () => {
+      clearInterval(refreshTimer);
+      requestGenerationRef.current += 1;
+      activeFeedRequestRef.current = '';
+      inFlightFeedRequestRef.current = '';
       controller.abort();
     };
-  }, [fetchQuery, language, queryCategoryKey, routeCategoryKey]);
+  }, [initialCategoryItems, language, queryCategoryKey, queryKey]);
 
   const loadNextPage = React.useCallback(() => {
     if (!loaded || loadingMore || !hasMore) return;

@@ -1,25 +1,10 @@
-import type { GetServerSideProps } from 'next';
+import type { GetStaticProps } from 'next';
 
 import CategoryFeedPage from '../../components/CategoryFeedPage';
+import { getCategoryStaticProps, type CategoryPageProps } from '../../lib/categoryPageProps';
 
-type Props = {
-  messages: any;
-  locale: string;
-};
+export const getStaticProps: GetStaticProps<CategoryPageProps> = (ctx) => getCategoryStaticProps(ctx, 'glamour');
 
-export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
-  const locale = (ctx.locale || 'en') as string;
-  const { getMessages } = await import('../../lib/getMessages');
-  const messages = await getMessages(locale);
-
-  return {
-    props: {
-      messages,
-      locale,
-    },
-  };
-};
-
-export default function GlamourPage() {
-  return <CategoryFeedPage title="Glamour" categoryKey="glamour" useCategoryShell />;
+export default function GlamourPage({ initialItems }: CategoryPageProps) {
+  return <CategoryFeedPage title="Glamour" categoryKey="glamour" useCategoryShell initialItems={initialItems} />;
 }
