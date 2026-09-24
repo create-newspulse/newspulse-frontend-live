@@ -1,29 +1,40 @@
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { useEffect, useState } from 'react';
-import { useYouthPulse } from '../../features/youthPulse/useYouthPulse';
-import type { YouthStory } from '../../features/youthPulse/types';
+import { useEffect, useMemo, useState } from 'react';
+import type { GetServerSideProps } from 'next';
+import { getYouthByCategory, getYouthTopics } from '../../features/youthPulse/api';
+import type { YouthCategory, YouthStory } from '../../features/youthPulse/types';
+import { useLanguage } from '../../utils/LanguageContext';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { StoryImage } from '../../src/components/story/StoryImage';
 
-export default function YouthCategoryPage() {
+type Props = { initialStories: YouthStory[]; initialTopics: YouthCategory[]; initialLocale: string; initialCategory: string; messages: any };
+const EMPTY_STORIES: YouthStory[] = [];
+
+export default function YouthCategoryPage({ initialStories, initialTopics, initialLocale, initialCategory }: Props) {
   const router = useRouter();
   const { t } = useI18n();
-  const { category } = router.query as { category?: string };
-  const { topics, getByCategory } = useYouthPulse();
-  const [stories, setStories] = useState<YouthStory[]>([]);
-  const meta = topics.find((c) => c.slug === category);
+  const { language } = useLanguage();
+  const category = String(router.query.category || initialCategory || '');
+  const seed = useMemo(() => language === initialLocale && category === initialCategory ? initialStories : EMPTY_STORIES, [language, initialLocale, category, initialCategory, initialStories]);
+  const [stories, setStories] = useState<YouthStory[]>(seed);
+  const meta = initialTopics.find((item) => item.slug === category);
 
   useEffect(() => {
-    let mounted = true;
-    (async () => {
+    const controller = new AbortController();
+    setStories(seed);
+    const refresh = async () => {
       if (!category) return;
-      const list = await getByCategory(category);
-      if (mounted) setStories(list);
-    })();
-    return () => { mounted = false; };
-  }, [category, getByCategory]);
+      try {
+        const list = await getYouthByCategory(category, language, { signal: controller.signal });
+        if (!controller.signal.aborted) setStories(list);
+      } catch {}
+    };
+    if (!seed.length) void refresh();
+    const timer = setInterval(refresh, 60_000);
+    return () => { clearInterval(timer); controller.abort(); };
+  }, [category, language, seed]);
 
   return (
     <div className="min-h-screen bg-white dark:bg-dark-primary text-black dark:text-dark-text">
@@ -49,7 +60,7 @@ export default function YouthCategoryPage() {
           {stories.length === 0 ? (
             <p className="text-gray-600 dark:text-gray-300">{t('youthPulse.noPostsYet')}</p>
           ) : (
-            stories.map((s) => (
+            stories.filter((story) => story.language === language).map((s) => (
               <article
                 key={s.id}
                 className="group relative rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm"
@@ -69,3 +80,15 @@ export default function YouthCategoryPage() {
     </div>
   );
 }
+
+export const getServerSideProps: GetServerSideProps<Props> = async ({ locale, params }) => {
+  const initialLocale = locale === 'hi' || locale === 'gu' ? locale : 'en';
+  const initialCategory = String(params?.category || '');
+  const { getMessages } = await import('../../lib/getMessages');
+  const initialStories = await getYouthByCategory(initialCategory, initialLocale).catch(() => []);
+  return { props: {
+    initialStories, initialLocale, initialCategory,
+    initialTopics: JSON.parse(JSON.stringify(await getYouthTopics())),
+    messages: await getMessages(initialLocale),
+  } };
+};

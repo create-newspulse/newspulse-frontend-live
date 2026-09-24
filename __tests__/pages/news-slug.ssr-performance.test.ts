@@ -1,4 +1,5 @@
 import { getServerSideProps } from '../../pages/news/[slug]';
+import { getServerSideProps as getLegacyProps } from '../../pages/news/[...parts]';
 
 jest.mock('../../hooks/useArticleAnalytics', () => ({
   useArticleAnalytics: jest.fn(),
@@ -52,6 +53,56 @@ function mockFetchSequence(handler: (url: string) => any) {
 describe('pages/news/[slug] getServerSideProps performance contract', () => {
   afterEach(() => {
     jest.resetAllMocks();
+    jest.useRealTimers();
+  });
+
+  test.each(['en', 'hi', 'gu'])('stalled main %s article returns retryable 503, not a false 404', async (locale) => {
+    jest.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    global.fetch = jest.fn((_url, init) => {
+      signal = init.signal;
+      return Promise.resolve({ ok: true, status: 200, json: () => new Promise(() => {}) });
+    }) as any;
+    const ctx = createCtx('slow-story', locale);
+    let completed = false;
+    const pending = getServerSideProps(ctx).then((result) => { completed = true; return result; });
+    await jest.advanceTimersByTimeAsync(4000);
+    expect(completed).toBe(true);
+    expect(ctx.res.statusCode).toBe(503);
+    expect(signal?.aborted).toBe(true);
+    expect((await pending as any).props.article).toBeNull();
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  test.each(['headers', 'body'])('stalled related %s leaves the main article usable', async (stage) => {
+    jest.useFakeTimers();
+    global.fetch = jest.fn((url) => {
+      if (String(url).includes('/slug/')) return Promise.resolve({ ok: true, json: async () => ({ article: article() }) });
+      return stage === 'headers' ? new Promise(() => {}) : Promise.resolve({ ok: true, json: () => new Promise(() => {}) });
+    }) as any;
+    let completed = false;
+    const pending = getServerSideProps(createCtx('gujarat-budget-2026')).then((result) => { completed = true; return result; });
+    await jest.advanceTimersByTimeAsync(1500);
+    expect(completed).toBe(true);
+    const result = await pending as any;
+    expect(result.props.article.title).toBe('Gujarat Budget 2026');
+    expect(result.props.safeHtml).toContain('Body');
+    expect(result.props.relatedStories).toEqual([]);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  test('legacy resolution is bounded across all attempts and returns 503 on timeout', async () => {
+    jest.useFakeTimers();
+    global.fetch = jest.fn(() => new Promise(() => {})) as any;
+    const ctx = createCtx('unused');
+    ctx.params = { parts: ['article-id', 'old-slug'] };
+    let completed = false;
+    const pending = getLegacyProps(ctx).then((result) => { completed = true; return result; });
+    await jest.advanceTimersByTimeAsync(4000);
+    expect(completed).toBe(true);
+    expect(await pending).toEqual({ props: { unavailable: true } });
+    expect(ctx.res.statusCode).toBe(503);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
   test('returns the article and its related lists', async () => {
@@ -123,6 +174,30 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
     const result: any = await getServerSideProps(createCtx('missing-story'));
 
     expect(result.notFound).toBe(true);
+  });
+
+  test('confirmed HTTP 404 remains notFound but HTTP 503 is retryable', async () => {
+    global.fetch = jest.fn(async () => ({ ok: false, status: 404 })) as any;
+    expect(await getServerSideProps(createCtx('missing-story'))).toEqual({ notFound: true });
+    global.fetch = jest.fn(async () => ({ ok: false, status: 503 })) as any;
+    const ctx = createCtx('temporarily-unavailable');
+    const result = await getServerSideProps(ctx) as any;
+    expect(ctx.res.statusCode).toBe(503);
+    expect(result.notFound).toBeUndefined();
+    expect(result.props.error).toBe('Article temporarily unavailable');
+  });
+
+  test('never-resolving main headers return before the SSR deadline', async () => {
+    jest.useFakeTimers();
+    global.fetch = jest.fn(() => new Promise(() => {})) as any;
+    const ctx = createCtx('slow-headers');
+    let completed = false;
+    const pending = getServerSideProps(ctx).then((result) => { completed = true; return result; });
+    await jest.advanceTimersByTimeAsync(4000);
+    expect(completed).toBe(true);
+    expect((await pending as any).props.article).toBeNull();
+    expect(ctx.res.statusCode).toBe(503);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
   test('returns notFound when a public slug resolves to a draft article', async () => {

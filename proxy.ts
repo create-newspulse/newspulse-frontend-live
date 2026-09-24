@@ -1,3 +1,4 @@
+import { withPublicReadDeadline } from './lib/publicReadDeadline';
 import { NextRequest, NextResponse } from 'next/server';
 
 const COOKIE_KEY = 'np_locale';
@@ -159,24 +160,21 @@ async function resolveDynamicSeoRedirect(req: NextRequest): Promise<NextResponse
   ];
 
   for (const endpoint of endpoints) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1200);
     try {
       const lookup = new URL(`${base}${endpoint}`);
       lookup.searchParams.set('path', normalizedPathname);
       lookup.searchParams.set('url', `${normalizedPathname}${currentUrl.search}`);
       lookup.searchParams.set('host', currentUrl.host);
 
-      const response = await fetch(lookup.toString(), {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-        signal: controller.signal,
+      const json = await withPublicReadDeadline(1200, async (signal) => {
+        const response = await fetch(lookup.toString(), {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          signal,
+        });
+        if (response.status === 404 || response.status === 204 || !response.ok) return null;
+        return response.json().catch(() => null);
       });
-      clearTimeout(timeout);
-      if (response.status === 404 || response.status === 204) continue;
-      if (!response.ok) continue;
-
-      const json = await response.json().catch(() => null);
       const rule = pickRedirectPayload(json);
       const rawDestination = String(rule?.destination || rule?.destinationUrl || rule?.target || rule?.targetUrl || rule?.to || rule?.url || '').trim();
       if (!rawDestination || rule?.enabled === false || rule?.active === false) continue;
@@ -197,7 +195,6 @@ async function resolveDynamicSeoRedirect(req: NextRequest): Promise<NextResponse
       });
       return redirect;
     } catch {
-      clearTimeout(timeout);
       continue;
     }
   }

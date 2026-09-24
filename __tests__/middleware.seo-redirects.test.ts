@@ -30,6 +30,30 @@ describe('dynamic SEO redirects middleware', () => {
     process.env.NEXT_PUBLIC_API_BASE = originalApiBase;
   });
 
+  afterEach(() => { jest.useRealTimers(); });
+
+  test.each(['headers', 'body'])('stalled %s fails open within the bounded lookup budget', async (stage) => {
+    jest.useFakeTimers();
+    const signals: AbortSignal[] = [];
+    global.fetch = jest.fn((_url, init) => {
+      signals.push(init.signal);
+      return stage === 'headers' ? new Promise(() => {}) : Promise.resolve({
+        ok: true, status: 200, json: () => new Promise(() => {}),
+      });
+    }) as any;
+    let completed = false;
+    const pending = middleware(request(`https://www.newspulse.co.in/stalled-${stage}-${requestCounter}`)).then((response) => {
+      completed = true;
+      return response;
+    });
+    await jest.advanceTimersByTimeAsync(3600);
+    expect(completed).toBe(true);
+    expect((await pending).status).toBe(200);
+    expect(signals).toHaveLength(3);
+    expect(signals.every((signal) => signal.aborted)).toBe(true);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
   test('matching 301 returns a server-side 301 redirect', async () => {
     global.fetch = jest.fn().mockResolvedValue(jsonResponse({ destination: '/new-destination', statusCode: 301, preserveQuery: true })) as any;
 

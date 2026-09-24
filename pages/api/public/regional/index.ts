@@ -8,13 +8,7 @@ import {
 } from '../../../../lib/unwrapRegionalFeed';
 import { normalizeRouteLocale } from '../../../../lib/localizedArticleFields';
 
-const BLOCKED_IDS = new Set<string>([
-  '69a9d5f74c3cb9a18ef5a179',
-  '69a9ca4a4c3cb9a18ef5a16f',
-  // Proven stale/deleted cards still appearing in public regional feeds.
-  '69c0c4707c7cb68a34add518',
-  '69c029fb7c7cb68a34add2ee',
-]);
+import { REGIONAL_BLOCKED_IDS as BLOCKED_IDS } from '../../../../lib/regionalInitialStories';
 
 function shouldKeepRegionalItem(item: any): boolean {
   const id = String(item?._id || item?.id || '').trim();

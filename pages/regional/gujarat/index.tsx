@@ -19,6 +19,7 @@ import { normalizeLang, useI18n } from '../../../src/i18n/LanguageProvider';
 import { getActiveRouteLang } from '../../../utils/routeLang';
 import { unwrapRegionalFeedItems } from '../../../lib/unwrapRegionalFeed';
 import { buildRegionalFeedSearchParams } from '../../../lib/regionalFeedQuery';
+import { fetchRegionalInitialStories, selectRegionalInitialStories } from '../../../lib/regionalInitialStories';
 
 const CATEGORIES = [
   'All',
@@ -36,6 +37,7 @@ const CATEGORIES = [
 const REGIONAL_FEED_BATCH_SIZE = 30;
 
 type AnyStory = any;
+const EMPTY_REGIONAL_STORIES: AnyStory[] = [];
 
 function normalize(s: string) {
   const raw = String(s || '')
@@ -151,7 +153,7 @@ function dedupeRegionalStories(stories: AnyStory[]): AnyStory[] {
   return output;
 }
 
-export default function GujaratIndexPage() {
+export default function GujaratIndexPage({ initialStories = EMPTY_REGIONAL_STORIES, initialLocale = 'en' }: { initialStories?: AnyStory[]; initialLocale?: string }) {
   const router = useRouter();
   const { language } = useLanguage();
   const { t } = useI18n();
@@ -203,17 +205,21 @@ export default function GujaratIndexPage() {
   const [searchQuery, setSearchQuery] = React.useState('');
   const [pickerOpen, setPickerOpen] = React.useState(false);
 
-  const [stories, setStories] = React.useState<AnyStory[]>([]);
-  const [loading, setLoading] = React.useState(false);
+  const seed = React.useMemo(() => initialLocale === uiLang ? selectRegionalInitialStories(initialStories, uiLang) : [], [initialStories, initialLocale, uiLang]);
+  const [stories, setStories] = React.useState<AnyStory[]>(seed);
+  const [loading, setLoading] = React.useState(!seed.length);
   const [loadingMore, setLoadingMore] = React.useState(false);
   const [page, setPage] = React.useState(1);
-  const [hasMore, setHasMore] = React.useState(true);
+  const [hasMore, setHasMore] = React.useState(seed.length >= REGIONAL_FEED_BATCH_SIZE);
   const [error, setError] = React.useState<string | null>(null);
   const [loadMoreError, setLoadMoreError] = React.useState<string | null>(null);
   const [refreshNonce, setRefreshNonce] = React.useState(0);
   const loadingPageRef = React.useRef<number | null>(null);
   const activeFeedRequestRef = React.useRef('');
   const inFlightFeedRequestRef = React.useRef('');
+  const displayStoriesRef = React.useRef(seed.length > 0);
+  const pageRef = React.useRef(1);
+  const feedGenerationRef = React.useRef(0);
 
   const districtFilteringEnabled = React.useMemo(
     () =>
@@ -260,9 +266,10 @@ export default function GujaratIndexPage() {
     }
   };
 
-  const fetchRegionalPage = React.useCallback(async (pageToLoad: number) => {
+  const fetchRegionalPage = React.useCallback(async (pageToLoad: number, signal?: AbortSignal, background = false) => {
     const requestedLimit = pageToLoad * REGIONAL_FEED_BATCH_SIZE;
-    const requestKey = `${regionalFeedFilterKey}:${refreshNonce}:${pageToLoad}`;
+    const requestKey = `${regionalFeedFilterKey}:${refreshNonce}:${pageToLoad}:${feedGenerationRef.current}`;
+    if (background && inFlightFeedRequestRef.current) return;
     if (inFlightFeedRequestRef.current === requestKey) return;
 
     loadingPageRef.current = pageToLoad;
@@ -270,12 +277,11 @@ export default function GujaratIndexPage() {
     inFlightFeedRequestRef.current = requestKey;
 
     if (pageToLoad === 1) {
-      setLoading(true);
+      setLoading(!displayStoriesRef.current);
       setError(null);
       setLoadMoreError(null);
-      setHasMore(true);
       setPage(1);
-    } else {
+    } else if (!background) {
       setLoadingMore(true);
       setLoadMoreError(null);
     }
@@ -293,34 +299,29 @@ export default function GujaratIndexPage() {
       if (query) params.set('q', query);
 
       const url = `/api/public/regional?${params.toString()}`;
-      const res = await fetch(url, { method: 'GET', cache: 'no-store', headers: { Accept: 'application/json' } });
-      if (!res.ok) throw new Error(`Failed to fetch regional feed (${res.status})`);
-
-      const data = await res.json().catch(() => null);
-      if (activeFeedRequestRef.current !== requestKey) return;
+      const data = await fetchRegionalInitialStories(params, { signal });
+      if (signal?.aborted || activeFeedRequestRef.current !== requestKey) return;
 
       if (debugRegional) {
         // eslint-disable-next-line no-console
         console.log('[regional/gujarat] feed debug', {
           url,
-          status: res.status,
-          cacheControl: res.headers.get('cache-control'),
-          age: res.headers.get('age'),
-          xVercelCache: res.headers.get('x-vercel-cache'),
           payload: data,
         });
       }
 
       const items = dedupeRegionalStories(unwrapRegionalFeedItems(data) as AnyStory[]);
+      displayStoriesRef.current = items.length > 0;
+      pageRef.current = pageToLoad;
       setStories(items);
       setPage(pageToLoad);
       setHasMore(items.length >= requestedLimit);
     } catch (e: any) {
       // eslint-disable-next-line no-console
       console.error('Failed to fetch regional feed', e);
-      if (activeFeedRequestRef.current !== requestKey) return;
+      if (signal?.aborted || activeFeedRequestRef.current !== requestKey) return;
       const message = e?.message || t('regionalUI.failedToLoadStories');
-      if (pageToLoad === 1) setError(message);
+      if (pageToLoad === 1 && !displayStoriesRef.current) setError(message);
       else {
         setLoadMoreError(message);
         setHasMore(true);
@@ -336,8 +337,31 @@ export default function GujaratIndexPage() {
   }, [effectiveCategory, refreshNonce, regionalFeedFilterKey, searchQuery, t, uiLang]);
 
   React.useEffect(() => {
-    fetchRegionalPage(1);
-  }, [fetchRegionalPage]);
+    const controller = new AbortController();
+    feedGenerationRef.current += 1;
+    activeFeedRequestRef.current = '';
+    inFlightFeedRequestRef.current = '';
+    const initial = effectiveCategory === 'All' && !searchQuery && !refreshNonce ? seed : [];
+    setStories(initial);
+    displayStoriesRef.current = initial.length > 0;
+    pageRef.current = 1;
+    setPage(1);
+    setLoading(!initial.length);
+    setHasMore(initial.length >= REGIONAL_FEED_BATCH_SIZE);
+    setError(null);
+    setLoadMoreError(null);
+    if (!initial.length) void fetchRegionalPage(1, controller.signal);
+    const timer = setInterval(() => {
+      if (document.visibilityState !== 'hidden') void fetchRegionalPage(pageRef.current, controller.signal, true);
+    }, 60_000);
+    return () => {
+      clearInterval(timer);
+      feedGenerationRef.current += 1;
+      activeFeedRequestRef.current = '';
+      inFlightFeedRequestRef.current = '';
+      controller.abort();
+    };
+  }, [regionalFeedFilterKey, refreshNonce, seed]);
 
   const loadNextRegionalPage = React.useCallback(() => {
     if (loading || loadingMore || !hasMore) return;
@@ -598,11 +622,23 @@ export default function GujaratIndexPage() {
   );
 }
 
-export const getStaticProps: GetStaticProps = async ({ locale }) => {
+export const getStaticProps: GetStaticProps = async (ctx) => {
+  const locale = normalizeLang(ctx.locale);
   const { getMessages } = await import('../../../lib/getMessages');
+  const params = buildRegionalFeedSearchParams({ state: 'gujarat', lang: locale });
+  params.set('limit', String(REGIONAL_FEED_BATCH_SIZE));
+  let initialStories: AnyStory[] = [];
+  try {
+    initialStories = (await fetchRegionalInitialStories(params, { server: true })).slice(0, REGIONAL_FEED_BATCH_SIZE);
+  } catch (error) {
+    if (ctx.revalidateReason === 'stale') throw error;
+  }
   return {
     props: {
-      messages: await getMessages(locale as string),
+      messages: await getMessages(locale),
+      initialStories,
+      initialLocale: locale,
     },
+    revalidate: 60,
   };
 };

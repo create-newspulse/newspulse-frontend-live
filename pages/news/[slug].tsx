@@ -1,4 +1,5 @@
 import type { GetServerSideProps } from 'next';
+import { withPublicReadDeadline } from '../../lib/publicReadDeadline';
 import Head from 'next/head';
 import Link from 'next/link';
 import React from 'react';
@@ -2333,24 +2334,29 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
       `${origin}/api/public/news/${encodeURIComponent(rawSlug)}?${params.toString()}`,
     ];
 
-    let data: any = null;
-    let article: Article | null = null;
-    for (const endpoint of endpoints) {
-      const res = await fetch(endpoint, { method: 'GET', headers, cache: 'no-store' });
-      const next = await res.json().catch(() => null);
-      if (isPendingTranslationPayload(next)) {
+    const { data, article } = await withPublicReadDeadline(4000, async (signal) => {
+      let data: any = null;
+      let article: Article | null = null;
+      for (const endpoint of endpoints) {
+        const res = await fetch(endpoint, { method: 'GET', headers, cache: 'no-store', signal });
+        if (res.status === 404) { data = null; continue; }
+        if (res.ok === false && res.status !== 404) throw new Error('Article upstream unavailable');
+        const next = await res.json();
+        signal.throwIfAborted();
+        if (isPendingTranslationPayload(next)) {
+          data = next;
+          break;
+        }
+        const candidate = unwrapArticle(next);
+        if (candidate?._id) {
+          data = next;
+          article = candidate;
+          break;
+        }
         data = next;
-        article = null;
-        break;
       }
-      const candidate = unwrapArticle(next);
-      if (candidate?._id) {
-        data = next;
-        article = candidate;
-        break;
-      }
-      data = next;
-    }
+      return { data, article };
+    });
 
     if (isPendingTranslationPayload(data)) {
       debugNewsDetailResolution('ssr-pending', {
@@ -2393,7 +2399,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
 
     // Secondary lists are not needed to render the article, so they run alongside
     // the translation-group lookup instead of after it.
-    const relatedPromise = (async () => {
+    const relatedPromise = withPublicReadDeadline(1500, async (signal) => {
       try {
         const categoryKey = resolveCategoryQueryKey(article);
         const limit = 24;
@@ -2405,7 +2411,8 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
         relatedParams.set('limit', String(limit));
 
         const endpoint = `${origin}/api/public/news?${relatedParams.toString()}`;
-        const res = await fetch(endpoint, { method: 'GET', headers, cache: 'no-store' });
+        const res = await fetch(endpoint, { method: 'GET', headers, cache: 'no-store', signal });
+        if (res.ok === false) return [] as Article[];
         const listData = await res.json().catch(() => null);
         const itemsRaw =
           Array.isArray(listData) ? listData :
@@ -2418,7 +2425,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
       } catch {
         return [] as Article[];
       }
-    })();
+    }).catch(() => [] as Article[]);
 
     // NOTE: /api/public/news/slug/[slug] and /api/public/news/[id] already resolve the
     // translation group with the same locale + policy, so repeating it here only added
@@ -2497,6 +2504,10 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
       },
     };
   } catch {
-    return { notFound: true };
+    ctx.res.statusCode = 503;
+    ctx.res.setHeader('Retry-After', '30');
+    return {
+      props: { messages, locale, lang, slug: rawSlug, article: null, safeHtml: '', topStories: [], relatedStories: [], error: 'Article temporarily unavailable', pending: false, siteUrl },
+    };
   }
 };

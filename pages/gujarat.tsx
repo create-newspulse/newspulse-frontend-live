@@ -3,12 +3,20 @@ import { useEffect, useState } from 'react';
 import { fetchRssNews } from '../lib/fetchRssNews';
 import type { GetStaticProps } from 'next';
 
-export default function GujaratNews() {
-  const [news, setNews] = useState<any[]>([]);
+const EMPTY_NEWS: any[] = [];
+
+export default function GujaratNews({ initialNews = EMPTY_NEWS }: { initialNews?: any[] }) {
+  const [news, setNews] = useState<any[]>(initialNews);
 
   useEffect(() => {
-    fetchRssNews("Gujarati").then(setNews); // ✅ pass argument
-  }, []);
+    const controller = new AbortController();
+    setNews(initialNews);
+    const refresh = () => fetchRssNews('Gujarati', { signal: controller.signal, throwOnError: true })
+      .then((items) => { if (!controller.signal.aborted) setNews(items); }).catch(() => {});
+    if (!initialNews.length) void refresh();
+    const timer = setInterval(refresh, 60_000);
+    return () => { clearInterval(timer); controller.abort(); };
+  }, [initialNews]);
 
   return (
     <div className="p-6">
@@ -26,11 +34,19 @@ export default function GujaratNews() {
   );
 }
 
-export const getStaticProps: GetStaticProps = async ({ locale }) => {
+export const getStaticProps: GetStaticProps = async ({ locale, revalidateReason }) => {
   const { getMessages } = await import('../lib/getMessages');
+  let initialNews: any[] = [];
+  try {
+    initialNews = await fetchRssNews('Gujarati', { throwOnError: true });
+  } catch (error) {
+    if (revalidateReason === 'stale') throw error;
+  }
   return {
     props: {
       messages: await getMessages(locale as string),
+      initialNews,
     },
+    revalidate: 60,
   };
 };

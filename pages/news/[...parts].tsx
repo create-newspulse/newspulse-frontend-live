@@ -1,4 +1,6 @@
 import type { GetServerSideProps } from 'next';
+import ErrorPage from 'next/error';
+import { withPublicReadDeadline } from '../../lib/publicReadDeadline';
 
 import { buildNewsUrl } from '../../lib/newsRoutes';
 import { unwrapArticle } from '../../lib/publicNewsApi';
@@ -20,8 +22,8 @@ function getRequestOrigin(ctx: any): string {
   return `${proto}://${host}`;
 }
 
-export default function LegacyNewsRedirectPage() {
-  return null;
+export default function LegacyNewsRedirectPage({ unavailable = false }: { unavailable?: boolean }) {
+  return unavailable ? <ErrorPage statusCode={503} /> : null;
 }
 
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
@@ -42,33 +44,39 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
 
   const attempts: RouteLocale[] = [lang, 'en', 'hi', 'gu'].filter((v, idx, arr) => arr.indexOf(v) === idx) as RouteLocale[];
 
-  const fetchById = async (attemptLang: RouteLocale): Promise<any | null> => {
+  const fetchById = async (attemptLang: RouteLocale, signal: AbortSignal): Promise<any | null> => {
     const qs = new URLSearchParams();
     qs.set('lang', attemptLang);
     qs.set('language', attemptLang);
     const endpoint = `${origin}/api/public/news/${encodeURIComponent(idCandidate)}?${qs.toString()}`;
-    const res = await fetch(endpoint, { method: 'GET', headers: { Accept: 'application/json' }, cache: 'no-store' });
-    if (!res.ok) return null;
+    const res = await fetch(endpoint, { method: 'GET', headers: { Accept: 'application/json' }, cache: 'no-store', signal });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error('Article upstream unavailable');
     const data = await res.json().catch(() => null);
+    signal.throwIfAborted();
     return unwrapArticle(data);
   };
 
-  const fetchBySlug = async (attemptLang: RouteLocale): Promise<any | null> => {
+  const fetchBySlug = async (attemptLang: RouteLocale, signal: AbortSignal): Promise<any | null> => {
     const qs = new URLSearchParams();
     qs.set('lang', attemptLang);
     qs.set('language', attemptLang);
     const endpoint = `${origin}/api/public/news/slug/${encodeURIComponent(slugCandidate)}?${qs.toString()}`;
-    const res = await fetch(endpoint, { method: 'GET', headers: { Accept: 'application/json' }, cache: 'no-store' });
+    const res = await fetch(endpoint, { method: 'GET', headers: { Accept: 'application/json' }, cache: 'no-store', signal });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error('Article upstream unavailable');
     const data = await res.json().catch(() => null);
+    signal.throwIfAborted();
     return unwrapArticle(data);
   };
 
   try {
+    return await withPublicReadDeadline(4000, async (signal) => {
     let found: any | null = null;
     let foundLang: RouteLocale | null = null;
 
     for (const attemptLang of attempts) {
-      const article = await fetchById(attemptLang);
+      const article = await fetchById(attemptLang, signal);
       if (article?._id) {
         found = article;
         foundLang = attemptLang;
@@ -78,7 +86,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
 
     if (!found) {
       for (const attemptLang of attempts) {
-        const article = await fetchBySlug(attemptLang);
+        const article = await fetchBySlug(attemptLang, signal);
         if (article?._id) {
           found = article;
           foundLang = attemptLang;
@@ -101,7 +109,11 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
         permanent: true,
       },
     };
+    });
   } catch {
-    return { notFound: true };
+    ctx.res.statusCode = 503;
+    ctx.res.setHeader('Cache-Control', 'no-store');
+    ctx.res.setHeader('Retry-After', '30');
+    return { props: { unavailable: true } };
   }
 };

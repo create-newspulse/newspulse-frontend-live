@@ -3,9 +3,12 @@ import type { YouthCategory, YouthStory } from "./types";
 import { getApiOrigin } from '../../lib/publicNewsApi';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
 import { buildNewsUrl } from '../../lib/newsRoutes';
+import { withPublicReadDeadline } from '../../lib/publicReadDeadline';
+import { filterPubliclyPublishedArticles, getLocalizedArticleFields, STRICT_LOCALE_POLICY } from '../../lib/localizedArticleFields';
 
 type FetchOpts = {
   signal?: AbortSignal;
+  throwOnError?: boolean;
 };
 
 const YOUTH_TRACKS = [
@@ -220,15 +223,16 @@ async function fetchYouthPulseArticles(limit: number, language?: string, opts: F
   const url = `${base}/api/public/news?${params.toString()}`;
 
   try {
-    const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' }, signal: opts.signal });
-    if (!res.ok) return [];
-
-    const data = await res.json().catch(() => null);
+    return await withPublicReadDeadline(4000, async (signal) => {
+    const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' }, signal });
+    if (!res.ok) throw new Error('Youth feed unavailable');
+    const data = await res.json();
     const list: unknown =
       (data && (data.items || data.articles || data.news || data.data)) ?? (Array.isArray(data) ? data : []);
     return Array.isArray(list) ? (list as any[]) : [];
+    }, opts.signal);
   } catch (e: any) {
-    if (e && e.name === 'AbortError') throw e;
+    if (opts.throwOnError || (e && e.name === 'AbortError')) throw e;
     return [];
   }
 }
@@ -277,16 +281,30 @@ export async function getYouthTrending(limit = 12): Promise<YouthStory[]> {
   return list.slice(0, limit);
 }
 
+function localizedYouthItems(input: any[], language?: string): any[] {
+  const locale = language === 'hi' || language === 'gu' ? language : 'en';
+  const items = filterPubliclyPublishedArticles(sanitizePublicYouthItems(input));
+  const publicationTime = (story: any) => {
+    for (const value of [story.publishedAt, story.publishAt, story.createdAt]) {
+      const parsed = Date.parse(String(value || ''));
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    return 0;
+  };
+  return items.sort((left, right) => publicationTime(right) - publicationTime(left)).flatMap((raw) => {
+    const localized = getLocalizedArticleFields(raw, locale, STRICT_LOCALE_POLICY);
+    if (!localized.isVisible || !localized.title) return [];
+    return [{ ...raw, title: localized.title, summary: localized.summary, slug: localized.slug, language: locale }];
+  });
+}
+
 export async function getYouthTrendingByLanguage(
   limit = 12,
   language?: string,
   opts: FetchOpts = {}
 ): Promise<YouthStory[]> {
-  const items = sanitizePublicYouthItems(await fetchYouthPulseArticles(limit, language, opts));
-  if (items.length) return items.map((raw) => toYouthStory(raw, undefined, language));
-
-  const list = getFallbackYouthStories();
-  return list.slice(0, limit);
+  const items = await fetchYouthPulseArticles(limit, language || 'en', { ...opts, throwOnError: true });
+  return localizedYouthItems(items, language).map((raw) => toYouthStory(raw, undefined, language)).slice(0, limit);
 }
 
 export async function getYouthByCategory(slug: string, language?: string, opts: FetchOpts = {}): Promise<YouthStory[]> {
@@ -296,12 +314,12 @@ export async function getYouthByCategory(slug: string, language?: string, opts: 
 
   // If asking for the main category, just return the latest youth-pulse feed.
   if (normalizeText(slug) === 'youth pulse' || normalizeText(slug) === 'youth-pulse') {
-    const items = sanitizePublicYouthItems(await fetchYouthPulseArticles(30, language, opts));
+    const items = localizedYouthItems(await fetchYouthPulseArticles(30, language, { ...opts, throwOnError: true }), language);
     if (items.length) return items.map((raw) => toYouthStory(raw, 'Youth Pulse', language));
-    return getFallbackYouthStories();
+    return [];
   }
 
-  const items = sanitizePublicYouthItems(await fetchYouthPulseArticles(30, language, opts));
+  const items = localizedYouthItems(await fetchYouthPulseArticles(30, language, { ...opts, throwOnError: true }), language);
   const filtered = items.filter((raw) => {
     const tags = extractTags(raw);
     const track = resolveYouthTrackFromRaw(raw);
@@ -312,5 +330,5 @@ export async function getYouthByCategory(slug: string, language?: string, opts: 
 
   if (filtered.length) return filtered.map((raw) => toYouthStory(raw, display || 'Youth Pulse', language));
 
-  return getFallbackYouthStories(slug);
+  return [];
 }

@@ -8,15 +8,18 @@ import CategoryGrid from '../components/youth/CategoryGrid';
 import FeaturedStories from '../components/youth/FeaturedStories';
 import YouthSpotlight from '../components/youth/YouthSpotlight';
 import SubmitStoryModal from '../components/youth/SubmitStoryModal';
-import { useYouthPulse } from '../features/youthPulse/useYouthPulse';
+import { useYouthPulse, type InitialYouthFeed } from '../features/youthPulse/useYouthPulse';
+import { getYouthTrendingByLanguage } from '../features/youthPulse/api';
+import { withPublicReadDeadline } from '../lib/publicReadDeadline';
 import { usePublicFounderToggles } from '../hooks/usePublicFounderToggles';
-import { fetchServerPublicFounderToggles, type PublicFounderToggles } from '../lib/publicFounderToggles';
+import { DEFAULT_PUBLIC_FOUNDER_TOGGLES, fetchServerPublicFounderToggles, type PublicFounderToggles } from '../lib/publicFounderToggles';
 
 type YouthPulsePageProps = {
   initialFounderToggles: PublicFounderToggles;
+  initialYouthFeed?: InitialYouthFeed;
 };
 
-export default function YouthPulsePage({ initialFounderToggles }: YouthPulsePageProps) {
+export default function YouthPulsePage({ initialFounderToggles, initialYouthFeed }: YouthPulsePageProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const catRef = useRef<HTMLDivElement>(null);
@@ -25,7 +28,7 @@ export default function YouthPulsePage({ initialFounderToggles }: YouthPulsePage
 
   const view = typeof router.query?.view === 'string' ? router.query.view : '';
   const isViewAll = view.toLowerCase() === 'all';
-  const { topics, trending, error } = useYouthPulse(isViewAll ? 30 : 12);
+  const { topics, trending, error } = useYouthPulse(isViewAll ? 30 : 12, initialYouthFeed);
   const submissionsClosed = toggles.youthPulseSubmissionsClosed;
   const spotlightStories = trending.slice(0, Math.min(4, trending.length));
   const latestStories = trending.slice(0, isViewAll ? 6 : 3);
@@ -145,13 +148,20 @@ export default function YouthPulsePage({ initialFounderToggles }: YouthPulsePage
   );
 }
 
-export const getServerSideProps: GetServerSideProps<YouthPulsePageProps> = async ({ locale }) => {
+export const getServerSideProps: GetServerSideProps<YouthPulsePageProps> = async ({ locale, query }) => {
   const { getMessages } = await import('../lib/getMessages');
-  const initialFounderToggles = await fetchServerPublicFounderToggles();
+  const language = locale === 'hi' || locale === 'gu' ? locale : 'en';
+  const limit = String(query?.view || '').toLowerCase() === 'all' ? 30 : 12;
+  const [stories, initialFounderToggles] = await Promise.all([
+    getYouthTrendingByLanguage(limit, language).catch(() => []),
+    withPublicReadDeadline(1500, (signal) => fetchServerPublicFounderToggles((input, init) => fetch(input, { ...init, signal })))
+      .catch(() => DEFAULT_PUBLIC_FOUNDER_TOGGLES),
+  ]);
   return {
     props: {
       initialFounderToggles,
-      messages: await getMessages(locale as string),
+      initialYouthFeed: { stories, language, limit },
+      messages: await getMessages(language),
     },
   };
 };
