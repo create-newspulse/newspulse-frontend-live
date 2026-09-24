@@ -69,9 +69,177 @@ function jsonResponse(payload: any, status = 200) {
   };
 }
 
+function pulseStory(locale = 'en', overrides: Record<string, any> = {}) {
+  return {
+    _id: `pulse-${locale}`,
+    translationGroupId: 'pulse-group',
+    category: 'pulse-dialogue',
+    language: locale,
+    status: 'published',
+    title: 'Pulse conversation',
+    slug: `pulse-${locale}`,
+    publishedAt: '2025-01-01T00:00:00.000Z',
+    coverImage: { url: 'https://images.test/cover.jpg' },
+    pulseDialogue: {
+      contributorId: 'contributor-1',
+      bylineSnapshot: { name: 'Contributor', photo: { url: 'https://images.test/snapshot.jpg', alt: 'Portrait' } },
+      contributor: { id: 'contributor-1', name: 'Contributor', photo: { url: 'https://images.test/portrait.jpg', alt: 'Portrait' } },
+    },
+    ...overrides,
+  };
+}
+
 describe('public news route localization', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  test.each(['en', 'hi', 'gu'])('strict Pulse %s returns a complete localized page with one upstream request', async (locale) => {
+    const story = pulseStory(locale);
+    const payload = { items: [story], total: 1, page: 1, limit: 30, totalPages: 1 };
+    const fetchMock = jest.fn().mockResolvedValue(jsonResponse(payload));
+    global.fetch = fetchMock as any;
+    const query = { category: 'pulse-dialogue', lang: locale, language: locale, strictLocale: '1', limit: '30' };
+    const res = createRes();
+
+    await newsHandler(createReq({ query, url: `/api/public/news?${new URLSearchParams(query)}` }) as any, res as any);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(res.body).toEqual(payload);
+    expect(res.headers['Cache-Control']).toBe('no-store, max-age=0');
+  });
+
+  test.each(['en', 'hi', 'gu'])('strict Pulse %s still widens empty responses without cross-locale or unpublished leakage', async (locale) => {
+    const story = pulseStory(locale);
+    const fetchMock = jest.fn()
+      .mockResolvedValueOnce(jsonResponse({ items: [], total: 1, page: 1, limit: 30 }))
+      .mockResolvedValueOnce(jsonResponse({
+        items: [
+          ...['en', 'hi', 'gu'].map((language) => pulseStory(language)),
+          pulseStory(locale, { _id: 'draft', translationGroupId: 'draft', status: 'draft' }),
+          pulseStory(locale, { _id: 'deleted', translationGroupId: 'deleted', deletedAt: '2025-01-01' }),
+          pulseStory(locale, { _id: 'future', translationGroupId: 'future', publishedAt: '2999-01-01' }),
+        ],
+        total: 900,
+      }));
+    global.fetch = fetchMock as any;
+    const query = { category: 'pulse-dialogue', lang: locale, language: locale, strictLocale: '1', limit: '30' };
+    const res = createRes();
+
+    await newsHandler(createReq({ query, url: `/api/public/news?${new URLSearchParams(query)}` }) as any, res as any);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const widenedUrl = new URL(String(fetchMock.mock.calls[1][0]));
+    expect(widenedUrl.searchParams.get('limit')).toBe('90');
+    expect(widenedUrl.searchParams.has('lang')).toBe(false);
+    expect(widenedUrl.searchParams.has('language')).toBe(false);
+    expect(widenedUrl.searchParams.get('strictLocale')).toBe('1');
+    expect(res.body.items).toEqual([story]);
+    expect(res.body.total).toBe(1);
+  });
+
+  test.each([
+    ['partial page', { items: [pulseStory()], total: 2 }],
+    ['unknown total on a short page', { items: [pulseStory()] }],
+    ['zero total', { items: [pulseStory()], total: 0 }],
+    ['wrong locale', { items: [pulseStory('gu')], total: 1 }],
+    ['draft', { items: [pulseStory('en', { status: 'draft' })], total: 1 }],
+    ['deleted', { items: [pulseStory('en', { deletedAt: '2025-01-01' })], total: 1 }],
+    ['scheduled', { items: [pulseStory('en', { publishedAt: '2999-01-01' })], total: 1 }],
+    ['missing title', { items: [pulseStory('en', { title: '' })], total: 1 }],
+    ['missing language', { items: [pulseStory('en', { language: '' })], total: 1 }],
+    ['missing id', { items: [pulseStory('en', { _id: '' })], total: 1 }],
+    ['wrong category', { items: [pulseStory('en', { category: 'national' })], total: 1 }],
+    ['duplicate group', { items: [pulseStory(), pulseStory('en', { _id: 'duplicate' })], total: 1 }],
+    ['wrong response page', { items: [pulseStory()], total: 1, page: 2 }],
+  ])('strict Pulse retains widening for %s', async (_label, payload) => {
+    const fetchMock = jest.fn().mockResolvedValueOnce(jsonResponse(payload))
+      .mockResolvedValueOnce(jsonResponse({ items: [pulseStory()] }));
+    global.fetch = fetchMock as any;
+    const query = { category: 'pulse-dialogue', lang: 'en', language: 'en', strictLocale: '1', limit: '30' };
+    const res = createRes();
+
+    await newsHandler(createReq({ query, url: `/api/public/news?${new URLSearchParams(query)}` }) as any, res as any);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(res.statusCode).toBe(200);
+  });
+
+  test.each(['national', 'regional', 'international', 'business', 'sports'])('keeps existing %s category widening', async (category) => {
+    const story = pulseStory('en', { category });
+    const fetchMock = jest.fn().mockResolvedValue(jsonResponse({ items: [story], total: 1, page: 1, limit: 30 }));
+    global.fetch = fetchMock as any;
+    const query = { category, lang: 'en', language: 'en', strictLocale: '1', limit: '30' };
+    const res = createRes();
+
+    await newsHandler(createReq({ query, url: `/api/public/news?${new URLSearchParams(query)}` }) as any, res as any);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(res.body.items).toEqual([story]);
+  });
+
+  test.each<Record<string, string>>([
+    { strictLocale: '0' },
+    { language: 'hi' },
+    { limit: '0' },
+    { limit: 'invalid' },
+    { page: '0' },
+  ])('retains widening for non-strict or ambiguous Pulse requests: %j', async (overrides) => {
+    const fetchMock = jest.fn().mockResolvedValue(jsonResponse({ items: [pulseStory()], total: 1 }));
+    global.fetch = fetchMock as any;
+    const query = { category: 'pulse-dialogue', lang: 'en', language: 'en', strictLocale: '1', limit: '30', ...overrides };
+    const res = createRes();
+
+    await newsHandler(createReq({ query, url: `/api/public/news?${new URLSearchParams(query)}` }) as any, res as any);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  test('a full Pulse page needs no total and preserves lead order despite a newer updatedAt on the older story', async () => {
+    const stories = [
+      pulseStory('en', { _id: 'new', translationGroupId: 'new', publishedAt: '2025-02-01', updatedAt: '2025-02-01' }),
+      pulseStory('en', { _id: 'old', translationGroupId: 'old', publishedAt: '2025-01-01', updatedAt: '2025-03-01' }),
+    ];
+    const fetchMock = jest.fn().mockResolvedValue(jsonResponse({ items: stories }));
+    global.fetch = fetchMock as any;
+    const query = { category: 'pulse-dialogue', lang: 'en', strictLocale: '1', limit: '2' };
+    const res = createRes();
+
+    await newsHandler(createReq({ query, url: `/api/public/news?${new URLSearchParams(query)}` }) as any, res as any);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(res.body.items).toEqual(stories);
+  });
+
+  test('a complete final Pulse page skips widening using the page offset', async () => {
+    const payload = { items: [pulseStory()], total: 3, page: 2, limit: 2, totalPages: 2 };
+    const fetchMock = jest.fn().mockResolvedValue(jsonResponse(payload));
+    global.fetch = fetchMock as any;
+    const query = { category: 'pulse-dialogue', lang: 'en', strictLocale: '1', limit: '2', page: '2' };
+    const res = createRes();
+
+    await newsHandler(createReq({ query, url: `/api/public/news?${new URLSearchParams(query)}` }) as any, res as any);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(res.body).toEqual(payload);
+  });
+
+  test('returns after the first upstream resolves without starting a never-resolving widened request', async () => {
+    let resolvePrimary!: (response: ReturnType<typeof jsonResponse>) => void;
+    const primary = new Promise<ReturnType<typeof jsonResponse>>((resolve) => { resolvePrimary = resolve; });
+    const fetchMock = jest.fn().mockReturnValueOnce(primary).mockImplementation(() => new Promise(() => {}));
+    global.fetch = fetchMock as any;
+    const query = { category: 'pulse-dialogue', lang: 'en', strictLocale: '1', limit: '30' };
+    const res = createRes();
+    const pending = newsHandler(createReq({ query, url: `/api/public/news?${new URLSearchParams(query)}` }) as any, res as any);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(res.body).toBeUndefined();
+    resolvePrimary(jsonResponse({ items: [pulseStory()], total: 1, page: 1, limit: 30 }));
+    await pending;
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(res.body.items).toEqual([pulseStory()]);
   });
 
   test('strict locale list resolution widens non-category feeds and picks the locale variant', async () => {

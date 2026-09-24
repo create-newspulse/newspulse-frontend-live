@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 
 import { getCategoryQueryKey, getCategoryRouteKey } from '../../../lib/categoryKeys';
 import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
-import { filterVisibleArticlesForLocale, normalizeRouteLocale, STRICT_LOCALE_POLICY } from '../../../lib/localizedArticleFields';
+import { filterVisibleArticlesForLocale, getLocalizedArticleFields, normalizeRouteLocale, STRICT_LOCALE_POLICY } from '../../../lib/localizedArticleFields';
 import { pickFreshestArticlesForLocale } from '../../../lib/translationGroupSync';
 
 function asSingleQueryValue(value: string | string[] | undefined): string {
@@ -183,7 +183,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const primaryItems = getPayloadItems(json);
       let listItems = Array.isArray(primaryItems) ? primaryItems : [];
 
-      if (shouldWidenLocaleFetch) {
+      let hasCompletePulsePage = false;
+      if (strictLocale && normalizedCategory === 'pulse-dialogue' && hasRequestedLocale) {
+        const localeValues = [asSingleQueryValue(req.query.lang), asSingleQueryValue(req.query.language)].filter(Boolean);
+        const requestedPage = Number(localizedParams.get('page') || 1);
+        const validPagination = Number.isSafeInteger(requestedLimit) && requestedLimit > 0
+          && Number.isSafeInteger(requestedPage) && requestedPage > 0
+          && (json?.page === undefined || json.page === requestedPage);
+        const expectedCount = Number.isSafeInteger(json?.total) && json.total >= 0
+          ? Math.min(requestedLimit, Math.max(0, json.total - (requestedPage - 1) * requestedLimit))
+          : requestedLimit;
+        const primaryResolved = pickFreshestArticlesForLocale({
+          articles: primaryItems,
+          locale: requestedLocale,
+          policy: STRICT_LOCALE_POLICY,
+        });
+        hasCompletePulsePage = validPagination
+          && localeValues.every((value) => value.toLowerCase() === requestedLocale)
+          && expectedCount > 0
+          && primaryResolved.length >= expectedCount
+          && primaryResolved.length === primaryItems.length
+          && primaryResolved.every((item) => {
+            const localized = getLocalizedArticleFields(item, requestedLocale, STRICT_LOCALE_POLICY);
+            return String(item?._id || item?.id || '').trim()
+              && getCategoryQueryKey(item?.category) === normalizedCategory
+              && localized.sourceLocale && localized.title.trim();
+          });
+      }
+
+      if (shouldWidenLocaleFetch && !hasCompletePulsePage) {
         try {
           const widenedParams = new URLSearchParams(localizedParams);
           widenedParams.delete('lang');
