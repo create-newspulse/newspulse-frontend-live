@@ -749,27 +749,42 @@ type HomePageStaticProps = {
   initialFreshStories: any[] | null;
 };
 
+export const HOMEPAGE_SPONSORED_FEATURE_TIMEOUT_MS = 2000;
+export const HOMEPAGE_LATEST_NEWS_TIMEOUT_MS = 4000;
+
+async function withHomepageSsrDeadline<T>(timeoutMs: number, run: (signal: AbortSignal) => Promise<T>): Promise<T | null> {
+  const controller = new AbortController();
+  let timer!: ReturnType<typeof setTimeout>;
+  const deadline = new Promise<null>((resolve) => {
+    timer = setTimeout(() => {
+      resolve(null);
+      controller.abort();
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([run(controller.signal), deadline]);
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export const getServerSideProps: GetServerSideProps<HomePageStaticProps> = async ({ locale, res }) => {
   res.setHeader('Cache-Control', HOMEPAGE_RESPONSE_CACHE_CONTROL);
 
   const { getMessages } = await import("../lib/getMessages");
   const { normalizeSponsoredFeatureLang, resolvePublicHomepageSponsoredFeature } = await import("../lib/publicSponsoredFeatureSource");
   const initialLang = toUiLangCode(locale);
-  const sponsoredFeatureResult = await resolvePublicHomepageSponsoredFeature({
-    placement: 'homepage',
-    lang: normalizeSponsoredFeatureLang(locale),
-  });
-  let initialTopStory: Article | null = null;
-  let initialFreshStories: any[] | null = null;
-
-  try {
-    const latest = await resolveHomepageLatestStories(initialLang);
-    initialTopStory = latest.topStory;
-    initialFreshStories = latest.freshStories;
-  } catch {
-    initialTopStory = null;
-    initialFreshStories = null;
-  }
+  const [sponsoredFeatureResult, latest] = await Promise.all([
+    withHomepageSsrDeadline(HOMEPAGE_SPONSORED_FEATURE_TIMEOUT_MS, (signal) => resolvePublicHomepageSponsoredFeature({
+      placement: 'homepage',
+      lang: normalizeSponsoredFeatureLang(locale),
+      signal,
+    })),
+    withHomepageSsrDeadline(HOMEPAGE_LATEST_NEWS_TIMEOUT_MS, (signal) => resolveHomepageLatestStories(initialLang, signal)),
+  ]);
 
   return {
     props: {
@@ -777,9 +792,9 @@ export const getServerSideProps: GetServerSideProps<HomePageStaticProps> = async
       seo: {
         canonicalUrl: HOMEPAGE_CANONICAL_URL,
       },
-      initialHomepageSponsoredFeature: normalizeHomepageSponsoredFeatureProps(sponsoredFeatureResult.feature),
-      initialTopStory,
-      initialFreshStories,
+      initialHomepageSponsoredFeature: normalizeHomepageSponsoredFeatureProps(sponsoredFeatureResult?.feature ?? null),
+      initialTopStory: latest?.topStory ?? null,
+      initialFreshStories: latest?.freshStories ?? null,
     },
   };
 };

@@ -3,7 +3,9 @@ import path from 'path';
 import { act, renderHook } from '@testing-library/react';
 import {
   HOMEPAGE_BACKGROUND_REVALIDATION_INTERVAL_MS,
+  HOMEPAGE_LATEST_NEWS_TIMEOUT_MS,
   HOMEPAGE_RESPONSE_CACHE_CONTROL,
+  HOMEPAGE_SPONSORED_FEATURE_TIMEOUT_MS,
   estimateReadMinutes,
   getHomepageLatestStoriesSignature,
   getServerSideProps,
@@ -16,6 +18,7 @@ import {
   useHomepageRevalidationTriggers,
 } from '../../pages/index';
 import { fetchPublicNews } from '../../lib/publicNewsApi';
+import { resolvePublicHomepageSponsoredFeature } from '../../lib/publicSponsoredFeatureSource';
 
 jest.mock('../../lib/publicNewsApi', () => ({
   fetchPublicNews: jest.fn(),
@@ -23,6 +26,10 @@ jest.mock('../../lib/publicNewsApi', () => ({
 
 jest.mock('../../lib/getMessages', () => ({
   getMessages: jest.fn(async (locale: string) => ({ locale })),
+}));
+
+jest.mock('../../lib/publicApiBase', () => ({
+  getPublicApiBaseUrl: jest.fn(() => 'https://backend.test'),
 }));
 
 jest.mock('../../lib/publicSponsoredFeatureSource', () => ({
@@ -57,6 +64,34 @@ function createServerSideContext(locale?: string) {
   };
 }
 
+function useRealHomepageDependencies() {
+  (fetchPublicNews as jest.Mock).mockImplementationOnce(jest.requireActual('../../lib/publicNewsApi').fetchPublicNews);
+  (resolvePublicHomepageSponsoredFeature as jest.Mock).mockImplementationOnce(
+    jest.requireActual('../../lib/publicSponsoredFeatureSource').resolvePublicHomepageSponsoredFeature
+  );
+}
+
+function sponsoredPayload(locale: string) {
+  return {
+    active: true,
+    sponsorName: 'Test Sponsor',
+    headline: `${locale} sponsored headline`,
+    shortSummary: `${locale} sponsored summary`,
+    ctaLabel: 'Visit sponsor',
+    imageSrc: 'https://res.cloudinary.com/demo/image/upload/sponsor.jpg',
+    destinationUrl: 'https://sponsor.test/landing',
+  };
+}
+
+function upstreamResponse(payload: unknown) {
+  return {
+    ok: true,
+    status: 200,
+    text: jest.fn(async () => JSON.stringify(payload)),
+    json: jest.fn(async () => payload),
+  };
+}
+
 function setDocumentVisibilityState(value: DocumentVisibilityState) {
   Object.defineProperty(document, 'visibilityState', {
     configurable: true,
@@ -66,6 +101,7 @@ function setDocumentVisibilityState(value: DocumentVisibilityState) {
 
 describe('homepage Top Story freshness', () => {
   const source = fs.readFileSync(path.join(process.cwd(), 'pages', 'index.tsx'), 'utf8');
+  const originalFetch = global.fetch;
   let dateNowSpy: jest.SpyInstance<number, []>;
 
   beforeEach(() => {
@@ -74,6 +110,7 @@ describe('homepage Top Story freshness', () => {
   });
 
   afterEach(() => {
+    global.fetch = originalFetch;
     jest.useRealTimers();
     setDocumentVisibilityState('visible');
     dateNowSpy.mockRestore();
@@ -167,6 +204,160 @@ describe('homepage Top Story freshness', () => {
     expect(source).not.toContain('writeHomeStoryCache');
     expect(source).not.toContain('cachedHome.topStory');
     expect(shouldShowHomepageTopStorySkeleton(null, null)).toBe(true);
+  });
+
+  test('SSR resolves safely when sponsored feature never settles and still attempts latest news', async () => {
+    jest.useFakeTimers();
+    (resolvePublicHomepageSponsoredFeature as jest.Mock).mockImplementationOnce(() => new Promise(() => {}));
+    (fetchPublicNews as jest.Mock).mockResolvedValueOnce({ items: [], meta: {}, endpoint: '/api/public/news' });
+    let completed = false;
+    const pending = getServerSideProps(createServerSideContext() as any).then((result) => {
+      completed = true;
+      return result;
+    });
+
+    await jest.advanceTimersByTimeAsync(HOMEPAGE_SPONSORED_FEATURE_TIMEOUT_MS);
+
+    expect(completed).toBe(true);
+    const result = await pending as any;
+    expect(result.props.initialHomepageSponsoredFeature).toBeNull();
+    expect(fetchPublicNews).toHaveBeenCalledWith(expect.objectContaining({ language: 'en', limit: 40 }));
+  });
+
+  test.each(['sponsored', 'latest'])('a rejected %s helper cannot discard the other SSR result', async (dependency) => {
+    jest.useFakeTimers();
+    const story = article({ _id: 'available-story' });
+    (fetchPublicNews as jest.Mock).mockImplementationOnce(async () => {
+      if (dependency === 'latest') throw new Error('Latest unavailable');
+      return { items: [story], meta: {}, endpoint: '/api/public/news' };
+    });
+    (resolvePublicHomepageSponsoredFeature as jest.Mock).mockImplementationOnce(async () => {
+      if (dependency === 'sponsored') throw new Error('Sponsor unavailable');
+      return { feature: { ...sponsoredPayload('en'), href: 'https://sponsor.test/landing' } };
+    });
+
+    const result = await getServerSideProps(createServerSideContext() as any) as any;
+
+    if (dependency === 'sponsored') {
+      expect(result.props.initialHomepageSponsoredFeature).toBeNull();
+      expect(result.props.initialTopStory).toEqual(story);
+    } else {
+      expect(result.props.initialHomepageSponsoredFeature.headline).toBe('en sponsored headline');
+      expect(result.props.initialTopStory).toBeNull();
+      expect(result.props.initialFreshStories).toBeNull();
+    }
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  describe.each([
+    ['/', undefined, 'en'],
+    ['/en', 'en', 'en'],
+    ['/hi', 'hi', 'hi'],
+    ['/gu', 'gu', 'gu'],
+  ])('%s SSR dependency deadlines', (_route, locale, expectedLanguage) => {
+    test('fast responses preserve localized stories, sponsored content, queries, and timer cleanup', async () => {
+      jest.useFakeTimers();
+      useRealHomepageDependencies();
+      const story = article({ _id: `story-${expectedLanguage}`, language: expectedLanguage });
+      const fetchMock = jest.fn(async (url: string) => upstreamResponse(url.includes('/sponsored-feature?')
+        ? sponsoredPayload(expectedLanguage!)
+        : { items: [story, article({ _id: 'draft', language: expectedLanguage, status: 'draft' })] }));
+      global.fetch = fetchMock as any;
+
+      const ctx = createServerSideContext(locale);
+      const result = await getServerSideProps(ctx as any) as any;
+
+      expect(result.props.initialTopStory).toEqual(story);
+      expect(result.props.initialFreshStories.map((item: any) => item.id)).toEqual([story._id]);
+      expect(result.props.initialHomepageSponsoredFeature.headline).toBe(`${expectedLanguage} sponsored headline`);
+      expect(ctx.res.setHeader).toHaveBeenCalledWith('Cache-Control', HOMEPAGE_RESPONSE_CACHE_CONTROL);
+      expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+        `https://backend.test/api/public/sponsored-feature?placement=homepage&lang=${expectedLanguage}&language=${expectedLanguage}`,
+        `https://backend.test/api/public/news?lang=${expectedLanguage}&language=${expectedLanguage}&limit=40`,
+      ]);
+      expect(jest.getTimerCount()).toBe(0);
+    });
+
+    test.each([
+      ['sponsored', 'headers'],
+      ['sponsored', 'body'],
+      ['latest', 'headers'],
+      ['latest', 'body'],
+    ])('a stalled %s %s wait aborts at its deadline and preserves the other dependency', async (dependency, stage) => {
+      jest.useFakeTimers();
+      useRealHomepageDependencies();
+      let stalledSignal: AbortSignal | undefined;
+      const stalledBody = jest.fn(() => new Promise(() => {}));
+      const story = article({ _id: `story-${expectedLanguage}`, language: expectedLanguage });
+      const fetchMock = jest.fn(async (url: string, init: RequestInit) => {
+        const isSponsored = url.includes('/sponsored-feature?');
+        const payload = isSponsored ? sponsoredPayload(expectedLanguage!) : { items: [story] };
+        if (isSponsored === (dependency === 'sponsored')) {
+          stalledSignal = init.signal as AbortSignal;
+          if (stage === 'headers') return new Promise(() => {});
+          return { ...upstreamResponse(payload), text: stalledBody, json: stalledBody };
+        }
+        return upstreamResponse(payload);
+      });
+      global.fetch = fetchMock as any;
+      let completed = false;
+      const pending = getServerSideProps(createServerSideContext(locale) as any).then((result) => {
+        completed = true;
+        return result;
+      });
+      const timeoutMs = dependency === 'sponsored' ? HOMEPAGE_SPONSORED_FEATURE_TIMEOUT_MS : HOMEPAGE_LATEST_NEWS_TIMEOUT_MS;
+
+      await jest.advanceTimersByTimeAsync(timeoutMs - 1);
+      expect(completed).toBe(false);
+      expect(stalledSignal?.aborted).toBe(false);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      if (stage === 'body') expect(stalledBody).toHaveBeenCalledTimes(1);
+
+      await jest.advanceTimersByTimeAsync(1);
+      expect(completed).toBe(true);
+      expect(stalledSignal?.aborted).toBe(true);
+      const result = await pending as any;
+      if (dependency === 'sponsored') {
+        expect(result.props.initialHomepageSponsoredFeature).toBeNull();
+        expect(result.props.initialTopStory).toEqual(story);
+        expect(result.props.initialFreshStories[0].lang).toBe(expectedLanguage);
+      } else {
+        expect(result.props.initialHomepageSponsoredFeature.headline).toBe(`${expectedLanguage} sponsored headline`);
+        expect(result.props.initialTopStory).toBeNull();
+        expect(result.props.initialFreshStories).toBeNull();
+      }
+      expect(jest.getTimerCount()).toBe(0);
+    });
+
+    test('both unresponsive dependencies return neutral props within the larger deadline, not their sum', async () => {
+      jest.useFakeTimers();
+      useRealHomepageDependencies();
+      const signals: AbortSignal[] = [];
+      global.fetch = jest.fn((_url: string, init: RequestInit) => {
+        signals.push(init.signal as AbortSignal);
+        return new Promise(() => {});
+      }) as any;
+      let completed = false;
+      const pending = getServerSideProps(createServerSideContext(locale) as any).then((result) => {
+        completed = true;
+        return result;
+      });
+
+      await jest.advanceTimersByTimeAsync(HOMEPAGE_SPONSORED_FEATURE_TIMEOUT_MS);
+      expect(signals).toHaveLength(2);
+      expect(signals[0].aborted).toBe(true);
+      expect(signals[1].aborted).toBe(false);
+      expect(completed).toBe(false);
+
+      await jest.advanceTimersByTimeAsync(HOMEPAGE_LATEST_NEWS_TIMEOUT_MS - HOMEPAGE_SPONSORED_FEATURE_TIMEOUT_MS);
+      expect(completed).toBe(true);
+      expect(signals[1].aborted).toBe(true);
+      const result = await pending as any;
+      expect(result.props.initialHomepageSponsoredFeature).toBeNull();
+      expect(result.props.initialTopStory).toBeNull();
+      expect(result.props.initialFreshStories).toBeNull();
+      expect(jest.getTimerCount()).toBe(0);
+    });
   });
 
   test('hydration refetch uses the same latest-story query and selector as server render', async () => {

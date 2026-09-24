@@ -8,6 +8,7 @@ import {
 type ResolvePublicHomepageSponsoredFeatureOptions = {
   placement?: string;
   lang?: SupportedSponsoredFeatureLang;
+  signal?: AbortSignal;
   requestHeaders?: {
     cookie?: string;
     authorization?: string;
@@ -62,6 +63,7 @@ export async function resolvePublicHomepageSponsoredFeature(
         authorization: String(options.requestHeaders?.authorization || ''),
       },
       cache: 'no-store',
+      signal: options.signal,
     });
 
     const text = await upstream.text().catch(() => '');
