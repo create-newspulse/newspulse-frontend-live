@@ -290,7 +290,7 @@ function MyApp({ Component, pageProps }) {
   return (
     <ThemeProvider>
       <PublicVersionWatcher />
-      <PublicSettingsProvider>
+      <PublicSettingsProvider initialSettings={pageProps?.initialPublicSettings}>
         <PublicModeProvider initialMode={pageProps?.publicMode}>
           <FeatureFlagProvider initialFlags={pageProps?.featureFlags}>
             <LanguageProvider initialLang={routeLang}>

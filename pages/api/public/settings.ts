@@ -351,31 +351,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // In this case we serve the locally published settings file so the UI can still render.
   if (!origin) {
     const local = await readPublishedLocal();
-    return res.status(200).json(local);
+    return res.status(200).json({ ...local, settingsSource: 'fallback' });
   }
 
-  // 0) Preferred admin-published public settings contract.
-  // This is the source that includes Inspiration Hub / DroneTV settings.
-  try {
-    const upstream = await fetch(`${origin}/api/settings/public`, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-        'Cache-Control': 'no-store',
-        Pragma: 'no-cache',
-      },
-      cache: 'no-store',
-    });
-
-    const json = await upstream.json().catch(() => null);
-    if (upstream.ok && hasPublishedInspirationHub(json)) {
-      return res.status(200).json(withCompatibleSettingsShape(json));
-    }
-  } catch {
-    // Try compatibility fallbacks below
-  }
-
-  // 1) Back-compat backend contract: GET {origin}/api/public/settings
   try {
     const upstream = await fetch(`${origin}/api/public/settings`, {
       method: 'GET',
@@ -389,29 +367,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const json = await upstream.json().catch(() => null);
     if (upstream.ok && json) {
-      if (shouldUseLocalDevelopmentSettingsFallback(origin, json)) {
-        const local = await readPublishedLocal();
-        return res.status(200).json(local);
-      }
-      if (!hasPublishedInspirationHub(json)) {
-        try {
-          const publishedUpstream = await fetch(`${origin}/api/settings/public`, {
-            method: 'GET',
-            headers: {
-              Accept: 'application/json',
-              'Cache-Control': 'no-store',
-              Pragma: 'no-cache',
-            },
-            cache: 'no-store',
-          });
-          const publishedJson = await publishedUpstream.json().catch(() => null);
-          if (publishedUpstream.ok && hasPublishedInspirationHub(publishedJson)) {
-            return res.status(200).json(withCompatibleSettingsShape(publishedJson));
-          }
-        } catch {
-          // Keep the older settings response below.
-        }
-      }
       return res.status(200).json(json);
     }
   } catch {
@@ -464,8 +419,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // This keeps the UI usable and avoids confusing 502s.
   try {
     const local = await readPublishedLocal();
-    return res.status(200).json(local);
+    return res.status(200).json({ ...local, settingsSource: 'fallback' });
   } catch {
-    return res.status(200).json(DEFAULT_PUBLIC_SETTINGS_RESPONSE);
+    return res.status(200).json({ ...DEFAULT_PUBLIC_SETTINGS_RESPONSE, settingsSource: 'fallback' });
   }
 }

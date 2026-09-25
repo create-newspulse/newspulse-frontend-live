@@ -4,6 +4,9 @@ import { getCategoryQueryKey, getCategoryRouteKey } from '../../../lib/categoryK
 import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
 import { filterVisibleArticlesForLocale, getLocalizedArticleFields, normalizeRouteLocale, STRICT_LOCALE_POLICY } from '../../../lib/localizedArticleFields';
 import { pickFreshestArticlesForLocale } from '../../../lib/translationGroupSync';
+import { withPublicReadDeadline } from '../../../lib/publicReadDeadline';
+
+export const HOMEPAGE_RECOVERY_PROXY_TIMEOUT_MS = 3500;
 
 function asSingleQueryValue(value: string | string[] | undefined): string {
   return String(Array.isArray(value) ? value[0] : value || '').trim();
@@ -67,19 +70,26 @@ function logDevNewsProxy(event: string, payload: Record<string, unknown>) {
   console.error('[api/public/news]', event, payload);
 }
 
-async function fetchUpstreamJson(url: string, req: NextApiRequest): Promise<{ ok: boolean; status: number; json: any }> {
-  const upstream = await fetch(url, {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json',
-      cookie: String(req.headers.cookie || ''),
-      authorization: String(req.headers.authorization || ''),
-    },
-  });
+async function fetchUpstreamJson(url: string, req: NextApiRequest, deadlineAt?: number): Promise<{ ok: boolean; status: number; json: any }> {
+  const read = async (signal?: AbortSignal) => {
+    const upstream = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        cookie: String(req.headers.cookie || ''),
+        authorization: String(req.headers.authorization || ''),
+      },
+      ...(signal ? { signal } : {}),
+    });
 
-  const text = await upstream.text().catch(() => '');
-  const json = text ? JSON.parse(text) : { items: [] };
-  return { ok: upstream.ok, status: upstream.status, json };
+    const text = await upstream.text().catch(() => '');
+    if (deadlineAt && (!text || signal?.aborted)) throw new Error('HOMEPAGE_NEWS_UNAVAILABLE');
+    const json = text ? JSON.parse(text) : { items: [] };
+    return { ok: upstream.ok, status: upstream.status, json };
+  };
+  return deadlineAt
+    ? withPublicReadDeadline(Math.max(1, deadlineAt - Date.now()), read)
+    : read();
 }
 
 function debugCategoryList(payload: Record<string, unknown>) {
@@ -111,6 +121,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (normalizedCategory) localizedParams.set('category', normalizedCategory);
 
   const shouldWidenLocaleFetch = hasRequestedLocale;
+  const homepageRecovery = req.headers['x-newspulse-homepage-recovery'] === '1'
+    && !rawCategory && requestedLimit === 40 && hasRequestedLocale
+    && !req.query.q && !req.query.spotlight && !req.query.strictLocale && !req.query.page;
+  const deadlineAt = homepageRecovery ? Date.now() + HOMEPAGE_RECOVERY_PROXY_TIMEOUT_MS : undefined;
 
   if (!candidateBases.length) {
     logDevNewsProxy('missing_upstream_base', {
@@ -119,6 +133,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
     // Keep UI alive even if env not configured.
     res.setHeader('Cache-Control', 'no-store');
+    if (homepageRecovery) return res.status(503).json({ error: 'HOMEPAGE_NEWS_UNAVAILABLE' });
     return res.status(200).json({ items: [], total: 0, page: 1, totalPages: 1, limit: 0 });
   }
 
@@ -130,7 +145,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     for (const candidateBase of candidateBases) {
       const candidateUrl = buildUpstreamUrl(candidateBase, localizedParams);
       try {
-        const response = await fetchUpstreamJson(candidateUrl, req);
+        const response = await fetchUpstreamJson(candidateUrl, req, deadlineAt);
         if (response.ok) {
           upstream = response;
           upstreamBase = candidateBase;
@@ -164,6 +179,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (!upstream) {
       res.setHeader('Cache-Control', 'no-store');
+      if (homepageRecovery) return res.status(503).json({ error: 'HOMEPAGE_NEWS_UNAVAILABLE' });
       return res.status(200).json({ items: [] });
     }
 
@@ -218,7 +234,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           widenedParams.delete('language');
           widenedParams.set('limit', String(Math.max(requestedLimit > 0 ? requestedLimit * 3 : 0, 90)));
 
-          const widened = await fetchUpstreamJson(buildUpstreamUrl(upstreamBase, widenedParams), req);
+          const widened = await fetchUpstreamJson(buildUpstreamUrl(upstreamBase, widenedParams), req, deadlineAt);
+          if (homepageRecovery && !widened.ok && !primaryItems.length) throw new Error('HOMEPAGE_NEWS_UNAVAILABLE');
           if (widened.ok) {
             const widenedItems = getPayloadItems(widened.json);
             listItems = [
@@ -226,7 +243,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               ...(Array.isArray(widenedItems) ? widenedItems : []),
             ];
           }
-        } catch {
+        } catch (error) {
+          if (homepageRecovery && !primaryItems.length) throw error;
           // Keep the locale-specific list when the wider translation-group fetch is unavailable.
         }
       }
@@ -263,10 +281,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json(normalized);
     } catch {
       res.setHeader('Cache-Control', 'no-store');
+      if (homepageRecovery) return res.status(503).json({ error: 'HOMEPAGE_NEWS_UNAVAILABLE' });
       return res.status(200).json({ items: [] });
     }
   } catch {
     res.setHeader('Cache-Control', 'no-store');
+    if (homepageRecovery) return res.status(503).json({ error: 'HOMEPAGE_NEWS_UNAVAILABLE' });
     return res.status(200).json({ items: [] });
   }
 }

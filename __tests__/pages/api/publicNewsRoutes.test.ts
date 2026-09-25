@@ -1,4 +1,4 @@
-import newsHandler from '../../../pages/api/public/news';
+import newsHandler, { HOMEPAGE_RECOVERY_PROXY_TIMEOUT_MS } from '../../../pages/api/public/news';
 import newsByIdHandler from '../../../pages/api/public/news/[id]/index';
 import newsBySlugHandler from '../../../pages/api/public/news/slug/[slug]';
 
@@ -92,6 +92,65 @@ function pulseStory(locale = 'en', overrides: Record<string, any> = {}) {
 describe('public news route localization', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  test.each(['en', 'hi', 'gu'])('homepage %s stalled primary read is bounded and is not reported as empty', async (locale) => {
+    jest.useFakeTimers();
+    const originalFetch = global.fetch;
+    const fetchMock = jest.fn(() => new Promise(() => {}));
+    global.fetch = fetchMock as any;
+    const query = { lang: locale, language: locale, limit: '40' };
+    const res = createRes();
+    try {
+      const pending = newsHandler(createReq({ query, url: `/api/public/news?${new URLSearchParams(query)}`, headers: { 'x-newspulse-homepage-recovery': '1' } }) as any, res as any);
+      await jest.advanceTimersByTimeAsync(HOMEPAGE_RECOVERY_PROXY_TIMEOUT_MS);
+      await pending;
+      expect(res.statusCode).toBe(503);
+      expect(res.body.error).toBe('HOMEPAGE_NEWS_UNAVAILABLE');
+      expect((fetchMock.mock.calls as any)[0][1].signal.aborted).toBe(true);
+    } finally {
+      global.fetch = originalFetch;
+      jest.useRealTimers();
+    }
+  });
+
+  test('homepage keeps primary stories when widening stalls within the shared recovery budget', async () => {
+    jest.useFakeTimers();
+    const originalFetch = global.fetch;
+    const story = pulseStory();
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce(jsonResponse({ items: [story] }))
+      .mockImplementationOnce(() => new Promise(() => {})) as any;
+    const query = { lang: 'en', language: 'en', limit: '40' };
+    const res = createRes();
+    try {
+      const pending = newsHandler(createReq({ query, url: `/api/public/news?${new URLSearchParams(query)}`, headers: { 'x-newspulse-homepage-recovery': '1' } }) as any, res as any);
+      await jest.advanceTimersByTimeAsync(HOMEPAGE_RECOVERY_PROXY_TIMEOUT_MS);
+      await pending;
+      expect(res.statusCode).toBe(200);
+      expect(res.body.items).toEqual([story]);
+    } finally {
+      global.fetch = originalFetch;
+      jest.useRealTimers();
+    }
+  });
+
+  test.each([500, 503])('homepage upstream %s remains a transient error instead of an empty feed', async (status) => {
+    global.fetch = jest.fn().mockResolvedValue(jsonResponse({ error: 'unavailable' }, status));
+    const query = { lang: 'en', language: 'en', limit: '40' };
+    const res = createRes();
+    await newsHandler(createReq({ query, url: `/api/public/news?${new URLSearchParams(query)}`, headers: { 'x-newspulse-homepage-recovery': '1' } }) as any, res as any);
+    expect(res.statusCode).toBe(503);
+    expect(res.body.items).toBeUndefined();
+  });
+
+  test('homepage genuinely empty primary and widened feeds remain a successful empty result', async () => {
+    global.fetch = jest.fn().mockResolvedValue(jsonResponse({ items: [] }));
+    const query = { lang: 'en', language: 'en', limit: '40' };
+    const res = createRes();
+    await newsHandler(createReq({ query, url: `/api/public/news?${new URLSearchParams(query)}`, headers: { 'x-newspulse-homepage-recovery': '1' } }) as any, res as any);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.items).toEqual([]);
   });
 
   test.each(['en', 'hi', 'gu'])('strict Pulse %s returns a complete localized page with one upstream request', async (locale) => {

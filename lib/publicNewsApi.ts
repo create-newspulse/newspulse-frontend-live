@@ -126,6 +126,7 @@ export async function fetchPublicNews(options: {
   limit?: number;
   extraQuery?: Record<string, string | number | undefined>;
   signal?: AbortSignal;
+  homepageRecovery?: boolean;
 }): Promise<{
   items: Article[];
   meta: PublicNewsMeta;
@@ -178,7 +179,7 @@ export async function fetchPublicNews(options: {
   try {
     const res = await fetch(endpoint, {
       method: 'GET',
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', ...(isBrowser && options.homepageRecovery ? { 'X-NewsPulse-Homepage-Recovery': '1' } : {}) },
       cache: 'no-store',
       signal: options.signal,
     });

@@ -1,9 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 import { act, renderHook } from '@testing-library/react';
+import { isSerializableProps } from 'next/dist/lib/is-serializable-props';
 import {
   HOMEPAGE_BACKGROUND_REVALIDATION_INTERVAL_MS,
   HOMEPAGE_LATEST_NEWS_TIMEOUT_MS,
+  HOMEPAGE_PUBLIC_SETTINGS_TIMEOUT_MS,
   HOMEPAGE_RESPONSE_CACHE_CONTROL,
   HOMEPAGE_SPONSORED_FEATURE_TIMEOUT_MS,
   estimateReadMinutes,
@@ -15,10 +17,17 @@ import {
   shouldCommitHomepageLatestStoriesRefresh,
   shouldShowHomepageTopStorySkeleton,
   storyLocationLabel,
+  useHomepageLatestStories,
   useHomepageRevalidationTriggers,
 } from '../../pages/index';
 import { fetchPublicNews } from '../../lib/publicNewsApi';
 import { resolvePublicHomepageSponsoredFeature } from '../../lib/publicSponsoredFeatureSource';
+import { fetchPublishedPublicSettings, normalizePublicSettings } from '../../src/lib/publicSettings';
+
+jest.mock('../../src/lib/publicSettings', () => ({
+  ...jest.requireActual('../../src/lib/publicSettings'),
+  fetchPublishedPublicSettings: jest.fn(async () => null),
+}));
 
 jest.mock('../../lib/publicNewsApi', () => ({
   fetchPublicNews: jest.fn(),
@@ -204,6 +213,69 @@ describe('homepage Top Story freshness', () => {
     expect(source).not.toContain('writeHomeStoryCache');
     expect(source).not.toContain('cachedHome.topStory');
     expect(shouldShowHomepageTopStorySkeleton(null, null)).toBe(true);
+  });
+
+  test.each(['en', 'hi', 'gu'])('SSR serializes the published settings snapshot alongside %s news', async (locale) => {
+    const settings = normalizePublicSettings({ version: 'published-v1', published: { tickers: { breaking: { enabled: false }, live: { enabled: true } }, modules: { appPromo: { enabled: false }, footer: { enabled: false } } } });
+    (fetchPublishedPublicSettings as jest.Mock).mockResolvedValueOnce(settings);
+    (fetchPublicNews as jest.Mock).mockResolvedValueOnce({ items: [article({ language: locale })], meta: {} });
+    const result = await getServerSideProps(createServerSideContext(locale) as any) as any;
+    expect(result.props.initialPublicSettings).toEqual(settings);
+    expect(JSON.parse(JSON.stringify(result.props.initialPublicSettings))).toEqual(settings);
+    expect(fetchPublishedPublicSettings).toHaveBeenCalledWith('https://backend.test', expect.any(AbortSignal));
+    expect(result.props.initialTopStory.language).toBe(locale);
+  });
+
+  test.each([undefined, false, true])('SSR omits undefined optional settings and preserves homepageModuleEnabled=%s', async (homepageModuleEnabled) => {
+    const settings = normalizePublicSettings({ version: '426', published: { inspirationHub: { enabled: false }, tickers: { breaking: { enabled: false }, live: { enabled: true } }, modules: { appPromo: { enabled: false }, footer: { enabled: false } } } });
+    settings.inspirationHub = { ...settings.inspirationHub!, homepageModuleEnabled };
+    const input = { ...settings, serializationProbe: { missing: undefined, values: [null, false, true, 0, '', 'value', { missing: undefined, kept: null }] } };
+    if (homepageModuleEnabled === undefined) {
+      expect(() => isSerializableProps('/', 'getServerSideProps', { initialPublicSettings: settings })).toThrow('inspirationHub.homepageModuleEnabled');
+    }
+    (fetchPublishedPublicSettings as jest.Mock).mockResolvedValueOnce(input);
+    (fetchPublicNews as jest.Mock).mockResolvedValueOnce({ items: [], meta: {} });
+    const result = await getServerSideProps(createServerSideContext('en') as any) as any;
+    const snapshot = result.props.initialPublicSettings;
+    expect(() => JSON.stringify(result)).not.toThrow();
+    expect(isSerializableProps('/', 'getServerSideProps', result.props)).toBe(true);
+    expect(Object.hasOwn(snapshot.inspirationHub, 'homepageModuleEnabled')).toBe(homepageModuleEnabled !== undefined);
+    if (homepageModuleEnabled !== undefined) expect(snapshot.inspirationHub.homepageModuleEnabled).toBe(homepageModuleEnabled);
+    expect(snapshot.serializationProbe).toStrictEqual({ values: [null, false, true, 0, '', 'value', { kept: null }] });
+    expect(snapshot.tickers.breaking.enabled).toBe(false);
+    expect(snapshot.tickers.live.enabled).toBe(true);
+    expect(snapshot.modules.appPromo.enabled).toBe(false);
+    expect(snapshot.modules.footer.enabled).toBe(false);
+    expect(JSON.parse(JSON.stringify(result)).props.initialPublicSettings).toStrictEqual(snapshot);
+    expect(Object.hasOwn(settings.inspirationHub!, 'homepageModuleEnabled')).toBe(true);
+  });
+
+  test('stalled settings abort at one second without discarding ready SSR news', async () => {
+    jest.useFakeTimers();
+    let signal!: AbortSignal;
+    (fetchPublishedPublicSettings as jest.Mock).mockImplementationOnce((_base, requestSignal) => { signal = requestSignal; return new Promise(() => {}); });
+    (fetchPublicNews as jest.Mock).mockResolvedValueOnce({ items: [article({ _id: 'ready' })], meta: {} });
+    let completed = false;
+    const pending = getServerSideProps(createServerSideContext('en') as any).then(result => { completed = true; return result; });
+    await jest.advanceTimersByTimeAsync(HOMEPAGE_PUBLIC_SETTINGS_TIMEOUT_MS - 1);
+    expect(completed).toBe(false);
+    expect(fetchPublicNews).toHaveBeenCalled();
+    expect(resolvePublicHomepageSponsoredFeature).toHaveBeenCalled();
+    await jest.advanceTimersByTimeAsync(1);
+    expect(completed).toBe(true);
+    expect(signal.aborted).toBe(true);
+    const result = await pending as any;
+    expect(result.props.initialPublicSettings).toBeNull();
+    expect(result.props.initialTopStory._id).toBe('ready');
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  test('settings failure leaves the successful story intact and returns no fabricated snapshot', async () => {
+    (fetchPublishedPublicSettings as jest.Mock).mockRejectedValueOnce(new Error('unavailable'));
+    (fetchPublicNews as jest.Mock).mockResolvedValueOnce({ items: [article({ _id: 'ready' })], meta: {} });
+    const result = await getServerSideProps(createServerSideContext('en') as any) as any;
+    expect(result.props.initialPublicSettings).toBeNull();
+    expect(result.props.initialTopStory._id).toBe('ready');
   });
 
   test('SSR resolves safely when sponsored feature never settles and still attempts latest news', async () => {
@@ -605,6 +677,98 @@ describe('homepage Top Story freshness', () => {
     });
 
     expect(onRevalidate).not.toHaveBeenCalled();
+  });
+
+  test.each(['en', 'hi', 'gu'] as const)('%s null SSR recovery is bounded even when fetch never settles', async (apiLang) => {
+    jest.useFakeTimers();
+    (fetchPublicNews as jest.Mock).mockImplementation(() => new Promise(() => {}));
+    const { result, unmount } = renderHook(() => useHomepageLatestStories({
+      apiLang, hydrated: true, initialTopStory: null, initialFreshStories: null,
+    }));
+    expect(result.current.storyStatus).toBe('loading');
+    await act(async () => { await jest.advanceTimersByTimeAsync(HOMEPAGE_LATEST_NEWS_TIMEOUT_MS); });
+    expect(result.current.storyStatus).toBe('error');
+    expect(shouldShowHomepageTopStorySkeleton(result.current.topStory, result.current.latestFromBackend, result.current.storyStatus)).toBe(false);
+    unmount();
+    (fetchPublicNews as jest.Mock).mockReset();
+  });
+
+  test.each(['en', 'hi', 'gu'] as const)('%s keeps SSR content on initial and background failures, then accepts fresh content', async (apiLang) => {
+    const initial = article({ _id: 'initial', language: apiLang });
+    (fetchPublicNews as jest.Mock).mockResolvedValue({ items: [], error: 'API 503', endpoint: '/api/public/news' });
+    const { result, unmount } = renderHook(() => useHomepageLatestStories({
+      apiLang, hydrated: true, initialTopStory: initial, initialFreshStories: [initial],
+    }));
+    expect(result.current.topStory).toBe(initial);
+    expect(shouldShowHomepageTopStorySkeleton(initial, null, 'loading')).toBe(false);
+    await act(async () => {});
+    expect(result.current.topStory).toBe(initial);
+    expect(result.current.storyStatus).toBe('error');
+    await act(async () => { result.current.refreshHomepageLatestStories('background'); });
+    expect(result.current.topStory).toBe(initial);
+    const newer = article({ _id: 'newer', language: apiLang, publishedAt: '2026-09-09T10:00:00.000Z' });
+    (fetchPublicNews as jest.Mock).mockResolvedValue({ items: [initial, newer], endpoint: '/api/public/news' });
+    await act(async () => { result.current.refreshHomepageLatestStories('background'); });
+    expect(result.current.topStory?._id).toBe('newer');
+    expect(result.current.storyStatus).toBe('content');
+    unmount();
+    (fetchPublicNews as jest.Mock).mockReset();
+  });
+
+  test('successful empty recovery exits loading and uses the existing fallback', async () => {
+    (fetchPublicNews as jest.Mock).mockResolvedValue({ items: [], endpoint: '/api/public/news' });
+    const { result, unmount } = renderHook(() => useHomepageLatestStories({
+      apiLang: 'en', hydrated: true, initialTopStory: null, initialFreshStories: null,
+    }));
+    await act(async () => {});
+    expect(result.current.storyStatus).toBe('empty');
+    expect(result.current.latestFromBackend).toEqual([]);
+    expect(shouldShowHomepageTopStorySkeleton(null, [], result.current.storyStatus)).toBe(false);
+    unmount();
+    (fetchPublicNews as jest.Mock).mockReset();
+  });
+
+  test('late timed-out response is ignored and the next recovery can succeed without the breaking feed', async () => {
+    jest.useFakeTimers();
+    let finishExpired!: (value: any) => void;
+    (fetchPublicNews as jest.Mock).mockImplementation((options) => options.category
+      ? new Promise(() => {})
+      : new Promise(resolve => { finishExpired = resolve; }));
+    const { result, unmount } = renderHook(() => useHomepageLatestStories({
+      apiLang: 'en', hydrated: true, initialTopStory: null, initialFreshStories: null,
+    }));
+    await act(async () => { await jest.advanceTimersByTimeAsync(HOMEPAGE_LATEST_NEWS_TIMEOUT_MS); });
+    await act(async () => { finishExpired({ items: [article({ _id: 'expired' })] }); });
+    expect(result.current.topStory).toBeNull();
+    expect(result.current.storyStatus).toBe('error');
+    (fetchPublicNews as jest.Mock).mockImplementation((options) => options.category
+      ? new Promise(() => {})
+      : Promise.resolve({ items: [article({ _id: 'recovered' })] }));
+    await act(async () => { result.current.refreshHomepageLatestStories('background'); });
+    expect(result.current.topStory?._id).toBe('recovered');
+    await act(async () => {
+      unmount();
+      await jest.advanceTimersByTimeAsync(0);
+    });
+    expect(jest.getTimerCount()).toBe(0);
+    (fetchPublicNews as jest.Mock).mockReset();
+  });
+
+  test('known empty content stays on fallback during background refresh and language changes cancel stale requests', async () => {
+    let completeEnglish!: (value: any) => void;
+    (fetchPublicNews as jest.Mock).mockImplementation((options) => options.language === 'en'
+      ? new Promise(resolve => { if (!options.category) completeEnglish = resolve; })
+      : Promise.resolve({ items: [article({ _id: 'hindi', language: 'hi' })] }));
+    const { result, rerender, unmount } = renderHook(({ apiLang }: { apiLang: TestLang }) => useHomepageLatestStories({
+      apiLang, hydrated: true, initialTopStory: null, initialFreshStories: [],
+    }), { initialProps: { apiLang: 'en' as TestLang } });
+    expect(result.current.storyStatus).toBe('empty');
+    expect(shouldShowHomepageTopStorySkeleton(null, [], result.current.storyStatus)).toBe(false);
+    await act(async () => { rerender({ apiLang: 'hi' }); });
+    await act(async () => { completeEnglish({ items: [article({ _id: 'stale-en' })] }); });
+    expect(result.current.topStory?._id).toBe('hindi');
+    unmount();
+    (fetchPublicNews as jest.Mock).mockReset();
   });
 
   test('genuine latest-news API loading or failure resolves to a neutral skeleton state', async () => {

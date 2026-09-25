@@ -1041,11 +1041,7 @@ function debugLiveTvSettingsResponse(raw: unknown): void {
   console.warn('Live TV offline media fields missing from API response.');
 }
 
-async function fetchPublicSettingsBody(options?: { signal?: AbortSignal }): Promise<unknown> {
-  // Always use same-origin. Next.js rewrites (and/or the local API route)
-  // take care of proxying to the backend.
-  const endpoint = '/api/public/settings';
-
+async function fetchPublicSettingsBody(options?: { signal?: AbortSignal }, endpoint = '/api/public/settings'): Promise<unknown> {
   const init = {
     method: 'GET',
     headers: {
@@ -1087,8 +1083,20 @@ export async function fetchPublicSettingsResponse(options?: { signal?: AbortSign
 }
 
 // Required by product: UI should fetch GET /api/public/settings, then normalize.
-export async function fetchPublicSettings(options?: { signal?: AbortSignal }): Promise<NormalizedPublicSettings> {
+export async function fetchPublicSettings(options?: { signal?: AbortSignal; baseUrl?: string }): Promise<NormalizedPublicSettings> {
   // On the server (if ever called there), hint Next to not cache.
-  const body = await fetchPublicSettingsBody({ signal: options?.signal });
+  const origin = options?.baseUrl?.trim().replace(/\/+$/, '').replace(/\/api$/, '');
+  if (options?.baseUrl !== undefined && !origin) throw new Error('PUBLIC_SETTINGS_UNRESOLVED');
+  const body = await fetchPublicSettingsBody({ signal: options?.signal }, `${origin || ''}/api/public/settings`);
+  const snapshot = getRecord(body, 'published') ?? getRecord(body, 'settings') ?? body;
+  if (!isRecord(body) || body.ok === false || body.success === false || body.settingsSource === 'fallback' || !isRecord(snapshot) ||
+    !(getRecord(snapshot, 'modules') || getRecord(snapshot, 'homepage', 'modules') || getRecord(snapshot, 'homepageModules') ||
+      getRecord(snapshot, 'homeModules') || getRecord(snapshot, 'tickers') || getRecord(snapshot, 'homepage', 'tickers'))) {
+    throw new Error('PUBLIC_SETTINGS_UNRESOLVED');
+  }
   return normalizePublicSettings(body);
+}
+
+export async function fetchPublishedPublicSettings(baseUrl: string, signal?: AbortSignal): Promise<NormalizedPublicSettings> {
+  return fetchPublicSettings({ baseUrl, signal });
 }

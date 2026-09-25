@@ -26,15 +26,16 @@ const PublicSettingsContext = React.createContext<PublicSettingsContextValue | u
 
 const PUBLIC_SETTINGS_DEDUPE_MS = 5_000;
 
-export function PublicSettingsProvider({ children }: { children: React.ReactNode }) {
-  const [settings, setSettings] = React.useState<NormalizedPublicSettings | null>(null);
-  const [isLoading, setIsLoading] = React.useState<boolean>(true);
+export function PublicSettingsProvider({ children, initialSettings = null }: { children: React.ReactNode; initialSettings?: NormalizedPublicSettings | null }) {
+  const [settings, setSettings] = React.useState<NormalizedPublicSettings | null>(initialSettings);
+  const [isLoading, setIsLoading] = React.useState<boolean>(initialSettings == null);
   const [error, setError] = React.useState<string | null>(null);
 
   const SAFE_MODE = isSafeMode();
 
   const inFlightRef = React.useRef<Promise<void> | null>(null);
   const lastRefreshAtRef = React.useRef<number>(0);
+  const settingsRef = React.useRef<NormalizedPublicSettings | null>(initialSettings);
 
   const load = React.useCallback(async (opts?: { background?: boolean; force?: boolean }) => {
     // Deduplicate overlapping calls (poll + focus + manual refetch).
@@ -44,7 +45,7 @@ export function PublicSettingsProvider({ children }: { children: React.ReactNode
     if (opts?.background && !opts?.force && now - lastRefreshAtRef.current < PUBLIC_SETTINGS_DEDUPE_MS) return;
     lastRefreshAtRef.current = now;
 
-    const shouldShowLoading = !opts?.background && settings == null;
+    const shouldShowLoading = !opts?.background && settingsRef.current == null;
     if (shouldShowLoading) setIsLoading(true);
 
     // For background refreshes, keep last-known-good settings visible.
@@ -55,16 +56,15 @@ export function PublicSettingsProvider({ children }: { children: React.ReactNode
         const next = await fetchPublicSettings();
 
         // Avoid state churn if nothing changed.
-        const prevVersion = settings?.version;
+        const prevVersion = settingsRef.current?.version;
         const nextVersion = next?.version;
         if (prevVersion && nextVersion && prevVersion === nextVersion) {
           return;
         }
 
+        settingsRef.current = next;
         setSettings(next);
       } catch (e: any) {
-        // Safe fallback defaults: show all modules.
-        if (settings == null) setSettings(DEFAULT_NORMALIZED_PUBLIC_SETTINGS);
         if (!opts?.background) setError(String(e?.message || 'PUBLIC_SETTINGS_LOAD_FAILED'));
       } finally {
         if (shouldShowLoading) setIsLoading(false);
@@ -74,7 +74,7 @@ export function PublicSettingsProvider({ children }: { children: React.ReactNode
 
     inFlightRef.current = p;
     return p;
-  }, [settings]);
+  }, []);
 
   React.useEffect(() => {
     void load();

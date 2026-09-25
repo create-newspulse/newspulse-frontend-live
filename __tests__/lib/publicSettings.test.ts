@@ -7,11 +7,76 @@ import {
   isTickerEnabled,
   mergePublicSettingsWithDefaults,
   fetchPublicSettings,
+  fetchPublishedPublicSettings,
   normalizePublicSettings,
 } from '../../src/lib/publicSettings';
 import { resolveInspirationHubDroneTvSettings } from '../../src/lib/inspirationHubSettings';
+import publicSettingsHandler from '../../pages/api/public/settings';
+
+jest.mock('../../lib/publicApiBase', () => ({ getPublicApiBaseUrl: jest.fn(() => 'https://backend.test') }));
 
 describe('publicSettings helpers', () => {
+  test('browser proxy returns canonical published data unchanged without legacy enrichment', async () => {
+    const originalFetch = global.fetch;
+    const body = { ok: true, version: 426, published: { modules: { appPromo: { enabled: false }, footer: { enabled: false } }, tickers: { breaking: { enabled: false }, live: { enabled: true } } } };
+    global.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => body })) as any;
+    const response = { setHeader: jest.fn(), status: jest.fn().mockReturnThis(), json: jest.fn() };
+    try {
+      await publicSettingsHandler({ method: 'GET', query: {} } as any, response as any);
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(global.fetch).toHaveBeenCalledWith('https://backend.test/api/public/settings', expect.objectContaining({ cache: 'no-store' }));
+      expect(response.status).toHaveBeenCalledWith(200);
+      expect(response.json).toHaveBeenCalledWith(body);
+      expect(response.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    } finally { global.fetch = originalFetch; }
+  });
+
+  test('server snapshot uses the canonical published endpoint and published precedence', async () => {
+    const originalFetch = global.fetch;
+    const body = { version: 426, published: { modules: { appPromo: { enabled: false }, footer: { enabled: false } }, tickers: { breaking: { enabled: false }, live: { enabled: true } } }, settings: DEFAULT_PUBLIC_SETTINGS };
+    global.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => body })) as any;
+    try {
+      const signal = new AbortController().signal;
+      const result = await fetchPublishedPublicSettings('http://localhost:3010/api/', signal);
+      expect(global.fetch).toHaveBeenCalledWith('http://localhost:3010/api/public/settings', expect.objectContaining({ cache: 'no-store', signal }));
+      expect(await fetchPublicSettings()).toEqual(result);
+      expect(global.fetch).toHaveBeenLastCalledWith('/api/public/settings', expect.objectContaining({ cache: 'no-store' }));
+      expect(result).toEqual(normalizePublicSettings(body));
+      expect(result.modules.appPromo.enabled).toBe(false);
+      expect(result.modules.footer.enabled).toBe(false);
+      expect(result.tickers.breaking.enabled).toBe(false);
+      expect(result.tickers.live.enabled).toBe(true);
+    } finally { global.fetch = originalFetch; }
+  });
+
+  test.each([{}, { ok: false }, { data: { published: DEFAULT_PUBLIC_SETTINGS } }, { settingsSource: 'fallback', settings: DEFAULT_PUBLIC_SETTINGS }])('server rejects non-authoritative settings %j', async body => {
+    const originalFetch = global.fetch;
+    global.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => body })) as any;
+    try { await expect(fetchPublishedPublicSettings('http://localhost:3010')).rejects.toThrow('PUBLIC_SETTINGS_UNRESOLVED'); }
+    finally { global.fetch = originalFetch; }
+  });
+
+  test('server accepts the raw published shape supported by the existing normalizer', async () => {
+    const originalFetch = global.fetch;
+    const body = { modules: { categoryStrip: { enabled: false }, footer: { enabled: false } } };
+    global.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => body })) as any;
+    try { expect(await fetchPublishedPublicSettings('http://localhost:3010')).toEqual(normalizePublicSettings(body)); }
+    finally { global.fetch = originalFetch; }
+  });
+
+  test('bundled API fallback cannot be accepted as published settings', async () => {
+    const originalFetch = global.fetch;
+    global.fetch = jest.fn(async () => ({
+      ok: true, status: 200,
+      json: async () => ({ settingsSource: 'fallback', settings: DEFAULT_PUBLIC_SETTINGS }),
+    })) as any;
+    try {
+      await expect(fetchPublicSettings()).rejects.toThrow('PUBLIC_SETTINGS_UNRESOLVED');
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
   test('getOrderedEnabledKeys sorts by order and filters disabled', () => {
     const modules = {
       ...DEFAULT_PUBLIC_SETTINGS.modules,

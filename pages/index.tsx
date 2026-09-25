@@ -7,6 +7,7 @@ import { usePublicSettings } from "../src/context/PublicSettingsContext";
 import { DEFAULT_TRENDING_TOPICS, type TrendingTopic } from "../src/config/trendingTopics";
 import { getTrendingTopics } from "../lib/getTrendingTopics";
 import { fetchPublicNews, type Article } from "../lib/publicNewsApi";
+import { withPublicReadDeadline } from "../lib/publicReadDeadline";
 import { toTickerTexts } from "../lib/publicBroadcast";
 import { usePublicBroadcastTicker } from "../hooks/usePublicBroadcastTicker";
 import { usePublicAdSlot } from "../hooks/usePublicAdSlot";
@@ -588,7 +589,7 @@ export function selectHomepageEditorialArticles(items: Article[] | null | undefi
     });
 }
 
-export async function resolveHomepageLatestStories(requestedLang: UiLangCode, signal?: AbortSignal): Promise<{
+export async function resolveHomepageLatestStories(requestedLang: UiLangCode, signal?: AbortSignal, homepageRecovery = false): Promise<{
   topStory: Article | null;
   freshStories: any[] | null;
   rawStories: Article[] | null;
@@ -596,7 +597,7 @@ export async function resolveHomepageLatestStories(requestedLang: UiLangCode, si
   error?: string;
   status?: number;
 }> {
-  const latestResp = await fetchPublicNews({ language: requestedLang, limit: HOME_FRESH_SOURCE_LIMIT, signal });
+  const latestResp = await fetchPublicNews({ language: requestedLang, limit: HOME_FRESH_SOURCE_LIMIT, signal, ...(homepageRecovery ? { homepageRecovery: true } : {}) });
   if (latestResp.error) {
     return {
       topStory: null,
@@ -618,8 +619,14 @@ export async function resolveHomepageLatestStories(requestedLang: UiLangCode, si
   };
 }
 
-export function shouldShowHomepageTopStorySkeleton(topStory: Article | null | undefined, latestStories: any[] | null | undefined): boolean {
-  return !topStory || latestStories == null;
+type HomepageStoryStatus = 'loading' | 'content' | 'empty' | 'error';
+
+export function shouldShowHomepageTopStorySkeleton(
+  topStory: Article | null | undefined,
+  latestStories: any[] | null | undefined,
+  status: HomepageStoryStatus = latestStories == null ? 'loading' : 'empty'
+): boolean {
+  return !topStory && status === 'loading';
 }
 
 function getHomepageStableStoryIdentifier(story: any, requestedLang: UiLangCode, fallbackIndex: number): string {
@@ -687,9 +694,99 @@ export function shouldCommitHomepageLatestStoriesRefresh({
   next: HomepageLatestStoriesSnapshot;
   requestedLang: UiLangCode;
 }): boolean {
-  if (error) return mode !== 'background';
+  if (error) return false;
   if (mode !== 'background') return true;
   return currentSignature !== getHomepageLatestStoriesSignature(next, requestedLang);
+}
+
+export function useHomepageLatestStories({
+  apiLang,
+  hydrated,
+  initialTopStory,
+  initialFreshStories,
+}: {
+  apiLang: UiLangCode;
+  hydrated: boolean;
+  initialTopStory: Article | null;
+  initialFreshStories: any[] | null;
+}) {
+  const initialState = {
+    lang: apiLang,
+    topStory: initialTopStory ?? null,
+    rawStories: null as Article[] | null,
+    freshStories: initialFreshStories ?? (initialTopStory ? [articleToFeedItem(initialTopStory, apiLang)] : null),
+    status: (initialTopStory ? 'content' : initialFreshStories == null ? 'loading' : 'empty') as HomepageStoryStatus,
+  };
+  const [state, setState] = useState(initialState);
+  const inFlightRef = useRef<AbortController | null>(null);
+  const seedRef = useRef(initialState);
+  seedRef.current = initialState;
+
+  const refreshHomepageLatestStories = React.useCallback((mode: HomepageLatestRefreshMode) => {
+    if (inFlightRef.current) return;
+    const controller = new AbortController();
+    inFlightRef.current = controller;
+    setState((current) => {
+      const previous = current.lang === apiLang ? current : seedRef.current;
+      return { ...previous, status: previous.topStory ? 'content' : previous.status };
+    });
+
+    void withPublicReadDeadline(HOMEPAGE_LATEST_NEWS_TIMEOUT_MS, (signal) =>
+      fetchPublicNews({ category: 'breaking', language: apiLang, limit: 10, signal }), controller.signal
+    ).catch(() => null);
+
+    void withPublicReadDeadline(HOMEPAGE_LATEST_NEWS_TIMEOUT_MS, (signal) =>
+      resolveHomepageLatestStories(apiLang, signal, true), controller.signal
+    ).then((latest) => {
+      if (controller.signal.aborted) return;
+      if (latest.error) throw new Error(latest.error);
+      setState((current) => {
+        const previous = current.lang === apiLang ? current : seedRef.current;
+        const next = {
+          topStory: latest.topStory,
+          rawStories: latest.rawStories || [],
+          freshStories: latest.freshStories || [],
+        };
+        const shouldApply = shouldCommitHomepageLatestStoriesRefresh({
+          currentSignature: getHomepageLatestStoriesSignature(previous, apiLang),
+          mode,
+          next,
+          requestedLang: apiLang,
+        });
+        return {
+          ...(shouldApply ? { lang: apiLang, ...next } : previous),
+          status: latest.topStory ? 'content' : 'empty',
+        };
+      });
+    }).catch(() => {
+      if (controller.signal.aborted) return;
+      setState((current) => {
+        const previous = current.lang === apiLang ? current : seedRef.current;
+        return { ...previous, rawStories: previous.rawStories ?? [], freshStories: previous.freshStories ?? [], status: 'error' };
+      });
+    }).finally(() => {
+      if (inFlightRef.current === controller) inFlightRef.current = null;
+      controller.abort();
+    });
+  }, [apiLang]);
+
+  React.useEffect(() => {
+    if (!hydrated) return;
+    refreshHomepageLatestStories('initial');
+    return () => {
+      inFlightRef.current?.abort();
+      inFlightRef.current = null;
+    };
+  }, [hydrated, refreshHomepageLatestStories]);
+
+  const visibleState = state.lang === apiLang ? state : initialState;
+  return {
+    topStory: visibleState.topStory,
+    latestRawStories: visibleState.rawStories,
+    latestFromBackend: visibleState.freshStories,
+    storyStatus: visibleState.status,
+    refreshHomepageLatestStories,
+  };
 }
 
 export function useHomepageRevalidationTriggers({
@@ -747,10 +844,12 @@ type HomePageStaticProps = {
   initialHomepageSponsoredFeature: HomepageSponsoredFeature | null;
   initialTopStory: Article | null;
   initialFreshStories: any[] | null;
+  initialPublicSettings?: import('../src/lib/publicSettings').NormalizedPublicSettings | null;
 };
 
 export const HOMEPAGE_SPONSORED_FEATURE_TIMEOUT_MS = 2000;
 export const HOMEPAGE_LATEST_NEWS_TIMEOUT_MS = 4000;
+export const HOMEPAGE_PUBLIC_SETTINGS_TIMEOUT_MS = 1000;
 
 async function withHomepageSsrDeadline<T>(timeoutMs: number, run: (signal: AbortSignal) => Promise<T>): Promise<T | null> {
   const controller = new AbortController();
@@ -776,14 +875,17 @@ export const getServerSideProps: GetServerSideProps<HomePageStaticProps> = async
 
   const { getMessages } = await import("../lib/getMessages");
   const { normalizeSponsoredFeatureLang, resolvePublicHomepageSponsoredFeature } = await import("../lib/publicSponsoredFeatureSource");
+  const { getPublicApiBaseUrl } = await import('../lib/publicApiBase');
+  const { fetchPublishedPublicSettings } = await import('../src/lib/publicSettings');
   const initialLang = toUiLangCode(locale);
-  const [sponsoredFeatureResult, latest] = await Promise.all([
+  const [sponsoredFeatureResult, latest, initialPublicSettings] = await Promise.all([
     withHomepageSsrDeadline(HOMEPAGE_SPONSORED_FEATURE_TIMEOUT_MS, (signal) => resolvePublicHomepageSponsoredFeature({
       placement: 'homepage',
       lang: normalizeSponsoredFeatureLang(locale),
       signal,
     })),
     withHomepageSsrDeadline(HOMEPAGE_LATEST_NEWS_TIMEOUT_MS, (signal) => resolveHomepageLatestStories(initialLang, signal)),
+    withHomepageSsrDeadline(HOMEPAGE_PUBLIC_SETTINGS_TIMEOUT_MS, (signal) => fetchPublishedPublicSettings(getPublicApiBaseUrl(), signal)),
   ]);
 
   return {
@@ -795,6 +897,7 @@ export const getServerSideProps: GetServerSideProps<HomePageStaticProps> = async
       initialHomepageSponsoredFeature: normalizeHomepageSponsoredFeatureProps(sponsoredFeatureResult?.feature ?? null),
       initialTopStory: latest?.topStory ?? null,
       initialFreshStories: latest?.freshStories ?? null,
+      initialPublicSettings: JSON.parse(JSON.stringify(initialPublicSettings)),
     },
   };
 };
@@ -3907,20 +4010,15 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
   } = usePublicSettings();
 
   const effectiveSettings = settings ?? DEFAULT_NORMALIZED_PUBLIC_SETTINGS;
-  const [latestFromBackend, setLatestFromBackend] = useState<any[] | null>(() => initialFreshStories ?? null);
-  const [latestRawStories, setLatestRawStories] = useState<Article[] | null>(null);
-  const [topStory, setTopStory] = useState<Article | null>(() => initialTopStory ?? null);
-  const homepageLatestFetchRef = useRef<AbortController | null>(null);
-  const homepageLatestSignatureRef = useRef<string>(getHomepageLatestStoriesSignature({
-    topStory: initialTopStory ?? null,
-    rawStories: null,
-    freshStories: initialFreshStories ?? null,
-  }, apiLang));
+  const settingsResolved = settings != null && settingsError !== 'PUBLIC_SETTINGS_PROVIDER_MISSING';
   const [homepageSponsoredFeature, setHomepageSponsoredFeature] = useState<HomepageSponsoredFeature | null>(initialHomepageSponsoredFeature);
   const [homeSectionNews, setHomeSectionNews] = useState<Record<string, Article[]>>({});
   const [homeSpotlightItems, setHomeSpotlightItems] = useState<any[] | null>(null);
   const [homepagePublicRefreshTick, setHomepagePublicRefreshTick] = useState(0);
   const [hydrated, setHydrated] = useState(false);
+  const { topStory, latestFromBackend, latestRawStories, storyStatus, refreshHomepageLatestStories } = useHomepageLatestStories({
+    apiLang, hydrated, initialTopStory, initialFreshStories,
+  });
 
   const broadcastTickers = usePublicBroadcastTicker({
     lang: apiLang,
@@ -3973,116 +4071,6 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
     setPrefs((p: any) => ({ ...p, lang: UI_LANG_LABEL[code] }));
   }, [lang]);
 
-  React.useEffect(() => {
-    homepageLatestSignatureRef.current = getHomepageLatestStoriesSignature({
-      topStory,
-      rawStories: latestRawStories,
-      freshStories: latestFromBackend,
-    }, apiLang);
-  }, [apiLang, latestFromBackend, latestRawStories, topStory]);
-
-  const refreshHomepageLatestStories = React.useCallback((mode: HomepageLatestRefreshMode) => {
-    if (!hydrated || homepageLatestFetchRef.current) return;
-
-    const controller = new AbortController();
-    homepageLatestFetchRef.current = controller;
-    const isBackgroundRefresh = mode === 'background';
-
-    if (!isBackgroundRefresh) {
-      setLatestRawStories(null);
-    }
-
-    (async () => {
-      // Latest news drives the center homepage; do not wait for side-channel fetches.
-      const latestPromise = resolveHomepageLatestStories(apiLang, controller.signal);
-      const breakingPromise = fetchPublicNews({ category: 'breaking', language: apiLang, limit: 10, signal: controller.signal });
-      breakingPromise.catch(() => null);
-
-      const [latestResult] = await Promise.allSettled([latestPromise]);
-      if (controller.signal.aborted) return;
-      const latest = latestResult.status === 'fulfilled'
-        ? latestResult.value
-        : {
-            topStory: null,
-            freshStories: null,
-            rawStories: null,
-            endpoint: '',
-            status: undefined,
-            error: latestResult.reason instanceof Error ? latestResult.reason.message : 'fetch failed',
-          };
-      if (process.env.NODE_ENV !== 'production') {
-        if (latest.error) {
-          // eslint-disable-next-line no-console
-          console.error('[homepage] latest news fetch failed', {
-            lang: apiLang,
-            endpoint: latest.endpoint,
-            status: latest.status ?? null,
-            error: latest.error,
-          });
-        } else if (!Array.isArray(latest.rawStories) || !latest.rawStories.length) {
-          // eslint-disable-next-line no-console
-          console.warn('[homepage] latest news returned 0 items', {
-            lang: apiLang,
-            endpoint: latest.endpoint,
-          });
-        }
-      }
-
-      if (!latest.error) {
-        const nextSnapshot = {
-          topStory: latest.topStory,
-          rawStories: latest.rawStories || [],
-          freshStories: latest.freshStories || [],
-        };
-        const nextSignature = getHomepageLatestStoriesSignature(nextSnapshot, apiLang);
-        const shouldApplyLatestStories = shouldCommitHomepageLatestStoriesRefresh({
-          currentSignature: homepageLatestSignatureRef.current,
-          mode,
-          next: nextSnapshot,
-          requestedLang: apiLang,
-        });
-
-        if (shouldApplyLatestStories) {
-          setTopStory(latest.topStory);
-          setLatestRawStories(latest.rawStories || []);
-          setLatestFromBackend(latest.freshStories || []);
-          homepageLatestSignatureRef.current = nextSignature;
-        }
-      } else if (!isBackgroundRefresh) {
-        setTopStory(null);
-        setLatestRawStories([]);
-        setLatestFromBackend([]);
-      }
-
-      const [breakingResult] = await Promise.allSettled([breakingPromise]);
-      if (controller.signal.aborted) return;
-      const breakingResp = breakingResult.status === 'fulfilled'
-        ? breakingResult.value
-        : { error: breakingResult.reason instanceof Error ? breakingResult.reason.message : 'fetch failed', endpoint: null, status: null };
-      if (process.env.NODE_ENV !== 'production' && breakingResp.error) {
-        // eslint-disable-next-line no-console
-        console.error('[homepage] breaking news fetch failed', {
-          lang: apiLang,
-          endpoint: breakingResp.endpoint,
-          status: breakingResp.status ?? null,
-          error: breakingResp.error,
-        });
-      }
-
-      // Keep this fetch for other UI uses; tickers now come from broadcast hook.
-      void breakingResp;
-    })().catch(() => {
-      if (controller.signal.aborted || isBackgroundRefresh) return;
-      setTopStory(null);
-      setLatestRawStories([]);
-      setLatestFromBackend([]);
-    }).finally(() => {
-      if (homepageLatestFetchRef.current === controller) {
-        homepageLatestFetchRef.current = null;
-      }
-    });
-  }, [apiLang, hydrated]);
-
   const requestHomepageBackgroundRefresh = React.useCallback(() => {
     setHomepagePublicRefreshTick((prev) => prev + 1);
   }, []);
@@ -4094,25 +4082,10 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
   });
 
 
-  // Fetch homepage data (latest) from backend.
-  React.useEffect(() => {
-    if (!hydrated) return;
-    homepageLatestFetchRef.current?.abort();
-    homepageLatestFetchRef.current = null;
-    refreshHomepageLatestStories('initial');
-  }, [apiLang, hydrated, refreshHomepageLatestStories]);
-
   React.useEffect(() => {
     if (!hydrated || homepagePublicRefreshTick <= 0) return;
     refreshHomepageLatestStories('background');
   }, [homepagePublicRefreshTick, hydrated, refreshHomepageLatestStories]);
-
-  React.useEffect(() => {
-    return () => {
-      homepageLatestFetchRef.current?.abort();
-      homepageLatestFetchRef.current = null;
-    };
-  }, []);
 
   React.useEffect(() => {
     const controller = new AbortController();
@@ -4226,6 +4199,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
   }, [effectiveSettings]);
 
   const moduleEnabledOrTrue = (key: string) => {
+    if (!settingsResolved) return false;
     const v = (publishedModulesContainer as any)?.[key]?.enabled;
     if (v === undefined) return true;
     return v === true;
@@ -4236,8 +4210,8 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
     return Number.isFinite(raw) ? raw : fallbackOrder;
   };
 
-  const showCategoryStrip = effectiveSettings.modules.categoryStrip.enabled === true;
-  const showTrendingStrip = effectiveSettings.modules.trending.enabled === true;
+  const showCategoryStrip = settingsResolved && effectiveSettings.modules.categoryStrip.enabled === true;
+  const showTrendingStrip = settingsResolved && effectiveSettings.modules.trending.enabled === true;
 
   // Module toggles control whether the ticker can render at all.
   const breakingModuleEnabled = moduleEnabledOrTrue('breakingTicker');
@@ -4280,7 +4254,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
   const inspirationHubEnabled = effectiveSettings.inspirationHub?.enabled === true;
   const inspirationHubHomepageEnabled = effectiveSettings.inspirationHub?.droneTv.homepageEnabled === true;
   const inspirationHubHomepageModuleEnabled = effectiveSettings.inspirationHub?.homepageModuleEnabled !== false;
-  const showInspirationHubHomepageSection = inspirationHubEnabled && inspirationHubHomepageEnabled && inspirationHubHomepageModuleEnabled;
+  const showInspirationHubHomepageSection = settingsResolved && inspirationHubEnabled && inspirationHubHomepageEnabled && inspirationHubHomepageModuleEnabled;
   const showInspirationHubHomepageDroneTv = !!inspirationHomepageDroneTvSettings?.embedUrl;
 
   React.useEffect(() => {
@@ -4297,19 +4271,19 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
   const moduleState = {
     categoryStrip: showCategoryStrip,
     trending: showTrendingStrip,
-    explore: effectiveSettings.modules.explore.enabled === true,
-    liveTvCard: effectiveSettings.modules.liveTvCard.enabled === true && (liveTvEnabled || hasLiveTvFallbackMedia),
-    quickTools: effectiveSettings.modules.quickTools.enabled === true,
-    snapshots: effectiveSettings.modules.snapshots.enabled === true,
-    appPromo: effectiveSettings.modules.appPromo.enabled === true,
-    footer: effectiveSettings.modules.footer.enabled === true,
+    explore: settingsResolved && effectiveSettings.modules.explore.enabled === true,
+    liveTvCard: settingsResolved && effectiveSettings.modules.liveTvCard.enabled === true && (liveTvEnabled || hasLiveTvFallbackMedia),
+    quickTools: settingsResolved && effectiveSettings.modules.quickTools.enabled === true,
+    snapshots: settingsResolved && effectiveSettings.modules.snapshots.enabled === true,
+    appPromo: settingsResolved && effectiveSettings.modules.appPromo.enabled === true,
+    footer: settingsResolved && effectiveSettings.modules.footer.enabled === true,
   };
 
   const sidebarBlocks = [
     {
       key: 'explore',
       order: effectiveSettings.modules.explore.order,
-      enabled: effectiveSettings.modules.explore.enabled === true,
+      enabled: moduleState.explore,
       node: (
         <ExploreCategoriesPanel
           theme={theme}
@@ -4326,7 +4300,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
     {
       key: 'liveTvCard',
       order: effectiveSettings.modules.liveTvCard.order,
-      enabled: effectiveSettings.modules.liveTvCard.enabled === true && (liveTvEnabled || hasLiveTvFallbackMedia),
+      enabled: moduleState.liveTvCard,
       node: (
         <LiveTVWidget theme={theme} liveTvSettings={effectiveSettings.liveTv} />
       ),
@@ -4334,7 +4308,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
     {
       key: 'snapshots',
       order: effectiveSettings.modules.snapshots.order,
-      enabled: effectiveSettings.modules.snapshots.enabled === true,
+      enabled: moduleState.snapshots,
       node: <SnapshotsCard theme={theme} />,
     },
   ]
@@ -4619,13 +4593,13 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
     {
       key: 'appPromo',
       order: effectiveSettings.modules.appPromo.order,
-      enabled: effectiveSettings.modules.appPromo.enabled === true,
+      enabled: moduleState.appPromo,
       node: <AppPromoSection theme={theme} onToast={onToast} />,
     },
     {
       key: 'footer',
       order: effectiveSettings.modules.footer.order,
-      enabled: effectiveSettings.modules.footer.enabled === true,
+      enabled: moduleState.footer,
       node: <SiteFooter theme={theme} onToast={onToast} footerTextOverride={undefined} lang={apiLang} />,
     },
   ]
@@ -4978,7 +4952,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
                         featureDotColor: undefined,
                       }}
                       onToast={onToast}
-                      isLoading={shouldShowHomepageTopStorySkeleton(topStory, latestFromBackend)}
+                      isLoading={shouldShowHomepageTopStorySkeleton(topStory, latestFromBackend, storyStatus)}
                     />
                   </div>
                   <div className="fresh-stories-card">
