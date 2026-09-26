@@ -5,8 +5,14 @@ import NewsSlugDetailPage, { ArticleFacebookEmbed, ArticleGallery, ArticleInline
 import { formatArticleBodyHtml } from '../../lib/articleBody';
 import { fetchPublicNews } from '../../lib/publicNewsApi';
 import { hasRenderedTwitterWidgetFrame, loadTwitterWidgetsIn } from '../../lib/xWidgets';
+import { getAuthorBylineMetadata } from '../../lib/authorByline';
 
 let mockBylinePrefix = 'By';
+
+jest.mock('next/head', () => ({
+  __esModule: true,
+  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
 
 jest.mock('../../src/i18n/LanguageProvider', () => ({
   useI18n: () => ({
@@ -142,7 +148,72 @@ function lightboxGallery() {
   };
 }
 
+const invalidAuthorBylines = [
+  undefined, null, '', [], {},
+  { enabled: false, snapshot: { name: 'Hidden author' } },
+  { enabled: 'true', snapshot: { name: 'Hidden author' } },
+  { snapshot: { name: 'Hidden author' } },
+  { enabled: true, name: 'Wrong flat name' },
+  { enabled: true, snapshot: null },
+  { enabled: true, snapshot: [] },
+  { enabled: true, snapshot: { name: '   ', shortBio: 'Hidden bio' } },
+  { enabled: true, snapshot: { name: 123 } },
+  { enabled: true, snapshot: { name: { en: 'Wrong identity' } } },
+];
+
+describe('public author metadata', () => {
+  test.each(invalidAuthorBylines)('rejects disabled or invalid metadata %p', (authorByline) => {
+    expect(getAuthorBylineMetadata({ category: 'national', authorByline })).toBeNull();
+  });
+
+  test('uses only explicit public snapshot fields without localized or contributor substitutions', () => {
+    expect(getAuthorBylineMetadata({
+      category: 'national',
+      authorByline: {
+        enabled: true,
+        snapshot: {
+          name: ' Shailesh Rathod ', publicDesignation: ' Independent Writer ',
+          photoUrl: '/uploads/author.jpg', shortBio: ' Public author biography. ',
+          email: 'private@example.com', internalNotes: 'Private note',
+        },
+      },
+      translations: { gu: { authorByline: { enabled: true, snapshot: { name: 'Wrong identity' } } } },
+      pulseDialogue: { bylineSnapshot: { name: 'Wrong contributor' } },
+    })).toStrictEqual({
+      name: ' Shailesh Rathod ', publicDesignation: ' Independent Writer ',
+      photoUrl: '/uploads/author.jpg', shortBio: ' Public author biography. ',
+    });
+  });
+
+  test.each(['javascript:alert(1)', 'data:image/png;base64,abc', '//external.example/photo.jpg', '/\\external.example/photo.jpg', 'https://user:secret@example.com/photo.jpg', 'invalid'])('rejects unsafe author photo %s', (photoUrl) => {
+    expect(getAuthorBylineMetadata({ authorByline: { enabled: true, snapshot: { name: 'Shailesh Rathod', photoUrl } } })?.photoUrl).toBe('');
+  });
+
+  test('does not consume unsupported flat fields or snapshot aliases', () => {
+    expect(getAuthorBylineMetadata({ authorByline: {
+      enabled: true, publicDesignation: 'Wrong role', photoUrl: '/wrong.jpg', shortBio: 'Wrong bio',
+      snapshot: { name: 'Shailesh Rathod', designation: 'Wrong alias', photo: { url: '/wrong.jpg' } },
+    } })).toStrictEqual({ name: 'Shailesh Rathod', publicDesignation: '', photoUrl: '', shortBio: '' });
+  });
+
+  test('never resolves author metadata for Pulse Dialogue', () => {
+    expect(getAuthorBylineMetadata({ category: 'pulse-dialogue', authorByline: { enabled: true, snapshot: { name: 'Wrong author' } } })).toBeNull();
+  });
+});
+
 describe('pages/news/[slug] editorial detail', () => {
+  function renderAuthorArticle(overrides: Record<string, unknown> = {}, lang: 'en' | 'hi' | 'gu' = 'en') {
+    return render(
+      <NewsSlugDetailPage
+        messages={{}} locale={lang} lang={lang} slug="author-story"
+        siteUrl="https://www.newspulse.co.in"
+        article={editorialArticle({ category: 'national', language: lang, slug: 'author-story', ...overrides }) as any}
+        safeHtml="<p>Newsroom article body.</p>" topStories={[]} relatedStories={[]}
+        error={null} pending={false}
+      />
+    );
+  }
+
   beforeEach(() => {
     jest.clearAllMocks();
     (hasRenderedTwitterWidgetFrame as jest.Mock).mockReturnValue(true);
@@ -156,6 +227,75 @@ describe('pages/news/[slug] editorial detail', () => {
     document.documentElement.style.overflow = '';
     document.body.style.overflow = '';
     document.body.style.overscrollBehavior = '';
+  });
+
+  test.each(invalidAuthorBylines)('preserves normal article markup for absent, disabled or invalid author %p', (authorByline) => {
+    const original = renderAuthorArticle();
+    const originalMarkup = original.container.innerHTML;
+    original.unmount();
+    const candidate = renderAuthorArticle({ authorByline });
+    expect(candidate.container.innerHTML).toBe(originalMarkup);
+    expect(screen.getByText('By Authorised Editor')).toBeTruthy();
+    expect(screen.queryByTestId('author-byline')).toBeNull();
+    expect(document.getElementById('about-author-heading')).toBeNull();
+    expect(document.querySelector('meta[name="author"]')?.getAttribute('content')).toBe('Authorised Editor');
+  });
+
+  test.each(['en', 'hi', 'gu'] as const)('renders the unchanged author identity, name only, on %s routes', (lang) => {
+    renderAuthorArticle({
+      authorByline: { enabled: true, snapshot: { name: 'Shailesh Rathod', publicDesignation: 'Independent Writer', photoUrl: '/uploads/author.jpg', shortBio: 'Public author biography.' } },
+      translations: { [lang]: { status: 'published', title: 'Localized story', content: '<p>Localized body</p>', authorByline: { enabled: true, snapshot: { name: 'Wrong localized author', publicDesignation: 'Wrong role', shortBio: 'Wrong bio' } } } },
+    }, lang);
+    const byline = screen.getByTestId('author-byline');
+    expect(within(byline).getByText('Shailesh Rathod').textContent).toBe('Shailesh Rathod');
+    expect(within(byline).getByText('Independent Writer')).toBeTruthy();
+    expect(within(byline).getByRole('img').getAttribute('src')).toBe('/uploads/author.jpg');
+    expect(byline.textContent).not.toMatch(/By |द्वारा|દ્વારા/);
+    expect(document.body.textContent).not.toMatch(/Authorised Editor|Wrong localized author|Wrong role|Wrong bio/);
+    expect(screen.getByText('Public author biography.')).toBeTruthy();
+    expect(document.getElementById('about-author-heading')?.textContent).toBe({ en: 'About Author', hi: 'लेखक के बारे में', gu: 'લેખક વિશે' }[lang]);
+    expect(document.querySelector('meta[name="author"]')?.getAttribute('content')).toBe('Shailesh Rathod');
+  });
+
+  test.each([{}, { publicDesignation: '', shortBio: '   ', photoUrl: '' }, { photoUrl: 'javascript:alert(1)', publicDesignation: {}, shortBio: {} }])('renders name only with no image, role or empty bio section for %p', (optionalFields) => {
+    renderAuthorArticle({ authorByline: { enabled: true, snapshot: { name: 'Shailesh Rathod', ...optionalFields } } });
+    const byline = screen.getByTestId('author-byline');
+    expect(byline.textContent).toBe('Shailesh Rathod');
+    expect(within(byline).queryByRole('img')).toBeNull();
+    expect(document.getElementById('about-author-heading')).toBeNull();
+  });
+
+  test('renders optional designation and public bio without private fields', () => {
+    renderAuthorArticle({ authorByline: {
+      enabled: true,
+      snapshot: {
+        name: 'Shailesh Rathod', publicDesignation: 'Independent Writer', shortBio: 'Public author biography.',
+        email: 'private@example.com', phone: 'private-phone', internalNotes: 'Private note',
+      },
+    } });
+    expect(screen.getByText('Independent Writer')).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'About Author' }).textContent).toBe('About AuthorPublic author biography.');
+    expect(document.body.textContent).not.toMatch(/private@example.com|private-phone|Private note/);
+  });
+
+  test('removes a failed author photo without a broken placeholder or lost name', () => {
+    renderAuthorArticle({ authorByline: { enabled: true, snapshot: { name: 'Shailesh Rathod', photoUrl: '/uploads/missing.jpg' } } });
+    fireEvent.error(within(screen.getByTestId('author-byline')).getByRole('img'));
+    expect(within(screen.getByTestId('author-byline')).queryByRole('img')).toBeNull();
+    expect(screen.getByText('Shailesh Rathod')).toBeTruthy();
+  });
+
+  test.each([undefined, { bylineSnapshot: { name: 'Public Contributor', designation: 'Public Voice' } }])('keeps Pulse Dialogue markup unchanged even with author metadata (%p)', (pulseDialogue) => {
+    const original = renderAuthorArticle({ category: 'pulse-dialogue', pulseDialogue });
+    const originalMarkup = original.container.innerHTML;
+    original.unmount();
+    const candidate = renderAuthorArticle({ category: 'pulse-dialogue', pulseDialogue, authorByline: {
+      enabled: true,
+      snapshot: { name: 'Wrong author', publicDesignation: 'Writer', photoUrl: '/uploads/hidden.jpg', shortBio: 'Hidden bio' },
+    } });
+    expect(candidate.container.innerHTML).toBe(originalMarkup);
+    expect(screen.queryByTestId('author-byline')).toBeNull();
+    expect(document.getElementById('about-author-heading')).toBeNull();
   });
 
   test('renders editorial detail fields without mixing author role and editorial type', async () => {

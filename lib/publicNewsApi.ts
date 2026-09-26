@@ -1,6 +1,7 @@
 import { getPublicApiBaseUrl } from './publicApiBase';
 import { getCategoryQueryKey } from './categoryKeys';
 import { filterPubliclyPublishedArticles } from './localizedArticleFields';
+import type { AuthorBylinePayload } from './authorByline';
 
 export type ArticleBase = {
   _id: string;
@@ -28,6 +29,7 @@ export type ArticleBase = {
   publishedAt?: string;
   category?: string;
   language?: string;
+  authorByline?: AuthorBylinePayload | null;
   pulseDialogue?: {
     contributorId?: string | null;
     dialogueFormat?: string | null;

@@ -7,6 +7,7 @@ import {
   getStoredSeoValue,
 } from './editorialDisplay';
 import { getPulseDialogueMetadata } from './pulseDialogue';
+import { getAuthorBylineMetadata } from './authorByline';
 import {
   getLocalizedArticleFields,
   getPublicArticleStatus,
@@ -243,7 +244,8 @@ export function buildArticleSeoMetadata(article: unknown, langInput: unknown, si
   const heroImage = getLocalizedSeoValue(item, lang, 'ogImage', 'openGraphImage', 'twitterImage', 'image') || resolveCoverImageUrl(item, { lang }) || '';
   const ogImage = absolutePublicUrl(heroImage, siteUrl);
   const pulseDialogue = getPulseDialogueMetadata(item);
-  const authorName = cleanText(pulseDialogue?.contributorName || getArticleAuthorName(item));
+  const authorByline = getAuthorBylineMetadata(item);
+  const authorName = authorByline?.name || cleanText(pulseDialogue?.contributorName || getArticleAuthorName(item));
   const authorImage = absolutePublicUrl(pulseDialogue?.contributorPhotoUrl || '', siteUrl);
   const authorAffiliation = cleanText(pulseDialogue?.contributorAffiliation || '');
   const publishedAt = articlePublishedAt(item);

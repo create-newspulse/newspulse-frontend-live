@@ -25,6 +25,7 @@ import StoryImage, { ArticleHeroImage } from '../../src/components/story/StoryIm
 import EmbeddedMediaConsentGate from '../../src/consent/EmbeddedMediaConsentGate';
 import { useArticleAnalytics } from '../../hooks/useArticleAnalytics';
 import { hasRenderedTwitterWidgetFrame, loadTwitterWidgetsIn } from '../../lib/xWidgets';
+import { getAuthorBylineMetadata, type AuthorBylineMetadata } from '../../lib/authorByline';
 import {
   getArticleAuthorDesignation,
   getArticleAuthorName,
@@ -811,6 +812,34 @@ function RelatedStoryShell({
   );
 }
 
+function AuthorArticleByline({ metadata }: { metadata: AuthorBylineMetadata }) {
+  const [photoFailed, setPhotoFailed] = React.useState(false);
+
+  React.useEffect(() => {
+    setPhotoFailed(false);
+  }, [metadata.photoUrl]);
+
+  return (
+    <div className="flex min-w-0 items-center gap-3 text-sm text-slate-800" data-testid="author-byline">
+      {metadata.photoUrl && !photoFailed ? (
+        <img
+          src={metadata.photoUrl}
+          alt={metadata.name}
+          width={48}
+          height={48}
+          className="h-12 w-12 shrink-0 rounded-full border border-slate-200 object-cover"
+          loading="lazy"
+          onError={() => setPhotoFailed(true)}
+        />
+      ) : null}
+      <div className="min-w-0 [overflow-wrap:anywhere]">
+        <div className="font-bold text-slate-900">{metadata.name}</div>
+        {metadata.publicDesignation ? <div className="text-slate-600">{metadata.publicDesignation}</div> : null}
+      </div>
+    </div>
+  );
+}
+
 function PulseDialogueArticleByline({ metadata }: { metadata: PulseDialogueMetadata }) {
   const [photoFailed, setPhotoFailed] = React.useState(false);
 
@@ -1127,7 +1156,8 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
   const isPulseDialogueDetail = categoryKey === 'pulse-dialogue' || Boolean(pulseDialogueMetadata);
   const authorName = React.useMemo(() => getArticleAuthorName(resolvedArticle), [resolvedArticle]);
   const authorDesignation = React.useMemo(() => getArticleAuthorDesignation(resolvedArticle), [resolvedArticle]);
-  const visibleAuthorName = isPulseDialogueDetail ? (pulseDialogueMetadata?.contributorName || '') : authorName;
+  const authorByline = React.useMemo(() => getAuthorBylineMetadata(resolvedArticle), [resolvedArticle]);
+  const visibleAuthorName = isPulseDialogueDetail ? (pulseDialogueMetadata?.contributorName || '') : (authorByline?.name || authorName);
   const visibleAuthorDesignation = isPulseDialogueDetail ? (pulseDialogueMetadata?.contributorDesignation || '') : authorDesignation;
   const pulseReadingTime = React.useMemo(() => pulseDialogueMetadata ? getArticleReadingTime(resolvedArticle) : '', [pulseDialogueMetadata, resolvedArticle]);
   const imageCaption = React.useMemo(() => getImageCaption(resolvedArticle, lang), [lang, resolvedArticle]);
@@ -1356,6 +1386,8 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
                       <div className="min-w-0 text-xs font-semibold text-slate-500">
                         {pulseDialogueMetadata ? (
                           <PulseDialogueArticleByline metadata={pulseDialogueMetadata} />
+                        ) : authorByline ? (
+                          <AuthorArticleByline metadata={authorByline} />
                         ) : visibleAuthorName ? (
                           <div className="text-sm text-slate-800">
                             <span className="font-bold">By {visibleAuthorName}</span>
@@ -1502,6 +1534,15 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
                   <div className="px-4 md:px-6 pb-6">
                     <PulseDialogueArticleExtras metadata={pulseDialogueMetadata} t={t} />
                   </div>
+                ) : null}
+
+                {authorByline?.shortBio ? (
+                  <section aria-labelledby="about-author-heading" className="px-4 md:px-6 pb-6 text-sm text-slate-700">
+                    <h2 id="about-author-heading" className="border-t border-slate-200 pt-4 font-bold text-slate-900">
+                      {{ en: 'About Author', hi: 'लेखक के बारे में', gu: 'લેખક વિશે' }[lang]}
+                    </h2>
+                    <p className="mt-2 [overflow-wrap:anywhere] leading-6">{authorByline.shortBio}</p>
+                  </section>
                 ) : null}
 
                 <div className="px-4 md:px-6 pb-6">

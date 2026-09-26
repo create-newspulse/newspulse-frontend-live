@@ -30,6 +30,47 @@ const article = {
 };
 
 describe('public SEO helpers', () => {
+  test.each(['en', 'hi', 'gu'] as const)('uses a name-only author Person on %s articles and preserves the publisher exactly', (lang) => {
+    const localizedArticle = { ...article, language: lang };
+    const baseline = buildArticleSeoMetadata(localizedArticle, lang, 'https://www.newspulse.co.in');
+    const seo = buildArticleSeoMetadata({ ...localizedArticle, authorByline: {
+      enabled: true,
+      snapshot: {
+        name: 'Shailesh Rathod', publicDesignation: 'Independent Writer', photoUrl: '/uploads/author.jpg',
+        shortBio: 'Public author biography.', email: 'private@example.com', internalNotes: 'Private note',
+      },
+    } }, lang, 'https://www.newspulse.co.in');
+    expect(seo?.authorName).toBe('Shailesh Rathod');
+    expect(seo?.newsArticleJsonLd?.author).toStrictEqual({ '@type': 'Person', name: 'Shailesh Rathod' });
+    expect(seo?.newsArticleJsonLd?.publisher).toStrictEqual(baseline?.newsArticleJsonLd?.publisher);
+    expect((seo?.newsArticleJsonLd?.publisher as any)?.name).toBe('News Pulse Media');
+    expect(JSON.stringify(seo)).not.toMatch(/author.jpg|Public author biography|Independent Writer|private@example.com|Private note/);
+  });
+
+  test.each([
+    undefined, null, {}, { name: 'Wrong flat name' },
+    { enabled: false, snapshot: { name: 'Hidden author' } },
+    { enabled: 'true', snapshot: { name: 'Hidden author' } },
+    { enabled: true, snapshot: { name: '   ' } },
+    { enabled: true, snapshot: { name: 123 } },
+  ])('keeps legacy SEO unchanged for absent, disabled or invalid author %p', (authorByline) => {
+    expect(buildArticleSeoMetadata({ ...article, authorByline }, 'en', 'https://www.newspulse.co.in'))
+      .toStrictEqual(buildArticleSeoMetadata(article, 'en', 'https://www.newspulse.co.in'));
+  });
+
+  test('preserves the exact supplied name in SEO', () => {
+    const name = ' Shailesh  Rathod ';
+    const seo = buildArticleSeoMetadata({ ...article, authorByline: { enabled: true, snapshot: { name } } }, 'en', 'https://www.newspulse.co.in');
+    expect(seo?.authorName).toBe(name);
+    expect(seo?.newsArticleJsonLd?.author).toStrictEqual({ '@type': 'Person', name });
+  });
+
+  test.each([undefined, { bylineSnapshot: { name: 'Public Contributor', photoUrl: '/contributors/public.jpg' } }])('ignores author byline metadata for Pulse Dialogue SEO (%p)', (pulseDialogue) => {
+    const pulseArticle = { ...article, category: 'pulse-dialogue', pulseDialogue };
+    expect(buildArticleSeoMetadata({ ...pulseArticle, authorByline: { enabled: true, snapshot: { name: 'Wrong author' } } }, 'en', 'https://www.newspulse.co.in'))
+      .toStrictEqual(buildArticleSeoMetadata(pulseArticle, 'en', 'https://www.newspulse.co.in'));
+  });
+
   test('published article renders title, description, canonical, Open Graph, Twitter and NewsArticle JSON-LD values', () => {
     const seo = buildArticleSeoMetadata(article, 'en', 'https://www.newspulse.co.in');
 
