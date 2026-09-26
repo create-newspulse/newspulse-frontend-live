@@ -496,6 +496,100 @@ describe('public news route localization', () => {
     }));
   });
 
+  test.each(['en', 'hi', 'gu'])('Pulse %s slug detail uses the public ID metadata instead of the incomplete slug snapshot', async (locale) => {
+    const detail = pulseStory(locale, {
+      content: '<p>Full article body</p>',
+      pulseDialogue: {
+        contributorId: 'shared-contributor',
+        dialogueFormat: 'guest_column',
+        series: 'Public Voices',
+        bylineSnapshot: { name: 'Shared Contributor', photo: { url: '/contributor.jpg' } },
+        contributor: { id: 'shared-contributor', name: 'Shared Contributor', shortBio: 'Public biography' },
+        contributorDisclosure: `${locale} disclosure`,
+        contributorDisclaimer: `${locale} disclaimer`,
+        editorNote: `${locale} editor note`,
+        showAboutContributor: true,
+      },
+    });
+    const incomplete = {
+      ...detail,
+      pulseDialogue: {
+        contributorId: 'shared-contributor',
+        bylineSnapshot: null,
+        contributorDisclosure: 'English disclosure',
+        contributorDisclaimer: 'English disclosure',
+      },
+    };
+    const fetchMock = jest.fn()
+      .mockResolvedValueOnce(jsonResponse({ article: incomplete }))
+      .mockResolvedValueOnce(jsonResponse({ items: [] }, 404))
+      .mockResolvedValueOnce(jsonResponse({ article: detail }));
+    global.fetch = fetchMock as any;
+    const res = createRes();
+    await newsBySlugHandler(createReq({
+      url: `/api/public/news/slug/${detail.slug}?lang=${locale}&language=${locale}`,
+      query: { slug: detail.slug, lang: locale, language: locale },
+    }) as any, res as any);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.article).toEqual(detail);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      `https://backend.test/api/public/news/${detail._id}?lang=${locale}&language=${locale}`,
+      expect.objectContaining({ signal: expect.any(AbortSignal), cache: 'no-store' })
+    );
+  });
+
+  test.each([
+    ['other article', { _id: 'other-article' }, 200],
+    ['English payload', { language: 'en' }, 200],
+    ['missing locale', { language: '' }, 200],
+    ['non-Pulse payload', { category: 'business' }, 200],
+    ['draft payload', { status: 'draft' }, 200],
+    ['failed lookup', {}, 503],
+  ])('Pulse slug detail rejects %s without using the unverified slug notices', async (_label, overrides, status) => {
+    const article = pulseStory('hi', { translationGroupId: null });
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce(jsonResponse({ article }))
+      .mockResolvedValueOnce(jsonResponse({ article: { ...article, ...(overrides as object) } }, status as number));
+    const res = createRes();
+    await newsBySlugHandler(createReq({
+      url: '/api/public/news/slug/pulse-hi?lang=hi&language=hi',
+      query: { slug: 'pulse-hi', lang: 'hi', language: 'hi' },
+    }) as any, res as any);
+    expect(res.body).toEqual({ article: null });
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  test.each(['headers', 'body'])('Pulse ID metadata lookup bounds stalled %s and cleans up its timer', async (stage) => {
+    jest.useFakeTimers();
+    let signal!: AbortSignal;
+    let completed = false;
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce(jsonResponse({ article: pulseStory('gu', { translationGroupId: null }) }))
+      .mockImplementationOnce((_url, options) => {
+        signal = options.signal;
+        return stage === 'headers' ? new Promise(() => {}) : Promise.resolve({ ok: true, text: () => new Promise(() => {}) });
+      });
+    const res = createRes();
+    try {
+      const pending = newsBySlugHandler(createReq({
+        url: '/api/public/news/slug/pulse-gu?lang=gu&language=gu',
+        query: { slug: 'pulse-gu', lang: 'gu', language: 'gu' },
+      }) as any, res as any).then(() => { completed = true; });
+      await jest.advanceTimersByTimeAsync(1499);
+      expect(completed).toBe(false);
+      expect(signal.aborted).toBe(false);
+      await jest.advanceTimersByTimeAsync(1);
+      await pending;
+      expect(signal.aborted).toBe(true);
+      expect(res.body).toEqual({ article: null });
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   test('Gujarati slug detail promotes an English slug hit to the Gujarati translation group record', async () => {
     const fetchMock = jest.fn()
       .mockResolvedValueOnce(jsonResponse({

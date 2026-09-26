@@ -268,17 +268,22 @@ describe('pages/news/[slug] editorial detail', () => {
     expect(screen.getByTestId('article-hero-image').getAttribute('src')).toBe(imageUrl);
   });
 
-  test('renders Pulse Dialogue contributor attribution and optional public sections without using staff fallback', async () => {
+  test.each([
+    ['en', 'The contributor works with civic groups.', 'The views expressed in this contribution are those of the author and do not necessarily represent the editorial position of News Pulse.'],
+    ['hi', 'यह लेख संपादकीय समीक्षा के बाद प्रकाशित किया गया है।', 'इस लेख में व्यक्त विचार लेखक के निजी विचार हैं।'],
+    ['gu', 'આ લેખ સંપાદકીય સમીક્ષા બાદ પ્રકાશિત થયો છે.', 'આ લેખમાં વ્યક્ત વિચારો લેખકના વ્યક્તિગત અભિપ્રાયો છે.'],
+  ] as const)('renders %s Pulse attribution and each localized notice exactly once without staff fallback', async (routeLang, disclosure, disclaimer) => {
     render(
       <NewsSlugDetailPage
         messages={{}}
-        locale="en"
-        lang="en"
+        locale={routeLang}
+        lang={routeLang}
         slug="city-dialogue"
         siteUrl="https://www.newspulse.co.in"
         article={editorialArticle({
           _id: 'pulse-article-1',
           category: 'pulse-dialogue',
+          language: routeLang,
           title: 'A City Dialogue',
           summary: 'A signed public contribution.',
           slug: 'city-dialogue',
@@ -289,9 +294,9 @@ describe('pages/news/[slug] editorial detail', () => {
           pulseDialogue: {
             dialogueFormat: 'guest_column',
             series: 'Civic Lens',
-            contributorDisclosure: 'The contributor works with civic groups.',
+            contributorDisclosure: disclosure,
             editorNote: 'Edited for clarity and length.',
-            contributorDisclaimer: 'default',
+            contributorDisclaimer: routeLang === 'en' ? 'default' : disclaimer,
             showAboutContributor: true,
             bylineSnapshot: {
               name: 'Dr Asha Mehta',
@@ -323,11 +328,16 @@ describe('pages/news/[slug] editorial detail', () => {
     expect(screen.getByAltText('Dr Asha Mehta portrait').getAttribute('src')).toBe('/contributors/asha.jpg');
     expect(screen.getByTestId('article-hero-image').getAttribute('src')).toBe('/covers/city-dialogue.jpg');
     expect(screen.getByText('Contributor Disclosure')).toBeTruthy();
-    expect(screen.getByText('The contributor works with civic groups.')).toBeTruthy();
+    expect(screen.getAllByText(disclosure)).toHaveLength(1);
     expect(screen.getByText("Editor's Note")).toBeTruthy();
     expect(screen.getByText('Edited for clarity and length.')).toBeTruthy();
     expect(screen.getByText('Contributor Disclaimer')).toBeTruthy();
-    expect(screen.getByText('The views expressed in this contribution are those of the author and do not necessarily represent the editorial position of News Pulse.')).toBeTruthy();
+    expect(screen.getAllByText(disclaimer)).toHaveLength(1);
+    expect(screen.getByText('Contributor Disclaimer').closest('section')?.textContent).not.toContain(disclosure);
+    if (routeLang !== 'en') {
+      expect(document.body.textContent).not.toContain('The contributor works with civic groups.');
+      expect(document.body.textContent).not.toContain('The views expressed in this contribution');
+    }
     expect(screen.getByText('About the Contributor')).toBeTruthy();
     expect(screen.getByText('Asha writes about Indian cities and public spaces.')).toBeTruthy();
     expect(screen.getByText('Pulse Dialogue article body.')).toBeTruthy();

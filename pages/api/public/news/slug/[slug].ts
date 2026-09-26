@@ -4,6 +4,8 @@ import { getPublicApiBaseUrl } from '../../../../../lib/publicApiBase';
 import { getLocalizedArticleFields, getLocalizedSlug, normalizeRouteLocale, STRICT_LOCALE_POLICY, type RouteLocale } from '../../../../../lib/localizedArticleFields';
 import { unwrapArticle, unwrapArticles } from '../../../../../lib/publicNewsApi';
 import { pickFreshestArticleForLocale } from '../../../../../lib/translationGroupSync';
+import { isPulseDialogueArticle } from '../../../../../lib/pulseDialogue';
+import { withPublicReadDeadline } from '../../../../../lib/publicReadDeadline';
 
 function asSingleQueryValue(value: string | string[] | undefined): string {
   return String(Array.isArray(value) ? value[0] : value || '').trim();
@@ -155,13 +157,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       const article = unwrapArticle(json);
       if (article?._id) {
-        const resolvedArticle = await resolveArticleFromTranslationGroup({
+        let resolvedArticle = await resolveArticleFromTranslationGroup({
           base,
           qs,
           requestHeaders,
           article,
           requestedLocale,
         });
+        if (isPulseDialogueArticle(resolvedArticle)) {
+          const detailArticle = await withPublicReadDeadline(1500, async (signal) => {
+            const detailRes = await fetch(`${base}/api/public/news/${encodeURIComponent(resolvedArticle._id)}${qs}`, {
+              method: 'GET',
+              headers: requestHeaders,
+              cache: 'no-store',
+              signal,
+            });
+            if (!detailRes.ok) throw new Error('PULSE_DIALOGUE_DETAIL_UNAVAILABLE');
+            return unwrapArticle(JSON.parse(await detailRes.text()));
+          });
+          const detailLanguage = String(detailArticle?.language || (detailArticle as any)?.lang || '').trim();
+          if (detailArticle?._id !== resolvedArticle._id || !detailLanguage ||
+            normalizeRouteLocale(detailLanguage) !== requestedLocale || !isPulseDialogueArticle(detailArticle) ||
+            !getLocalizedArticleFields(detailArticle, requestedLocale, STRICT_LOCALE_POLICY).isVisible) {
+            throw new Error('PULSE_DIALOGUE_DETAIL_MISMATCH');
+          }
+          resolvedArticle = detailArticle;
+        }
         const localized = getLocalizedArticleFields(resolvedArticle, requestedLocale, STRICT_LOCALE_POLICY);
         if (localized.isVisible) {
           return returnResolvedArticle({ ...json, article: resolvedArticle }, resolvedArticle, resolvedArticle === article ? 'direct-hit' : 'direct-group-hit');
