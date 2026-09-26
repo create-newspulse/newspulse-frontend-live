@@ -5,6 +5,7 @@ import HomePage, { getServerSideProps } from '../../pages/index';
 import { PublicSettingsProvider, usePublicSettings } from '../../src/context/PublicSettingsContext';
 import { fetchPublicSettings, fetchPublishedPublicSettings, normalizePublicSettings } from '../../src/lib/publicSettings';
 import { dispatchPublicDataRefresh } from '../../lib/publicDataRefresh';
+import { fetchPublicNews } from '../../lib/publicNewsApi';
 
 jest.mock('next/router', () => ({ useRouter: () => ({ asPath: '/', pathname: '/', locale: 'en', push: jest.fn(), replace: jest.fn() }) }));
 jest.mock('next/head', () => ({ __esModule: true, default: () => null }));
@@ -129,6 +130,46 @@ describe('homepage published visibility', () => {
     expect(screen.queryByText('common.appStore')).toBeNull();
     expect(container.querySelector('a[href="/monthly-compliance"]')).toBeNull();
     expect(fetchPublicSettings).toHaveBeenCalledTimes(1);
+  });
+
+  test('homepage fallback survives 503 trigger bursts and is replaced by one successful retry', async () => {
+    jest.useFakeTimers();
+    const story = { _id: 'recovered', title: 'Recovered homepage lead', slug: 'recovered', language: 'en', status: 'published', publishedAt: '2026-01-01T10:00:00Z' };
+    let attempts = 0;
+    (fetchPublicSettings as jest.Mock).mockResolvedValue(published());
+    (fetchPublicNews as jest.Mock).mockImplementation(async (options) => {
+      if (options.category || !options.homepageRecovery) return { items: [] };
+      attempts++;
+      return attempts === 1 ? { items: [], error: 'API 503', status: 503, retryAfter: '45' } : { items: [story] };
+    });
+    const { container, unmount } = render(<PublicSettingsProvider initialSettings={published()}><HomePage {...props} /></PublicSettingsProvider>);
+    try {
+      await act(async () => {});
+      expect(screen.getByRole('heading', { name: 'News Pulse Front Page' })).toBeTruthy();
+      const fallbackMarkup = container.querySelector('#top-story')?.innerHTML;
+      const navigation = Array.from(container.querySelectorAll('nav')).map(element => element.innerHTML);
+      for (let iteration = 0; iteration < 10; iteration++) {
+        await act(async () => {
+          window.dispatchEvent(new Event('focus'));
+          document.dispatchEvent(new Event('visibilitychange'));
+          dispatchPublicDataRefresh({ version: String(iteration), previousVersion: null, source: 'test' });
+        });
+      }
+      expect(attempts).toBe(1);
+      expect(container.querySelector('#top-story')?.innerHTML).toBe(fallbackMarkup);
+      await act(async () => { await jest.advanceTimersByTimeAsync(44_999); });
+      expect(attempts).toBe(1);
+      await act(async () => { await jest.advanceTimersByTimeAsync(1); });
+      expect(attempts).toBe(2);
+      expect(container.querySelector('#top-story h1')?.textContent).toBe(story.title);
+      expect(Array.from(container.querySelectorAll('nav')).map(element => element.innerHTML)).toEqual(navigation);
+      expect(screen.queryByText('Breaking fixture')).toBeNull();
+      expect(screen.queryByText('common.appStore')).toBeNull();
+    } finally {
+      unmount();
+      jest.useRealTimers();
+      (fetchPublicNews as jest.Mock).mockReset().mockResolvedValue({ items: [], endpoint: '/api/public/news' });
+    }
   });
 
   test('single initial fetch survives StrictMode and preserves version and background semantics', async () => {

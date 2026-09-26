@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import React from 'react';
 import { act, renderHook } from '@testing-library/react';
 import { isSerializableProps } from 'next/dist/lib/is-serializable-props';
 import {
@@ -694,6 +695,7 @@ describe('homepage Top Story freshness', () => {
   });
 
   test.each(['en', 'hi', 'gu'] as const)('%s keeps SSR content on initial and background failures, then accepts fresh content', async (apiLang) => {
+    jest.useFakeTimers();
     const initial = article({ _id: 'initial', language: apiLang });
     (fetchPublicNews as jest.Mock).mockResolvedValue({ items: [], error: 'API 503', endpoint: '/api/public/news' });
     const { result, unmount } = renderHook(() => useHomepageLatestStories({
@@ -708,7 +710,7 @@ describe('homepage Top Story freshness', () => {
     expect(result.current.topStory).toBe(initial);
     const newer = article({ _id: 'newer', language: apiLang, publishedAt: '2026-09-09T10:00:00.000Z' });
     (fetchPublicNews as jest.Mock).mockResolvedValue({ items: [initial, newer], endpoint: '/api/public/news' });
-    await act(async () => { result.current.refreshHomepageLatestStories('background'); });
+    await act(async () => { await jest.advanceTimersByTimeAsync(5_000); });
     expect(result.current.topStory?._id).toBe('newer');
     expect(result.current.storyStatus).toBe('content');
     unmount();
@@ -728,6 +730,180 @@ describe('homepage Top Story freshness', () => {
     (fetchPublicNews as jest.Mock).mockReset();
   });
 
+  test.each(['en', 'hi', 'gu'] as const)('%s repeated renders and in-flight focus/visibility/refresh bursts create one canonical request', async (apiLang) => {
+    jest.useFakeTimers();
+    (fetchPublicNews as jest.Mock).mockImplementation(() => new Promise(() => {}));
+    const canonicalCalls = () => (fetchPublicNews as jest.Mock).mock.calls.filter(([options]) => !options.category);
+    const { result, rerender, unmount } = renderHook(() => {
+      const stories = useHomepageLatestStories({ apiLang, hydrated: true, initialTopStory: null, initialFreshStories: null });
+      useHomepageRevalidationTriggers({ enabled: true, onRevalidate: () => stories.refreshHomepageLatestStories('background') });
+      return stories;
+    }, { wrapper: ({ children }) => React.createElement(React.StrictMode, null, children) });
+    await act(async () => {});
+    for (let iteration = 0; iteration < 20; iteration++) {
+      rerender();
+      await act(async () => {
+        window.dispatchEvent(new Event('focus'));
+        document.dispatchEvent(new Event('visibilitychange'));
+        result.current.refreshHomepageLatestStories('background');
+      });
+    }
+    expect(canonicalCalls()).toHaveLength(1);
+    expect(canonicalCalls()[0][0]).toEqual({ language: apiLang, limit: 40, homepageRecovery: true, signal: expect.any(AbortSignal) });
+    unmount();
+    await act(async () => { await jest.advanceTimersByTimeAsync(0); });
+    expect(jest.getTimerCount()).toBe(0);
+    (fetchPublicNews as jest.Mock).mockReset();
+  });
+
+  test.each([
+    [undefined, 5_000],
+    ['invalid', 5_000],
+    ['0', 5_000],
+    ['45', 45_000],
+    ['http-date', 90_000],
+    ['stalled-body', 45_000],
+  ] as const)('503 respects Retry-After %s and ignores trigger bursts before recovery', async (header, delay) => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-09-26T12:00:00.000Z'));
+    const retryAfter = header === 'http-date' ? new Date(Date.now() + delay).toUTCString() : header === 'stalled-body' ? '45' : header;
+    const recovered = article({ _id: 'gu-recovered', language: 'gu' });
+    let attempts = 0;
+    const readErrorBody = jest.fn(() => header === 'stalled-body' ? new Promise(() => {}) : Promise.resolve({ error: 'rebuilding' }));
+    const cancelErrorBody = jest.fn(async () => {});
+    global.fetch = jest.fn(async (url) => {
+      if (String(url).includes('category=')) return upstreamResponse({ items: [] });
+      attempts++;
+      return attempts === 1
+        ? { ok: false, status: 503, headers: { get: () => retryAfter }, json: readErrorBody, body: { cancel: cancelErrorBody } }
+        : upstreamResponse({ items: [recovered] });
+    }) as any;
+    (fetchPublicNews as jest.Mock).mockImplementation(jest.requireActual('../../lib/publicNewsApi').fetchPublicNews);
+    const { result, rerender, unmount } = renderHook(() => useHomepageLatestStories({
+      apiLang: 'gu', hydrated: true, initialTopStory: null, initialFreshStories: [],
+    }));
+    await act(async () => {});
+    expect(result.current.storyStatus).toBe('error');
+    expect(result.current.latestFromBackend).toEqual([]);
+    expect(readErrorBody).not.toHaveBeenCalled();
+    expect(cancelErrorBody).toHaveBeenCalledTimes(1);
+    for (let iteration = 0; iteration < 20; iteration++) {
+      rerender();
+      await act(async () => { result.current.refreshHomepageLatestStories('background'); });
+    }
+    expect(attempts).toBe(1);
+    await act(async () => { await jest.advanceTimersByTimeAsync(delay - 1); });
+    expect(attempts).toBe(1);
+    await act(async () => { await jest.advanceTimersByTimeAsync(1); });
+    expect(attempts).toBe(2);
+    expect(result.current.topStory?._id).toBe('gu-recovered');
+    expect(result.current.storyStatus).toBe('content');
+    const urls = (global.fetch as jest.Mock).mock.calls.map(([url]) => String(url)).filter(url => !url.includes('category='));
+    expect(urls).toEqual(Array(2).fill('https://backend.test/api/public/news?lang=gu&language=gu&limit=40'));
+    expect(jest.getTimerCount()).toBe(0);
+    unmount();
+    (fetchPublicNews as jest.Mock).mockReset();
+  });
+
+  test('persistent 503 has three automatic retries and cooldown-limited external probes', async () => {
+    jest.useFakeTimers();
+    (fetchPublicNews as jest.Mock).mockResolvedValue({ items: [], error: 'API 503', status: 503 });
+    const canonicalCalls = () => (fetchPublicNews as jest.Mock).mock.calls.filter(([options]) => !options.category);
+    const { result, unmount } = renderHook(() => useHomepageLatestStories({ apiLang: 'hi', hydrated: true, initialTopStory: null, initialFreshStories: [] }));
+    await act(async () => {});
+    for (const [index, delay] of [5_000, 10_000, 20_000].entries()) {
+      await act(async () => { await jest.advanceTimersByTimeAsync(delay - 1); });
+      expect(canonicalCalls()).toHaveLength(index + 1);
+      await act(async () => { result.current.refreshHomepageLatestStories('background'); });
+      expect(canonicalCalls()).toHaveLength(index + 1);
+      await act(async () => { await jest.advanceTimersByTimeAsync(1); });
+      expect(canonicalCalls()).toHaveLength(index + 2);
+    }
+    expect(jest.getTimerCount()).toBe(0);
+    await act(async () => { await jest.advanceTimersByTimeAsync(59_999); result.current.refreshHomepageLatestStories('background'); });
+    expect(canonicalCalls()).toHaveLength(4);
+    await act(async () => { await jest.advanceTimersByTimeAsync(1); result.current.refreshHomepageLatestStories('background'); });
+    expect(canonicalCalls()).toHaveLength(5);
+    for (let iteration = 0; iteration < 20; iteration++) {
+      await act(async () => { result.current.refreshHomepageLatestStories('background'); });
+    }
+    expect(canonicalCalls()).toHaveLength(5);
+    await act(async () => { await jest.advanceTimersByTimeAsync(0); });
+    expect(jest.getTimerCount()).toBe(0);
+    unmount();
+    (fetchPublicNews as jest.Mock).mockReset();
+  });
+
+  test('EN HI GU cooldowns and snapshots remain isolated across switches', async () => {
+    jest.useFakeTimers();
+    const english = article({ _id: 'english', language: 'en' });
+    (fetchPublicNews as jest.Mock).mockImplementation((options) => Promise.resolve(options.language === 'gu'
+      ? { items: [article({ _id: 'gujarati', language: 'gu' })] }
+      : { items: [], error: 'API 503', status: 503, retryAfter: '45' }));
+    const callsFor = (locale: TestLang) => (fetchPublicNews as jest.Mock).mock.calls.filter(([options]) => !options.category && options.language === locale);
+    const { result, rerender, unmount } = renderHook(({ apiLang }: { apiLang: TestLang }) => useHomepageLatestStories({
+      apiLang, hydrated: true, initialTopStory: english, initialFreshStories: [english],
+    }), { initialProps: { apiLang: 'en' as TestLang } });
+    await act(async () => {});
+    expect(result.current.topStory).toBe(english);
+    await act(async () => { rerender({ apiLang: 'hi' }); });
+    expect(result.current.topStory).toBeNull();
+    expect(result.current.latestFromBackend).toEqual([]);
+    await act(async () => { rerender({ apiLang: 'gu' }); });
+    expect(result.current.topStory?._id).toBe('gujarati');
+    await act(async () => { rerender({ apiLang: 'en' }); });
+    expect(result.current.topStory).toBe(english);
+    expect(callsFor('en')).toHaveLength(1);
+    expect(callsFor('hi')).toHaveLength(1);
+    expect(callsFor('gu')).toHaveLength(1);
+    await act(async () => { await jest.advanceTimersByTimeAsync(44_999); });
+    expect(callsFor('en')).toHaveLength(1);
+    expect(callsFor('hi')).toHaveLength(1);
+    await act(async () => { await jest.advanceTimersByTimeAsync(1); });
+    expect(callsFor('en')).toHaveLength(2);
+    expect(callsFor('hi')).toHaveLength(1);
+    unmount();
+    expect(jest.getTimerCount()).toBe(0);
+    (fetchPublicNews as jest.Mock).mockReset();
+  });
+
+  test('obsolete locale failure cannot schedule retries or overwrite the active localized snapshot', async () => {
+    jest.useFakeTimers();
+    let finishEnglish!: (value: any) => void;
+    let englishSignal!: AbortSignal;
+    const hindi = article({ _id: 'hindi', language: 'hi' });
+    (fetchPublicNews as jest.Mock).mockImplementation((options) => {
+      if (options.category) return Promise.resolve({ items: [] });
+      if (options.language === 'en') {
+        englishSignal = options.signal;
+        return new Promise(resolve => { finishEnglish = resolve; });
+      }
+      return Promise.resolve({ items: [hindi] });
+    });
+    const { result, rerender, unmount } = renderHook(({ apiLang }: { apiLang: TestLang }) => useHomepageLatestStories({
+      apiLang, hydrated: true, initialTopStory: null, initialFreshStories: [],
+    }), { initialProps: { apiLang: 'en' as TestLang } });
+    await act(async () => {});
+    await act(async () => { rerender({ apiLang: 'hi' }); });
+    expect(englishSignal.aborted).toBe(true);
+    await act(async () => { finishEnglish({ items: [], error: 'API 503', status: 503, retryAfter: '45' }); });
+    expect(result.current.topStory).toBe(hindi);
+    expect(result.current.storyStatus).toBe('content');
+    await act(async () => { await jest.advanceTimersByTimeAsync(60_000); });
+    expect((fetchPublicNews as jest.Mock).mock.calls.filter(([options]) => !options.category)).toHaveLength(2);
+    expect(jest.getTimerCount()).toBe(0);
+    unmount();
+    (fetchPublicNews as jest.Mock).mockReset();
+  });
+
+  test.each(['en', 'hi', 'gu'] as const)('%s homepage selection does not substitute another language', async (apiLang) => {
+    (fetchPublicNews as jest.Mock).mockResolvedValue({ items: ['en', 'hi', 'gu'].map(language => article({ _id: language, language })) });
+    const result = await resolveHomepageLatestStories(apiLang);
+    expect(result.rawStories?.map(story => story.language)).toEqual([apiLang]);
+    expect(HOMEPAGE_LATEST_NEWS_TIMEOUT_MS).toBe(4_000);
+    (fetchPublicNews as jest.Mock).mockReset();
+  });
+
   test('late timed-out response is ignored and the next recovery can succeed without the breaking feed', async () => {
     jest.useFakeTimers();
     let finishExpired!: (value: any) => void;
@@ -744,7 +920,7 @@ describe('homepage Top Story freshness', () => {
     (fetchPublicNews as jest.Mock).mockImplementation((options) => options.category
       ? new Promise(() => {})
       : Promise.resolve({ items: [article({ _id: 'recovered' })] }));
-    await act(async () => { result.current.refreshHomepageLatestStories('background'); });
+    await act(async () => { await jest.advanceTimersByTimeAsync(5_000); });
     expect(result.current.topStory?._id).toBe('recovered');
     await act(async () => {
       unmount();
@@ -764,6 +940,7 @@ describe('homepage Top Story freshness', () => {
     }), { initialProps: { apiLang: 'en' as TestLang } });
     expect(result.current.storyStatus).toBe('empty');
     expect(shouldShowHomepageTopStorySkeleton(null, [], result.current.storyStatus)).toBe(false);
+    await act(async () => {});
     await act(async () => { rerender({ apiLang: 'hi' }); });
     await act(async () => { completeEnglish({ items: [article({ _id: 'stale-en' })] }); });
     expect(result.current.topStory?._id).toBe('hindi');

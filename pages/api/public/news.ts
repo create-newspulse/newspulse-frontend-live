@@ -70,7 +70,7 @@ function logDevNewsProxy(event: string, payload: Record<string, unknown>) {
   console.error('[api/public/news]', event, payload);
 }
 
-async function fetchUpstreamJson(url: string, req: NextApiRequest, deadlineAt?: number): Promise<{ ok: boolean; status: number; json: any }> {
+async function fetchUpstreamJson(url: string, req: NextApiRequest, deadlineAt?: number): Promise<{ ok: boolean; status: number; json: any; retryAfter?: string | null }> {
   const read = async (signal?: AbortSignal) => {
     const upstream = await fetch(url, {
       method: 'GET',
@@ -82,6 +82,11 @@ async function fetchUpstreamJson(url: string, req: NextApiRequest, deadlineAt?: 
       ...(signal ? { signal } : {}),
     });
 
+    if (deadlineAt && !upstream.ok) {
+      const retryAfter = upstream.headers?.get('Retry-After');
+      await upstream.body?.cancel().catch(() => {});
+      return { ok: false, status: upstream.status, json: null, retryAfter };
+    }
     const text = await upstream.text().catch(() => '');
     if (deadlineAt && (!text || signal?.aborted)) throw new Error('HOMEPAGE_NEWS_UNAVAILABLE');
     const json = text ? JSON.parse(text) : { items: [] };
@@ -146,6 +151,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const candidateUrl = buildUpstreamUrl(candidateBase, localizedParams);
       try {
         const response = await fetchUpstreamJson(candidateUrl, req, deadlineAt);
+        if (homepageRecovery && response.retryAfter) res.setHeader('Retry-After', response.retryAfter);
         if (response.ok) {
           upstream = response;
           upstreamBase = candidateBase;
@@ -227,7 +233,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           });
       }
 
-      if (shouldWidenLocaleFetch && !hasCompletePulsePage) {
+      if (shouldWidenLocaleFetch && !homepageRecovery && !hasCompletePulsePage) {
         try {
           const widenedParams = new URLSearchParams(localizedParams);
           widenedParams.delete('lang');
@@ -257,7 +263,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         ? pickFreshestArticlesForLocale({
             articles: listItems,
             locale: requestedLocale,
-            policy: strictLocale ? STRICT_LOCALE_POLICY : undefined,
+            policy: strictLocale || homepageRecovery ? STRICT_LOCALE_POLICY : undefined,
           })
         : filterVisibleArticlesForLocale(
             listItems,

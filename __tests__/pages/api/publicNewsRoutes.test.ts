@@ -114,7 +114,7 @@ describe('public news route localization', () => {
     }
   });
 
-  test('homepage keeps primary stories when widening stalls within the shared recovery budget', async () => {
+  test('homepage returns primary stories without a widened recovery request', async () => {
     jest.useFakeTimers();
     const originalFetch = global.fetch;
     const story = pulseStory();
@@ -129,6 +129,7 @@ describe('public news route localization', () => {
       await pending;
       expect(res.statusCode).toBe(200);
       expect(res.body.items).toEqual([story]);
+      expect(global.fetch).toHaveBeenCalledTimes(1);
     } finally {
       global.fetch = originalFetch;
       jest.useRealTimers();
@@ -144,13 +145,35 @@ describe('public news route localization', () => {
     expect(res.body.items).toBeUndefined();
   });
 
-  test('homepage genuinely empty primary and widened feeds remain a successful empty result', async () => {
+  test('homepage genuinely empty primary feed remains successful without widening', async () => {
     global.fetch = jest.fn().mockResolvedValue(jsonResponse({ items: [] }));
     const query = { lang: 'en', language: 'en', limit: '40' };
     const res = createRes();
     await newsHandler(createReq({ query, url: `/api/public/news?${new URLSearchParams(query)}`, headers: { 'x-newspulse-homepage-recovery': '1' } }) as any, res as any);
     expect(res.statusCode).toBe(200);
     expect(res.body.items).toEqual([]);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  test.each(['en', 'hi', 'gu'])('homepage %s recovery keeps the canonical query and rejects other locales', async (locale) => {
+    const story = pulseStory(locale);
+    global.fetch = jest.fn().mockResolvedValue(jsonResponse({ items: ['en', 'hi', 'gu'].map(language => pulseStory(language)) }));
+    const query = { lang: locale, language: locale, limit: '40' };
+    const res = createRes();
+    await newsHandler(createReq({ query, url: `/api/public/news?${new URLSearchParams(query)}`, headers: { 'x-newspulse-homepage-recovery': '1' } }) as any, res as any);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledWith(`https://backend.test/api/public/news?lang=${locale}&language=${locale}&limit=40`, expect.any(Object));
+    expect(res.body.items).toEqual([story]);
+  });
+
+  test.each(['45', 'Sat, 26 Sep 2026 12:01:00 GMT'])('homepage forwards Retry-After %s even for a non-JSON 503', async (retryAfter) => {
+    global.fetch = jest.fn().mockResolvedValue({ ok: false, status: 503, headers: { get: () => retryAfter }, text: async () => '<html>Unavailable</html>' });
+    const query = { lang: 'gu', language: 'gu', limit: '40' };
+    const res = createRes();
+    await newsHandler(createReq({ query, url: `/api/public/news?${new URLSearchParams(query)}`, headers: { 'x-newspulse-homepage-recovery': '1' } }) as any, res as any);
+    expect(res.statusCode).toBe(503);
+    expect(res.headers['Retry-After']).toBe(retryAfter);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
   test.each(['en', 'hi', 'gu'])('strict Pulse %s returns a complete localized page with one upstream request', async (locale) => {

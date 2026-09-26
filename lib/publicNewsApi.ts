@@ -133,6 +133,7 @@ export async function fetchPublicNews(options: {
   endpoint: string;
   error?: string;
   status?: number;
+  retryAfter?: string | null;
 }> {
   const isBrowser = typeof window !== 'undefined';
   const base = getApiOrigin();
@@ -184,7 +185,9 @@ export async function fetchPublicNews(options: {
       signal: options.signal,
     });
 
-    const data = await res.json().catch(() => null);
+    const skipErrorBody = isBrowser && options.homepageRecovery && res.status === 503;
+    if (skipErrorBody) void res.body?.cancel().catch(() => {});
+    const data = skipErrorBody ? null : await res.json().catch(() => null);
 
     if (!res.ok) {
       const msg =
@@ -203,6 +206,7 @@ export async function fetchPublicNews(options: {
         meta: { limit: options.limit },
         endpoint,
         status: res.status,
+        retryAfter: res.headers?.get('Retry-After'),
         error: msg ? `API ${res.status} (${msg})` : `API ${res.status}`,
       };
     }

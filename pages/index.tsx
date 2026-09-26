@@ -59,7 +59,7 @@ import { usePublicFounderToggles } from "../hooks/usePublicFounderToggles";
 import { DEFAULT_PUBLIC_FOUNDER_TOGGLES, type PublicFounderToggles } from "../lib/publicFounderToggles";
 import { subscribePublicDataRefresh } from "../lib/publicDataRefresh";
 import { hasStoredConsentForCategory } from "../src/consent/cookieConsent";
-import { filterPubliclyPublishedArticles, isPubliclyPublishedArticle } from "../lib/localizedArticleFields";
+import { filterPubliclyPublishedArticles, filterVisibleArticlesForLocale, isPubliclyPublishedArticle, STRICT_LOCALE_POLICY } from "../lib/localizedArticleFields";
 import { formatPublicArticleLocation } from "../lib/publicLocation";
 import {
   ArrowRight,
@@ -557,6 +557,17 @@ function clampNum(n: any, min: number, max: number, fallback: number) {
 
 export const HOMEPAGE_RESPONSE_CACHE_CONTROL = 'no-store, no-cache, must-revalidate, proxy-revalidate';
 export const HOMEPAGE_BACKGROUND_REVALIDATION_INTERVAL_MS = 30_000;
+const HOMEPAGE_RETRY_DELAYS_MS = [5_000, 10_000, 20_000];
+const HOMEPAGE_FAILURE_COOLDOWN_MS = 60_000;
+
+function homepageRetryDelay(failures: number, retryAfter?: string | null): number {
+  const backoff = HOMEPAGE_RETRY_DELAYS_MS[failures - 1] ?? HOMEPAGE_FAILURE_COOLDOWN_MS;
+  const seconds = retryAfter?.trim() ? Number(retryAfter) : NaN;
+  const requestedDelay = Number.isFinite(seconds)
+    ? seconds * 1000
+    : retryAfter ? Date.parse(retryAfter) - Date.now() : 0;
+  return Math.max(backoff, Number.isFinite(requestedDelay) ? requestedDelay : 0);
+}
 
 type HomepageLatestStoriesSnapshot = {
   topStory: Article | null | undefined;
@@ -577,7 +588,7 @@ function getHomepagePublicationTimeValue(article: any): number {
 }
 
 export function selectHomepageEditorialArticles(items: Article[] | null | undefined, requestedLang: UiLangCode): Article[] {
-  return filterPubliclyPublishedArticles(items)
+  return filterVisibleArticlesForLocale(items ?? [], requestedLang, STRICT_LOCALE_POLICY)
     .filter((article) => !isHomepageSponsoredContent(article, requestedLang))
     .slice()
     .sort((left, right) => {
@@ -596,6 +607,7 @@ export async function resolveHomepageLatestStories(requestedLang: UiLangCode, si
   endpoint: string;
   error?: string;
   status?: number;
+  retryAfter?: string | null;
 }> {
   const latestResp = await fetchPublicNews({ language: requestedLang, limit: HOME_FRESH_SOURCE_LIMIT, signal, ...(homepageRecovery ? { homepageRecovery: true } : {}) });
   if (latestResp.error) {
@@ -606,6 +618,7 @@ export async function resolveHomepageLatestStories(requestedLang: UiLangCode, si
       endpoint: latestResp.endpoint,
       error: latestResp.error,
       status: latestResp.status,
+      retryAfter: latestResp.retryAfter,
     };
   }
 
@@ -710,26 +723,44 @@ export function useHomepageLatestStories({
   initialTopStory: Article | null;
   initialFreshStories: any[] | null;
 }) {
+  const seedLangRef = useRef(apiLang);
+  const seedMatchesLanguage = initialTopStory?.language
+    ? initialTopStory.language === apiLang
+    : seedLangRef.current === apiLang;
   const initialState = {
     lang: apiLang,
-    topStory: initialTopStory ?? null,
+    topStory: seedMatchesLanguage ? initialTopStory ?? null : null,
     rawStories: null as Article[] | null,
-    freshStories: initialFreshStories ?? (initialTopStory ? [articleToFeedItem(initialTopStory, apiLang)] : null),
-    status: (initialTopStory ? 'content' : initialFreshStories == null ? 'loading' : 'empty') as HomepageStoryStatus,
+    freshStories: seedMatchesLanguage ? initialFreshStories ?? (initialTopStory ? [articleToFeedItem(initialTopStory, apiLang)] : null) : null,
+    status: (seedMatchesLanguage && initialTopStory ? 'content' : !seedMatchesLanguage || initialFreshStories == null ? 'loading' : 'empty') as HomepageStoryStatus,
   };
   const [state, setState] = useState(initialState);
   const inFlightRef = useRef<AbortController | null>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryStateRef = useRef(new Map<UiLangCode, { failures: number; nextAllowedAt: number }>());
+  const snapshotsRef = useRef(new Map<UiLangCode, typeof initialState>());
+  snapshotsRef.current.set(state.lang, state);
   const seedRef = useRef(initialState);
-  seedRef.current = initialState;
+  seedRef.current = snapshotsRef.current.get(apiLang) ?? initialState;
 
   const refreshHomepageLatestStories = React.useCallback((mode: HomepageLatestRefreshMode) => {
-    if (inFlightRef.current) return;
+    if (inFlightRef.current || retryTimerRef.current !== null) return;
+    const retryState = retryStateRef.current.get(apiLang);
+    const scheduleRetry = (delay: number) => {
+      retryTimerRef.current = setTimeout(() => {
+        retryTimerRef.current = null;
+        refreshHomepageLatestStories('background');
+      }, Math.min(delay, 2_147_483_647));
+    };
+    if (retryState && Date.now() < retryState.nextAllowedAt) {
+      if (retryState.failures <= HOMEPAGE_RETRY_DELAYS_MS.length) {
+        scheduleRetry(retryState.nextAllowedAt - Date.now());
+      }
+      return;
+    }
     const controller = new AbortController();
     inFlightRef.current = controller;
-    setState((current) => {
-      const previous = current.lang === apiLang ? current : seedRef.current;
-      return { ...previous, status: previous.topStory ? 'content' : previous.status };
-    });
+    let retryAfter: string | null | undefined;
 
     void withPublicReadDeadline(HOMEPAGE_LATEST_NEWS_TIMEOUT_MS, (signal) =>
       fetchPublicNews({ category: 'breaking', language: apiLang, limit: 10, signal }), controller.signal
@@ -739,7 +770,9 @@ export function useHomepageLatestStories({
       resolveHomepageLatestStories(apiLang, signal, true), controller.signal
     ).then((latest) => {
       if (controller.signal.aborted) return;
+      retryAfter = latest.retryAfter;
       if (latest.error) throw new Error(latest.error);
+      retryStateRef.current.delete(apiLang);
       setState((current) => {
         const previous = current.lang === apiLang ? current : seedRef.current;
         const next = {
@@ -760,6 +793,10 @@ export function useHomepageLatestStories({
       });
     }).catch(() => {
       if (controller.signal.aborted) return;
+      const failures = (retryStateRef.current.get(apiLang)?.failures ?? 0) + 1;
+      const delay = homepageRetryDelay(failures, retryAfter);
+      retryStateRef.current.set(apiLang, { failures, nextAllowedAt: Date.now() + delay });
+      if (failures <= HOMEPAGE_RETRY_DELAYS_MS.length) scheduleRetry(delay);
       setState((current) => {
         const previous = current.lang === apiLang ? current : seedRef.current;
         return { ...previous, rawStories: previous.rawStories ?? [], freshStories: previous.freshStories ?? [], status: 'error' };
@@ -772,14 +809,20 @@ export function useHomepageLatestStories({
 
   React.useEffect(() => {
     if (!hydrated) return;
-    refreshHomepageLatestStories('initial');
+    let active = true;
+    void Promise.resolve().then(() => {
+      if (active) refreshHomepageLatestStories('initial');
+    });
     return () => {
+      active = false;
       inFlightRef.current?.abort();
       inFlightRef.current = null;
+      if (retryTimerRef.current !== null) clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
     };
   }, [hydrated, refreshHomepageLatestStories]);
 
-  const visibleState = state.lang === apiLang ? state : initialState;
+  const visibleState = state.lang === apiLang ? state : seedRef.current;
   return {
     topStory: visibleState.topStory,
     latestRawStories: visibleState.rawStories,
