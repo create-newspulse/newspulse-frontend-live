@@ -811,7 +811,7 @@ function RelatedStoryShell({
   );
 }
 
-function PulseDialogueArticleByline({ metadata, byLabel }: { metadata: PulseDialogueMetadata; byLabel: string }) {
+function PulseDialogueArticleByline({ metadata }: { metadata: PulseDialogueMetadata }) {
   const [photoFailed, setPhotoFailed] = React.useState(false);
 
   React.useEffect(() => {
@@ -835,7 +835,7 @@ function PulseDialogueArticleByline({ metadata, byLabel }: { metadata: PulseDial
       ) : null}
       <div className="min-w-0">
         {metadata.contributorName ? (
-          <div className="font-bold text-slate-900">{byLabel} {metadata.contributorName}</div>
+          <div className="font-bold text-slate-900">{metadata.contributorName}</div>
         ) : null}
         {metadata.contributorDesignation ? <div className="text-slate-600">{metadata.contributorDesignation}</div> : null}
         {metadata.contributorAffiliation ? <div className="text-slate-600">{metadata.contributorAffiliation}</div> : null}
@@ -1355,7 +1355,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
                     <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
                       <div className="min-w-0 text-xs font-semibold text-slate-500">
                         {pulseDialogueMetadata ? (
-                          <PulseDialogueArticleByline metadata={pulseDialogueMetadata} byLabel={t('pulseDialogue.article.by')} />
+                          <PulseDialogueArticleByline metadata={pulseDialogueMetadata} />
                         ) : visibleAuthorName ? (
                           <div className="text-sm text-slate-800">
                             <span className="font-bold">By {visibleAuthorName}</span>

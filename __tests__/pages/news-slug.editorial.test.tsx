@@ -6,6 +6,8 @@ import { formatArticleBodyHtml } from '../../lib/articleBody';
 import { fetchPublicNews } from '../../lib/publicNewsApi';
 import { hasRenderedTwitterWidgetFrame, loadTwitterWidgetsIn } from '../../lib/xWidgets';
 
+let mockBylinePrefix = 'By';
+
 jest.mock('../../src/i18n/LanguageProvider', () => ({
   useI18n: () => ({
     t: (key: string) => ({
@@ -23,7 +25,7 @@ jest.mock('../../src/i18n/LanguageProvider', () => ({
       'categories.pulseDialogue': 'Pulse Dialogue',
       'brand.name': 'News Pulse',
       'pulseDialogue.formats.guestColumn': 'Guest Column',
-      'pulseDialogue.article.by': 'By',
+      'pulseDialogue.article.by': mockBylinePrefix,
       'pulseDialogue.article.contributorDisclosure': 'Contributor Disclosure',
       'pulseDialogue.article.editorNote': "Editor's Note",
       'pulseDialogue.article.contributorDisclaimer': 'Contributor Disclaimer',
@@ -322,7 +324,7 @@ describe('pages/news/[slug] editorial detail', () => {
     expect(screen.getByText('Pulse Dialogue')).toBeTruthy();
     expect(screen.getByText('Guest Column')).toBeTruthy();
     expect(screen.getByText('Civic Lens')).toBeTruthy();
-    expect(screen.getByText(/By\s+Dr Asha Mehta/)).toBeTruthy();
+    expect(screen.getAllByText('Dr Asha Mehta')).toHaveLength(2);
     expect(screen.getByText('Urban Planner')).toBeTruthy();
     expect(screen.getByText('Civic Futures')).toBeTruthy();
     expect(screen.getByAltText('Dr Asha Mehta portrait').getAttribute('src')).toBe('/contributors/asha.jpg');
@@ -424,7 +426,7 @@ describe('pages/news/[slug] editorial detail', () => {
       />
     );
 
-    expect(screen.getByText(/By\s+Rohan Desai/)).toBeTruthy();
+    expect(screen.getByText('Rohan Desai')).toBeTruthy();
     expect(screen.getByText('Civic Writer')).toBeTruthy();
     expect(screen.getByText('Public Forum')).toBeTruthy();
     expect(screen.getByTestId('article-hero-image').getAttribute('src')).toBe('/covers/no-photo-dialogue.jpg');
@@ -465,13 +467,14 @@ describe('pages/news/[slug] editorial detail', () => {
     const contributorPhoto = screen.getByAltText('Nisha Rao portrait');
     fireEvent.error(contributorPhoto);
 
-    expect(screen.getByText(/By\s+Nisha Rao/)).toBeTruthy();
+    expect(screen.getByText('Nisha Rao')).toBeTruthy();
     expect(screen.getByText('Public Policy Fellow')).toBeTruthy();
     expect(screen.queryByAltText('Nisha Rao portrait')).toBeNull();
   });
 
-  test('renders the same Pulse Dialogue contributor photo safely on EN, HI, and GU article routes', async () => {
+  test('renders the exact Pulse contributor name without EN, HI, or GU prefixes and preserves photo and role', async () => {
     for (const routeLang of ['en', 'hi', 'gu'] as const) {
+      mockBylinePrefix = { en: 'By', hi: 'द्वारा', gu: 'દ્વારા' }[routeLang];
       const { unmount } = render(
         <NewsSlugDetailPage
           messages={{}}
@@ -488,11 +491,11 @@ describe('pages/news/[slug] editorial detail', () => {
             slug: `${routeLang}-shared-photo-dialogue`,
             pulseDialogue: {
               bylineSnapshot: {
-                name: 'Shared Contributor',
+                name: 'Shailesh Rathod',
                 designation: 'Public Voice',
               },
               contributor: {
-                name: 'Shared Contributor',
+                name: 'Shailesh Rathod',
                 photo: {
                   asset: { url: '/contributors/shared-dialogue.jpg', alt: 'Shared contributor portrait' },
                 },
@@ -508,10 +511,13 @@ describe('pages/news/[slug] editorial detail', () => {
       );
 
       expect(screen.getByAltText('Shared contributor portrait').getAttribute('src')).toBe('/contributors/shared-dialogue.jpg');
-      expect(screen.getByText(/By\s+Shared Contributor/)).toBeTruthy();
+      expect(screen.getByText('Shailesh Rathod').textContent).toBe('Shailesh Rathod');
+      expect(screen.getByText('Public Voice')).toBeTruthy();
+      expect(screen.queryByText(/^(?:By|द्वारा|દ્વારા)\s+Shailesh Rathod$/)).toBeNull();
       unmount();
       cleanup();
     }
+    mockBylinePrefix = 'By';
   });
 
   test('leaves normal non-Pulse article rendering unchanged even when contributor-like data is present', async () => {
