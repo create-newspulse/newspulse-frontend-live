@@ -32,6 +32,7 @@ jest.mock('../../src/i18n/LanguageProvider', () => ({
       'brand.name': 'News Pulse',
       'pulseDialogue.formats.guestColumn': 'Guest Column',
       'pulseDialogue.article.by': mockBylinePrefix,
+      'pulseDialogue.archive.viewAll': 'View all contributions',
       'pulseDialogue.article.contributorDisclosure': 'Contributor Disclosure',
       'pulseDialogue.article.editorNote': "Editor's Note",
       'pulseDialogue.article.contributorDisclaimer': 'Contributor Disclaimer',
@@ -487,6 +488,28 @@ describe('pages/news/[slug] editorial detail', () => {
     expect(document.body.textContent).not.toContain('Staff Editor');
     expect(document.body.textContent).not.toContain('private@example.com');
     expect(document.body.textContent).not.toContain('Private note');
+  });
+
+  test.each(['en', 'hi', 'gu'] as const)('links available %s profiles without replacing historical attribution', (locale) => {
+    const makeArticle = (profileAvailable: boolean) => editorialArticle({ category: 'pulse-dialogue', language: locale, pulseDialogue: {
+      profileAvailable, contributorSlug: 'current-writer',
+      bylineSnapshot: { name: 'Historical Writer', designation: 'Historical Role', photoUrl: '/historical.jpg' },
+      contributor: { name: 'Current Writer', publicDesignation: 'Current Role', photoUrl: '/current.jpg' },
+    } });
+    const props = { messages: {}, locale, lang: locale, slug: 'special-story', siteUrl: 'https://www.newspulse.co.in', safeHtml: '<p>Body</p>', topStories: [], relatedStories: [], error: null, pending: false };
+    const view = render(<NewsSlugDetailPage {...props} article={makeArticle(true) as any} />);
+    const href = `${locale === 'en' ? '' : `/${locale}`}/pulse-dialogue/contributors/current-writer`;
+    expect(screen.getByRole('link', { name: 'View all contributions' }).getAttribute('href')).toBe(href);
+    expect(screen.getByText('Historical Writer').closest('a')!.getAttribute('href')).toBe(href);
+    expect(screen.getByAltText('Historical Writer').getAttribute('src')).toBe('/historical.jpg');
+    expect(screen.getByAltText('Historical Writer').closest('a')!.getAttribute('href')).toBe(href);
+    expect(screen.getByText('Historical Role')).toBeTruthy();
+    expect(screen.queryByText('Current Writer')).toBeNull();
+    expect(screen.queryByText('Current Role')).toBeNull();
+    view.rerender(<NewsSlugDetailPage {...props} article={makeArticle(false) as any} />);
+    expect(screen.queryByRole('link', { name: 'View all contributions' })).toBeNull();
+    expect(screen.getByText('Historical Writer').closest('a')).toBeNull();
+    expect(screen.getByAltText('Historical Writer').closest('a')).toBeNull();
   });
 
   test('renders public contributor photo fallback without using the article cover image as the byline photo', async () => {

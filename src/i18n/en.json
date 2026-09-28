@@ -154,6 +154,20 @@
   },
   "pulseDialogue": {
     "exploreSubtitle": "Ideas and independent voices",
+    "archive": {
+      "contributions": "Contributions",
+      "articles": "Articles",
+      "viewContributions": "View contributions",
+      "viewAll": "View all contributions",
+      "empty": "No contributions published yet.",
+      "emptyPage": "No contributions on this page.",
+      "pagination": "Contribution pages",
+      "previous": "Previous",
+      "next": "Next",
+      "page": "Page",
+      "unavailable": "Pulse Dialogue is temporarily unavailable",
+      "tryAgain": "Please try again shortly."
+    },
     "landing": {
       "description": "Ideas, essays, conversations and perspectives from writers, scholars, experts and independent voices.",
       "featuredDialogue": "Featured Dialogue",

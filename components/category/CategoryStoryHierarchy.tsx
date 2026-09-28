@@ -201,7 +201,7 @@ function TopStoryCard({ item, topLabel, renderTopActions }: { item: CategoryStor
   );
 }
 
-function KeyStoryCard({ item, editorial = false }: { item: CategoryStoryHierarchyItem; editorial?: boolean }) {
+export function KeyStoryCard({ item, editorial = false, locale }: { item: CategoryStoryHierarchyItem; editorial?: boolean; locale?: false }) {
   const body = (
     <article className="h-full overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm transition group-hover:-translate-y-0.5 group-hover:shadow-md">
       {!editorial ? (
@@ -219,7 +219,7 @@ function KeyStoryCard({ item, editorial = false }: { item: CategoryStoryHierarch
   );
 
   if (!canOpen(item)) return <div>{body}</div>;
-  return <Link href={item.href || '#'} className="group block h-full focus:outline-none focus-visible:ring-2 focus-visible:ring-newsPulse-blue/40">{body}</Link>;
+  return <Link href={item.href || '#'} locale={locale} className="group block h-full focus:outline-none focus-visible:ring-2 focus-visible:ring-newsPulse-blue/40">{body}</Link>;
 }
 
 function LatestRow({ item, editorial = false }: { item: CategoryStoryHierarchyItem; editorial?: boolean }) {

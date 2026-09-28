@@ -10,6 +10,27 @@ const t = (key: string) => ({
 } as Record<string, string>)[key] || key;
 
 describe('pulseDialogue helpers', () => {
+  test.each([true, false, undefined, 'true'])('requires explicit profile availability: %s', (profileAvailable) => {
+    const metadata = getPulseDialogueMetadata({
+      category: 'pulse-dialogue',
+      pulseDialogue: {
+        profileAvailable, contributorSlug: 'current-slug',
+        bylineSnapshot: { name: 'Historical Name', designation: 'Historical Role', photoUrl: '/historical.jpg' },
+        contributor: { name: 'Edited Name', publicDesignation: 'Edited Role', photoUrl: '/edited.jpg' },
+      },
+    });
+    expect(metadata).toMatchObject({
+      profileAvailable: profileAvailable === true, contributorSlug: 'current-slug',
+      contributorName: 'Historical Name', contributorDesignation: 'Historical Role', contributorPhotoUrl: '/historical.jpg',
+    });
+  });
+
+  test('does not infer a profile link from a nested contributor slug', () => {
+    expect(getPulseDialogueMetadata({ category: 'pulse-dialogue', pulseDialogue: {
+      profileAvailable: true, contributor: { slug: 'not-advertised' },
+    } })?.profileAvailable).toBe(false);
+  });
+
   test('returns null for non-Pulse articles and Pulse articles without metadata', () => {
     expect(getPulseDialogueMetadata({ category: 'business', pulseDialogue: { contributorId: 'c-1' } })).toBeNull();
     expect(getPulseDialogueMetadata({ category: 'pulse-dialogue' })).toBeNull();

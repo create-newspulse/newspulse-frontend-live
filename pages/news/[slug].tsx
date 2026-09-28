@@ -48,6 +48,7 @@ import {
 import {
   getPulseDialogueFormatLabel,
   getPulseDialogueMetadata,
+  pulseDialogueArchivePath,
   resolvePulseDialogueDisclaimer,
   type PulseDialogueMetadata,
 } from '../../lib/pulseDialogue';
@@ -840,7 +841,7 @@ function AuthorArticleByline({ metadata }: { metadata: AuthorBylineMetadata }) {
   );
 }
 
-function PulseDialogueArticleByline({ metadata }: { metadata: PulseDialogueMetadata }) {
+function PulseDialogueArticleByline({ metadata, locale, t }: { metadata: PulseDialogueMetadata; locale: RouteLocale; t: (key: string) => string }) {
   const [photoFailed, setPhotoFailed] = React.useState(false);
 
   React.useEffect(() => {
@@ -848,26 +849,30 @@ function PulseDialogueArticleByline({ metadata }: { metadata: PulseDialogueMetad
   }, [metadata.contributorPhotoUrl]);
 
   const showPhoto = Boolean(metadata.contributorPhotoUrl && !photoFailed);
+  const profileHref = metadata.profileAvailable && metadata.contributorSlug
+    ? pulseDialogueArchivePath('contributors', metadata.contributorSlug, locale) : '';
+  const photo = showPhoto ? (
+    <img
+      src={metadata.contributorPhotoUrl}
+      alt={metadata.contributorPhotoAlt || metadata.contributorName || 'Contributor'}
+      className="h-12 w-12 shrink-0 rounded-full border border-slate-200 bg-slate-100 object-cover"
+      loading="lazy"
+      onError={() => setPhotoFailed(true)}
+    />
+  ) : null;
 
   if (!metadata.contributorName && !showPhoto) return null;
 
   return (
     <div className="flex min-w-0 items-center gap-3 text-sm text-slate-800">
-      {showPhoto ? (
-        <img
-          src={metadata.contributorPhotoUrl}
-          alt={metadata.contributorPhotoAlt || metadata.contributorName || 'Contributor'}
-          className="h-12 w-12 shrink-0 rounded-full border border-slate-200 bg-slate-100 object-cover"
-          loading="lazy"
-          onError={() => setPhotoFailed(true)}
-        />
-      ) : null}
+      {photo && profileHref ? <Link href={profileHref} locale={false} className="shrink-0">{photo}</Link> : photo}
       <div className="min-w-0">
         {metadata.contributorName ? (
-          <div className="font-bold text-slate-900">{metadata.contributorName}</div>
+          <div className="font-bold text-slate-900">{profileHref ? <Link href={profileHref} locale={false} className="hover:underline">{metadata.contributorName}</Link> : metadata.contributorName}</div>
         ) : null}
         {metadata.contributorDesignation ? <div className="text-slate-600">{metadata.contributorDesignation}</div> : null}
         {metadata.contributorAffiliation ? <div className="text-slate-600">{metadata.contributorAffiliation}</div> : null}
+        {profileHref ? <Link href={profileHref} locale={false} className="mt-1 inline-block text-xs font-semibold text-newsPulse-blue hover:underline">{t('pulseDialogue.archive.viewAll')}</Link> : null}
       </div>
     </div>
   );
@@ -1385,7 +1390,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
                     <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
                       <div className="min-w-0 text-xs font-semibold text-slate-500">
                         {pulseDialogueMetadata ? (
-                          <PulseDialogueArticleByline metadata={pulseDialogueMetadata} />
+                          <PulseDialogueArticleByline metadata={pulseDialogueMetadata} locale={lang} t={t} />
                         ) : authorByline ? (
                           <AuthorArticleByline metadata={authorByline} />
                         ) : visibleAuthorName ? (

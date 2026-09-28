@@ -1,4 +1,10 @@
 import { getCategoryRouteKey } from './categoryKeys';
+import { normalizeRouteLocale } from './localizedArticleFields';
+
+export function pulseDialogueArchivePath(kind: 'contributors' | 'series', slug: string, locale: unknown, page = 1): string {
+  const lang = normalizeRouteLocale(locale);
+  return `${lang === 'en' ? '' : `/${lang}`}/pulse-dialogue/${kind}/${encodeURIComponent(slug)}${page > 1 ? `?page=${page}` : ''}`;
+}
 
 export type PulseDialoguePhoto = {
   url?: string | null;
@@ -49,6 +55,8 @@ export type PulseDialogueBylineSnapshot = {
 
 export type PulseDialoguePayload = {
   contributorId?: string | null;
+  contributorSlug?: string | null;
+  profileAvailable?: boolean | null;
   contributor?: PulseDialogueContributor | null;
   bylineSnapshot?: PulseDialogueBylineSnapshot | null;
   contributorPhotoUrl?: string | null;
@@ -65,6 +73,8 @@ export type PulseDialoguePayload = {
 export type PulseDialogueMetadata = {
   isPulseDialogue: boolean;
   contributorId: string;
+  contributorSlug: string;
+  profileAvailable: boolean;
   dialogueFormat: string;
   series: string;
   contributorName: string;
@@ -193,6 +203,8 @@ export function getPulseDialogueMetadata(article: unknown): PulseDialogueMetadat
   return {
     isPulseDialogue: true,
     contributorId: cleanText(pulse.contributorId || contributor.id),
+    contributorSlug: cleanText(pulse.contributorSlug),
+    profileAvailable: pulse.profileAvailable === true && Boolean(cleanText(pulse.contributorSlug)),
     dialogueFormat: cleanText(pulse.dialogueFormat),
     series: cleanText(pulse.series),
     contributorName,
