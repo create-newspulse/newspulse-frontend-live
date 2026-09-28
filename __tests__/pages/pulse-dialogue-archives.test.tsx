@@ -1,4 +1,4 @@
-import { getDialogueArchiveProps } from '../../server/pulseDialogueArchive';
+import { getDialogueArchiveProps } from '../../lib/pulseDialogueArchive';
 import { getPublicApiBaseUrl } from '../../lib/publicApiBase';
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';

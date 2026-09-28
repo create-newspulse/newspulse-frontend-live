@@ -6,7 +6,7 @@ import { KeyStoryCard } from './category/CategoryStoryHierarchy';
 import { pulseDialogueArchivePath } from '../lib/pulseDialogue';
 import { safeJsonLd } from '../lib/seo';
 import { useI18n } from '../src/i18n/LanguageProvider';
-import type { DialogueArchiveProps } from '../server/pulseDialogueArchive';
+import type { DialogueArchiveProps } from '../lib/pulseDialogueArchive';
 
 function ContributorPhoto({ src, name }: { src: string; name: string }) {
   const [failed, setFailed] = React.useState(false);
