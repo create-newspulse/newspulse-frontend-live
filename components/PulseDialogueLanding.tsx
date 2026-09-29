@@ -58,12 +58,12 @@ export function PulseRequestState({ loading, error, empty, retry, errorMessage }
   </>;
 }
 
-function LatestDialogue({ locale, filters, initialPage, initialItems, initialFailed, discoveryError, retryDiscovery }: { locale: RouteLocale; filters: PulseFilters; initialPage: PulsePage<PulseCard> | null; initialItems: PulseCard[]; initialFailed: boolean; discoveryError: boolean; retryDiscovery: () => void }) {
+function LatestDialogue({ locale, filters, heading, initialPage, initialItems, initialFailed, discoveryError, retryDiscovery }: { locale: RouteLocale; filters: PulseFilters; heading: string; initialPage: PulsePage<PulseCard> | null; initialItems: PulseCard[]; initialFailed: boolean; discoveryError: boolean; retryDiscovery: () => void }) {
   const { t } = useI18n();
   const feed = usePulsePage<PulseCard>('articles', locale, pulseArticleQuery(filters), initialPage, initialItems, initialFailed);
   const retry = () => { feed.retry(); if (discoveryError) retryDiscovery(); };
   return <section aria-labelledby="pulse-latest" className="border-t border-slate-200 py-6">
-    <h2 id="pulse-latest" className="mb-4 text-xl font-bold text-newsPulse-navy">{t('pulseDialogue.landing.latestContributions')}</h2>
+    <h2 id="pulse-latest" className="mb-4 text-xl font-bold text-newsPulse-navy">{heading}</h2>
     <PulseRequestState {...feed} retry={retry} empty={!feed.items.length} errorMessage={t('pulseDialogue.discovery.latestUnavailable')} />
     <PulseStoryGrid items={uniquePulseStories(feed.items)} locale={locale} />
     {feed.hasMore && !feed.error ? <button type="button" disabled={feed.loading} onClick={feed.next} className={`${control} mt-5 w-full disabled:opacity-50`}>{t('pulseDialogue.discovery.loadMore')}</button> : null}
@@ -138,7 +138,7 @@ export default function PulseDialogueLanding({ initialItems, initialDiscovery, i
     return () => clearTimeout(timer);
   }, [draft, filters.q]);
   const filtered = Boolean(filters.q || filters.contributor || filters.series || filters.format || filters.sort !== 'newest');
-  const selectedFormat = filters.format ? PULSE_FORMAT_OPTIONS.find((option) => filters.format.split(',').every((format) => option.value.split(',').includes(format)))?.value || '' : '';
+  const selectedFormat = filters.format ? PULSE_FORMAT_OPTIONS.find((option) => filters.format.split(',').every((format) => option.value.split(',').includes(format))) : undefined;
   const heading = <header className="border-b border-slate-200 pb-5 text-newsPulse-navy"><h1 className="text-3xl font-bold">{t('categories.pulseDialogue')}</h1><p className="mt-3 max-w-3xl leading-7 text-newsPulse-slate">{t('pulseDialogue.landing.description')}</p></header>;
   return <>
     <Head><title>{`${t('categories.pulseDialogue')} | News Pulse`}</title><meta name="description" content={t('pulseDialogue.landing.description')} />
@@ -149,7 +149,7 @@ export default function PulseDialogueLanding({ initialItems, initialDiscovery, i
         {discovery?.featuredVoices.length ? <section aria-labelledby="pulse-voices" className="border-t border-slate-200 py-6"><h2 id="pulse-voices" className="mb-4 text-xl font-bold">{label('featuredVoices')}</h2><div className="grid gap-3 sm:grid-cols-2">{discovery.featuredVoices.map((voice) => <VoiceCard key={voice.slug} contributor={voice} locale={locale} featured />)}</div></section> : null}
         <nav aria-label={label('formats')} className="flex flex-wrap gap-2 border-t border-slate-200 py-5">
           <button type="button" aria-pressed={!filters.format} className={`${control} aria-pressed:border-newsPulse-blue aria-pressed:bg-blue-50`} onClick={() => change({ format: '' })}>{label('all')}</button>
-          {PULSE_FORMAT_OPTIONS.map((option) => <button type="button" key={option.value} className={`${control} aria-pressed:border-newsPulse-blue aria-pressed:bg-blue-50`} aria-pressed={selectedFormat === option.value} onClick={() => change({ format: option.value })}>{t(option.labelKey)}</button>)}
+          {PULSE_FORMAT_OPTIONS.map((option) => <button type="button" key={option.value} className={`${control} aria-pressed:border-newsPulse-blue aria-pressed:bg-blue-50`} aria-pressed={selectedFormat?.value === option.value} onClick={() => change({ format: option.value })}>{t(option.labelKey)}</button>)}
         </nav>
         <nav aria-labelledby="pulse-explore" className="pb-4">
           <p id="pulse-explore" className="mb-2 text-sm font-medium text-newsPulse-slate">{label('explore')}</p>
@@ -158,7 +158,6 @@ export default function PulseDialogueLanding({ initialItems, initialDiscovery, i
           <button type="button" aria-expanded={directory === 'series'} className={`${control} inline-flex items-center gap-2 aria-expanded:border-newsPulse-blue aria-expanded:bg-blue-50`} onClick={() => { setDirectory('series'); setFiltersOpen(false); }}><Library size={18} />{label('series')}</button>
           </div>
         </nav>
-        {!filtered && discovery ? Object.entries(discovery.formatGroups).map(([group, items]) => items.length ? <section key={group} aria-label={label(group)} className="pb-6"><h3 className="mb-3 text-lg font-bold">{label(group)}</h3><PulseStoryGrid items={uniquePulseStories(items)} locale={locale} /></section> : null) : null}
         {directory ? <PulseDirectory key={`${directory}:${locale}`} kind={directory} locale={locale} onClose={() => setDirectory(null)} onFilter={(slug) => { change(directory === 'contributors' ? { contributor: slug } : { series: slug }); setDirectory(null); }} /> : null}
         <section aria-label={label('filters')} className="py-4" onKeyDown={(event) => { if (event.key === 'Escape' && filtersOpen) { setFiltersOpen(false); filtersButton.current?.focus(); } }}>
           <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
@@ -174,6 +173,7 @@ export default function PulseDialogueLanding({ initialItems, initialDiscovery, i
           </div>
         </section>
         <LatestDialogue key={`${locale}:${JSON.stringify(filters)}`} locale={locale} filters={filters}
+          heading={t(selectedFormat?.labelKey || 'pulseDialogue.landing.latestContributions')}
           initialPage={!filtered && locale === initialLocale && (!initialPage?.lang || initialPage.lang === locale) ? initialPage : null}
           initialItems={!filtered && locale === initialLocale ? initialItems : []}
           initialFailed={!filtered && locale === initialLocale && Boolean(initialErrors?.articles)}

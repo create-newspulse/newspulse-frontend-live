@@ -59,6 +59,7 @@ test.each([
 ])('%s tab sends its exact mapping, preserves filters, and becomes active', async (label, format) => {
   mockRouter.query = { q: 'heritage', contributor: 'writer', series: 'ideas', sort: 'oldest' };
   mockRouter.asPath += '?q=heritage';
+  (readPulse as jest.Mock).mockImplementation(async (_resource, _locale, query) => page((query.dialogueFormat || '').split(',').filter(Boolean).map((value: string) => story(`${value}-result`, { pulseDialogue: { dialogueFormat: value } }))));
   show(); await waitFor(() => expect(readPulse).toHaveBeenCalledTimes(1));
   const tabs = screen.getByRole('navigation', { name: 'Content format' });
   fireEvent.click(within(tabs).getByRole('button', { name: label }));
@@ -67,10 +68,42 @@ test.each([
   expect(mockRouter.replace).toHaveBeenLastCalledWith(expect.objectContaining({ query: { q: 'heritage', contributor: 'writer', series: 'ideas', sort: 'oldest', format } }), undefined, expect.objectContaining({ shallow: true }));
   expect(within(tabs).getAllByRole('button', { pressed: true }).map((button) => button.textContent)).toEqual([label]);
   expect(screen.queryByRole('combobox', { name: 'Content format' })).toBeNull();
+  const results = screen.getByRole('region', { name: label });
+  expect(within(results).getAllByRole('heading', { level: 3 }).map((node) => node.textContent)).toEqual(format.split(',').map((value) => `${value}-result`));
+  expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(1);
+  expect(screen.queryByRole('region', { name: 'Latest Contributions' })).toBeNull();
 });
-test('uses discovery format previews without per-preview fetches', () => {
-  show({ initialDiscovery: { ...emptyDiscovery(), formatGroups: { ...emptyDiscovery().formatGroups, essays: [story('preview-essay')] } } });
-  expect(screen.getByText('preview-essay')).toBeTruthy(); expect(readPulse).not.toHaveBeenCalled();
+test.each(['en', 'hi', 'gu'] as const)('All / Latest renders one contribution without format previews in %s', (locale) => {
+  mockDictionaryLocale = locale; mockRouter.locale = locale;
+  const shared = story('shared-contribution', { language: locale });
+  const labels = mockDictionaries[locale].pulseDialogue;
+  show({ initialItems: [shared], initialPage: page([shared]), initialDiscovery: { ...emptyDiscovery(), formatGroups: { columns: [shared], essays: [shared], culture: [shared], conversations: [shared] } } });
+  const results = screen.getByRole('region', { name: labels.landing.latestContributions });
+  expect(within(results).getByRole('heading', { level: 3, name: 'shared-contribution' })).toBeTruthy();
+  expect(screen.getAllByRole('heading', { level: 3, name: 'shared-contribution' })).toHaveLength(1);
+  for (const group of ['columns', 'essays', 'culture', 'conversations'] as const) {
+    expect(screen.queryByRole('region', { name: labels.discovery[group] })).toBeNull();
+    expect(screen.queryByRole('heading', { name: labels.discovery[group] })).toBeNull();
+  }
+  expect(screen.getByRole('navigation', { name: labels.discovery.explore }).nextElementSibling).toBe(screen.getByRole('region', { name: labels.discovery.filters }));
+  expect(readPulse).not.toHaveBeenCalled();
+});
+test.each(['en', 'hi', 'gu'] as const)('uses the selected localized heading for the single results region in %s', async (locale) => {
+  mockDictionaryLocale = locale; mockRouter.locale = locale;
+  const labels = mockDictionaries[locale].pulseDialogue;
+  (readPulse as jest.Mock).mockResolvedValue(page([story('matching-contribution', { language: locale })]));
+  show();
+  const tabs = screen.getByRole('navigation', { name: labels.discovery.formats });
+  for (const button of within(tabs).getAllByRole('button').slice(1)) {
+    fireEvent.click(button);
+    const results = screen.getByRole('region', { name: button.textContent || '' });
+    await within(results).findByRole('heading', { level: 3, name: 'matching-contribution' });
+    expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(1);
+    expect(screen.queryByRole('region', { name: labels.landing.latestContributions })).toBeNull();
+  }
+  fireEvent.click(within(tabs).getByRole('button', { name: labels.discovery.all }));
+  expect(screen.getByRole('region', { name: labels.landing.latestContributions })).toBeTruthy();
+  expect(readPulse).toHaveBeenCalledTimes(7);
 });
 test.each(['en', 'hi', 'gu'] as const)('separates eight format tabs from localized Explore controls in %s', (locale) => {
   mockDictionaryLocale = locale; mockRouter.locale = locale;
@@ -149,6 +182,8 @@ test('All / Latest clears only format and retains other filters', async () => {
   expect(mockRouter.replace).toHaveBeenLastCalledWith(expect.objectContaining({ query: { q: 'heritage', contributor: 'writer', series: 'ideas', sort: 'oldest' } }), undefined, expect.anything());
   const tabs = screen.getByRole('navigation', { name: 'Content format' });
   expect(within(tabs).getAllByRole('button', { pressed: true }).map((button) => button.textContent)).toEqual(['All / Latest']);
+  expect(screen.getByRole('region', { name: 'Latest Contributions' })).toBeTruthy();
+  expect(screen.queryByRole('region', { name: 'Essays' })).toBeNull();
 });
 test.each([['Contributors', 'contributors'], ['Series / Columns', 'series']])('%s navigation opens only its directory without changing the selected format or filters', async (label, resource) => {
   mockRouter.query = { q: 'heritage', format: 'open_letter', contributor: 'writer', series: 'ideas', sort: 'oldest' };
@@ -330,7 +365,7 @@ test('a filtered initial URL requests only its own articles, not an extra defaul
   await waitFor(() => expect(readPulse).toHaveBeenCalledTimes(1));
   expect(readPulse).toHaveBeenCalledWith('articles', 'en', expect.objectContaining({ dialogueFormat: 'essay' }), expect.anything());
 });
-test.each(['en', 'hi', 'gu'])('deduplicates each %s section by canonical identity while preserving manual order and cross-section curation', (locale) => {
+test.each(['en', 'hi', 'gu'])('deduplicates %s results while preserving curated Featured Dialogue separately', (locale) => {
   mockRouter.locale = locale;
   const shared = story('chosen-first', { translationKey: 'shared' });
   const edition = story('translated-edition', { translationGroupId: 'shared', language: locale });
@@ -338,12 +373,13 @@ test.each(['en', 'hi', 'gu'])('deduplicates each %s section by canonical identit
   const items = [shared, edition, second, shared];
   show({ initialPage: page(items), initialDiscovery: { ...emptyDiscovery(), featuredDialogue: items,
     formatGroups: { columns: items, essays: items, culture: items, conversations: items } } });
-  for (const name of ['Featured Dialogue', 'Columns', 'Essays', 'Culture', 'Conversations', 'Latest Contributions']) {
+  for (const name of ['Featured Dialogue', 'Latest Contributions']) {
     const section = screen.getByRole('region', { name });
     expect(within(section).getAllByRole('heading', { level: 3 }).map((node) => node.textContent).filter((text) => text !== name)).toEqual(['chosen-first', 'chosen-second']);
     expect(within(section).queryByText('translated-edition')).toBeNull();
   }
-  expect(screen.getAllByText('chosen-first')).toHaveLength(6);
+  expect(screen.getAllByText('chosen-first')).toHaveLength(2);
+  for (const name of ['Columns', 'Essays', 'Culture', 'Conversations']) expect(screen.queryByRole('region', { name })).toBeNull();
   expect(readPulse).not.toHaveBeenCalled();
 });
 
