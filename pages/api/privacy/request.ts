@@ -92,7 +92,10 @@ export default async function privacyRequestHandler(req: NextApiRequest, res: Ne
       return res.status(upstream.status || 500).json({ ok: false, message: 'Unable to submit privacy request' });
     }
 
-    return res.status(upstream.status || 200).json(json || { ok: true });
+    return res.status(upstream.status || 200).json({
+      ok: true,
+      ...(typeof json?.requestId === 'string' ? { requestId: json.requestId } : {}),
+    });
   } catch {
     return res.status(500).json({ ok: false, message: 'Unable to submit privacy request' });
   }

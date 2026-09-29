@@ -144,6 +144,7 @@ export default function SubmitStoryModal({ open, onClose, submissionsOpen = true
 
   useEffect(() => {
     if (open) {
+      try { localStorage.removeItem('youth-story-last'); } catch {}
       const draft = localStorage.getItem('youth-story-draft');
       if (draft) {
         try {
@@ -213,15 +214,6 @@ export default function SubmitStoryModal({ open, onClose, submissionsOpen = true
         return;
       }
 
-      localStorage.setItem(
-        'youth-story-last',
-        JSON.stringify({
-          ...form,
-          referenceId: result.referenceId,
-          status: result.status,
-          createdAt: new Date().toISOString(),
-        })
-      );
       localStorage.removeItem('youth-story-draft');
       setSaved(form.fullName.trim() || 'Friend');
       setForm(INITIAL_FORM);

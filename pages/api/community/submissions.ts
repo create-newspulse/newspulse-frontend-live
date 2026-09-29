@@ -24,8 +24,9 @@ function readJsonBody(req: NextApiRequest): Record<string, any> {
 }
 
 function isPublicSafeMessage(value: string): boolean {
-  if (!value || /^submit_failed$/i.test(value)) return false
+  if (!value || value.length > 240 || /^submit_failed$/i.test(value)) return false
   if (/axios|stack|trace|pages\/api|internal|exception|error:/i.test(value)) return false
+  if (/[<>]|https?:\/\/|[a-z]:\\|\/(?:home|var|srv|app|usr|opt|tmp)\/|[^\s@]+@[^\s@]+|\b(?:token|cookie|authorization|secret)\b|\d{7,}/i.test(value)) return false
   return true
 }
 
@@ -47,7 +48,7 @@ function resolveValidationMessage(status: number, data: any): string {
     return 'Please check the required story details and try submitting again.'
   }
 
-  return isPublicSafeMessage(message) ? message : "We couldn't submit your story right now. Please try again."
+  return "We couldn't submit your story right now. Please try again."
 }
 
 function resolveBackendAgeGroup(value: unknown): string {
@@ -145,7 +146,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     try {
       const json = text ? JSON.parse(text) : { success: true }
-      return res.status(upstream.status || 200).json(json)
+      const acknowledgement = Object.fromEntries(
+        ['ok', 'success', 'referenceId', 'id', 'status', 'reporterType']
+          .filter((field) => field === 'ok' || field === 'success' ? typeof json?.[field] === 'boolean' : typeof json?.[field] === 'string')
+          .map((field) => [field, json[field]])
+      )
+      return res.status(upstream.status || 200).json(acknowledgement)
     } catch {
       return res.status(upstream.status || 200).json({ success: true })
     }

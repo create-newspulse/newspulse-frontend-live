@@ -13,7 +13,13 @@ describe('pages/api/public/grievance', () => {
     (global as any).fetch.mockResolvedValueOnce({
       ok: true,
       status: 201,
-      text: async () => JSON.stringify({ ok: true, grievanceId: 'grv-1' }),
+      text: async () => JSON.stringify({
+        ok: true,
+        grievanceId: 'grv-1',
+        submission: { email: 'private-fixture@example.invalid', violationSummary: 'Private fixture complaint' },
+        adminNotes: 'Private fixture notes',
+        verificationToken: 'fixture-only-token',
+      }),
     });
 
     const req = {
@@ -89,6 +95,38 @@ describe('pages/api/public/grievance', () => {
     expect((global as any).fetch).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(400);
     expect(res.body).toEqual({ ok: false, message: 'Invalid grievance details' });
+  });
+
+  const validBody = {
+    fullName: 'Test User', email: 'fixture@example.invalid', phone: 'fixture-phone', address: 'Fixture address',
+    articleReference: '/news/fixture', publicationDate: '2026-01-01', publicationViolation: 'Fixture concern',
+    violationSummary: 'Fixture summary', declarationAccepted: true,
+  };
+
+  it.each(['grievanceId', 'referenceId', 'trackingId', 'grievanceReference', 'referenceNumber'])('preserves the public %s reference without exposing extra fields', async (field) => {
+    (global as any).fetch.mockResolvedValueOnce({ ok: true, status: 201, text: async () => JSON.stringify({ ok: true, [field]: 'fixture-ref', privateNotes: 'Private fixture' }) });
+    const res = createMockResponse();
+    await handler({ method: 'POST', body: validBody } as any, res as any);
+    expect(res.body).toEqual({ ok: true, [field]: 'fixture-ref' });
+  });
+
+  it.each([
+    [false, 500, JSON.stringify({ message: 'Private fixture error', stack: 'Private fixture stack' })],
+    [false, 502, '<html>Private fixture error</html>'],
+    [true, 200, JSON.stringify({ ok: false, message: 'Private fixture error' })],
+  ])('does not expose upstream failure bodies for success=%s status=%s', async (ok, status, text) => {
+    (global as any).fetch.mockResolvedValueOnce({ ok, status, text: async () => text });
+    const res = createMockResponse();
+    await handler({ method: 'POST', body: validBody } as any, res as any);
+    expect(res.statusCode).toBe(status);
+    expect(res.body).toEqual({ ok: false, message: 'Unable to submit grievance' });
+  });
+
+  it('rejects structured private data in reference fields', async () => {
+    (global as any).fetch.mockResolvedValueOnce({ ok: true, status: 201, text: async () => JSON.stringify({ ok: true, grievanceId: { privateNotes: 'Private fixture' }, referenceNumber: 42 }) });
+    const res = createMockResponse();
+    await handler({ method: 'POST', body: validBody } as any, res as any);
+    expect(res.body).toEqual({ ok: true, referenceNumber: 42 });
   });
 });
 

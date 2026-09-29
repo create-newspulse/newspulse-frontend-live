@@ -13,7 +13,14 @@ describe('pages/api/privacy/request', () => {
     (global as any).fetch.mockResolvedValueOnce({
       ok: true,
       status: 201,
-      text: async () => JSON.stringify({ ok: true, requestId: 'prv-1' }),
+      text: async () => JSON.stringify({
+        ok: true,
+        requestId: 'prv-1',
+        request: { email: 'private-fixture@example.invalid', message: 'Private fixture request' },
+        verificationToken: 'fixture-only-token',
+        reviewNotes: 'Private fixture review',
+        message: 'Private upstream acknowledgement',
+      }),
     });
 
     const req = {
@@ -79,6 +86,25 @@ describe('pages/api/privacy/request', () => {
     expect((global as any).fetch).not.toHaveBeenCalled();
     expect(res.statusCode).toBe(400);
     expect(res.body).toEqual({ ok: false, message: 'Invalid privacy request details' });
+  });
+
+  it.each([
+    [true, 200, { ok: true, requestId: { email: 'private-fixture@example.invalid' }, debug: 'Private fixture' }, { ok: true }],
+    [false, 500, { ok: false, message: 'Private upstream failure', stack: 'Private fixture stack' }, { ok: false, message: 'Unable to submit privacy request' }],
+    [false, 502, '<html>Private upstream failure</html>', { ok: false, message: 'Unable to submit privacy request' }],
+  ])('minimizes the public response for upstream success=%s status=%s', async (ok, status, payload, expected) => {
+    (global as any).fetch.mockResolvedValueOnce({
+      ok,
+      status,
+      text: async () => typeof payload === 'string' ? payload : JSON.stringify(payload),
+    });
+    const req = { method: 'POST', body: { fullName: 'Test User', email: 'fixture@example.invalid', requestType: 'access', message: 'Fixture request' } } as any;
+    const res = createMockResponse();
+
+    await handler(req, res as any);
+
+    expect(res.statusCode).toBe(status);
+    expect(res.body).toEqual(expected);
   });
 });
 

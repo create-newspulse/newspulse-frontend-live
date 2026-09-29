@@ -311,7 +311,6 @@ export async function submitYouthPulseStory(
     console.info('[submitYouthPulseStory] request', {
       requestUrl,
       method: 'POST',
-      requestBody,
     });
   }
 
@@ -327,8 +326,6 @@ export async function submitYouthPulseStory(
       console.error('[submitYouthPulseStory] network failure', {
         requestUrl,
         method: 'POST',
-        requestBody,
-        error,
       });
     }
     throw error;
@@ -349,8 +346,6 @@ export async function submitYouthPulseStory(
         requestUrl,
         method: 'POST',
         status: res.status,
-        requestBody,
-        response: data,
       });
     }
     return { ok: false, referenceId, status, message };

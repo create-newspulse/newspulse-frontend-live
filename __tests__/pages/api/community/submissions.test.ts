@@ -13,7 +13,12 @@ describe('pages/api/community/submissions', () => {
     (global as any).fetch.mockResolvedValueOnce({
       ok: true,
       status: 201,
-      text: async () => JSON.stringify({ ok: true, referenceId: 'story-1', status: 'Under review' }),
+      text: async () => JSON.stringify({
+        ok: true, referenceId: 'story-1', status: 'Under review',
+        reporterDocumentId: 'private-fixture-document',
+        reporterProfile: { email: 'private-fixture@example.invalid', phone: 'private-fixture-phone' },
+        adminNotes: 'Private fixture review', verification: { privateUrl: 'private-fixture-url' },
+      }),
     });
 
     const req = {
@@ -196,6 +201,35 @@ describe('pages/api/community/submissions', () => {
     expect(JSON.stringify(res.body)).not.toContain('submit_failed');
     expect(JSON.stringify(res.body)).not.toContain('AxiosError');
     expect(JSON.stringify(res.body)).not.toContain('pages/api');
+  });
+
+  it.each([
+    '<html>Private failure</html>',
+    '/srv/private-fixture/handler.js',
+    'private-fixture@example.invalid was rejected',
+    'authorization token: fixture-only-token',
+    'Contact 1234567890 failed',
+  ])('does not expose an unsafe validation message: %s', async (message) => {
+    (global as any).fetch.mockResolvedValueOnce({ ok: false, status: 400, text: async () => JSON.stringify({ message }) });
+    const res = createMockResponse();
+    await handler({ method: 'POST', body: {} } as any, res as any);
+    expect(res.body).toEqual({ ok: false, code: 'VALIDATION_ERROR', message: 'Please check the required story details and try submitting again.' });
+  });
+
+  it('preserves useful validation messages but not server diagnostics', async () => {
+    for (const status of [400, 500]) {
+      (global as any).fetch.mockResolvedValueOnce({ ok: false, status, text: async () => JSON.stringify({ message: 'Please select a category.' }) });
+      const res = createMockResponse();
+      await handler({ method: 'POST', body: {} } as any, res as any);
+      expect(res.body.message).toBe(status === 400 ? 'Please select a category.' : "We couldn't submit your story right now. Please try again.");
+    }
+  });
+
+  it('preserves legacy acknowledgement fields without forwarding structured private metadata', async () => {
+    (global as any).fetch.mockResolvedValueOnce({ ok: true, status: 200, text: async () => JSON.stringify({ success: true, id: 'fixture-reference', reporterType: 'community', status: { privateNotes: 'Private fixture' } }) });
+    const res = createMockResponse();
+    await handler({ method: 'POST', body: {} } as any, res as any);
+    expect(res.body).toEqual({ success: true, id: 'fixture-reference', reporterType: 'community' });
   });
 });
 

@@ -91,10 +91,15 @@ export default async function publicGrievanceHandler(req: NextApiRequest, res: N
       : null;
 
     if (!upstream.ok || json?.ok === false) {
-      return res.status(upstream.status || 500).json({ ok: false, message: text || 'Upstream Error' });
+      return res.status(upstream.status || 500).json({ ok: false, message: 'Unable to submit grievance' });
     }
 
-    return res.status(upstream.status || 200).json(json || { ok: true });
+    const references = Object.fromEntries(
+      ['grievanceId', 'referenceId', 'trackingId', 'grievanceReference', 'referenceNumber']
+        .filter((field) => typeof json?.[field] === 'string' || typeof json?.[field] === 'number')
+        .map((field) => [field, json[field]])
+    );
+    return res.status(upstream.status || 200).json({ ok: true, ...references });
   } catch {
     return res.status(500).json({ ok: false, message: 'Internal Server Error' });
   }

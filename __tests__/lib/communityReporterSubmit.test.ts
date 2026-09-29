@@ -159,4 +159,36 @@ describe('submitCommunityStory (identity anchors)', () => {
     expect(body.meta.source).toBe('youth_pulse');
     expect(body.storyText).toContain('clean-up drive');
   });
+
+  it.each(['success', 'http-error', 'network-error'])('keeps personal form data and response details out of %s diagnostics', async (outcome) => {
+    const info = jest.spyOn(console, 'info').mockImplementation(() => {});
+    const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const privateDetail = 'private-fixture-detail';
+    const networkError = new Error(privateDetail);
+    (global as any).fetch = outcome === 'network-error'
+      ? jest.fn().mockRejectedValue(networkError)
+      : jest.fn().mockResolvedValue({ ok: outcome === 'success', status: outcome === 'success' ? 201 : 500, json: async () => ({ message: privateDetail }) });
+    try {
+      const submission = submitYouthPulseStory({
+        reporterName: privateDetail, reporterEmail: 'fixture@example.invalid', mobileNumber: privateDetail,
+        college: privateDetail, city: privateDetail, state: privateDetail, headline: privateDetail, story: privateDetail,
+        track: 'campus-buzz', submissionType: 'student-voice', storySource: 'first-hand',
+        truthfulnessConfirmed: true, rightsConfirmed: true, reviewAcknowledged: true, safetyConfirmed: true,
+      });
+      if (outcome === 'network-error') await expect(submission).rejects.toBe(networkError);
+      else await submission;
+
+      expect(info).toHaveBeenCalledWith('[submitYouthPulseStory] request', { requestUrl: '/api/public/youth-pulse/submit', method: 'POST' });
+      if (outcome !== 'success') {
+        expect(error).toHaveBeenCalledWith(expect.any(String), {
+          requestUrl: '/api/public/youth-pulse/submit', method: 'POST', ...(outcome === 'http-error' ? { status: 500 } : {}),
+        });
+      }
+      expect(JSON.stringify([...info.mock.calls, ...error.mock.calls])).not.toContain(privateDetail);
+      expect(JSON.stringify([...info.mock.calls, ...error.mock.calls])).not.toContain('fixture@example.invalid');
+    } finally {
+      info.mockRestore();
+      error.mockRestore();
+    }
+  });
 });
