@@ -4607,14 +4607,10 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
     ? 'home-grid home-grid--three'
     : 'home-grid home-grid--two';
   const heroLeftRailAdNode = (
-    <div>
-      <AdSlot slot="HOME_LEFT_300x600" variant="right300x600" />
-    </div>
+    <AdSlot slot="HOME_LEFT_300x600" variant="right300x600" />
   );
   const leftRailAdNode = (
-    <div>
-      <AdSlot slot="HOME_LEFT_300x250" variant="right300" />
-    </div>
+    <AdSlot slot="HOME_LEFT_300x250" variant="right300" />
   );
   const leftRailTallAdBlock = { key: 'heroLeftRailAd', node: heroLeftRailAdNode };
   const leftRailSmallAdBlock = { key: 'leftRailAd', node: leftRailAdNode };

@@ -6,17 +6,20 @@ import { PublicSettingsProvider, usePublicSettings } from '../../src/context/Pub
 import { fetchPublicSettings, fetchPublishedPublicSettings, normalizePublicSettings } from '../../src/lib/publicSettings';
 import { dispatchPublicDataRefresh } from '../../lib/publicDataRefresh';
 import { fetchPublicNews } from '../../lib/publicNewsApi';
+import AdSlot from '../../src/components/ads/AdSlot';
+import HomeRightRail from '../../components/home/HomeRightRail';
+import { usePublicAdSlot } from '../../hooks/usePublicAdSlot';
 
 jest.mock('next/router', () => ({ useRouter: () => ({ asPath: '/', pathname: '/', locale: 'en', push: jest.fn(), replace: jest.fn() }) }));
 jest.mock('next/head', () => ({ __esModule: true, default: () => null }));
 jest.mock('../../src/i18n/LanguageProvider', () => ({ ...jest.requireActual('../../src/i18n/LanguageProvider'), useI18n: () => ({ lang: 'en', t: (key: string) => key, setLang: jest.fn() }) }));
 jest.mock('../../src/consent/CookieConsentProvider', () => ({ useCookieConsent: () => ({ hasCategoryConsent: () => false, openPreferences: jest.fn() }) }));
-jest.mock('../../src/components/ads/AdSlot', () => ({ __esModule: true, default: () => null }));
-jest.mock('../../components/home/HomeRightRail', () => ({ __esModule: true, default: () => null }));
+jest.mock('../../src/components/ads/AdSlot', () => ({ __esModule: true, default: jest.fn(() => null) }));
+jest.mock('../../components/home/HomeRightRail', () => ({ __esModule: true, default: jest.fn(() => null) }));
 jest.mock('../../hooks/usePublicFounderToggles', () => ({ usePublicFounderToggles: () => ({ toggles: {} }) }));
 jest.mock('../../hooks/usePublicBroadcastTicker', () => ({ usePublicBroadcastTicker: () => ({ breakingTexts: ['Breaking fixture'], liveTexts: ['Live fixture'] }) }));
 jest.mock('../../hooks/usePublicTickerAds', () => ({ usePublicTickerAds: () => ({ ads: [] }) }));
-jest.mock('../../hooks/usePublicAdSlot', () => ({ usePublicAdSlot: () => ({ enabled: false, ad: null }) }));
+jest.mock('../../hooks/usePublicAdSlot', () => ({ usePublicAdSlot: jest.fn(() => ({ enabled: false, ad: null })) }));
 jest.mock('../../lib/publicNewsApi', () => ({ fetchPublicNews: jest.fn(async () => ({ items: [], endpoint: '/api/public/news' })) }));
 jest.mock('../../lib/publicSponsoredFeature', () => ({ ...jest.requireActual('../../lib/publicSponsoredFeature'), fetchHomepageSponsoredFeature: jest.fn(async () => null) }));
 jest.mock('../../lib/getTrendingTopics', () => ({ getTrendingTopics: jest.fn(async () => []) }));
@@ -45,6 +48,78 @@ const published = (version = '426', appPromo = false) => normalizePublicSettings
 });
 
 const wrapper = ({ children }: { children: React.ReactNode }) => <React.StrictMode><PublicSettingsProvider>{children}</PublicSettingsProvider></React.StrictMode>;
+
+describe('homepage ad layout boundaries', () => {
+  const slots = ['HOME_728x90', 'HOME_LEFT_300x600', 'HOME_LEFT_300x250', 'HOME_RIGHT_300x250', 'HOME_RIGHT_300x600', 'HOME_BILLBOARD_970x250', 'FOOTER_BANNER_728x90'];
+
+  beforeEach(() => {
+    jest.mocked(AdSlot).mockImplementation(jest.requireActual('../../src/components/ads/AdSlot').default);
+    jest.mocked(HomeRightRail).mockImplementation(jest.requireActual('../../components/home/HomeRightRail').default);
+  });
+
+  afterEach(() => {
+    jest.mocked(AdSlot).mockReset().mockImplementation(() => null);
+    jest.mocked(HomeRightRail).mockReset().mockImplementation(() => <></>);
+    jest.mocked(usePublicAdSlot).mockReset().mockReturnValue({ enabled: false, ad: null, isLoading: false, hasResolved: true });
+  });
+
+  test.each([
+    { name: 'all slots ON', enabledSlots: slots, state: 'creative' },
+    { name: 'only the tall left slot ON', enabledSlots: ['HOME_LEFT_300x600'], state: 'creative' },
+    { name: 'only the small left slot ON', enabledSlots: ['HOME_LEFT_300x250'], state: 'creative' },
+    { name: 'mixed slots ON', enabledSlots: ['HOME_LEFT_300x250', 'HOME_RIGHT_300x600', 'HOME_BILLBOARD_970x250'], state: 'creative' },
+    { name: 'all slots OFF', enabledSlots: [], state: 'creative' },
+    { name: 'enabled house ads', enabledSlots: slots, state: 'house' },
+    { name: 'enabled loading placeholders', enabledSlots: slots, state: 'loading' },
+  ])('$name preserves inventory, content order, and purposeful grid children', ({ enabledSlots, state }) => {
+    jest.mocked(usePublicAdSlot).mockImplementation(({ slot }) => ({
+      enabled: enabledSlots.includes(slot),
+      ad: state === 'creative' ? { imageUrl: '/logo.png', title: `Creative ${slot}`, isClickable: true, targetUrl: '/advertise' } : null,
+      isLoading: state === 'loading',
+      hasResolved: state !== 'loading',
+    }));
+    const settings = published();
+    settings.modules.footer.enabled = true;
+    settings.modules.snapshots.enabled = true;
+    const html = renderToString(<PublicSettingsProvider initialSettings={settings}><HomePage {...props} /></PublicSettingsProvider>);
+    const document = new DOMParser().parseFromString(html, 'text/html');
+    const leftGrid = document.querySelector('.home-left > .grid')!;
+    const renderedSlots = Array.from(document.querySelectorAll('[data-ad-slot]')).map(element => element.getAttribute('data-ad-slot'));
+
+    expect(renderedSlots).toEqual(slots.filter(slot => enabledSlots.includes(slot) && (state === 'creative' || !/HOME_(LEFT|RIGHT)_/.test(slot))));
+    if (state !== 'creative') {
+      for (const slot of slots.filter(slot => /HOME_(LEFT|RIGHT)_/.test(slot))) {
+        expect(document.querySelector(`a[href="/advertise?slot=${slot}"]`)).not.toBeNull();
+      }
+    }
+    expect(document.querySelector('#top-story')).not.toBeNull();
+    expect(document.querySelector('.fresh-stories-card')).not.toBeNull();
+    expect(leftGrid.textContent).toContain('home.exploreCategories');
+    expect(leftGrid.textContent).toContain('home.snapshotsTitle');
+    expect(document.querySelector('.home-right')?.textContent).toContain('YOUTH DESK');
+    expect(document.querySelector('.home-grid')!.compareDocumentPosition(document.querySelector('.post-home-grid-ads')!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(document.querySelector('.post-home-grid-ads')!.compareDocumentPosition(document.querySelector('a[href="/monthly-compliance"]')!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+
+    for (const slot of ['HOME_LEFT_300x600', 'HOME_LEFT_300x250']) {
+      const frame = document.querySelector<HTMLElement>(`[data-ad-slot="${slot}"]`);
+      if (enabledSlots.includes(slot) && state === 'creative') {
+        expect(frame?.style.maxWidth).toBe('300px');
+        expect(frame?.querySelector<HTMLElement>('[style*="aspect-ratio"]')?.style.aspectRatio).toBe(slot.endsWith('600') ? '300 / 600' : '300 / 250');
+        expect(frame?.querySelector<HTMLImageElement>('img')?.style.objectFit).toBe('contain');
+        expect(frame?.textContent).toContain('AD');
+      } else if (!enabledSlots.includes(slot)) {
+        expect(frame).toBeNull();
+        expect(leftGrid.textContent).not.toContain(`Creative ${slot}`);
+      }
+    }
+
+    expect(Array.from(leftGrid.children).filter(element => element.childNodes.length === 0)).toHaveLength(0);
+    if (!enabledSlots.length) {
+      expect(leftGrid.children).toHaveLength(2);
+      expect(leftGrid.textContent).not.toMatch(/advertisement|advertise here/i);
+    }
+  });
+});
 
 describe('homepage published visibility', () => {
   beforeEach(() => { jest.clearAllMocks(); });
