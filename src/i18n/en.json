@@ -154,6 +154,15 @@
   },
   "pulseDialogue": {
     "exploreSubtitle": "Ideas and independent voices",
+    "discovery": {
+      "explore": "Explore Pulse Dialogue",
+      "featuredVoices": "Featured Voices", "columns": "Columns", "essays": "Essays", "culture": "Culture", "conversations": "Conversations",
+      "all": "All / Latest", "browse": "Browse", "contributors": "Contributors", "series": "Series / Columns", "contributor": "Contributor",
+      "formats": "Content format", "filters": "Search and filters", "filterBy": "Filter by", "search": "Search Pulse Dialogue", "searchPlaceholder": "Search Pulse Dialogue...",
+      "filterToggle": "Filters", "latestUnavailable": "Latest contributions are temporarily unavailable.",
+      "sort": "Sort", "newest": "Newest", "oldest": "Oldest", "clear": "Clear filters", "close": "Close", "loading": "Loading...", "retry": "Retry", "loadMore": "Load more",
+      "empty": "No results found.", "moreContributor": "More from this contributor", "moreSeries": "More from this Series"
+    },
     "archive": {
       "contributions": "Contributions",
       "articles": "Articles",

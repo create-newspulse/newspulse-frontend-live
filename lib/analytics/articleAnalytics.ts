@@ -422,6 +422,18 @@ export async function postAnalyticsEvent(event: string, payload: any): Promise<v
   }
 }
 
+export type DiscoveryEvent = 'contributor_profile_click' | 'series_click' | 'featured_dialogue_click' | 'featured_voice_click';
+
+export function trackDiscoveryClick(event: DiscoveryEvent, target: string, lang: ArticleAnalyticsLang): void {
+  try {
+    if (!hasStoredConsentForCategory('analytics') || !target || !shouldTrackClientAnalytics()) return;
+    const targetField = event === 'featured_dialogue_click' ? 'articleId' : event === 'series_click' ? 'seriesSlug' : 'contributorSlug';
+    const visitorId = getOrCreateVisitorId();
+    const { sessionId } = getOrCreateSessionId();
+    void postAnalyticsEvent('discovery', { event, [targetField]: target, lang, visitorId, sessionId });
+  } catch {}
+}
+
 export function buildBasePayload(args: {
   visitorId: string;
   sessionId: string;

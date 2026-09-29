@@ -154,6 +154,15 @@
   },
   "pulseDialogue": {
     "exploreSubtitle": "વિચારો અને સ્વતંત્ર અવાજો",
+    "discovery": {
+      "explore": "પલ્સ સંવાદ જાણો",
+      "featuredVoices": "પસંદગીના અવાજો", "columns": "કૉલમ", "essays": "નિબંધો", "culture": "સંસ્કૃતિ", "conversations": "સંવાદો",
+      "all": "બધાં / તાજેતરનાં", "browse": "જુઓ", "contributors": "યોગદાનકર્તાઓ", "series": "શ્રેણીઓ / કૉલમ", "contributor": "યોગદાનકર્તા",
+      "formats": "લેખનો પ્રકાર", "filters": "શોધ અને ફિલ્ટર", "filterBy": "ફિલ્ટર કરો", "search": "પલ્સ સંવાદ શોધો", "searchPlaceholder": "પલ્સ સંવાદ શોધો...",
+      "filterToggle": "ફિલ્ટર", "latestUnavailable": "તાજેતરનાં યોગદાન અસ્થાયી રૂપે ઉપલબ્ધ નથી.",
+      "sort": "ક્રમ", "newest": "સૌથી નવા", "oldest": "સૌથી જૂના", "clear": "ફિલ્ટર દૂર કરો", "close": "બંધ કરો", "loading": "લોડ થઈ રહ્યું છે...", "retry": "ફરી પ્રયાસ કરો", "loadMore": "વધુ જુઓ",
+      "empty": "કોઈ પરિણામ મળ્યું નથી.", "moreContributor": "આ યોગદાનકર્તાના વધુ લેખો", "moreSeries": "આ શ્રેણીના વધુ લેખો"
+    },
     "archive": {
       "contributions": "યોગદાન",
       "articles": "લેખો",

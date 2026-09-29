@@ -4,6 +4,8 @@ import Head from 'next/head';
 import Link from 'next/link';
 import React from 'react';
 import { useRouter } from 'next/router';
+import dynamic from 'next/dynamic';
+import { trackDiscoveryClick } from '../../lib/analytics/articleAnalytics';
 
 import AdSlot from '../../src/components/ads/AdSlot';
 import CategoryHeader from '../../src/components/category/CategoryHeader';
@@ -52,6 +54,8 @@ import {
   resolvePulseDialogueDisclaimer,
   type PulseDialogueMetadata,
 } from '../../lib/pulseDialogue';
+
+const RelatedContributions = dynamic(() => import('../../components/pulse-dialogue/RelatedContributions'), { ssr: false });
 
 type ArticleDisplayAdProps = {
   slotId: 'ARTICLE_INLINE' | 'ARTICLE_END';
@@ -851,6 +855,7 @@ function PulseDialogueArticleByline({ metadata, locale, t }: { metadata: PulseDi
   const showPhoto = Boolean(metadata.contributorPhotoUrl && !photoFailed);
   const profileHref = metadata.profileAvailable && metadata.contributorSlug
     ? pulseDialogueArchivePath('contributors', metadata.contributorSlug, locale) : '';
+  const trackProfile = () => trackDiscoveryClick('contributor_profile_click', metadata.contributorSlug, locale);
   const photo = showPhoto ? (
     <img
       src={metadata.contributorPhotoUrl}
@@ -865,14 +870,14 @@ function PulseDialogueArticleByline({ metadata, locale, t }: { metadata: PulseDi
 
   return (
     <div className="flex min-w-0 items-center gap-3 text-sm text-slate-800">
-      {photo && profileHref ? <Link href={profileHref} locale={false} className="shrink-0">{photo}</Link> : photo}
+      {photo && profileHref ? <Link href={profileHref} locale={false} onClick={trackProfile} className="shrink-0">{photo}</Link> : photo}
       <div className="min-w-0">
         {metadata.contributorName ? (
-          <div className="font-bold text-slate-900">{profileHref ? <Link href={profileHref} locale={false} className="hover:underline">{metadata.contributorName}</Link> : metadata.contributorName}</div>
+          <div className="font-bold text-slate-900">{profileHref ? <Link href={profileHref} locale={false} onClick={trackProfile} className="hover:underline">{metadata.contributorName}</Link> : metadata.contributorName}</div>
         ) : null}
         {metadata.contributorDesignation ? <div className="text-slate-600">{metadata.contributorDesignation}</div> : null}
         {metadata.contributorAffiliation ? <div className="text-slate-600">{metadata.contributorAffiliation}</div> : null}
-        {profileHref ? <Link href={profileHref} locale={false} className="mt-1 inline-block text-xs font-semibold text-newsPulse-blue hover:underline">{t('pulseDialogue.archive.viewAll')}</Link> : null}
+        {profileHref ? <Link href={profileHref} locale={false} onClick={trackProfile} className="mt-1 inline-block text-xs font-semibold text-newsPulse-blue hover:underline">{t('pulseDialogue.archive.viewAll')}</Link> : null}
       </div>
     </div>
   );
@@ -1554,6 +1559,8 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
                   <ArticleDisplayAd slotId="ARTICLE_END" />
                 </div>
               </div>
+
+              {pulseDialogueMetadata && resolvedArticle ? <RelatedContributions key={`${getStoryId(resolvedArticle)}:${lang}`} article={resolvedArticle} locale={lang} excludedStories={relatedStories} /> : null}
 
               {/* Below-article: Related */}
               <div className="mt-6">

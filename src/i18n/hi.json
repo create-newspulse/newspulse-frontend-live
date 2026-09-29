@@ -154,6 +154,15 @@
   },
   "pulseDialogue": {
     "exploreSubtitle": "विचार और स्वतंत्र आवाज़ें",
+    "discovery": {
+      "explore": "पल्स संवाद खोजें",
+      "featuredVoices": "चुनिंदा आवाज़ें", "columns": "स्तंभ", "essays": "निबंध", "culture": "संस्कृति", "conversations": "संवाद",
+      "all": "सभी / नवीनतम", "browse": "देखें", "contributors": "योगदानकर्ता", "series": "श्रृंखलाएँ / स्तंभ", "contributor": "योगदानकर्ता",
+      "formats": "लेख का प्रकार", "filters": "खोज और फ़िल्टर", "filterBy": "फ़िल्टर करें", "search": "पल्स संवाद खोजें", "searchPlaceholder": "पल्स संवाद खोजें...",
+      "filterToggle": "फ़िल्टर", "latestUnavailable": "नवीनतम योगदान अस्थायी रूप से उपलब्ध नहीं हैं।",
+      "sort": "क्रम", "newest": "नवीनतम", "oldest": "सबसे पुराने", "clear": "फ़िल्टर हटाएँ", "close": "बंद करें", "loading": "लोड हो रहा है...", "retry": "फिर प्रयास करें", "loadMore": "और देखें",
+      "empty": "कोई परिणाम नहीं मिला।", "moreContributor": "इस योगदानकर्ता के और लेख", "moreSeries": "इस श्रृंखला के और लेख"
+    },
     "archive": {
       "contributions": "योगदान",
       "articles": "लेख",

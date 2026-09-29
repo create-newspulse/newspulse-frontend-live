@@ -65,6 +65,7 @@ describe('/api/analytics/[event] proxy', () => {
     ['engaged-read', 'https://backend.example.test/api/analytics/article/engagement'],
     ['scroll-milestone', 'https://backend.example.test/api/analytics/article/scroll'],
     ['article-heartbeat', 'https://backend.example.test/api/analytics/article/heartbeat'],
+    ['discovery', 'https://backend.example.test/api/analytics/discovery'],
   ];
 
   it.each(cases)('maps %s to the verified backend endpoint', async (event, expectedUrl) => {

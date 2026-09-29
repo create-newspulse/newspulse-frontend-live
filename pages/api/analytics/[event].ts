@@ -8,6 +8,7 @@ const BACKEND_EVENT_PATHS: Record<string, string> = {
   'engaged-read': '/api/analytics/article/engagement',
   'scroll-milestone': '/api/analytics/article/scroll',
   'article-heartbeat': '/api/analytics/article/heartbeat',
+  'discovery': '/api/analytics/discovery',
 }
 
 // A backend outage would otherwise emit one log line per reader event.

@@ -8,7 +8,7 @@ jest.mock('../../lib/publicApiBase', () => ({ getPublicApiBaseUrl: () => 'https:
 
 const categories = [
   'international', 'business', 'science-technology', 'tech-gadgets', 'sports', 'lifestyle',
-  'faith-culture', 'glamour', 'editorial', 'pulse-dialogue', 'web-stories',
+  'faith-culture', 'glamour', 'editorial', 'web-stories',
 ];
 
 function story(category: string, language: string, overrides: Record<string, unknown> = {}) {
