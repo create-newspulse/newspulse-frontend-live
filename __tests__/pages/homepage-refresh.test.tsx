@@ -53,6 +53,7 @@ describe('homepage ad layout boundaries', () => {
   const slots = ['HOME_728x90', 'HOME_LEFT_300x600', 'HOME_LEFT_300x250', 'HOME_RIGHT_300x250', 'HOME_RIGHT_300x600', 'HOME_BILLBOARD_970x250', 'FOOTER_BANNER_728x90'];
 
   beforeEach(() => {
+    jest.mocked(AdSlot).mockClear();
     jest.mocked(AdSlot).mockImplementation(jest.requireActual('../../src/components/ads/AdSlot').default);
     jest.mocked(HomeRightRail).mockImplementation(jest.requireActual('../../components/home/HomeRightRail').default);
   });
@@ -65,16 +66,17 @@ describe('homepage ad layout boundaries', () => {
 
   test.each([
     { name: 'all slots ON', enabledSlots: slots, state: 'creative' },
+    { name: 'non-clickable billboard', enabledSlots: ['HOME_BILLBOARD_970x250'], state: 'creative', isClickable: false },
     { name: 'only the tall left slot ON', enabledSlots: ['HOME_LEFT_300x600'], state: 'creative' },
     { name: 'only the small left slot ON', enabledSlots: ['HOME_LEFT_300x250'], state: 'creative' },
     { name: 'mixed slots ON', enabledSlots: ['HOME_LEFT_300x250', 'HOME_RIGHT_300x600', 'HOME_BILLBOARD_970x250'], state: 'creative' },
     { name: 'all slots OFF', enabledSlots: [], state: 'creative' },
     { name: 'enabled house ads', enabledSlots: slots, state: 'house' },
     { name: 'enabled loading placeholders', enabledSlots: slots, state: 'loading' },
-  ])('$name preserves inventory, content order, and purposeful grid children', ({ enabledSlots, state }) => {
+  ])('$name preserves inventory, content order, and purposeful grid children', ({ enabledSlots, state, isClickable = true }) => {
     jest.mocked(usePublicAdSlot).mockImplementation(({ slot }) => ({
       enabled: enabledSlots.includes(slot),
-      ad: state === 'creative' ? { imageUrl: '/logo.png', title: `Creative ${slot}`, isClickable: true, targetUrl: '/advertise' } : null,
+      ad: state === 'creative' ? { imageUrl: '/logo.png', title: `Creative ${slot}`, isClickable, targetUrl: '/advertise' } : null,
       isLoading: state === 'loading',
       hasResolved: state !== 'loading',
     }));
@@ -99,6 +101,41 @@ describe('homepage ad layout boundaries', () => {
     expect(document.querySelector('.home-right')?.textContent).toContain('YOUTH DESK');
     expect(document.querySelector('.home-grid')!.compareDocumentPosition(document.querySelector('.post-home-grid-ads')!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(document.querySelector('.post-home-grid-ads')!.compareDocumentPosition(document.querySelector('a[href="/monthly-compliance"]')!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+
+    expect(jest.mocked(AdSlot).mock.calls.map(([slotProps]) => slotProps)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ slot: 'HOME_BILLBOARD_970x250', variant: 'billboard970x250', className: 'mx-auto w-full' }),
+      expect.objectContaining({ slot: 'HOME_728x90', variant: 'homeBanner', className: 'home-shell mx-auto mt-3' }),
+      expect.objectContaining({ slot: 'FOOTER_BANNER_728x90', variant: 'banner728x90', className: 'mx-auto w-full max-w-[1440px] px-4 md:px-8 my-2' }),
+    ]));
+
+    const billboard = document.querySelector<HTMLElement>('[data-ad-slot="HOME_BILLBOARD_970x250"]');
+    if (enabledSlots.includes('HOME_BILLBOARD_970x250')) {
+      expect(billboard?.parentElement?.classList.contains('w-full')).toBe(true);
+      expect(billboard?.parentElement?.parentElement?.classList.contains('post-home-grid-ads')).toBe(true);
+      expect(billboard?.querySelector<HTMLElement>('[style*="aspect-ratio"]')?.style.aspectRatio).toBe('970 / 250');
+      const image = billboard?.querySelector('img');
+      if (state === 'creative') {
+        expect(image?.getAttribute('src')).toBe('/logo.png');
+        expect(image?.style.objectFit).toBe('cover');
+        const link = image?.closest('a');
+        if (isClickable) {
+          expect(link?.getAttribute('href')).toBe('/advertise');
+          expect(link?.getAttribute('target')).toBe('_blank');
+          expect(link?.getAttribute('rel')).toBe('nofollow sponsored noopener noreferrer');
+        } else {
+          expect(link).toBeNull();
+        }
+      } else {
+        expect(image).toBeNull();
+        if (state === 'loading') {
+          expect(billboard?.querySelector('.animate-pulse')).not.toBeNull();
+        } else {
+          expect(billboard?.querySelector('a[href="/advertise?slot=HOME_BILLBOARD_970x250"]')).not.toBeNull();
+        }
+      }
+    } else {
+      expect(billboard).toBeNull();
+    }
 
     for (const slot of ['HOME_LEFT_300x600', 'HOME_LEFT_300x250']) {
       const frame = document.querySelector<HTMLElement>(`[data-ad-slot="${slot}"]`);

@@ -5011,7 +5011,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
           <AdSlot
             slot="HOME_BILLBOARD_970x250"
             variant="billboard970x250"
-            className="mx-auto"
+            className="mx-auto w-full"
           />
         </div>
 
