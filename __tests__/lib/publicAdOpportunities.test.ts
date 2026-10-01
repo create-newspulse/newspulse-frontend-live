@@ -7,12 +7,14 @@ import {
   isPublicDisplayAdSlot,
   normalizePublicAdInquiryValue,
 } from '../../src/lib/publicAdOpportunities';
+import { normalizeSlot } from '../../src/lib/adSlots';
 
 describe('publicAdOpportunities registry', () => {
-  test('keeps the 17 canonical public ad opportunities with types', () => {
-    expect(PUBLIC_AD_OPPORTUNITIES).toHaveLength(17);
+  test('keeps the 18 canonical public ad opportunities with types', () => {
+    expect(PUBLIC_AD_OPPORTUNITIES).toHaveLength(18);
     expect(PUBLIC_AD_OPPORTUNITIES.map((item) => item.value)).toEqual([
       'HOME_728x90',
+      'TOP_HOME_BILLBOARD_970x250',
       'FOOTER_BANNER_728x90',
       'HOME_LEFT_300x250',
       'HOME_RIGHT_300x250',
@@ -48,5 +50,16 @@ describe('publicAdOpportunities registry', () => {
     expect(normalizePublicAdInquiryValue('SPONSORED_ARTICLE')).toBe('SPONSORED_ARTICLE');
     expect(normalizePublicAdInquiryValue('UNKNOWN')).toBe('NOT_SURE');
     expect(getPublicAdOpportunityLabel('COMBO_CAMPAIGN')).toBe('Combo Campaign');
+  });
+
+  test('keeps the premium top-home product distinct in display and inquiry registries', () => {
+    const slot = 'TOP_HOME_BILLBOARD_970x250';
+    expect(isPublicDisplayAdSlot(slot)).toBe(true);
+    expect(getPublicAdOpportunityLabel(slot)).toBe('Top Home Billboard 970×250 (Premium)');
+    expect(normalizePublicAdInquiryValue(slot)).toBe(slot);
+    expect(normalizeSlot(slot)).toBe(slot);
+    expect(normalizeSlot('HOME_728x90')).toBe('HOME_728x90');
+    expect(normalizeSlot('HOME_BILLBOARD_970x250')).toBe('HOME_BILLBOARD_970x250');
+    expect(PUBLIC_AD_INQUIRY_OPTIONS.filter((option) => option.value === slot)).toHaveLength(1);
   });
 });

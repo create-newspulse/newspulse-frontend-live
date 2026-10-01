@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { usePublicAdSlot, type PublicAd } from '../../../hooks/usePublicAdSlot';
+import { usePublicAdSlot, type PublicAd, type UsePublicAdSlotResult } from '../../../hooks/usePublicAdSlot';
 import { normalizeSlot } from '../../lib/adSlots';
 import { getPublicAdOpportunityType } from '../../lib/publicAdOpportunities';
 import { useLanguage } from '../../i18n/language';
@@ -60,6 +60,16 @@ const HOMEPAGE_UNIT_CONFIG: Record<string, HomepageUnitConfig> = {
     panelClassName: 'overflow-hidden rounded-2xl border border-black/10 bg-white shadow-md p-0',
     mediaClassName: '',
   },
+  TOP_HOME_BILLBOARD_970x250: {
+    w: 970,
+    h: 250,
+    maxW: 970,
+    objectFit: 'cover',
+    label: '970×250',
+    wrapperClassName: 'max-w-[970px] xl:max-w-[1200px]',
+    panelClassName: 'overflow-hidden rounded-2xl border border-black/10 bg-white shadow-md p-0',
+    mediaClassName: '',
+  },
 };
 
 export type AdSlotProps = {
@@ -75,6 +85,7 @@ function defaultVariantForSlot(normalizedSlot: string): Variant {
     case 'HOME_728x90':
       return 'homeBanner';
     case 'HOME_BILLBOARD_970x250':
+    case 'TOP_HOME_BILLBOARD_970x250':
       return 'billboard970x250';
     case 'FOOTER_BANNER_728x90':
       return 'banner728x90';
@@ -565,8 +576,34 @@ function sizing(variant: Variant) {
   }
 }
 
-export default function AdSlot({ slot, variant, className = '', renderMode = 'default', hideWhenEmpty = false }: AdSlotProps) {
-  const { t, language } = useLanguage();
+export default function AdSlot(props: AdSlotProps): React.ReactElement | null {
+  const { language } = useLanguage();
+  const normalizedSlot = normalizeSlot(props.slot);
+  const opportunityType = getPublicAdOpportunityType(normalizedSlot);
+  const shouldRenderDisplaySlot = !opportunityType || opportunityType === 'display-slot';
+  const state = usePublicAdSlot({
+    slot: shouldRenderDisplaySlot ? normalizedSlot : '',
+    language,
+  });
+
+  return <ResolvedAdSlot {...props} state={state} />;
+}
+
+type ResolvedAdSlotProps = AdSlotProps & {
+  state: UsePublicAdSlotResult;
+  onImageError?: () => void;
+};
+
+export function ResolvedAdSlot({
+  slot,
+  variant,
+  className = '',
+  renderMode = 'default',
+  hideWhenEmpty = false,
+  state,
+  onImageError,
+}: ResolvedAdSlotProps) {
+  const { t } = useLanguage();
 
   const normalizedSlot = React.useMemo(() => normalizeSlot(slot), [slot]);
   const opportunityType = React.useMemo(() => getPublicAdOpportunityType(normalizedSlot), [normalizedSlot]);
@@ -576,10 +613,7 @@ export default function AdSlot({ slot, variant, className = '', renderMode = 'de
 
   const strictConfig = getStrictSlotConfig(normalizedSlot);
   const homepageUnitConfig = getHomepageUnitConfig(normalizedSlot);
-  const { enabled, ad, isLoading, hasResolved } = usePublicAdSlot({
-    slot: shouldRenderDisplaySlot ? normalizedSlot : '',
-    language,
-  });
+  const { enabled, ad, isLoading, hasResolved } = state;
 
   const [imgError, setImgError] = React.useState(false);
   React.useEffect(() => {
@@ -645,6 +679,7 @@ export default function AdSlot({ slot, variant, className = '', renderMode = 'de
   const onCreativeError = (event: React.SyntheticEvent<HTMLImageElement>) => {
     event.currentTarget.style.display = 'none';
     setImgError(true);
+    onImageError?.();
   };
 
   if (isArticleDisplayMode) {

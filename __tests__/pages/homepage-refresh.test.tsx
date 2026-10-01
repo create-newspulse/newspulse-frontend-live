@@ -14,12 +14,16 @@ jest.mock('next/router', () => ({ useRouter: () => ({ asPath: '/', pathname: '/'
 jest.mock('next/head', () => ({ __esModule: true, default: () => null }));
 jest.mock('../../src/i18n/LanguageProvider', () => ({ ...jest.requireActual('../../src/i18n/LanguageProvider'), useI18n: () => ({ lang: 'en', t: (key: string) => key, setLang: jest.fn() }) }));
 jest.mock('../../src/consent/CookieConsentProvider', () => ({ useCookieConsent: () => ({ hasCategoryConsent: () => false, openPreferences: jest.fn() }) }));
-jest.mock('../../src/components/ads/AdSlot', () => ({ __esModule: true, default: jest.fn(() => null) }));
+jest.mock('../../src/components/ads/AdSlot', () => ({
+  ...jest.requireActual('../../src/components/ads/AdSlot'),
+  __esModule: true,
+  default: jest.fn(() => null),
+}));
 jest.mock('../../components/home/HomeRightRail', () => ({ __esModule: true, default: jest.fn(() => null) }));
 jest.mock('../../hooks/usePublicFounderToggles', () => ({ usePublicFounderToggles: () => ({ toggles: {} }) }));
 jest.mock('../../hooks/usePublicBroadcastTicker', () => ({ usePublicBroadcastTicker: () => ({ breakingTexts: ['Breaking fixture'], liveTexts: ['Live fixture'] }) }));
 jest.mock('../../hooks/usePublicTickerAds', () => ({ usePublicTickerAds: () => ({ ads: [] }) }));
-jest.mock('../../hooks/usePublicAdSlot', () => ({ usePublicAdSlot: jest.fn(() => ({ enabled: false, ad: null })) }));
+jest.mock('../../hooks/usePublicAdSlot', () => ({ usePublicAdSlot: jest.fn(() => ({ enabled: false, ad: null, isLoading: false, hasResolved: true })) }));
 jest.mock('../../lib/publicNewsApi', () => ({ fetchPublicNews: jest.fn(async () => ({ items: [], endpoint: '/api/public/news' })) }));
 jest.mock('../../lib/publicSponsoredFeature', () => ({ ...jest.requireActual('../../lib/publicSponsoredFeature'), fetchHomepageSponsoredFeature: jest.fn(async () => null) }));
 jest.mock('../../lib/getTrendingTopics', () => ({ getTrendingTopics: jest.fn(async () => []) }));
@@ -50,7 +54,7 @@ const published = (version = '426', appPromo = false) => normalizePublicSettings
 const wrapper = ({ children }: { children: React.ReactNode }) => <React.StrictMode><PublicSettingsProvider>{children}</PublicSettingsProvider></React.StrictMode>;
 
 describe('homepage ad layout boundaries', () => {
-  const slots = ['HOME_728x90', 'HOME_LEFT_300x600', 'HOME_LEFT_300x250', 'HOME_RIGHT_300x250', 'HOME_RIGHT_300x600', 'HOME_BILLBOARD_970x250', 'FOOTER_BANNER_728x90'];
+  const slots = ['TOP_HOME_BILLBOARD_970x250', 'HOME_728x90', 'HOME_LEFT_300x600', 'HOME_LEFT_300x250', 'HOME_RIGHT_300x250', 'HOME_RIGHT_300x600', 'HOME_BILLBOARD_970x250', 'FOOTER_BANNER_728x90'];
 
   beforeEach(() => {
     jest.mocked(AdSlot).mockClear();
@@ -66,6 +70,8 @@ describe('homepage ad layout boundaries', () => {
 
   test.each([
     { name: 'all slots ON', enabledSlots: slots, state: 'creative' },
+    { name: 'premium top with independent billboard', enabledSlots: ['TOP_HOME_BILLBOARD_970x250', 'HOME_BILLBOARD_970x250'], state: 'creative' },
+    { name: 'standard top with independent billboard and footer', enabledSlots: ['HOME_728x90', 'HOME_BILLBOARD_970x250', 'FOOTER_BANNER_728x90'], state: 'creative' },
     { name: 'non-clickable billboard', enabledSlots: ['HOME_BILLBOARD_970x250'], state: 'creative', isClickable: false },
     { name: 'only the tall left slot ON', enabledSlots: ['HOME_LEFT_300x600'], state: 'creative' },
     { name: 'only the small left slot ON', enabledSlots: ['HOME_LEFT_300x250'], state: 'creative' },
@@ -83,12 +89,44 @@ describe('homepage ad layout boundaries', () => {
     const settings = published();
     settings.modules.footer.enabled = true;
     settings.modules.snapshots.enabled = true;
+    settings.modules.categoryStrip.order = 1;
+    settings.tickers.breaking.enabled = true;
+    settings.tickers.breaking.order = 2;
+    settings.tickers.live.order = 3;
     const html = renderToString(<PublicSettingsProvider initialSettings={settings}><HomePage {...props} /></PublicSettingsProvider>);
     const document = new DOMParser().parseFromString(html, 'text/html');
     const leftGrid = document.querySelector('.home-left > .grid')!;
     const renderedSlots = Array.from(document.querySelectorAll('[data-ad-slot]')).map(element => element.getAttribute('data-ad-slot'));
 
-    expect(renderedSlots).toEqual(slots.filter(slot => enabledSlots.includes(slot) && (state === 'creative' || !/HOME_(LEFT|RIGHT)_/.test(slot))));
+    const topSlot = state === 'creative' && enabledSlots.includes('TOP_HOME_BILLBOARD_970x250')
+      ? 'TOP_HOME_BILLBOARD_970x250'
+      : 'HOME_728x90';
+    expect(renderedSlots).toEqual(slots.filter(slot =>
+      enabledSlots.includes(slot)
+      && (!['TOP_HOME_BILLBOARD_970x250', 'HOME_728x90'].includes(slot) || slot === topSlot)
+      && (state === 'creative' || !/HOME_(LEFT|RIGHT)_/.test(slot))
+    ));
+    const topFrames = document.querySelectorAll('[data-ad-slot="TOP_HOME_BILLBOARD_970x250"], [data-ad-slot="HOME_728x90"]');
+    expect(topFrames.length).toBeLessThanOrEqual(1);
+    const header = document.querySelector('.header-shell')!;
+    const categoryNav = document.querySelector('.category-nav-shell')!;
+    const tickers = document.querySelector('.ticker-wrapper')!;
+    const trending = document.querySelector('.trending-shell')!;
+    expect(header.compareDocumentPosition(categoryNav)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(categoryNav.compareDocumentPosition(tickers)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(tickers.textContent).toContain('Breaking fixture');
+    expect(tickers.textContent).toContain('Live fixture');
+    expect(tickers.textContent!.indexOf('Breaking fixture')).toBeLessThan(tickers.textContent!.indexOf('Live fixture'));
+    expect(tickers.compareDocumentPosition(trending)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(trending.compareDocumentPosition(document.querySelector('.home-grid')!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    if (topFrames.length) {
+      const topFrame = topFrames[0];
+      expect(topFrame.parentElement?.className).toBe(`home-shell mx-auto mt-3${state === 'creative' ? ' not-prose' : ''}`);
+      expect(tickers.compareDocumentPosition(topFrame)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+      expect(topFrame.compareDocumentPosition(trending)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+      expect(topFrame.querySelector<HTMLElement>('[style*="aspect-ratio"]')?.style.aspectRatio)
+        .toBe(topSlot === 'HOME_728x90' ? '728 / 90' : '970 / 250');
+    }
     if (state !== 'creative') {
       for (const slot of slots.filter(slot => /HOME_(LEFT|RIGHT)_/.test(slot))) {
         expect(document.querySelector(`a[href="/advertise?slot=${slot}"]`)).not.toBeNull();
@@ -104,7 +142,6 @@ describe('homepage ad layout boundaries', () => {
 
     expect(jest.mocked(AdSlot).mock.calls.map(([slotProps]) => slotProps)).toEqual(expect.arrayContaining([
       expect.objectContaining({ slot: 'HOME_BILLBOARD_970x250', variant: 'billboard970x250', className: 'mx-auto w-full' }),
-      expect.objectContaining({ slot: 'HOME_728x90', variant: 'homeBanner', className: 'home-shell mx-auto mt-3' }),
       expect.objectContaining({ slot: 'FOOTER_BANNER_728x90', variant: 'banner728x90', className: 'mx-auto w-full max-w-[1440px] px-4 md:px-8 my-2' }),
     ]));
 

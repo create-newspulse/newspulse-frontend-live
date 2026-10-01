@@ -13,6 +13,7 @@ export type PublicAdOpportunity = {
 
 export const PUBLIC_AD_OPPORTUNITIES: PublicAdOpportunity[] = [
   { value: 'HOME_728x90', label: 'Home Banner 728x90', type: 'display-slot' },
+  { value: 'TOP_HOME_BILLBOARD_970x250', label: 'Top Home Billboard 970×250 (Premium)', type: 'display-slot' },
   { value: 'FOOTER_BANNER_728x90', label: 'Footer Banner 728x90', type: 'display-slot' },
   { value: 'HOME_LEFT_300x250', label: 'Home Left Rail 300x250', type: 'display-slot' },
   { value: 'HOME_RIGHT_300x250', label: 'Home Right Rail 300x250', type: 'display-slot' },

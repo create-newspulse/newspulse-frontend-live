@@ -30,6 +30,7 @@ import {
 import { resolveSponsoredContentMeta } from "../lib/sponsoredContent";
 import HomepageSponsoredFeatureCard from "../components/home/HomepageSponsoredFeatureCard";
 import HomeRightRail from "../components/home/HomeRightRail";
+import HomeTopAdSlot from "../components/home/HomeTopAdSlot";
 import {
   fetchHomepageSponsoredFeature,
   normalizeHomepageSponsoredFeatureProps,
@@ -4951,11 +4952,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
         <React.Fragment key={b.key}>{b.node}</React.Fragment>
       ))}
 
-      <AdSlot
-        slot="HOME_728x90"
-        variant="homeBanner"
-        className="home-shell mx-auto mt-3"
-      />
+      <HomeTopAdSlot />
 
       {/* TRENDING */}
       {showTrendingStrip ? (
