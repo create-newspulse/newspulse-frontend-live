@@ -4242,13 +4242,6 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
     return effectiveSettings?.modules ?? null;
   }, [effectiveSettings]);
 
-  const moduleEnabledOrTrue = (key: string) => {
-    if (!settingsResolved) return false;
-    const v = (publishedModulesContainer as any)?.[key]?.enabled;
-    if (v === undefined) return true;
-    return v === true;
-  };
-
   const moduleOrderOr = (key: string, fallbackOrder: number) => {
     const raw = Number((publishedModulesContainer as any)?.[key]?.order);
     return Number.isFinite(raw) ? raw : fallbackOrder;
@@ -4257,19 +4250,13 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
   const showCategoryStrip = settingsResolved && effectiveSettings.modules.categoryStrip.enabled === true;
   const showTrendingStrip = settingsResolved && effectiveSettings.modules.trending.enabled === true;
 
-  // Module toggles control whether the ticker can render at all.
-  const breakingModuleEnabled = moduleEnabledOrTrue('breakingTicker');
-  const liveModuleEnabled = moduleEnabledOrTrue('liveUpdatesTicker');
+  // Broadcast owns homepage ticker configuration. Wait for its initial result to avoid flashing disabled tickers.
+  const broadcastReady = !broadcastTickers.isLoading;
+  const breakingTickerVisible = !SAFE_MODE && broadcastReady && (broadcastTickers.breakingEnabled ?? true);
+  const liveTickerVisible = !SAFE_MODE && broadcastReady && (broadcastTickers.liveEnabled ?? true);
 
-  const breakingTickerEnabled = breakingModuleEnabled && effectiveSettings.tickers.breaking.enabled === true;
-  const liveTickerEnabled = liveModuleEnabled && effectiveSettings.tickers.live.enabled === true;
-
-  // Broadcast config controls whether the ticker is active; it must not override module toggles.
-  const breakingTickerVisible = !SAFE_MODE && breakingTickerEnabled && (broadcastTickers.breakingEnabled ?? true);
-  const liveTickerVisible = !SAFE_MODE && liveTickerEnabled && (broadcastTickers.liveEnabled ?? true);
-
-  const breakingDurationSec = clampNum(broadcastTickers.breakingSpeedSec ?? effectiveSettings.tickers.breaking.speedSec, 10, 300, 18);
-  const liveDurationSec = clampNum(broadcastTickers.liveSpeedSec ?? effectiveSettings.tickers.live.speedSec, 10, 300, 24);
+  const breakingDurationSec = clampNum(broadcastTickers.breakingSpeedSec ?? 18, 10, 300, 18);
+  const liveDurationSec = clampNum(broadcastTickers.liveSpeedSec ?? 24, 10, 300, 24);
 
   const breakingItems = broadcastTickers.breakingTexts;
   const showBreakingContent = breakingItems.length > 0;

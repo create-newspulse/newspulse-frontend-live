@@ -9,6 +9,10 @@ import { fetchPublicNews } from '../../lib/publicNewsApi';
 import AdSlot from '../../src/components/ads/AdSlot';
 import HomeRightRail from '../../components/home/HomeRightRail';
 import { usePublicAdSlot } from '../../hooks/usePublicAdSlot';
+import { usePublicBroadcastTicker, type PublicBroadcastTickerState } from '../../hooks/usePublicBroadcastTicker';
+import { normalizePublicBroadcast } from '../../lib/publicBroadcast';
+import { usePublicTickerAds } from '../../hooks/usePublicTickerAds';
+import { isSafeMode } from '../../utils/safeMode';
 
 jest.mock('next/router', () => ({ useRouter: () => ({ asPath: '/', pathname: '/', locale: 'en', push: jest.fn(), replace: jest.fn() }) }));
 jest.mock('next/head', () => ({ __esModule: true, default: () => null }));
@@ -21,8 +25,9 @@ jest.mock('../../src/components/ads/AdSlot', () => ({
 }));
 jest.mock('../../components/home/HomeRightRail', () => ({ __esModule: true, default: jest.fn(() => null) }));
 jest.mock('../../hooks/usePublicFounderToggles', () => ({ usePublicFounderToggles: () => ({ toggles: {} }) }));
-jest.mock('../../hooks/usePublicBroadcastTicker', () => ({ usePublicBroadcastTicker: () => ({ breakingTexts: ['Breaking fixture'], liveTexts: ['Live fixture'] }) }));
-jest.mock('../../hooks/usePublicTickerAds', () => ({ usePublicTickerAds: () => ({ ads: [] }) }));
+jest.mock('../../hooks/usePublicBroadcastTicker', () => ({ usePublicBroadcastTicker: jest.fn() }));
+jest.mock('../../hooks/usePublicTickerAds', () => ({ usePublicTickerAds: jest.fn() }));
+jest.mock('../../utils/safeMode', () => ({ isSafeMode: jest.fn(() => false) }));
 jest.mock('../../hooks/usePublicAdSlot', () => ({ usePublicAdSlot: jest.fn(() => ({ enabled: false, ad: null, isLoading: false, hasResolved: true })) }));
 jest.mock('../../lib/publicNewsApi', () => ({ fetchPublicNews: jest.fn(async () => ({ items: [], endpoint: '/api/public/news' })) }));
 jest.mock('../../lib/publicSponsoredFeature', () => ({ ...jest.requireActual('../../lib/publicSponsoredFeature'), fetchHomepageSponsoredFeature: jest.fn(async () => null) }));
@@ -53,10 +58,37 @@ const published = (version = '426', appPromo = false) => normalizePublicSettings
 
 const wrapper = ({ children }: { children: React.ReactNode }) => <React.StrictMode><PublicSettingsProvider>{children}</PublicSettingsProvider></React.StrictMode>;
 
+function broadcastState(overrides: Partial<PublicBroadcastTickerState> = {}): PublicBroadcastTickerState {
+  return {
+    broadcast: normalizePublicBroadcast({
+      settings: { breaking: { enabled: false, speedSec: 18 }, live: { enabled: true, speedSec: 24 } },
+      items: { breaking: [{ text: 'Breaking fixture' }], live: [{ text: 'Live fixture' }] },
+    }),
+    breakingTexts: ['Breaking fixture'],
+    liveTexts: ['Live fixture'],
+    breakingEnabled: false,
+    liveEnabled: true,
+    breakingSpeedSec: 18,
+    liveSpeedSec: 24,
+    isLoading: false,
+    error: null,
+    lastUpdatedAt: null,
+    source: 'poll',
+    ...overrides,
+  };
+}
+
+beforeEach(() => {
+  jest.mocked(usePublicBroadcastTicker).mockReturnValue(broadcastState());
+  jest.mocked(usePublicTickerAds).mockReturnValue({ ads: [], isLoading: false, error: null, lastUpdatedAt: null, refetch: jest.fn() });
+  jest.mocked(isSafeMode).mockReturnValue(false);
+});
+
 describe('homepage ad layout boundaries', () => {
   const slots = ['TOP_HOME_BILLBOARD_970x250', 'HOME_728x90', 'HOME_LEFT_300x600', 'HOME_LEFT_300x250', 'HOME_RIGHT_300x250', 'HOME_RIGHT_300x600', 'HOME_BILLBOARD_970x250', 'FOOTER_BANNER_728x90'];
 
   beforeEach(() => {
+    jest.mocked(usePublicBroadcastTicker).mockReturnValue(broadcastState({ breakingEnabled: true }));
     jest.mocked(AdSlot).mockClear();
     jest.mocked(AdSlot).mockImplementation(jest.requireActual('../../src/components/ads/AdSlot').default);
     jest.mocked(HomeRightRail).mockImplementation(jest.requireActual('../../components/home/HomeRightRail').default);
@@ -235,6 +267,7 @@ describe('homepage published visibility', () => {
   });
 
   test('SSR does not render configurable modules from defaults', () => {
+    jest.mocked(usePublicBroadcastTicker).mockReturnValue(broadcastState({ isLoading: true, breakingEnabled: null, liveEnabled: null }));
     const html = renderToString(<PublicSettingsProvider><HomePage {...props} /></PublicSettingsProvider>);
     expect(html).not.toContain('Breaking fixture');
     expect(html).not.toContain('common.appStore');
@@ -259,7 +292,7 @@ describe('homepage published visibility', () => {
     expect(screen.queryByText('Breaking fixture')).toBeNull();
     expect(screen.queryByText('common.appStore')).toBeNull();
     expect(container.querySelector('a[href="/monthly-compliance"]')).toBeNull();
-    expect(screen.queryByText('Live fixture')).toBeNull();
+    expect(screen.getAllByText('Live fixture').length).toBeGreaterThan(0);
     await act(async () => { resolveSettings(published()); });
     expect(screen.queryByText('Breaking fixture')).toBeNull();
     expect(screen.queryByText('common.appStore')).toBeNull();
@@ -343,5 +376,172 @@ describe('homepage published visibility', () => {
     expect(result.current.settings?.modules.appPromo.order).toBe(7);
     expect(result.current.settings?.modules.footer.enabled).toBe(false);
     expect(fetchPublicSettings).toHaveBeenCalledTimes(4);
+  });
+});
+
+describe('homepage Broadcast-only ticker ownership', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.mocked(fetchPublicSettings).mockResolvedValue(published());
+  });
+
+  function renderSnapshot(settings: ReturnType<typeof published> | null = published()) {
+    const html = renderToString(<PublicSettingsProvider initialSettings={settings}><HomePage {...props} /></PublicSettingsProvider>);
+    return new DOMParser().parseFromString(html, 'text/html');
+  }
+
+  function tracks(document: Document) {
+    return Array.from(document.querySelectorAll<HTMLElement>('.ticker-wrapper .np-tickerTrack'));
+  }
+
+  test.each([
+    [true, true],
+    [true, false],
+    [false, true],
+    [false, false],
+  ])('Broadcast visibility breaking=%s/live=%s ignores both Public Settings enabled values', (breakingEnabled, liveEnabled) => {
+    jest.mocked(usePublicBroadcastTicker).mockReturnValue(broadcastState({ breakingEnabled, liveEnabled }));
+    for (const publicEnabled of [false, true]) {
+      const settings = published();
+      settings.tickers.breaking.enabled = publicEnabled;
+      settings.tickers.live.enabled = publicEnabled;
+      const document = renderSnapshot(settings);
+      expect(document.body.textContent?.includes('Breaking fixture')).toBe(breakingEnabled);
+      expect(document.body.textContent?.includes('Live fixture')).toBe(liveEnabled);
+      expect(tracks(document)).toHaveLength(Number(breakingEnabled) + Number(liveEnabled));
+    }
+  });
+
+  test('resolved Broadcast renders independently of missing or failed Public Settings', async () => {
+    jest.mocked(usePublicBroadcastTicker).mockReturnValue(broadcastState({ breakingEnabled: true }));
+    expect(tracks(renderSnapshot(null))).toHaveLength(2);
+    jest.mocked(fetchPublicSettings).mockRejectedValueOnce(new Error('settings unavailable'));
+    const { container } = render(<PublicSettingsProvider><HomePage {...props} /></PublicSettingsProvider>);
+    await act(async () => {});
+    expect(container.querySelectorAll('.ticker-wrapper .np-tickerTrack')).toHaveLength(2);
+    expect(container.querySelector('.category-nav-shell')).toBeNull();
+  });
+
+  test('initial Broadcast loading never flashes enabled defaults or a subsequently disabled ticker', async () => {
+    jest.mocked(usePublicBroadcastTicker).mockReturnValue(broadcastState({
+      isLoading: true, breakingEnabled: null, liveEnabled: null, breakingSpeedSec: null, liveSpeedSec: null,
+    }));
+    expect(tracks(renderSnapshot())).toHaveLength(0);
+    const homepage = <PublicSettingsProvider initialSettings={published()}><HomePage {...props} /></PublicSettingsProvider>;
+    const { container, rerender } = render(homepage);
+    await act(async () => {});
+    expect(container.querySelector('.ticker-wrapper')).toBeNull();
+    jest.mocked(usePublicBroadcastTicker).mockReturnValue(broadcastState({ breakingEnabled: false, liveEnabled: true }));
+    rerender(<PublicSettingsProvider initialSettings={published()}><HomePage {...props} /></PublicSettingsProvider>);
+    expect(container.querySelectorAll('.ticker-wrapper .np-tickerTrack')).toHaveLength(1);
+    expect(container.querySelector('.ticker-wrapper')?.textContent).not.toContain('Breaking fixture');
+    expect(container.querySelector('.ticker-wrapper')?.textContent).toContain('Live fixture');
+  });
+
+  test('SAFE_MODE still hides both tickers and disables existing fetch hooks', () => {
+    jest.mocked(isSafeMode).mockReturnValue(true);
+    jest.mocked(usePublicBroadcastTicker).mockReturnValue(broadcastState({ breakingEnabled: true }));
+    expect(tracks(renderSnapshot())).toHaveLength(0);
+    expect(usePublicBroadcastTicker).toHaveBeenCalledWith({ lang: 'en', enableSse: true, enabled: false });
+    for (const channel of ['breaking', 'live']) {
+      expect(usePublicTickerAds).toHaveBeenCalledWith({ lang: 'en', channel, enabled: false, refreshIntervalMs: 15_000 });
+    }
+  });
+
+  test.each([
+    { base: 20, expected: ['20s', '24s'] },
+    { base: 35, expected: ['35s', '35s'] },
+    { base: 10, expected: ['18s', '24s'] },
+    { base: null, expected: ['18s', '24s'] },
+  ])('Broadcast base $base and existing minima ignore Public Settings speed', ({ base, expected }) => {
+    jest.mocked(usePublicBroadcastTicker).mockReturnValue(broadcastState({
+      breakingEnabled: true, breakingSpeedSec: base, liveSpeedSec: base, breakingTexts: ['B'], liveTexts: ['L'],
+    }));
+    for (const publicSpeed of [5, 24, 180]) {
+      const settings = published();
+      settings.tickers.breaking.speedSec = publicSpeed;
+      settings.tickers.live.speedSec = publicSpeed;
+      expect(tracks(renderSnapshot(settings)).map((track) => track.style.animationDuration)).toEqual(expected);
+    }
+  });
+
+  test.each([
+    { breakingLength: 900, liveLength: 800, expected: '100s' },
+    { breakingLength: 3600, liveLength: 3200, expected: '300s' },
+  ])('preserves text-length adjustment and final clamp: $expected', ({ breakingLength, liveLength, expected }) => {
+    jest.mocked(usePublicBroadcastTicker).mockReturnValue(broadcastState({
+      breakingEnabled: true, breakingSpeedSec: 20, liveSpeedSec: 20,
+      breakingTexts: ['B'.repeat(breakingLength)], liveTexts: ['L'.repeat(liveLength)],
+    }));
+    expect(tracks(renderSnapshot()).map((track) => track.style.animationDuration)).toEqual([expected, expected]);
+  });
+
+  test('resolved content-only Broadcast uses existing defaults, not Public Settings configuration', () => {
+    jest.mocked(usePublicBroadcastTicker).mockReturnValue(broadcastState({
+      broadcast: normalizePublicBroadcast({ items: { breaking: [], live: [] } }),
+      breakingEnabled: null, liveEnabled: null, breakingSpeedSec: null, liveSpeedSec: null,
+      breakingTexts: ['B'], liveTexts: ['L'],
+    }));
+    const settings = published();
+    settings.tickers.breaking.enabled = false;
+    settings.tickers.live.enabled = false;
+    settings.tickers.breaking.speedSec = 90;
+    settings.tickers.live.speedSec = 120;
+    expect(tracks(renderSnapshot(settings)).map((track) => track.style.animationDuration)).toEqual(['18s', '24s']);
+  });
+
+  test('does not introduce FORCE_ON/FORCE_OFF rendering semantics', () => {
+    jest.mocked(usePublicBroadcastTicker).mockReturnValue(broadcastState({
+      broadcast: normalizePublicBroadcast({
+        settings: { breaking: { enabled: false, mode: 'FORCE_ON' }, live: { enabled: true, mode: 'FORCE_OFF' } },
+      }),
+    }));
+    const document = renderSnapshot();
+    expect(tracks(document)).toHaveLength(1);
+    expect(document.querySelector('.ticker-wrapper')?.textContent).toContain('Live fixture');
+  });
+
+  test('preserves 12/15 editorial caps and real paid-scroll insertion, links, and channel calls', () => {
+    jest.mocked(usePublicBroadcastTicker).mockReturnValue(broadcastState({
+      breakingEnabled: true,
+      breakingTexts: Array.from({ length: 20 }, (_, index) => `B${index + 1}`),
+      liveTexts: Array.from({ length: 20 }, (_, index) => `L${index + 1}`),
+    }));
+    jest.mocked(usePublicTickerAds).mockImplementation(({ channel }) => ({
+      ads: [{ id: `paid-${channel}`, text: `Paid ${channel}`, channel, url: `#paid-${channel}`, frequency: 3, priority: 1, raw: {} }],
+      isLoading: false, error: null, lastUpdatedAt: null, refetch: jest.fn(),
+    }));
+    const document = renderSnapshot();
+    const sequences = tracks(document).map((track) =>
+      Array.from(track.querySelectorAll('.np-tickerSeq')[0].querySelectorAll('.tickerText'))
+        .map((node) => node.textContent?.replace(/^.*Ad: /, 'Ad: '))
+    );
+    expect(sequences).toEqual([
+      ['B1', 'B2', 'B3', 'Ad: Paid breaking', 'B4', 'B5', 'B6', 'Ad: Paid breaking', 'B7', 'B8', 'B9', 'Ad: Paid breaking', 'B10', 'B11', 'B12'],
+      ['L1', 'L2', 'L3', 'Ad: Paid live', 'L4', 'L5', 'L6', 'Ad: Paid live', 'L7', 'L8', 'L9', 'Ad: Paid live', 'L10', 'L11', 'L12', 'Ad: Paid live', 'L13', 'L14', 'L15'],
+    ]);
+    for (const channel of ['breaking', 'live']) {
+      expect(usePublicTickerAds).toHaveBeenCalledWith({ lang: 'en', channel, enabled: true, refreshIntervalMs: 15_000 });
+      const link = document.querySelector(`a[href="#paid-${channel}"]`);
+      expect(link?.getAttribute('target')).toBe('_blank');
+      expect(link?.getAttribute('rel')).toBe('sponsored noopener noreferrer');
+    }
+    expect(tracks(document).every((track) => track.querySelectorAll('.np-tickerSeq').length === 2)).toBe(true);
+  });
+
+  test('keeps Breaking before Live even when published order values are reversed', () => {
+    jest.mocked(usePublicBroadcastTicker).mockReturnValue(broadcastState({ breakingEnabled: true }));
+    const settings = published();
+    settings.tickers.breaking.order = 30;
+    settings.tickers.live.order = 10;
+    const document = renderSnapshot(settings);
+    const text = document.querySelector('.ticker-wrapper')!.textContent!;
+    expect(text.indexOf('Breaking fixture')).toBeLessThan(text.indexOf('Live fixture'));
+    expect(document.querySelector('.header-shell')!.compareDocumentPosition(document.querySelector('.category-nav-shell')!))
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(document.querySelector('.ticker-wrapper')!.compareDocumentPosition(document.querySelector('.trending-shell')!))
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(document.querySelector('.trending-shell')!.compareDocumentPosition(document.querySelector('.home-grid')!))
+      .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 });

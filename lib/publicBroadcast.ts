@@ -156,12 +156,12 @@ export function normalizePublicBroadcast(raw: unknown): PublicBroadcast {
     const liveItemsRaw = isRecord(liveBundle) ? (liveBundle as any).items ?? (liveBundle as any).data ?? (liveBundle as any).list : liveBundle;
 
     const hasSettings =
-      (isRecord(breakingBundle) && ('enabled' in (breakingBundle as any) || 'durationSeconds' in (breakingBundle as any) || 'durationSec' in (breakingBundle as any))) ||
-      (isRecord(liveBundle) && ('enabled' in (liveBundle as any) || 'durationSeconds' in (liveBundle as any) || 'durationSec' in (liveBundle as any)));
+      (isRecord(breakingBundle) && ('enabled' in (breakingBundle as any) || 'durationSeconds' in (breakingBundle as any) || 'durationSec' in (breakingBundle as any) || 'tickerSpeedSeconds' in (breakingBundle as any) || 'speedSec' in (breakingBundle as any) || 'speedSeconds' in (breakingBundle as any))) ||
+      (isRecord(liveBundle) && ('enabled' in (liveBundle as any) || 'durationSeconds' in (liveBundle as any) || 'durationSec' in (liveBundle as any) || 'tickerSpeedSeconds' in (liveBundle as any) || 'speedSec' in (liveBundle as any) || 'speedSeconds' in (liveBundle as any)));
 
     return {
       ok: ok !== false,
-      meta: { hasSettings: Boolean(hasSettings) },
+      meta: { hasSettings: Boolean(root?._meta?.hasSettings ?? root?.meta?.hasSettings ?? hasSettings) },
       settings: {
         breaking: {
           enabled: breakingEnabledRaw === undefined ? DEFAULT_BREAKING_SETTINGS.enabled : Boolean(breakingEnabledRaw),
@@ -190,12 +190,13 @@ export function normalizePublicBroadcast(raw: unknown): PublicBroadcast {
   const hasBreakingSettings =
     !!breakingSettingsRaw &&
     typeof breakingSettingsRaw === 'object' &&
-    ('enabled' in (breakingSettingsRaw as any) || 'mode' in (breakingSettingsRaw as any) || 'speedSec' in (breakingSettingsRaw as any) || 'speedSeconds' in (breakingSettingsRaw as any));
+    ('enabled' in (breakingSettingsRaw as any) || 'mode' in (breakingSettingsRaw as any) || 'speedSec' in (breakingSettingsRaw as any) || 'speedSeconds' in (breakingSettingsRaw as any) || 'tickerSpeedSeconds' in (breakingSettingsRaw as any));
   const hasLiveSettings =
     !!liveSettingsRaw &&
     typeof liveSettingsRaw === 'object' &&
-    ('enabled' in (liveSettingsRaw as any) || 'mode' in (liveSettingsRaw as any) || 'speedSec' in (liveSettingsRaw as any) || 'speedSeconds' in (liveSettingsRaw as any));
-  const hasSettings = Boolean(root?._meta?.hasSettings ?? (hasBreakingSettings || hasLiveSettings));
+    ('enabled' in (liveSettingsRaw as any) || 'mode' in (liveSettingsRaw as any) || 'speedSec' in (liveSettingsRaw as any) || 'speedSeconds' in (liveSettingsRaw as any) || 'tickerSpeedSeconds' in (liveSettingsRaw as any));
+  // Preserve provenance when the hook normalizes an already-normalized HTTP result.
+  const hasSettings = Boolean(root?._meta?.hasSettings ?? root?.meta?.hasSettings ?? (hasBreakingSettings || hasLiveSettings));
 
   const settings = {
     breaking: {

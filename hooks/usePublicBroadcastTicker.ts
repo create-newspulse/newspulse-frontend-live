@@ -45,7 +45,7 @@ function fingerprintWithLang(b: PublicBroadcast, lang: BroadcastLang): string {
   const lTexts = toTickerTexts((b.items?.live || []) as any, { lang }).slice(0, 50).join('|');
   const s = b.settings || ({} as any);
   const sKey = `${s?.breaking?.enabled}:${s?.breaking?.mode}:${s?.breaking?.speedSec}|${s?.live?.enabled}:${s?.live?.mode}:${s?.live?.speedSec}`;
-  return `${lang}#${bTexts}#${lTexts}#${sKey}`;
+  return `${lang}#${bTexts}#${lTexts}#${sKey}#${b.meta.hasSettings}`;
 }
 
 export function usePublicBroadcastTicker(options: {
