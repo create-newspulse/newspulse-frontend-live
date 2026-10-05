@@ -5,8 +5,11 @@ import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
 import { filterVisibleArticlesForLocale, getLocalizedArticleFields, normalizeRouteLocale, STRICT_LOCALE_POLICY } from '../../../lib/localizedArticleFields';
 import { pickFreshestArticlesForLocale } from '../../../lib/translationGroupSync';
 import { withPublicReadDeadline } from '../../../lib/publicReadDeadline';
+import { getOrdinaryCategoryPageItems, getOrdinaryCategoryPagination, ORDINARY_PAGINATION_HEADER, validateOrdinaryPageRequest } from '../../../lib/ordinaryCategoryPagination';
+import { unwrapArticles } from '../../../lib/publicNewsApi';
 
 export const HOMEPAGE_RECOVERY_PROXY_TIMEOUT_MS = 3500;
+export const ORDINARY_CATEGORY_PROXY_TIMEOUT_MS = 3500;
 
 function asSingleQueryValue(value: string | string[] | undefined): string {
   return String(Array.isArray(value) ? value[0] : value || '').trim();
@@ -122,6 +125,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const qsIndex = (req.url || '').indexOf('?');
   const localizedParams = new URLSearchParams(qsIndex >= 0 ? (req.url || '').slice(qsIndex + 1) : '');
   const requestedLimit = Number(localizedParams.get('limit') || 0);
+  const ordinaryPagination = req.headers[ORDINARY_PAGINATION_HEADER.toLowerCase()] === '1';
+  let ordinaryPageRequest: { page: number; limit: number } | null = null;
+
+  if (ordinaryPagination) {
+    try {
+      ordinaryPageRequest = validateOrdinaryPageRequest(normalizedCategory, localizedParams.get('page'), localizedParams.get('limit'));
+      if (!hasRequestedLocale) throw new Error('Ordinary category pagination requires a locale');
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid category pagination request' });
+    }
+  }
 
   if (normalizedCategory) localizedParams.set('category', normalizedCategory);
 
@@ -129,7 +143,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const homepageRecovery = req.headers['x-newspulse-homepage-recovery'] === '1'
     && !rawCategory && requestedLimit === 40 && hasRequestedLocale
     && !req.query.q && !req.query.spotlight && !req.query.strictLocale && !req.query.page;
-  const deadlineAt = homepageRecovery ? Date.now() + HOMEPAGE_RECOVERY_PROXY_TIMEOUT_MS : undefined;
+  const deadlineAt = homepageRecovery ? Date.now() + HOMEPAGE_RECOVERY_PROXY_TIMEOUT_MS
+    : ordinaryPagination ? Date.now() + ORDINARY_CATEGORY_PROXY_TIMEOUT_MS : undefined;
 
   if (!candidateBases.length) {
     logDevNewsProxy('missing_upstream_base', {
@@ -138,6 +153,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
     // Keep UI alive even if env not configured.
     res.setHeader('Cache-Control', 'no-store');
+    if (ordinaryPagination) return res.status(503).json({ error: 'CATEGORY_NEWS_UNAVAILABLE' });
     if (homepageRecovery) return res.status(503).json({ error: 'HOMEPAGE_NEWS_UNAVAILABLE' });
     return res.status(200).json({ items: [], total: 0, page: 1, totalPages: 1, limit: 0 });
   }
@@ -185,6 +201,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (!upstream) {
       res.setHeader('Cache-Control', 'no-store');
+      if (ordinaryPagination) return res.status(503).json({ error: 'CATEGORY_NEWS_UNAVAILABLE' });
       if (homepageRecovery) return res.status(503).json({ error: 'HOMEPAGE_NEWS_UNAVAILABLE' });
       return res.status(200).json({ items: [] });
     }
@@ -202,7 +219,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     try {
       const json = upstream.json;
-      const primaryItems = getPayloadItems(json);
+      const primaryItems = ordinaryPageRequest ? unwrapArticles(getOrdinaryCategoryPageItems(json)) : getPayloadItems(json);
+      const pagination = ordinaryPageRequest ? getOrdinaryCategoryPagination(json, ordinaryPageRequest, primaryItems.length) : null;
       let listItems = Array.isArray(primaryItems) ? primaryItems : [];
 
       let hasCompletePulsePage = false;
@@ -233,7 +251,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           });
       }
 
-      if (shouldWidenLocaleFetch && !homepageRecovery && !hasCompletePulsePage) {
+      if (shouldWidenLocaleFetch && !homepageRecovery && !hasCompletePulsePage && !ordinaryPagination) {
         try {
           const widenedParams = new URLSearchParams(localizedParams);
           widenedParams.delete('lang');
@@ -271,7 +289,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             strictLocale ? STRICT_LOCALE_POLICY : undefined
           );
       const items = requestedLimit > 0 ? itemsResolved.slice(0, requestedLimit) : itemsResolved;
-      const normalized = replaceItems(json, items);
+      const replaced = replaceItems(json, items);
+      const normalized = pagination
+        ? { ...(Array.isArray(replaced) ? { items: replaced } : replaced), pagination }
+        : replaced;
 
       debugCategoryList({
         locale: requestedLocale,
@@ -285,13 +306,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // Avoid stale listings after delete/unpublish; accuracy over cache.
       res.setHeader('Cache-Control', 'no-store, max-age=0');
       return res.status(200).json(normalized);
-    } catch {
+    } catch (error) {
       res.setHeader('Cache-Control', 'no-store');
+      if (ordinaryPagination) {
+        logDevNewsProxy('invalid_category_page', { error: error instanceof Error ? error.message : String(error) });
+        return res.status(503).json({ error: 'CATEGORY_NEWS_UNAVAILABLE' });
+      }
       if (homepageRecovery) return res.status(503).json({ error: 'HOMEPAGE_NEWS_UNAVAILABLE' });
       return res.status(200).json({ items: [] });
     }
   } catch {
     res.setHeader('Cache-Control', 'no-store');
+    if (ordinaryPagination) return res.status(503).json({ error: 'CATEGORY_NEWS_UNAVAILABLE' });
     if (homepageRecovery) return res.status(503).json({ error: 'HOMEPAGE_NEWS_UNAVAILABLE' });
     return res.status(200).json({ items: [] });
   }

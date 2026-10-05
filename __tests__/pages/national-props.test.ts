@@ -90,10 +90,15 @@ describe('/national page-data props', () => {
       }
 
       if (url.includes('/api/public/news?')) {
-        const limit = new URL(url).searchParams.get('limit');
+        const params = new URL(url).searchParams;
+        const limit = Number(params.get('limit'));
+        const page = Number(params.get('page') || 1);
         return Promise.resolve({
           ok: true,
-          json: async () => ({ items: limit === '5' ? articles.slice(0, 5) : articles, total: articles.length, limit: Number(limit) }),
+          json: async () => ({
+            items: articles.slice((page - 1) * limit, page * limit),
+            total: articles.length, page, limit, totalPages: Math.ceil(articles.length / limit),
+          }),
         }) as any;
       }
 
@@ -103,7 +108,12 @@ describe('/national page-data props', () => {
     const result: any = await getStaticProps({ locale: 'en' } as any);
     const props = result.props;
 
-    expect(props.data).toHaveLength(40);
+    expect(props.data).toHaveLength(20);
+    expect(props.initialPagination).toEqual({ page: 1, limit: 20, total: 40, totalPages: 2, hasMore: true });
+    const firstFeedUrl = new URL(String((global.fetch as jest.Mock).mock.calls[0][0]));
+    expect(firstFeedUrl.searchParams.get('page')).toBe('1');
+    expect(firstFeedUrl.searchParams.get('limit')).toBe('20');
+    expect(firstFeedUrl.searchParams.has('strictLocale')).toBe(false);
     expect(props.breaking).toHaveLength(5);
     expect(props.data[0]).toMatchObject({
       _id: 'article-01',
@@ -124,6 +134,39 @@ describe('/national page-data props', () => {
     });
     expect(result.revalidate).toBe(60);
     expect(jsonBytes(props)).toBeLessThan(128 * 1024);
+  });
+
+  test.each([
+    ['en'],
+    ['hi'],
+    ['gu'],
+  ])('initial %s pagination uses 20-item pages and retains backend exhaustion metadata', async (locale) => {
+    const title = locale === 'hi' ? '\u0938\u092e\u093e\u091a\u093e\u0930' : locale === 'gu' ? '\u0ab8\u0aae\u0abe\u0a9a\u0abe\u0ab0' : 'National story';
+    const articles = Array.from({ length: 17 }, (_, index) => makeArticle(index, { language: locale, title: `${title} ${index}` }));
+    global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input), 'http://backend.test');
+      if (url.pathname.startsWith('/api/ticker/')) return new Response(JSON.stringify({ items: [] }));
+      const limit = Number(url.searchParams.get('limit'));
+      return new Response(JSON.stringify({
+        items: articles.slice(0, limit), page: 1, limit, total: 17, totalPages: Math.ceil(17 / limit),
+      }));
+    });
+    const result = await getStaticProps({ locale });
+    expect('props' in result).toBe(true);
+    if (!('props' in result)) throw new Error('Missing National props');
+    const props = await result.props;
+    expect(props.data).toHaveLength(17);
+    expect(props.initialPagination).toEqual({ page: 1, limit: 20, total: 17, totalPages: 1, hasMore: false });
+    expect(props.data.every((item: { language: string }) => item.language === locale)).toBe(true);
+    const pagedCalls = (global.fetch as jest.Mock).mock.calls
+      .map(([input]) => new URL(String(input), 'http://backend.test'))
+      .filter((url) => url.searchParams.has('page'));
+    expect(pagedCalls).toHaveLength(1);
+    expect(pagedCalls[0].searchParams.get('page')).toBe('1');
+    expect(pagedCalls[0].searchParams.get('limit')).toBe('20');
+    expect(pagedCalls[0].searchParams.get('lang')).toBe(locale);
+    expect(pagedCalls[0].searchParams.get('language')).toBe(locale);
+    expect(result.revalidate).toBe(60);
   });
 
   test.each([

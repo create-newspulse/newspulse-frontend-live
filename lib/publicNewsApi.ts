@@ -2,6 +2,7 @@ import { getPublicApiBaseUrl } from './publicApiBase';
 import { getCategoryQueryKey } from './categoryKeys';
 import { filterPubliclyPublishedArticles } from './localizedArticleFields';
 import type { AuthorBylinePayload } from './authorByline';
+import { getOrdinaryCategoryPageItems, getOrdinaryCategoryPagination, ORDINARY_PAGINATION_HEADER, validateOrdinaryPageRequest, type OrdinaryCategoryPagination } from './ordinaryCategoryPagination';
 
 export type ArticleBase = {
   _id: string;
@@ -112,6 +113,7 @@ export type PublicNewsMeta = {
   page?: number;
   totalPages?: number;
   limit?: number;
+  pagination?: OrdinaryCategoryPagination;
 };
 
 function logPublicNewsError(event: string, details: Record<string, unknown>) {
@@ -129,6 +131,7 @@ export async function fetchPublicNews(options: {
   extraQuery?: Record<string, string | number | undefined>;
   signal?: AbortSignal;
   homepageRecovery?: boolean;
+  ordinaryPagination?: boolean;
 }): Promise<{
   items: Article[];
   meta: PublicNewsMeta;
@@ -180,16 +183,23 @@ export async function fetchPublicNews(options: {
   const endpoint = `${base}/api/public/news?${params.toString()}`;
 
   try {
+    const pageRequest = options.ordinaryPagination
+      ? validateOrdinaryPageRequest(options.category, options.page, options.limit)
+      : null;
     const res = await fetch(endpoint, {
       method: 'GET',
-      headers: { Accept: 'application/json', ...(isBrowser && options.homepageRecovery ? { 'X-NewsPulse-Homepage-Recovery': '1' } : {}) },
+      headers: {
+        Accept: 'application/json',
+        ...(isBrowser && options.homepageRecovery ? { 'X-NewsPulse-Homepage-Recovery': '1' } : {}),
+        ...(isBrowser && pageRequest ? { [ORDINARY_PAGINATION_HEADER]: '1' } : {}),
+      },
       cache: 'no-store',
       signal: options.signal,
     });
 
     const skipErrorBody = isBrowser && options.homepageRecovery && res.status === 503;
     if (skipErrorBody) void res.body?.cancel().catch(() => {});
-    const data = skipErrorBody ? null : await res.json().catch(() => null);
+    const data = skipErrorBody ? null : pageRequest ? await res.json() : await res.json().catch(() => null);
 
     if (!res.ok) {
       const msg =
@@ -213,12 +223,15 @@ export async function fetchPublicNews(options: {
       };
     }
 
-    const items = filterPubliclyPublishedArticles(unwrapArticles(data));
+    const rawItems = unwrapArticles(pageRequest ? getOrdinaryCategoryPageItems(data) : data);
+    const pagination = pageRequest ? getOrdinaryCategoryPagination(data, pageRequest, rawItems.length) : undefined;
+    const items = filterPubliclyPublishedArticles(rawItems);
     const meta: PublicNewsMeta = {
       total: data && typeof data === 'object' ? (data.total as number | undefined) : undefined,
       page: data && typeof data === 'object' ? (data.page as number | undefined) : undefined,
       totalPages: data && typeof data === 'object' ? (data.totalPages as number | undefined) : undefined,
       limit: data && typeof data === 'object' ? (data.limit as number | undefined) : options.limit,
+      ...(pagination ? { pagination } : {}),
     };
 
     return { items, meta, endpoint };

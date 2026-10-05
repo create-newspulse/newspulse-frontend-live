@@ -4,7 +4,8 @@ import { useRouter } from 'next/router';
 import React, { useMemo, useState } from 'react';
 import { getCategoryQueryKey, getCategoryRouteKey } from '../lib/categoryKeys';
 import type { Article } from '../lib/publicNewsApi';
-import { CATEGORY_FEED_BATCH_SIZE, CATEGORY_FEED_REFRESH_MS, fetchCategoryFeed, selectCategoryFeedArticles } from '../lib/categoryFeed';
+import { CATEGORY_FEED_BATCH_SIZE, CATEGORY_FEED_REFRESH_MS, fetchCategoryFeed, fetchCategoryFeedPage, mergeCategoryFeedPages, selectCategoryFeedArticles, type CategoryFeedPageResult } from '../lib/categoryFeed';
+import { getOrdinaryCategoryBatchSize, isOrdinaryPaginatedCategory, type OrdinaryCategoryPagination } from '../lib/ordinaryCategoryPagination';
 import { getLocalizedArticleFields, STRICT_LOCALE_POLICY } from '../lib/localizedArticleFields';
 import { useLanguage } from '../utils/LanguageContext';
 import { useI18n } from '../src/i18n/LanguageProvider';
@@ -25,6 +26,8 @@ export type CategoryFeedPageProps = {
   extraQuery?: Record<string, string>;
   useCategoryShell?: boolean;
   initialItems?: Article[];
+  initialPagination?: OrdinaryCategoryPagination;
+  initialLocale?: string;
 };
 
 function categoryKeyToI18nKey(categoryKey: string): string | null {
@@ -153,23 +156,31 @@ function hasMoreCategoryResults(resp: Awaited<ReturnType<typeof fetchCategoryFee
   return (Array.isArray(resp.items) ? resp.items.length : 0) >= requestedLimit;
 }
 
-export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCategoryShell = false, initialItems }: CategoryFeedPageProps) {
+export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCategoryShell = false, initialItems, initialPagination, initialLocale }: CategoryFeedPageProps) {
   const router = useRouter();
   const { language } = useLanguage();
   const { t } = useI18n();
+  const pagedCategory = isOrdinaryPaginatedCategory(categoryKey);
+  const batchSize = pagedCategory ? getOrdinaryCategoryBatchSize(categoryKey) : CATEGORY_FEED_BATCH_SIZE;
+  const seedMatchesLocale = !initialLocale || initialLocale === language;
+  const seedPagination = pagedCategory && seedMatchesLocale ? initialPagination : undefined;
   const initialCategoryItems = React.useMemo(
-    () => selectCategoryFeedArticles(initialItems, getCategoryQueryKey(categoryKey), language),
-    [categoryKey, initialItems, language]
+    () => selectCategoryFeedArticles(pagedCategory && !seedMatchesLocale ? [] : initialItems, getCategoryQueryKey(categoryKey), language),
+    [categoryKey, initialItems, language, pagedCategory, seedMatchesLocale]
   );
   const [items, setItems] = useState<Article[]>(() => initialCategoryItems);
-  const [loaded, setLoaded] = useState(() => initialCategoryItems.length > 0);
+  const [loaded, setLoaded] = useState(() => initialCategoryItems.length > 0 || Boolean(seedPagination));
   const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(() => initialCategoryItems.length >= CATEGORY_FEED_BATCH_SIZE);
+  const [page, setPage] = useState(seedPagination?.page ?? 1);
+  const [hasMore, setHasMore] = useState(() => seedPagination?.hasMore ?? initialCategoryItems.length >= batchSize);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const pageRef = React.useRef(1);
+  const [searchQuery, setSearchQuery] = useState(() => {
+    const raw = pagedCategory ? router.query.search ?? router.query.q : '';
+    return String(Array.isArray(raw) ? raw[0] || '' : raw || '').trim();
+  });
+  const pageRef = React.useRef(seedPagination?.page ?? 1);
+  const feedControllerRef = React.useRef<AbortController | null>(null);
   const requestGenerationRef = React.useRef(0);
   const activeFeedRequestRef = React.useRef('');
   const inFlightFeedRequestRef = React.useRef('');
@@ -178,6 +189,9 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
   const queryKey = useMemo(() => JSON.stringify(extraQuery || {}), [extraQuery]);
   const routeCategoryKey = useMemo(() => getCategoryRouteKey(categoryKey), [categoryKey]);
   const queryCategoryKey = useMemo(() => getCategoryQueryKey(categoryKey), [categoryKey]);
+  const feedContextKey = JSON.stringify([language, queryCategoryKey, queryKey, pagedCategory ? searchQuery.trim().toLowerCase() : '']);
+  const seedContextRef = React.useRef<string | null>(feedContextKey);
+  const seedItemsRef = React.useRef(initialItems);
   const fetchQuery = useMemo(
     () => ({ ...(extraQuery || {}), strictLocale: '1' }),
     [extraQuery]
@@ -205,12 +219,12 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
     const raw = (router.query as any)?.search ?? (router.query as any)?.q;
     const value = Array.isArray(raw) ? raw[0] : raw;
     const next = String(value || '').trim();
-    if (!next) return;
+    if (!next && !pagedCategory) return;
     setSearchQuery(next);
-  }, [router.isReady, router.query]);
+  }, [router.isReady, router.query, pagedCategory]);
 
-  const filteredItems = useMemo(() => {
-    const scopedItems = selectCategoryFeedArticles(items, queryCategoryKey, language);
+  const selectPageItems = React.useCallback((articles: Article[]) => {
+    const scopedItems = selectCategoryFeedArticles(articles, queryCategoryKey, language);
     const q = String(searchQuery || '').trim().toLowerCase();
     if (!q) return scopedItems;
     return scopedItems.filter((a) => {
@@ -219,11 +233,12 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
       const hay = `${localized.title || ''} ${localized.summary || ''}`.toLowerCase();
       return hay.includes(q);
     });
-  }, [items, language, queryCategoryKey, searchQuery]);
+  }, [language, queryCategoryKey, searchQuery]);
+  const filteredItems = useMemo(() => selectPageItems(items), [items, selectPageItems]);
 
   const loadPage = React.useCallback(async (pageToLoad: number, signal?: AbortSignal, background = false) => {
-    const requestedLimit = pageToLoad * CATEGORY_FEED_BATCH_SIZE;
-    const requestKey = `${language}:${queryCategoryKey}:${queryKey}:${pageToLoad}:${requestGenerationRef.current}`;
+    const requestedLimit = pagedCategory ? batchSize : pageToLoad * CATEGORY_FEED_BATCH_SIZE;
+    const requestKey = `${feedContextKey}:${pageToLoad}:${requestGenerationRef.current}`;
     if (background && inFlightFeedRequestRef.current) return;
     if (inFlightFeedRequestRef.current === requestKey) return;
 
@@ -240,6 +255,31 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
     }
 
     try {
+      if (pagedCategory) {
+        const nextItems: Article[] = [];
+        let nextPage = background ? 1 : pageToLoad;
+        let result: CategoryFeedPageResult;
+        do {
+          result = await fetchCategoryFeedPage({
+            category: queryCategoryKey, language, page: nextPage, limit: batchSize,
+            extraQuery: fetchQuery, signal, selectItems: selectPageItems,
+            isCurrent: () => activeFeedRequestRef.current === requestKey,
+          });
+          if (signal?.aborted || activeFeedRequestRef.current !== requestKey) return;
+          nextItems.push(...result.items);
+          nextPage = result.pagination.page + 1;
+        } while (background && result.pagination.hasMore && nextPage <= pageToLoad);
+
+        const append = !background && pageToLoad > 1;
+        hasDisplayItemsRef.current = (append && hasDisplayItemsRef.current) || nextItems.length > 0;
+        setItems((previous) => mergeCategoryFeedPages(append ? previous : [], nextItems, language));
+        pageRef.current = result.pagination.page;
+        setPage(result.pagination.page);
+        setHasMore(result.pagination.hasMore);
+        setLoaded(true);
+        setLoadMoreError(null);
+        return;
+      }
       const resp = await fetchCategoryFeed({
         category: String(queryCategoryKey || ''),
         language,
@@ -277,23 +317,35 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
       }
       if (inFlightFeedRequestRef.current === requestKey) inFlightFeedRequestRef.current = '';
     }
-  }, [fetchQuery, language, queryCategoryKey, queryKey, t]);
+  }, [batchSize, feedContextKey, fetchQuery, language, pagedCategory, queryCategoryKey, selectPageItems, t]);
 
   React.useEffect(() => {
     const controller = new AbortController();
+    feedControllerRef.current = controller;
     requestGenerationRef.current += 1;
     activeFeedRequestRef.current = '';
     inFlightFeedRequestRef.current = '';
-    hasDisplayItemsRef.current = initialCategoryItems.length > 0;
-    pageRef.current = 1;
-    setItems(initialCategoryItems);
-    setLoaded(initialCategoryItems.length > 0);
+    if (pagedCategory) {
+      if (seedItemsRef.current !== initialItems) {
+        seedItemsRef.current = initialItems;
+        seedContextRef.current = feedContextKey;
+      } else if (seedContextRef.current !== feedContextKey) {
+        seedContextRef.current = null;
+      }
+    }
+    const useSeed = !pagedCategory || (seedContextRef.current === feedContextKey && !searchQuery.trim() && !Object.keys(extraQuery || {}).length);
+    const seed = useSeed ? initialCategoryItems : [];
+    const pagination = useSeed ? seedPagination : undefined;
+    hasDisplayItemsRef.current = seed.length > 0;
+    pageRef.current = pagination?.page ?? 1;
+    setItems(seed);
+    setLoaded(seed.length > 0 || Boolean(pagination));
     setError(null);
     setLoadMoreError(null);
-    setHasMore(initialCategoryItems.length >= CATEGORY_FEED_BATCH_SIZE);
-    setPage(1);
+    setHasMore(pagination?.hasMore ?? seed.length >= batchSize);
+    setPage(pagination?.page ?? 1);
 
-    if (!initialCategoryItems.length) void loadPage(1, controller.signal);
+    if (!seed.length && !pagination) void loadPage(1, controller.signal);
     const refreshTimer = setInterval(() => {
       if (document.visibilityState === 'hidden') return;
       void loadPage(pageRef.current, controller.signal, true);
@@ -306,12 +358,12 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
       inFlightFeedRequestRef.current = '';
       controller.abort();
     };
-  }, [initialCategoryItems, language, queryCategoryKey, queryKey]);
+  }, [initialCategoryItems, language, queryCategoryKey, queryKey, feedContextKey, seedPagination]);
 
   const loadNextPage = React.useCallback(() => {
     if (!loaded || loadingMore || !hasMore) return;
-    loadPage(page + 1);
-  }, [hasMore, loadPage, loaded, loadingMore, page]);
+    loadPage(page + 1, pagedCategory ? feedControllerRef.current?.signal : undefined);
+  }, [hasMore, loadPage, loaded, loadingMore, page, pagedCategory]);
 
   const isUnauthorized = typeof error === 'string' && /\b401\b/.test(error);
   const shellLang = language === 'hi' || language === 'gu' ? language : 'en';

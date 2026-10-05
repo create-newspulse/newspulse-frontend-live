@@ -5,6 +5,6 @@ import { getCategoryStaticProps, type CategoryPageProps } from '../../lib/catego
 
 export const getStaticProps: GetStaticProps<CategoryPageProps> = (ctx) => getCategoryStaticProps(ctx, 'glamour');
 
-export default function GlamourPage({ initialItems }: CategoryPageProps) {
-  return <CategoryFeedPage title="Glamour" categoryKey="glamour" useCategoryShell initialItems={initialItems} />;
+export default function GlamourPage({ initialItems, initialPagination, locale }: CategoryPageProps) {
+  return <CategoryFeedPage title="Glamour" categoryKey="glamour" useCategoryShell initialItems={initialItems} initialPagination={initialPagination} initialLocale={locale} />;
 }

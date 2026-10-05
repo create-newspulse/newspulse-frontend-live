@@ -12,6 +12,8 @@ import { useLanguage } from '../../utils/LanguageContext';
 import { getRegionName, toLanguageKey } from '../../utils/localizedNames';
 
 import { fetchPublicNews } from '../../lib/publicNewsApi';
+import { fetchCategoryFeedPage, mergeCategoryFeedPages, type CategoryFeedPageResult } from '../../lib/categoryFeed';
+import { getOrdinaryCategoryBatchSize, type OrdinaryCategoryPagination } from '../../lib/ordinaryCategoryPagination';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../../lib/newsRoutes';
 import { localizeArticle } from '../../lib/localizeArticle';
@@ -41,6 +43,7 @@ const NATIONAL_SEARCH_TEXT_MAX_CHARS = 900;
 const NATIONAL_STATIC_REVALIDATE_SECONDS = 60;
 const NATIONAL_BUILD_FETCH_TIMEOUT_MS = 8000;
 const NATIONAL_BUILD_TICKER_TIMEOUT_MS = 3500;
+const NATIONAL_FEED_BATCH_SIZE = getOrdinaryCategoryBatchSize('national');
 
 function withTimeoutSignal<T>(timeoutMs: number, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
   const controller = new AbortController();
@@ -366,6 +369,19 @@ function matchRegion(story: AnyStory, regionName: string) {
   return new RegExp(`(^|\s)${n}(\s|$)`).test(text) || text.includes(n);
 }
 
+function filterNationalStories(stories: AnyStory[], topic: TopicChip, regionName: string | undefined, search: string): AnyStory[] {
+  const q = normalize(search);
+  let list = stories;
+  if (topic !== 'All') list = list.filter((story) => matchesTopic(story, topic));
+  if (regionName) list = list.filter((story) => matchRegion(story, regionName));
+  if (q) {
+    list = list.filter((story) => normalize(
+      `${story?.title || ''} ${story?.excerpt || ''} ${story?.summary || ''} ${story?.content || ''} ${story?.searchText || ''}`
+    ).includes(q));
+  }
+  return list;
+}
+
 function useVoiceReader() {
   const synthRef = React.useRef<SpeechSynthesis | null>(null);
   const [speaking, setSpeaking] = React.useState(false);
@@ -504,7 +520,7 @@ function CompactFeedRow({ story, lang }: { story: AnyStory; lang: 'en' | 'hi' | 
   );
 }
 
-export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data: AnyStory[] | null; breaking?: AnyStory[] | null }) {
+export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data: AnyStory[] | null; breaking?: AnyStory[] | null; initialPagination?: OrdinaryCategoryPagination }) {
   const router = useRouter();
   const { language } = useLanguage();
   const { t } = useI18n();
@@ -515,40 +531,42 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
   const [selectedTopic, setSelectedTopic] = React.useState<TopicChip>('All');
   const [selectedRegion, setSelectedRegion] = React.useState<string>('all');
   const [sortKey, setSortKey] = React.useState<SortKey>('latest');
-  const [searchQuery, setSearchQuery] = React.useState('');
+  const routeSearchValue = router.query.search ?? router.query.q;
+  const routeSearchQuery = String(Array.isArray(routeSearchValue) ? routeSearchValue[0] || '' : routeSearchValue || '').trim();
+  const [searchQuery, setSearchQuery] = React.useState(routeSearchQuery);
 
   // Allow deep-linking into a filtered view (used by article-page category header search).
   React.useEffect(() => {
     if (!router.isReady) return;
-    const raw = (router.query as any)?.search ?? (router.query as any)?.q;
-    const value = Array.isArray(raw) ? raw[0] : raw;
-    const next = String(value || '').trim();
-    if (!next) return;
-    setSearchQuery(next);
-  }, [router.isReady, router.query]);
+    setSearchQuery(routeSearchQuery);
+  }, [router.isReady, routeSearchQuery]);
 
-  const initialStories = React.useMemo(() => (Array.isArray(props.data) ? props.data : []), [props.data]);
+  const initialStories = React.useMemo(() => (props.lang === effectiveLang && Array.isArray(props.data) ? props.data : []), [props.data, props.lang, effectiveLang]);
+  const initialPagination = props.lang === effectiveLang ? props.initialPagination : undefined;
   const initialBreaking = React.useMemo(() => (Array.isArray(props.breaking) ? props.breaking : []), [props.breaking]);
 
   const [stories, setStories] = React.useState<AnyStory[]>(initialStories);
   const [breaking, setBreaking] = React.useState<any[]>(initialBreaking);
 
-  const [page, setPage] = React.useState(1);
-  const [loading, setLoading] = React.useState(!initialStories.length);
+  const [page, setPage] = React.useState(initialPagination?.page ?? 1);
+  const [loading, setLoading] = React.useState(!initialStories.length && !initialPagination);
   const [loadingMore, setLoadingMore] = React.useState(false);
-  const [hasMore, setHasMore] = React.useState(true);
+  const [hasMore, setHasMore] = React.useState(initialPagination?.hasMore ?? initialStories.length >= NATIONAL_FEED_BATCH_SIZE);
   const [error, setError] = React.useState<string | null>(null);
   const [loadMoreError, setLoadMoreError] = React.useState<string | null>(null);
 
-  const didInitRef = React.useRef(false);
-  const refreshStateRef = React.useRef({ page: 1 });
+  const pageRef = React.useRef(initialPagination?.page ?? 1);
+  const feedControllerRef = React.useRef<AbortController | null>(null);
+  const feedGenerationRef = React.useRef(0);
+  const hasDisplayItemsRef = React.useRef(initialStories.length > 0);
   const loadingPageRef = React.useRef<number | null>(null);
   const activeFeedRequestRef = React.useRef('');
   const inFlightFeedRequestRef = React.useRef('');
 
-  React.useEffect(() => {
-    refreshStateRef.current = { page };
-  }, [page]);
+  const feedContextKey = JSON.stringify([effectiveLang, selectedTopic, selectedRegion, searchQuery.trim().toLowerCase()]);
+  const seedContextRef = React.useRef<string | null>(feedContextKey);
+  const seedItemsRef = React.useRef(props.data);
+  const selectedRegionName = ALL_REGIONS.find((region) => region.slug === selectedRegion)?.name;
 
   // URL <-> filter state (shareable links)
   React.useEffect(() => {
@@ -619,9 +637,9 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
   };
 
   const loadPage = React.useCallback(
-    async (pageToLoad: number) => {
-      const limit = 20;
-      const requestKey = `${effectiveLang}:${pageToLoad}`;
+    async (pageToLoad: number, signal?: AbortSignal, background = false) => {
+      const requestKey = `${feedContextKey}:${pageToLoad}:${feedGenerationRef.current}`;
+      if (background && inFlightFeedRequestRef.current) return;
       if (inFlightFeedRequestRef.current === requestKey) return;
 
       loadingPageRef.current = pageToLoad;
@@ -630,49 +648,45 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
 
       try {
         if (pageToLoad === 1) {
-          setLoading(true);
+          setLoading(!hasDisplayItemsRef.current);
           setError(null);
           setLoadMoreError(null);
-        } else {
+        } else if (!background) {
           setLoadingMore(true);
           setLoadMoreError(null);
         }
 
-        // Public API does not currently support pagination params; emulate paging by increasing limit.
-        const requested = pageToLoad * limit;
-        const resp = await fetchPublicNews({ category: 'national', language: effectiveLang, limit: requested });
-        if (activeFeedRequestRef.current !== requestKey) return;
+        const items: AnyStory[] = [];
+        let nextPage = background ? 1 : pageToLoad;
+        let result: CategoryFeedPageResult;
+        do {
+          result = await fetchCategoryFeedPage({
+            category: 'national', language: effectiveLang, page: nextPage, limit: NATIONAL_FEED_BATCH_SIZE, signal,
+            selectItems: (articles) => filterNationalStories(articles, selectedTopic, selectedRegionName, searchQuery),
+            isCurrent: () => activeFeedRequestRef.current === requestKey,
+          });
+          if (signal?.aborted || activeFeedRequestRef.current !== requestKey) return;
+          items.push(...result.items);
+          nextPage = result.pagination.page + 1;
+        } while (background && result.pagination.hasMore && nextPage <= pageToLoad);
 
-        if (resp?.error) {
-          if (pageToLoad === 1) {
-            setError(resp.error);
-            setHasMore(false);
-            setStories([]);
-          } else {
-            setLoadMoreError(resp.error);
-            setHasMore(true);
-          }
-          return;
-        }
-
-        const items = Array.isArray(resp?.items) ? resp.items : [];
-
-        // Heuristic: if backend returns a full page worth, assume there may be more.
-        const total = typeof resp?.meta?.total === 'number' ? resp.meta.total : undefined;
-        const totalPages = typeof resp?.meta?.totalPages === 'number' ? resp.meta.totalPages : undefined;
-        setHasMore(typeof total === 'number' ? items.length < total : typeof totalPages === 'number' ? pageToLoad < totalPages : items.length >= requested);
-        setStories(items);
-
-        setPage(pageToLoad);
+        const append = !background && pageToLoad > 1;
+        hasDisplayItemsRef.current = (append && hasDisplayItemsRef.current) || items.length > 0;
+        setStories((previous) => mergeCategoryFeedPages(append ? previous : [], items, effectiveLang, false));
+        pageRef.current = result.pagination.page;
+        setHasMore(result.pagination.hasMore);
+        setPage(result.pagination.page);
+        setLoadMoreError(null);
       } catch (e: any) {
-        if (activeFeedRequestRef.current !== requestKey) return;
+        if (signal?.aborted || activeFeedRequestRef.current !== requestKey) return;
         const message = e?.message ? String(e.message) : t('nationalPage.failedToLoad');
-        if (pageToLoad === 1) {
+        if (!hasDisplayItemsRef.current) {
           setError(message);
           setStories([]);
+          setHasMore(false);
         } else {
           setLoadMoreError(message);
-          setHasMore(true);
+          if (!background) setHasMore(true);
         }
       } finally {
         if (activeFeedRequestRef.current === requestKey) {
@@ -683,29 +697,57 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
         if (inFlightFeedRequestRef.current === requestKey) inFlightFeedRequestRef.current = '';
       }
     },
-    [effectiveLang, t]
+    [effectiveLang, feedContextKey, searchQuery, selectedRegionName, selectedTopic, t]
   );
 
   const loadNextPage = React.useCallback(() => {
     if (loading || loadingMore || !hasMore) return;
-    loadPage(page + 1);
+    loadPage(page + 1, feedControllerRef.current?.signal);
   }, [hasMore, loadPage, loading, loadingMore, page]);
 
-  // Initial fetch + refetch when language changes
+  React.useEffect(() => {
+    const controller = new AbortController();
+    feedControllerRef.current = controller;
+    feedGenerationRef.current += 1;
+    activeFeedRequestRef.current = '';
+    inFlightFeedRequestRef.current = '';
+    if (seedItemsRef.current !== props.data) {
+      seedItemsRef.current = props.data;
+      seedContextRef.current = feedContextKey;
+    } else if (seedContextRef.current !== feedContextKey) {
+      seedContextRef.current = null;
+    }
+    const useSeed = seedContextRef.current === feedContextKey && selectedTopic === 'All' && selectedRegion === 'all' && !searchQuery.trim();
+    const seed = useSeed ? initialStories : [];
+    const pagination = useSeed ? initialPagination : undefined;
+    hasDisplayItemsRef.current = seed.length > 0;
+    pageRef.current = pagination?.page ?? 1;
+    setStories(seed);
+    setPage(pagination?.page ?? 1);
+    setHasMore(pagination?.hasMore ?? seed.length >= NATIONAL_FEED_BATCH_SIZE);
+    setLoading(!seed.length && !pagination);
+    setLoadingMore(false);
+    setError(null);
+    setLoadMoreError(null);
+    if (!seed.length && !pagination) void loadPage(1, controller.signal);
+
+    const timer = window.setInterval(() => {
+      void loadPage(pageRef.current, controller.signal, true);
+    }, AUTO_REFRESH_MS);
+    return () => {
+      window.clearInterval(timer);
+      feedGenerationRef.current += 1;
+      activeFeedRequestRef.current = '';
+      inFlightFeedRequestRef.current = '';
+      controller.abort();
+    };
+  }, [effectiveLang, feedContextKey, initialStories, initialPagination]);
+
+  // The live strip retains its independent locale refresh and fallbacks.
   React.useEffect(() => {
     let cancelled = false;
 
-    const isFirstRun = !didInitRef.current;
-    didInitRef.current = true;
-
-    // If we already have SSR-provided items, avoid a forced refetch only on first paint.
-    // Always refetch when language changes (effect reruns).
-    const shouldFetchFirstPage = !isFirstRun || !initialStories.length;
-
     (async () => {
-      if (shouldFetchFirstPage) {
-        await loadPage(1);
-      }
       if (cancelled) return;
 
       const fallbackToLatestNational = async () => {
@@ -736,38 +778,7 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
     return () => {
       cancelled = true;
     };
-  }, [effectiveLang, initialStories.length, loadPage]);
-
-  // Auto refresh the feed to pick up newly translated stories.
-  React.useEffect(() => {
-    if (typeof window === 'undefined') return;
-    let cancelled = false;
-
-    const id = window.setInterval(() => {
-      const cur = refreshStateRef.current;
-      const curPage = Number(cur?.page || 1) || 1;
-      const limit = 20;
-      const requested = curPage * limit;
-
-      (async () => {
-        try {
-          const resp = await fetchPublicNews({ category: 'national', language: effectiveLang, limit: requested });
-          if (cancelled) return;
-          if (resp?.error) return;
-          const items = Array.isArray(resp?.items) ? resp.items : [];
-          setHasMore(items.length >= requested);
-          setStories(items);
-        } catch {
-          // keep existing
-        }
-      })();
-    }, AUTO_REFRESH_MS);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-  }, [effectiveLang]);
+  }, [effectiveLang, props.data?.length]);
 
   const regionOptions = React.useMemo(() => {
     return ALL_REGIONS.map((r) => ({
@@ -782,27 +793,10 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
     return regionOptions.find((r) => r.slug === selectedRegion) || null;
   }, [regionOptions, selectedRegion]);
 
-  const filteredStories = React.useMemo(() => {
-    const q = normalize(searchQuery);
-    let list = stories;
-
-    if (selectedTopic !== 'All') {
-      list = list.filter((s) => matchesTopic(s, selectedTopic));
-    }
-
-    if (activeRegionEntry) {
-      list = list.filter((s) => matchRegion(s, activeRegionEntry.name));
-    }
-
-    if (q) {
-      list = list.filter((s) => {
-        const text = normalize(`${s?.title || ''} ${s?.excerpt || ''} ${s?.summary || ''} ${s?.content || ''} ${s?.searchText || ''}`);
-        return text.includes(q);
-      });
-    }
-
-    return list;
-  }, [activeRegionEntry, searchQuery, selectedTopic, stories]);
+  const filteredStories = React.useMemo(
+    () => filterNationalStories(stories, selectedTopic, activeRegionEntry?.name, searchQuery),
+    [activeRegionEntry, searchQuery, selectedTopic, stories]
+  );
 
   const sortedStories = React.useMemo(() => {
     const copy = [...filteredStories];
@@ -1048,20 +1042,17 @@ export const getStaticProps: GetStaticProps = async ({ locale }) => {
       return { props: { lang, data: [], breaking: [], messages }, revalidate: NATIONAL_STATIC_REVALIDATE_SECONDS };
     }
 
-    const limit = 40;
-    const params = new URLSearchParams();
-    params.set('category', 'national');
-    params.set('lang', lang);
-    params.set('language', lang);
-    params.set('limit', String(limit));
-
-    const endpoint = `${apiBase}/api/public/news?${params.toString()}`;
-    const items = await withTimeoutSignal(NATIONAL_BUILD_FETCH_TIMEOUT_MS, async (signal) => {
-      const res = await fetch(endpoint, { headers: { Accept: 'application/json' }, signal });
-      const json = await res.json().catch(() => null);
-      if (!res.ok) return [];
-      return Array.isArray(json?.items) ? json.items : Array.isArray(json?.articles) ? json.articles : Array.isArray(json?.data) ? json.data : [];
-    }).catch(() => []);
+    let initialPagination: OrdinaryCategoryPagination | undefined;
+    const items = await fetchCategoryFeedPage({
+      category: 'national', language: lang, page: 1, limit: NATIONAL_FEED_BATCH_SIZE,
+      timeoutMs: NATIONAL_BUILD_FETCH_TIMEOUT_MS,
+    }).then((result) => {
+      initialPagination = result.pagination;
+      return result.items;
+    }).catch((error) => {
+      console.error('SSR national feed error', error);
+      return [];
+    });
 
     // LIVE UPDATES strip (national-only): use ticker endpoint with fallback to latest national stories.
     const breaking = await (async () => {
@@ -1095,6 +1086,7 @@ export const getStaticProps: GetStaticProps = async ({ locale }) => {
         data: compactNationalArticlesForProps(items, lang),
         breaking,
         messages,
+        ...(initialPagination ? { initialPagination } : {}),
       },
       revalidate: NATIONAL_STATIC_REVALIDATE_SECONDS,
     };

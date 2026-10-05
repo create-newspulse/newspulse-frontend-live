@@ -5,6 +5,6 @@ import { getCategoryStaticProps, type CategoryPageProps } from '../../lib/catego
 
 export const getStaticProps: GetStaticProps<CategoryPageProps> = (ctx) => getCategoryStaticProps(ctx, 'tech-gadgets');
 
-export default function TechGadgetsPage({ initialItems }: CategoryPageProps) {
-  return <CategoryFeedPage title="Tech & Gadgets" categoryKey="tech-gadgets" useCategoryShell initialItems={initialItems} />;
+export default function TechGadgetsPage({ initialItems, initialPagination, locale }: CategoryPageProps) {
+  return <CategoryFeedPage title="Tech & Gadgets" categoryKey="tech-gadgets" useCategoryShell initialItems={initialItems} initialPagination={initialPagination} initialLocale={locale} />;
 }

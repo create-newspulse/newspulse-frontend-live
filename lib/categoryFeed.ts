@@ -1,7 +1,10 @@
 import { getCategoryQueryKey } from './categoryKeys';
-import { filterPubliclyPublishedArticles, getLocalizedArticleFields, STRICT_LOCALE_POLICY } from './localizedArticleFields';
+import { filterPubliclyPublishedArticles, getLocalizedArticleFields, normalizeRouteLocale, STRICT_LOCALE_POLICY } from './localizedArticleFields';
 import { fetchPublicNews, type Article } from './publicNewsApi';
 import { getStoryId } from './storyIdentity';
+import { getOrdinaryCategoryPagination, validateOrdinaryPageRequest, type OrdinaryCategoryPagination } from './ordinaryCategoryPagination';
+import { withPublicReadDeadline } from './publicReadDeadline';
+import { pickFreshestArticlesForLocale } from './translationGroupSync';
 
 export const CATEGORY_FEED_BATCH_SIZE = 30;
 export const CATEGORY_FEED_TIMEOUT_MS = 4000;
@@ -101,4 +104,47 @@ export async function fetchCategoryFeed(options: Parameters<typeof fetchPublicNe
     clearTimeout(timer);
     options.signal?.removeEventListener('abort', cancel);
   }
+}
+
+export type CategoryFeedPageResult = {
+  items: Article[];
+  pagination: OrdinaryCategoryPagination;
+};
+
+export function mergeCategoryFeedPages(current: Article[], incoming: Article[], language: string, strictLocale = true): Article[] {
+  return dedupeArticles(pickFreshestArticlesForLocale({
+    articles: [...current, ...incoming],
+    locale: normalizeRouteLocale(language),
+    policy: strictLocale ? STRICT_LOCALE_POLICY : undefined,
+  }));
+}
+
+export async function fetchCategoryFeedPage(options: Parameters<typeof fetchPublicNews>[0] & {
+  category: string;
+  page: number;
+  limit: number;
+  selectItems?: (items: Article[]) => Article[];
+  isCurrent?: () => boolean;
+  timeoutMs?: number;
+}): Promise<CategoryFeedPageResult> {
+  const { selectItems, isCurrent, timeoutMs = CATEGORY_FEED_TIMEOUT_MS, ...request } = options;
+  const requested = validateOrdinaryPageRequest(request.category, request.page, request.limit);
+  for (const key of ['category', 'lang', 'language', 'page', 'limit']) {
+    if (request.extraQuery?.[key] !== undefined) throw new Error(`Category pagination cannot override ${key}`);
+  }
+  return withPublicReadDeadline(timeoutMs, async (signal) => {
+    let page = requested.page;
+    while (!signal.aborted && isCurrent?.() !== false) {
+      const response = await fetchPublicNews({ ...request, page, ordinaryPagination: true, signal });
+      if (signal.aborted || isCurrent?.() === false) throw new Error('Category page fetch cancelled');
+      if (response.error) throw new Error(response.error);
+      const pagination = response.meta.pagination
+        ?? getOrdinaryCategoryPagination(response.meta, { page, limit: requested.limit }, response.items.length);
+      const items = selectItems ? selectItems(response.items) : response.items;
+      if (items.length || !pagination.hasMore) return { items, pagination };
+      // Filtering an entire backend page does not exhaust the category.
+      page = pagination.page + 1;
+    }
+    throw new Error('Category page fetch cancelled');
+  }, options.signal);
 }
