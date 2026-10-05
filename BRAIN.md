@@ -86,6 +86,8 @@ Current root documentation includes:
 - `CHANGELOG.md`
 - `README.md`
 - `BRAIN.md`
+- [rules.md](./rules.md): contributor conventions and the mandatory safety checklist.
+- [architecture.md](./architecture.md): a code-linked map of the active application and integration boundaries.
 
 Prefer code and automated tests over manually maintained "verified" snapshots.
 

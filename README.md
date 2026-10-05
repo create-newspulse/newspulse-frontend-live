@@ -44,6 +44,10 @@
 
 ## 🚀 Quick Start
 
+For current project conventions and safety checks, read [rules.md](./rules.md).
+For application structure, data flows, and integration boundaries, read [architecture.md](./architecture.md).
+Use [package.json](./package.json) for current runtime and dependency requirements.
+
 ### Prerequisites
 - Node.js 18+ 
 - npm or yarn

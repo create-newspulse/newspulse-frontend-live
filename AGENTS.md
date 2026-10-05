@@ -1,6 +1,8 @@
 IMPORTANT: Never tell the user to git add, commit, push, or deploy until the mandatory News Pulse Pre-Commit / Pre-Deployment Safety Rules below have been completed.
 IMPORTANT: Localhost may generate a local/dev Reporter Portal OTP for logging in on localhost, but it must not silently use production OTP/email services.
 
+Read [rules.md](./rules.md) for project conventions and the mandatory safety checklist, and [architecture.md](./architecture.md) for the code map and integration boundaries.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know
