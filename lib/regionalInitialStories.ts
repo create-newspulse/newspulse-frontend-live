@@ -1,6 +1,6 @@
 import { getPublicApiBaseUrl } from './publicApiBase';
 import { dedupeRegionalFeedPayload, unwrapRegionalFeedItems } from './unwrapRegionalFeed';
-import { filterPubliclyPublishedArticles, getLocalizedArticleFields, STRICT_LOCALE_POLICY } from './localizedArticleFields';
+import { filterPubliclyPublishedArticles, getLocalizedArticleFields, normalizeRouteLocale, STRICT_LOCALE_POLICY } from './localizedArticleFields';
 import { withPublicReadDeadline } from './publicReadDeadline';
 
 export const REGIONAL_BLOCKED_IDS = new Set([
@@ -9,10 +9,15 @@ export const REGIONAL_BLOCKED_IDS = new Set([
 ]);
 
 export function selectRegionalInitialStories(payload: unknown, locale: string): any[] {
+  const requestedLocale = normalizeRouteLocale(locale);
+  const policy = {
+    ...STRICT_LOCALE_POLICY,
+    allowReadyTranslations: requestedLocale === 'en' || requestedLocale === 'hi',
+  };
   const items = unwrapRegionalFeedItems(dedupeRegionalFeedPayload(payload, locale));
   return filterPubliclyPublishedArticles(items).filter((item) => {
     if (REGIONAL_BLOCKED_IDS.has(String(item?._id || (item as any)?.id || ''))) return false;
-    const localized = getLocalizedArticleFields(item, locale, STRICT_LOCALE_POLICY);
+    const localized = getLocalizedArticleFields(item, locale, policy);
     return localized.isVisible && Boolean(localized.title);
   }).sort((left: any, right: any) => {
     const timestamp = (story: any) => {

@@ -80,6 +80,7 @@ The [homepage](./pages/index.tsx), [category feed](./components/CategoryFeedPage
 
 - [publicNewsApi.ts](./lib/publicNewsApi.ts) fetches news, unwraps backend response shapes, passes language/category parameters, and filters publicly published items.
 - [localizedArticleFields.ts](./lib/localizedArticleFields.ts) controls localized content and visibility. [newsRoutes.ts](./lib/newsRoutes.ts), [articleSlugs.ts](./lib/articleSlugs.ts), and [storyIdentity.ts](./lib/storyIdentity.ts) coordinate links and identity.
+- [regionalInitialStories.ts](./lib/regionalInitialStories.ts) opts Regional EN/HI selection into backend `ready` translations only when both the requested locale's title and body are present. Gujarati selection and the shared strict policy used by Home and other categories do not opt in.
 - [articleBody.ts](./lib/articleBody.ts) handles article-body content and controlled embeds; [seo.ts](./lib/seo.ts) centralizes SEO helpers. [The sitemap handlers](./pages/api/sitemap.ts) and [news sitemap handler](./pages/api/news-sitemap.ts) serve the corresponding rewritten public URLs.
 - Homepage SSR reads news, sponsored content, and public settings concurrently with bounded deadlines. Those initial props seed the page before client refreshes.
 

@@ -30,6 +30,8 @@ export type LocaleFallbackPolicy = {
    * article is visible on that locale route.
    */
   requireLocaleVariant?: boolean;
+  /** Opt in to ready translations only with a localized title and body. */
+  allowReadyTranslations?: boolean;
 };
 
 export const DEFAULT_FALLBACK_POLICY: LocaleFallbackPolicy = {
@@ -92,10 +94,11 @@ function getNested(obj: any, path: string[]): any {
   return cur;
 }
 
-function normTranslationStatus(raw: unknown): 'APPROVED' | 'BLOCKED' | 'PENDING' | 'REJECTED' | 'DRAFT' | 'UNKNOWN' | null {
+function normTranslationStatus(raw: unknown): 'APPROVED' | 'READY' | 'BLOCKED' | 'PENDING' | 'REJECTED' | 'DRAFT' | 'UNKNOWN' | null {
   const v = String(raw || '').toUpperCase().trim();
   if (!v) return null;
   if (v === 'APPROVED') return 'APPROVED';
+  if (v === 'READY') return 'READY';
   if (v === 'BLOCKED') return 'BLOCKED';
   if (v === 'PENDING') return 'PENDING';
   if (v === 'REJECTED') return 'REJECTED';
@@ -103,7 +106,7 @@ function normTranslationStatus(raw: unknown): 'APPROVED' | 'BLOCKED' | 'PENDING'
   return 'UNKNOWN';
 }
 
-function getLocaleTranslationStatus(article: any, locale: RouteLocale): 'APPROVED' | 'BLOCKED' | 'PENDING' | 'REJECTED' | 'DRAFT' | 'UNKNOWN' | null {
+function getLocaleTranslationStatus(article: any, locale: RouteLocale): 'APPROVED' | 'READY' | 'BLOCKED' | 'PENDING' | 'REJECTED' | 'DRAFT' | 'UNKNOWN' | null {
   const direct = typeof article?.translationStatus === 'string' ? normTranslationStatus(article?.translationStatus) : null;
   if (direct) return direct;
 
@@ -444,7 +447,13 @@ export function getLocalizedArticleFields(
   const shouldFallback = isCrossLocale && !translationFound;
   const translationStatus = getLocaleTranslationStatus(item, requestedLocale);
   const isSourceLocale = sourceLocale ? sourceLocale === requestedLocale : requestedLocale === 'en';
-  const hasLocaleVariant = isSourceLocale || (translationStatus ? translationStatus === 'APPROVED' : translationFound);
+  const hasReadyTranslation =
+    policy.allowReadyTranslations === true &&
+    translationStatus === 'READY' &&
+    titleResolved.translationFound &&
+    bodyResolved.translationFound;
+  const hasLocaleVariant =
+    isSourceLocale || hasReadyTranslation || (translationStatus ? translationStatus === 'APPROVED' : translationFound);
 
   if (policy.requireLocaleVariant && !hasLocaleVariant) {
     return {
