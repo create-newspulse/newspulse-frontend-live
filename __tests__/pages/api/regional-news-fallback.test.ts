@@ -1,7 +1,7 @@
 /** @jest-environment node */
 import type { NextApiRequest, NextApiResponse } from 'next';
 import handler from '../../../pages/api/public/regional';
-import { fetchRegionalInitialStories, REGIONAL_BLOCKED_IDS, selectRegionalInitialStories } from '../../../lib/regionalInitialStories';
+import { appendRegionalStories, fetchRegionalInitialStories, fetchRegionalStoryPage, getRegionalPagination, REGIONAL_BLOCKED_IDS, selectRegionalInitialStories } from '../../../lib/regionalInitialStories';
 import { unwrapRegionalFeedItems } from '../../../lib/unwrapRegionalFeed';
 
 jest.mock('../../../lib/publicApiBase', () => ({ getPublicApiBaseUrl: () => 'https://backend.test' }));
@@ -63,6 +63,109 @@ describe('Regional News fallback', () => {
       .mockResolvedValueOnce(upstream({ data: { items: [{ _id: 'lightweight', title: 'No publication metadata' }] } }))
       .mockResolvedValueOnce(upstream({ items }));
   }
+
+  test.each(['en', 'hi', 'gu'] as const)('%s current ten-story fallback reports real exhaustion', async (language) => {
+    const items = Array.from({ length: 10 }, (_, index) => story(language, index ? `story-${index}` : OCTOBER_IDS[language], new Date(Date.parse('2026-10-03T20:15:33.097Z') - index * 86400000).toISOString()));
+    fetchMock
+      .mockResolvedValueOnce(upstream({ items: [] }))
+      .mockResolvedValueOnce(upstream({ items, page: 1, limit: 30, total: 10, totalPages: 1 }));
+    const { payload } = await requestRegional({ lang: language, page: '1' });
+    expect(selectRegionalInitialStories(payload, language).map((item) => item._id)).toEqual(items.map((item) => item._id));
+    expect(payload.pagination).toEqual({ page: 1, limit: 30, total: 10, totalPages: 1, hasMore: false });
+  });
+
+  test.each(['en', 'hi', 'gu'] as const)('%s initial and browser loaders page through 100 stories as 30/30/30/10', async (language) => {
+    const items = Array.from({ length: 100 }, (_, index) => story(language, index ? `story-${index}` : OCTOBER_IDS[language], new Date(Date.parse('2026-10-03T20:15:33.097Z') - index * 86400000).toISOString()));
+    fetchMock.mockImplementation(async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/api/public/regional') return upstream({ items: [{ _id: 'lightweight', title: 'No publication fields' }] });
+      expect(url.pathname).toBe('/api/public/news');
+      expect(url.searchParams.get('category')).toBe('regional');
+      expect(url.searchParams.get('lang')).toBe(language);
+      expect(url.searchParams.get('language')).toBe(language);
+      expect(url.searchParams.get('limit')).toBe('30');
+      const page = Number(url.searchParams.get('page'));
+      return upstream({ items: items.slice((page - 1) * 30, page * 30), page, limit: 30, total: 100, totalPages: 4 });
+    });
+
+    let accumulated: Record<string, unknown>[] = [];
+    for (const page of [1, 2, 3, 4]) {
+      global.fetch = fetchMock;
+      const params = new URLSearchParams({ state: 'gujarat', lang: language, page: String(page), limit: '30' });
+      const initial = await fetchRegionalStoryPage(params, { server: true });
+      const { payload } = await requestRegional({ lang: language, page: String(page) });
+      const browserFetch = jest.fn().mockResolvedValue(upstream(payload));
+      global.fetch = browserFetch;
+      const browser = await fetchRegionalStoryPage(params);
+      expect(browserFetch).toHaveBeenCalledTimes(1);
+      expect(browserFetch.mock.calls[0][0]).toBe(`/api/public/regional?${params}`);
+      expect(browser).toEqual(initial);
+      expect(browser.stories).toHaveLength(page === 4 ? 10 : 30);
+      expect(browser.stories.map((item) => item._id)).toEqual(items.slice((page - 1) * 30, page * 30).map((item) => item._id));
+      expect(browser.pagination.hasMore).toBe(page < 4);
+      accumulated = appendRegionalStories(accumulated, browser.stories, language);
+      expect(accumulated).toHaveLength(Math.min(page * 30, 100));
+    }
+    expect(accumulated.map((item) => item._id)).toEqual(items.map((item) => item._id));
+    expect(accumulated[0]._id).toBe(OCTOBER_IDS[language]);
+    const fallbackPages = fetchMock.mock.calls.map(([input]) => new URL(String(input))).filter((url) => url.pathname === '/api/public/news');
+    expect(fallbackPages.map((url) => url.searchParams.get('page'))).toEqual(['1', '1', '2', '2', '3', '3', '4', '4']);
+  });
+
+  test('preserves backend totals before publication, language and slug filtering', async () => {
+    fetchMock
+      .mockResolvedValueOnce(upstream({ items: [] }))
+      .mockResolvedValueOnce(upstream({
+        items: [story(), { ...story(), _id: 'duplicate' }, story('gu'), { ...story('en', 'draft'), status: 'draft' }],
+        page: 1, limit: 30, total: 100, totalPages: 4,
+      }));
+    const { payload } = await requestRegional({ page: '1' });
+    expect(unwrapRegionalFeedItems(payload).map((item) => item._id)).toEqual([OCTOBER_IDS.en]);
+    expect(payload.pagination).toEqual({ page: 1, limit: 30, total: 100, totalPages: 4, hasMore: true });
+  });
+
+  test('uses raw fallback count before category filtering when backend totals are absent', async () => {
+    fallbackResponse([story(), ...Array.from({ length: 29 }, (_, index) => ({ ...story('en', `breaking-${index}`), category: 'breaking' }))]);
+    const { payload } = await requestRegional({ page: '1' });
+    expect(unwrapRegionalFeedItems(payload)).toHaveLength(1);
+    expect(payload.pagination.hasMore).toBe(true);
+  });
+
+  test('retains a successful primary and its nested pagination without calling News', async () => {
+    fetchMock.mockResolvedValueOnce(upstream({
+      data: { items: [story()], pagination: { page: 2, limit: 30, total: 65, totalPages: 3 } },
+    }));
+    const { payload } = await requestRegional({ page: '2' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(new URL(String(fetchMock.mock.calls[0][0])).pathname).toBe('/api/public/regional');
+    expect(payload.pagination).toEqual({ page: 2, limit: 30, total: 65, totalPages: 3, hasMore: true });
+  });
+
+  test('advances a completely ineligible page rather than claiming exhaustion', async () => {
+    const pending = { ...story(), sourceLanguage: 'gu', translationStatus: { en: 'pending' }, translations: { en: { title: 'English', content: 'English body' } } };
+    fetchMock.mockImplementation(async (input) => {
+      const page = Number(new URL(String(input), 'https://frontend.test').searchParams.get('page'));
+      return upstream({ items: page === 1 ? [pending] : [story('en', 'eligible-page-two')], page, limit: 30, total: 31, totalPages: 2 });
+    });
+    const result = await fetchRegionalStoryPage(new URLSearchParams({ lang: 'en', page: '1', limit: '30' }));
+    expect(result.stories.map((item) => item._id)).toEqual(['eligible-page-two']);
+    expect(result.pagination).toEqual({ page: 2, limit: 30, total: 31, totalPages: 2, hasMore: false });
+    expect(fetchMock.mock.calls.map(([input]) => new URL(String(input), 'https://frontend.test').searchParams.get('page'))).toEqual(['1', '2']);
+  });
+
+  test('does not disguise a paginated source failure as exhaustion', async () => {
+    fetchMock.mockRejectedValue(new Error('Offline'));
+    const { res, payload } = await requestRegional({ page: '2' });
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(payload).toEqual({ ok: false, message: 'REGIONAL_FEED_UNAVAILABLE' });
+  });
+
+  test('rejects incorrect page/limit metadata instead of appending a repeated or truncated page', () => {
+    expect(() => getRegionalPagination({ page: 1, limit: 30 }, { page: 2, limit: 30 })).toThrow('unexpected page or limit');
+    expect(() => getRegionalPagination({ page: 1, limit: 60 }, { page: 1, limit: 30 })).toThrow('unexpected page or limit');
+    expect(() => getRegionalPagination({ items: Array.from({ length: 31 }, () => story()) }, { page: 1, limit: 30 })).toThrow('exceeded the requested page size');
+    expect(() => getRegionalPagination({ page: 1, limit: 30, total: 100, hasMore: false })).toThrow('Inconsistent Regional pagination metadata');
+  });
 
   test.each(['en', 'hi', 'gu'] as const)('uses the requested %s News representation with both language parameters', async (language) => {
     const october = story(language);

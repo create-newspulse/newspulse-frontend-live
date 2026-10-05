@@ -9,6 +9,7 @@ import { formatEditorialDateTime } from '../../lib/storyDateTime';
 import { getStoryTitleHookColor, splitStoryTitleHook } from '../../lib/storyTitleHook';
 import StoryImage, { TopStoryImage } from '../../src/components/story/StoryImage';
 import { normalizeRouteLocale } from '../../lib/localizedArticleFields';
+import { getRegionalReadMinutes } from '../../lib/regionalListingStories';
 import CategoryStoryHierarchy, { type CategoryStoryHierarchyItem } from '../category/CategoryStoryHierarchy';
 
 type AnyStory = any;
@@ -48,11 +49,6 @@ function getStoryId(story: AnyStory): string {
   return String(story?._id || story?.id || '').trim();
 }
 
-function estimateReadMinutes(text: string): number {
-  const words = String(text || '').trim().split(/\s+/).filter(Boolean).length;
-  return Math.max(1, Math.ceil(words / 220));
-}
-
 function isRenderableStory(story: AnyStory, requestedLang: 'en' | 'hi' | 'gu'): boolean {
   const id = getStoryId(story);
   if (!id) return false;
@@ -83,7 +79,7 @@ function toStoryViewModel(story: AnyStory, requestedLang: 'en' | 'hi' | 'gu', fa
   const districtLabel = typeof getDistrictLabel === 'function' ? String(getDistrictLabel(story) || '').trim() : '';
   const dateText = formatEditorialDateTime(getStoryDateIso(story));
   const imageSrc = resolveCoverImageUrl(story) || COVER_PLACEHOLDER_SRC;
-  const readMinutes = estimateReadMinutes(`${title} ${summary} ${String(story?.content || '').trim()}`);
+  const readMinutes = getRegionalReadMinutes(story);
   const rawLang = String(story?.language || story?.lang || story?.sourceLang || story?.sourceLanguage || '').trim();
   const storyLocale = rawLang ? normalizeRouteLocale(rawLang) : null;
 

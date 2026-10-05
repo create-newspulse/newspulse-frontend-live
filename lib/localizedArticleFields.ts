@@ -106,7 +106,7 @@ function normTranslationStatus(raw: unknown): 'APPROVED' | 'READY' | 'BLOCKED' |
   return 'UNKNOWN';
 }
 
-function getLocaleTranslationStatus(article: any, locale: RouteLocale): 'APPROVED' | 'READY' | 'BLOCKED' | 'PENDING' | 'REJECTED' | 'DRAFT' | 'UNKNOWN' | null {
+export function getLocaleTranslationStatus(article: any, locale: RouteLocale): 'APPROVED' | 'READY' | 'BLOCKED' | 'PENDING' | 'REJECTED' | 'DRAFT' | 'UNKNOWN' | null {
   const direct = typeof article?.translationStatus === 'string' ? normTranslationStatus(article?.translationStatus) : null;
   if (direct) return direct;
 

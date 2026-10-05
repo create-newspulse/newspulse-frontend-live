@@ -2,6 +2,12 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 
 import RegionalHomeStorySections from '../../components/regional/RegionalHomeStorySections';
+import { HomeRightRailLatestNews } from '../../components/home/HomeRightRail';
+import { compactRegionalInitialStories } from '../../lib/regionalListingStories';
+
+jest.mock('../../src/i18n/LanguageProvider', () => ({
+  useI18n: () => ({ t: (key: string) => key }),
+}));
 
 jest.mock('next/link', () => ({
   __esModule: true,
@@ -10,11 +16,66 @@ jest.mock('next/link', () => ({
 
 jest.mock('../../src/components/story/StoryImage', () => ({
   __esModule: true,
-  default: ({ alt }: { alt: string }) => <img alt={alt} />,
-  TopStoryImage: ({ alt }: { alt: string }) => <img alt={alt} />,
+  default: ({ alt, src }: { alt: string; src: string }) => <img alt={alt} src={src} />,
+  TopStoryImage: ({ alt, src }: { alt: string; src: string }) => <img alt={alt} src={src} />,
 }));
 
 describe('RegionalHomeStorySections', () => {
+  test.each(['en', 'hi', 'gu'] as const)('%s preserves the Regional shell right-rail fallback, including time and Original label', (locale) => {
+    const story = {
+      _id: 'regional-sidebar-story',
+      slug: 'regional-sidebar-slug',
+      title: 'Regional sidebar headline',
+      category: 'regional',
+      language: locale,
+      status: 'published',
+      publishedAt: '2026-10-03T20:15:33.097Z',
+      time: '4 Oct 2026 | 1:45 AM',
+      titleIsOriginal: true,
+    };
+    const raw = render(<HomeRightRailLatestNews items={[story]} lang={locale} />);
+    const before = raw.container.innerHTML;
+    raw.unmount();
+    const compact = render(<HomeRightRailLatestNews items={compactRegionalInitialStories([story], locale)} lang={locale} />);
+    expect(compact.container.innerHTML).toBe(before);
+    expect(screen.getByText(story.time)).toBeTruthy();
+  });
+
+  test.each(['en', 'hi', 'gu'] as const)('%s renders identical raw/compact cards and all ten stories before caught-up', (locale) => {
+    const stories = Array.from({ length: 10 }, (_, index) => ({
+      _id: `story-${index}`,
+      title: index ? `Regional story ${index}` : 'October bridge Top Story',
+      summary: `Regional summary ${index}`,
+      content: '<p>Long regional body word </p>'.repeat(200),
+      category: 'regional',
+      language: locale,
+      sourceLanguage: locale,
+      status: 'published',
+      publishedAt: new Date(Date.parse('2026-10-03T20:15:33.097Z') - index * 86400000).toISOString(),
+      coverImage: { url: `https://images.example.test/story-${index}.jpg` },
+      location: { district: 'Ahmedabad', city: 'Ahmedabad' },
+    }));
+    const props = {
+      requestedLang: locale,
+      stateName: 'Gujarat',
+      categoryLabel: 'Latest from Gujarat',
+      emptyTitle: 'No stories match your filters.',
+      readMoreLabel: 'Read more',
+      fallbackCategoryLabel: 'Regional',
+      getDistrictLabel: (item: typeof stories[number]) => item.location.district,
+      hasMore: false,
+    };
+    const raw = render(<RegionalHomeStorySections {...props} stories={stories} />);
+    const before = raw.container.innerHTML;
+    raw.unmount();
+    const compact = render(<RegionalHomeStorySections {...props} stories={compactRegionalInitialStories(stories, locale)} />);
+    expect(compact.container.innerHTML).toBe(before);
+    expect(screen.getByText(/all caught up/i)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /load more/i })).toBeNull();
+    for (const item of stories) expect(screen.getAllByRole('link').some((link) => link.getAttribute('href')?.endsWith(`/news/${item._id}`))).toBe(true);
+    expect(screen.getByText('October bridge Top Story')).toBeTruthy();
+  });
+
   test('renders top story and fresh stories from filtered Regional data', () => {
     render(
       <RegionalHomeStorySections

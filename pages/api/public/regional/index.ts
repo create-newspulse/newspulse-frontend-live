@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 
 import { getPublicApiBaseUrl } from '../../../../lib/publicApiBase';
 import { fetchRegionalFeedSource } from '../../../../lib/regionalFeedSource';
+import { unwrapRegionalFeedItems } from '../../../../lib/unwrapRegionalFeed';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Prevent edge/browser caching; regional feeds must reflect deletes/unpublishes quickly.
@@ -24,5 +25,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     query: req.query,
     headers: req.headers,
   });
+  if (req.query.page !== undefined && 'upstreamError' in result) {
+    return res.status(503).json({ ok: false, message: 'REGIONAL_FEED_UNAVAILABLE' });
+  }
+  if (result.pagination) {
+    const payload = result.payload !== null && typeof result.payload === 'object' && !Array.isArray(result.payload)
+      ? result.payload : { items: unwrapRegionalFeedItems(result.payload) };
+    return res.status(result.status).json({ ...payload, pagination: result.pagination });
+  }
   return res.status(result.status).json(result.payload);
 }

@@ -58,7 +58,10 @@ describe('Gujarat initial loading', () => {
     const props = await result.props;
 
     expect(result.revalidate).toBe(60);
-    expect(props.initialStories).toEqual([october, september, may]);
+    expect(props.initialStories.map((item: { _id: string }) => item._id)).toEqual([october._id, september._id, may._id]);
+    expect(selectRegionalInitialStories(props.initialStories, locale).map((item) => item._id)).toEqual([october._id, september._id, may._id]);
+    expect(props.initialPagination).toEqual({ page: 1, limit: 30, hasMore: false });
+    expect(new URL(String(fetchMock.mock.calls[0][0])).searchParams.get('page')).toBe('1');
     expect(fetchMock).toHaveBeenCalledTimes(2);
     fetchMock.mockClear();
     render(<GujaratPage {...props} />);
