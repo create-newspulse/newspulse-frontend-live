@@ -35,6 +35,19 @@ export async function fetchRegionalInitialStories(params: URLSearchParams, optio
   const base = options.server ? String(getPublicApiBaseUrl() || '').replace(/\/+$/, '') : '';
   if (options.server && !base) throw new Error('Regional backend not configured');
   return withPublicReadDeadline(4000, async (signal) => {
+    if (options.server) {
+      const { fetchRegionalFeedSource } = await import('./regionalFeedSource');
+      const result = await fetchRegionalFeedSource({
+        base,
+        url: `/api/public/regional?${params.toString()}`,
+        query: Object.fromEntries(params),
+        headers: {},
+        signal,
+      });
+      if ('upstreamError' in result) throw result.upstreamError;
+      if (result.status < 200 || result.status >= 300) throw new Error(`Regional feed unavailable (${result.status})`);
+      return selectRegionalInitialStories(result.payload, params.get('lang') || 'en');
+    }
     const response = await fetch(`${base}/api/public/regional?${params.toString()}`, {
       method: 'GET', cache: 'no-store', headers: { Accept: 'application/json' }, signal,
     });

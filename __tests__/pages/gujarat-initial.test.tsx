@@ -32,7 +32,7 @@ describe('Gujarat initial loading', () => {
   afterEach(() => { cleanup(); jest.useRealTimers(); });
   test.each(['en', 'hi', 'gu'])('%s initial stories render immediately without hydration requests', async (locale) => {
     mockLocale = locale;
-    global.fetch = jest.fn(async () => ({ ok: true, json: async () => ({ items: [story(locale), story(locale === 'en' ? 'hi' : 'en', 'Wrong locale')] }) })) as any;
+    global.fetch = jest.fn(async () => new Response(JSON.stringify({ items: [story(locale), story(locale === 'en' ? 'hi' : 'en', 'Wrong locale')] })));
     const result = await getStaticProps({ locale, revalidateReason: 'build' } as any) as any;
     expect(result.revalidate).toBe(60);
     expect(global.fetch).toHaveBeenCalledTimes(1);
@@ -43,9 +43,37 @@ describe('Gujarat initial loading', () => {
     expect(screen.queryByText('Loading stories')).toBeNull();
     expect(global.fetch).not.toHaveBeenCalled();
   });
+  test.each(['en', 'hi', 'gu'])('%s ISR props render the News fallback immediately with October first', async (locale) => {
+    mockLocale = locale;
+    const may = { ...story(locale, 'May Regional'), slug: 'may-regional', publishedAt: '2026-05-19T09:46:24.291Z' };
+    const september = { ...story(locale, 'September Regional'), slug: 'september-regional', publishedAt: '2026-09-22T18:25:18.049Z' };
+    const october = { ...story(locale, 'October bridge'), slug: 'october-bridge', publishedAt: '2026-10-03T20:15:33.097Z' };
+    const fetchMock = jest.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ ...may, status: undefined }] })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [may, september, october] })));
+    global.fetch = fetchMock;
+
+    const result = await getStaticProps({ locale, revalidateReason: 'build' });
+    if (!('props' in result)) throw new Error('Expected Regional initial props');
+    const props = await result.props;
+
+    expect(result.revalidate).toBe(60);
+    expect(props.initialStories).toEqual([october, september, may]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    fetchMock.mockClear();
+    render(<GujaratPage {...props} />);
+    expect(screen.getByText('October bridge')).toBeTruthy();
+    expect(screen.queryByText('Loading stories')).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
   test.each(['headers', 'body'])('stalled initial %s returns empty build props at four seconds', async (stage) => {
     jest.useFakeTimers();
-    global.fetch = jest.fn(() => stage === 'headers' ? new Promise(() => {}) : Promise.resolve({ ok: true, json: () => new Promise(() => {}) })) as any;
+    global.fetch = jest.fn(() => {
+      if (stage === 'headers') return new Promise<Response>(() => {});
+      const response = new Response('');
+      jest.spyOn(response, 'text').mockReturnValue(new Promise<string>(() => {}));
+      return Promise.resolve(response);
+    });
     let completed = false;
     const pending = Promise.resolve(getStaticProps({ locale: 'gu', revalidateReason: 'build' } as any)).then((result) => { completed = true; return result; });
     await jest.advanceTimersByTimeAsync(4000);
