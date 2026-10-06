@@ -209,10 +209,10 @@ export default function SharedMobileNavigationDrawer({
   ].filter((item) => !item.hidden);
 
   const quickAccess = [
-    { key: 'latest', label: `${t('home.latest')} News`, href: localizePath('/latest', lang), Icon: Bell },
-    { key: 'breaking', label: 'Breaking News', href: localizedBreakingHref('breaking', lang), Icon: Flame },
-    { key: 'live', label: 'Live Updates', href: localizedBreakingHref('live', lang), Icon: Radio },
-    { key: 'top-stories', label: 'Top Stories', href: `${localizePath('/', lang)}#top-story`, Icon: Flag },
+    { key: 'latest', label: t('mobileMenu.latestNews'), href: localizePath('/latest', lang), Icon: Bell },
+    { key: 'breaking', label: t('mobileMenu.breakingNews'), href: localizedBreakingHref('breaking', lang), Icon: Flame },
+    { key: 'live', label: t('mobileMenu.liveUpdates'), href: localizedBreakingHref('live', lang), Icon: Radio },
+    { key: 'top-stories', label: t('mobileMenu.topStories'), href: `${localizePath('/', lang)}#top-story`, Icon: Flag },
     { key: 'advertise', label: t('footer.advertiseWithUs'), href: localizePath('/advertise-with-us', lang), Icon: Briefcase },
   ];
 
@@ -275,7 +275,7 @@ export default function SharedMobileNavigationDrawer({
 
                       <div className="rounded-[26px] border p-3" style={{ borderColor: theme.border, background: theme.surface2 }}>
                         <div className="mb-3 text-[11px] font-black uppercase tracking-[0.18em]" style={{ color: theme.sub }}>
-                          Quick Access
+                          {t('mobileMenu.quickAccess')}
                         </div>
                         <div className="grid gap-2">
                           {quickAccess.map((item) => (

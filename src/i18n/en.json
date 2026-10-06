@@ -114,6 +114,13 @@
     "untitled": "Untitled",
     "video": "Video"
   },
+  "mobileMenu": {
+    "quickAccess": "Quick Access",
+    "latestNews": "Latest News",
+    "breakingNews": "Breaking News",
+    "liveUpdates": "Live Updates",
+    "topStories": "Top Stories"
+  },
   "brand": {
     "name": "News Pulse",
     "tagline": "Your pulse on the world’s latest news"

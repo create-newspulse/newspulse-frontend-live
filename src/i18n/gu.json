@@ -114,6 +114,13 @@
     "untitled": "શીર્ષક નથી",
     "video": "વીડિયો"
   },
+  "mobileMenu": {
+    "quickAccess": "ઝડપી ઍક્સેસ",
+    "latestNews": "તાજા સમાચાર",
+    "breakingNews": "બ્રેકિંગ ન્યૂઝ",
+    "liveUpdates": "લાઇવ અપડેટ્સ",
+    "topStories": "મુખ્ય સમાચાર"
+  },
   "brand": {
     "name": "News Pulse",
     "tagline": "દુનિયાની તાજી ખબરોથી તમારી પલ્સ"

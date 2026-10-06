@@ -141,6 +141,7 @@ Reporter sign-in uses same-origin [reporter-auth API handlers](./pages/api/repor
 
 - [next.config.js](./next.config.js) defines `en`, `hi`, and `gu`, with English as the default and automatic locale detection disabled. [LanguageProvider.tsx](./src/i18n/LanguageProvider.tsx) uses the route-derived initial language; preference persistence is a separate concern.
 - Runtime dictionaries live alongside that provider. [getMessages.ts](./lib/getMessages.ts) loads the separate [messages/](./messages/) dictionaries for page props. Preserve both consumers when changing shared copy.
+- [SharedMobileNavigationDrawer.tsx](./src/components/layout/SharedMobileNavigationDrawer.tsx) uses the runtime `mobileMenu` keys for complete Quick Access labels, separate from ticker and desktop copy.
 - [cookieConsent.ts](./src/consent/cookieConsent.ts) models necessary, preferences, analytics, advertising, and embedded-media categories. Optional categories default to denied. This consent model does not replace checking each integration's actual behavior.
 - [EmbeddedMediaConsentGate.tsx](./src/consent/EmbeddedMediaConsentGate.tsx) is the shared UI boundary for gated media.
 - Firebase browser messaging uses [firebaseClient.ts](./lib/firebaseClient.ts), [firebaseMessaging.ts](./lib/firebaseMessaging.ts), [public push handlers](./pages/api/public/push/), and [firebase-messaging-sw.js](./public/firebase-messaging-sw.js). Keep browser-safe Firebase configuration separate from server credentials.

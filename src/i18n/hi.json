@@ -114,6 +114,13 @@
     "untitled": "शीर्षक नहीं",
     "video": "वीडियो"
   },
+  "mobileMenu": {
+    "quickAccess": "त्वरित पहुँच",
+    "latestNews": "नवीनतम समाचार",
+    "breakingNews": "ब्रेकिंग न्यूज़",
+    "liveUpdates": "लाइव अपडेट्स",
+    "topStories": "प्रमुख खबरें"
+  },
   "brand": {
     "name": "News Pulse",
     "tagline": "दुनिया की ताज़ा ख़बरों की आपकी पल्स"
