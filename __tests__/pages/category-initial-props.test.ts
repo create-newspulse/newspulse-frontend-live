@@ -34,7 +34,9 @@ describe('shared category initial props', () => {
           story(category, locale, { _id: 'future', publishedAt: '2099-01-01T10:00:00.000Z' }),
           story(category, locale === 'en' ? 'gu' : 'en', { _id: 'wrong-language' }),
           story('national', locale, { _id: 'wrong-category' }),
-        ], meta: {}, endpoint: '/api/public/news',
+        ],
+        meta: category === 'faith-culture' ? { page: 1, limit: 30, total: 6, totalPages: 1, hasMore: false } : {},
+        endpoint: '/api/public/news',
       });
       const route = require(`../../pages/${category}`);
       expect(route.getServerSideProps).toBeUndefined();

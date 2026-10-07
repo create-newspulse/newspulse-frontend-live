@@ -6,6 +6,7 @@ import { getCategoryQueryKey, getCategoryRouteKey } from '../lib/categoryKeys';
 import type { Article } from '../lib/publicNewsApi';
 import { CATEGORY_FEED_BATCH_SIZE, CATEGORY_FEED_REFRESH_MS, fetchCategoryFeed, fetchCategoryFeedPage, mergeCategoryFeedPages, selectCategoryFeedArticles, type CategoryFeedPageResult } from '../lib/categoryFeed';
 import { getOrdinaryCategoryBatchSize, isOrdinaryPaginatedCategory, type OrdinaryCategoryPagination } from '../lib/ordinaryCategoryPagination';
+import { FAITH_CULTURE_PAGE_SIZE, isFaithCultureCategory } from '../lib/faithCulturePagination';
 import { getLocalizedArticleFields, STRICT_LOCALE_POLICY } from '../lib/localizedArticleFields';
 import { useLanguage } from '../utils/LanguageContext';
 import { useI18n } from '../src/i18n/LanguageProvider';
@@ -160,8 +161,9 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
   const router = useRouter();
   const { language } = useLanguage();
   const { t } = useI18n();
-  const pagedCategory = isOrdinaryPaginatedCategory(categoryKey);
-  const batchSize = pagedCategory ? getOrdinaryCategoryBatchSize(categoryKey) : CATEGORY_FEED_BATCH_SIZE;
+  const faithPagination = isFaithCultureCategory(categoryKey);
+  const pagedCategory = faithPagination || isOrdinaryPaginatedCategory(categoryKey);
+  const batchSize = faithPagination ? FAITH_CULTURE_PAGE_SIZE : pagedCategory ? getOrdinaryCategoryBatchSize(categoryKey) : CATEGORY_FEED_BATCH_SIZE;
   const seedMatchesLocale = !initialLocale || initialLocale === language;
   const seedPagination = pagedCategory && seedMatchesLocale ? initialPagination : undefined;
   const initialCategoryItems = React.useMemo(
@@ -301,7 +303,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
       setLoadMoreError(null);
     } catch (failure) {
       if (signal?.aborted || activeFeedRequestRef.current !== requestKey) return;
-      const message = failure instanceof Error ? failure.message : t('errors.fetchFailed');
+      const message = !faithPagination && failure instanceof Error ? failure.message : t('errors.fetchFailed');
       setLoaded(true);
       if (!hasDisplayItemsRef.current) {
         setError(message);
@@ -317,7 +319,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
       }
       if (inFlightFeedRequestRef.current === requestKey) inFlightFeedRequestRef.current = '';
     }
-  }, [batchSize, feedContextKey, fetchQuery, language, pagedCategory, queryCategoryKey, selectPageItems, t]);
+  }, [batchSize, faithPagination, feedContextKey, fetchQuery, language, pagedCategory, queryCategoryKey, selectPageItems, t]);
 
   React.useEffect(() => {
     const controller = new AbortController();
@@ -602,7 +604,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
           {isUnauthorized ? t('categoryPage.publicFeedProtected') : t('categoryPage.ensureBackendRunning')}
         </div>
       </div>
-    ) : loaded && items.length === 0 ? (
+    ) : loaded && items.length === 0 && !(faithPagination && hasMore) ? (
       <div className="mt-8 rounded-2xl border border-newsPulse-slate/25 bg-newsPulse-white p-6">
         <div className="text-lg font-semibold text-newsPulse-navy">{t('categoryPage.noStoriesYet')}</div>
       </div>
@@ -622,6 +624,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
         hasMore={hasMore}
         loadingMore={loadingMore}
         loadMoreError={loadMoreError}
+        showLoadMoreWhenEmpty={faithPagination}
         autoLoadMore
         onLoadMore={loadNextPage}
       />

@@ -5,6 +5,6 @@ import { getCategoryStaticProps, type CategoryPageProps } from '../../lib/catego
 
 export const getStaticProps: GetStaticProps<CategoryPageProps> = (ctx) => getCategoryStaticProps(ctx, 'faith-culture');
 
-export default function FaithCulturePage({ initialItems }: CategoryPageProps) {
-  return <CategoryFeedPage title="Faith & Culture" categoryKey="faith-culture" useCategoryShell initialItems={initialItems} />;
+export default function FaithCulturePage({ initialItems, initialPagination, locale }: CategoryPageProps) {
+  return <CategoryFeedPage title="Faith & Culture" categoryKey="faith-culture" useCategoryShell initialItems={initialItems} initialPagination={initialPagination} initialLocale={locale} />;
 }

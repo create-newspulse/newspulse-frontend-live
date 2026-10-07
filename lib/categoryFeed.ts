@@ -5,6 +5,7 @@ import { getStoryId } from './storyIdentity';
 import { getOrdinaryCategoryPagination, validateOrdinaryPageRequest, type OrdinaryCategoryPagination } from './ordinaryCategoryPagination';
 import { withPublicReadDeadline } from './publicReadDeadline';
 import { pickFreshestArticlesForLocale } from './translationGroupSync';
+import { getFaithCulturePagination, isFaithCultureCategory, validateFaithCulturePageRequest } from './faithCulturePagination';
 
 export const CATEGORY_FEED_BATCH_SIZE = 30;
 export const CATEGORY_FEED_TIMEOUT_MS = 4000;
@@ -77,6 +78,7 @@ export function selectCategoryFeedArticles(articles: Article[] | null | undefine
     const leftTime = getCategoryPublishTimeValue(left);
     const rightTime = getCategoryPublishTimeValue(right);
     if (leftTime !== rightTime) return rightTime - leftTime;
+    if (isFaithCultureCategory(categoryKey)) return 0;
     return String((left as any)?._id || (left as any)?.id || left?.slug || '')
       .localeCompare(String((right as any)?._id || (right as any)?.id || right?.slug || ''));
   }));
@@ -128,20 +130,25 @@ export async function fetchCategoryFeedPage(options: Parameters<typeof fetchPubl
   timeoutMs?: number;
 }): Promise<CategoryFeedPageResult> {
   const { selectItems, isCurrent, timeoutMs = CATEGORY_FEED_TIMEOUT_MS, ...request } = options;
-  const requested = validateOrdinaryPageRequest(request.category, request.page, request.limit);
+  const faithPagination = isFaithCultureCategory(request.category);
+  const requested = faithPagination
+    ? validateFaithCulturePageRequest(request.category, request.page, request.limit, request.language)
+    : validateOrdinaryPageRequest(request.category, request.page, request.limit);
   for (const key of ['category', 'lang', 'language', 'page', 'limit']) {
     if (request.extraQuery?.[key] !== undefined) throw new Error(`Category pagination cannot override ${key}`);
   }
   return withPublicReadDeadline(timeoutMs, async (signal) => {
     let page = requested.page;
     while (!signal.aborted && isCurrent?.() !== false) {
-      const response = await fetchPublicNews({ ...request, page, ordinaryPagination: true, signal });
+      const response = await fetchPublicNews({
+        ...request, page, ordinaryPagination: !faithPagination, faithPagination, signal,
+      });
       if (signal.aborted || isCurrent?.() === false) throw new Error('Category page fetch cancelled');
       if (response.error) throw new Error(response.error);
       const pagination = response.meta.pagination
-        ?? getOrdinaryCategoryPagination(response.meta, { page, limit: requested.limit }, response.items.length);
+        ?? (faithPagination ? getFaithCulturePagination : getOrdinaryCategoryPagination)(response.meta, { page, limit: requested.limit }, response.items.length);
       const items = selectItems ? selectItems(response.items) : response.items;
-      if (items.length || !pagination.hasMore) return { items, pagination };
+      if (faithPagination || items.length || !pagination.hasMore) return { items, pagination };
       // Filtering an entire backend page does not exhaust the category.
       page = pagination.page + 1;
     }

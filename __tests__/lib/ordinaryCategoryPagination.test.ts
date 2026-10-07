@@ -32,7 +32,7 @@ describe('ordinary category bounded page contract', () => {
     expect(getOrdinaryCategoryBatchSize(category)).toBe(category === 'national' ? 20 : 30);
   });
 
-  test.each(['regional', 'faith-culture', 'editorial', 'web-stories', 'viral-videos', 'pulse-dialogue', 'youth-pulse', 'community-reporter', 'inspiration-hub'])(
+  test.each(['regional', 'editorial', 'web-stories', 'viral-videos', 'pulse-dialogue', 'youth-pulse', 'community-reporter', 'inspiration-hub'])(
     'rejects %s without making a request', async (category) => {
       await expect(fetchCategoryFeedPage({ category, language: 'en', page: 1, limit: 30 })).rejects.toThrow('Unsupported');
       expect(fetchMock).not.toHaveBeenCalled();

@@ -45,6 +45,7 @@ type Props = {
   loadingMore?: boolean;
   loadMoreError?: string | null;
   autoLoadMore?: boolean;
+  showLoadMoreWhenEmpty?: boolean;
   endOfFeedLabel?: string;
   onLoadMore?: () => void;
   renderTopActions?: (item: CategoryStoryHierarchyItem) => React.ReactNode;
@@ -469,6 +470,7 @@ export default function CategoryStoryHierarchy({
   loadingMore = false,
   loadMoreError = null,
   autoLoadMore = false,
+  showLoadMoreWhenEmpty = false,
   endOfFeedLabel = "You're all caught up.",
   onLoadMore,
   renderTopActions,
@@ -502,6 +504,9 @@ export default function CategoryStoryHierarchy({
       <div className="rounded-[28px] border border-slate-200/80 bg-white p-6 shadow-sm">
         <div className="text-base font-semibold text-newsPulse-navy">{emptyTitle}</div>
         {emptyHint ? <div className="mt-2 text-sm leading-6 text-newsPulse-slate">{emptyHint}</div> : null}
+        {showLoadMoreWhenEmpty && canLoadMore ? (
+          <LoadMoreBoundary canLoadMore loadingMore={loadingMore} loadMoreLabel={loadMoreLabel} loadMoreError={loadMoreError} autoLoadMore={false} onLoadMore={handleLoadMore} />
+        ) : null}
       </div>
     );
   }

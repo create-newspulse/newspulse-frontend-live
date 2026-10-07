@@ -3,6 +3,7 @@ import { CATEGORY_FEED_BATCH_SIZE, CATEGORY_FEED_REFRESH_MS, fetchCategoryFeed, 
 import { getArticleReadingTime } from './editorialDisplay';
 import type { Article } from './publicNewsApi';
 import { getOrdinaryCategoryBatchSize, isOrdinaryPaginatedCategory, type OrdinaryCategoryPagination } from './ordinaryCategoryPagination';
+import { FAITH_CULTURE_PAGE_SIZE, isFaithCultureCategory } from './faithCulturePagination';
 
 export type CategoryPageProps = {
   messages: any;
@@ -36,9 +37,10 @@ export async function getCategoryStaticProps(ctx: GetStaticPropsContext, categor
   let initialItems: Article[] = [];
   let initialPagination: OrdinaryCategoryPagination | undefined;
   try {
-    if (isOrdinaryPaginatedCategory(category)) {
+    if (isFaithCultureCategory(category) || isOrdinaryPaginatedCategory(category)) {
       const response = await fetchCategoryFeedPage({
-        category, language: locale, page: 1, limit: getOrdinaryCategoryBatchSize(category),
+        category, language: locale, page: 1,
+        limit: isFaithCultureCategory(category) ? FAITH_CULTURE_PAGE_SIZE : getOrdinaryCategoryBatchSize(category),
         extraQuery: { strictLocale: '1' },
         selectItems: (items) => selectCategoryFeedArticles(items, category, locale),
       });
@@ -57,7 +59,7 @@ export async function getCategoryStaticProps(ctx: GetStaticPropsContext, categor
         .map(compactCategoryArticle);
     }
   } catch (error) {
-    if (ctx.revalidateReason === 'stale') throw error;
+    if (isFaithCultureCategory(category) || ctx.revalidateReason === 'stale') throw error;
   }
   return {
     props: { messages, locale, initialItems, ...(initialPagination ? { initialPagination } : {}) },

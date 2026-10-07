@@ -3,6 +3,7 @@ import { getCategoryQueryKey } from './categoryKeys';
 import { filterPubliclyPublishedArticles } from './localizedArticleFields';
 import type { AuthorBylinePayload } from './authorByline';
 import { getOrdinaryCategoryPageItems, getOrdinaryCategoryPagination, ORDINARY_PAGINATION_HEADER, validateOrdinaryPageRequest, type OrdinaryCategoryPagination } from './ordinaryCategoryPagination';
+import { FAITH_CULTURE_NEWS_UNAVAILABLE, FAITH_CULTURE_PAGINATION_HEADER, getFaithCulturePagination, validateFaithCulturePageRequest } from './faithCulturePagination';
 
 export type ArticleBase = {
   _id: string;
@@ -132,6 +133,7 @@ export async function fetchPublicNews(options: {
   signal?: AbortSignal;
   homepageRecovery?: boolean;
   ordinaryPagination?: boolean;
+  faithPagination?: boolean;
 }): Promise<{
   items: Article[];
   meta: PublicNewsMeta;
@@ -183,7 +185,9 @@ export async function fetchPublicNews(options: {
   const endpoint = `${base}/api/public/news?${params.toString()}`;
 
   try {
-    const pageRequest = options.ordinaryPagination
+    const pageRequest = options.faithPagination
+      ? validateFaithCulturePageRequest(options.category, options.page, options.limit, options.language)
+      : options.ordinaryPagination
       ? validateOrdinaryPageRequest(options.category, options.page, options.limit)
       : null;
     const res = await fetch(endpoint, {
@@ -191,13 +195,14 @@ export async function fetchPublicNews(options: {
       headers: {
         Accept: 'application/json',
         ...(isBrowser && options.homepageRecovery ? { 'X-NewsPulse-Homepage-Recovery': '1' } : {}),
-        ...(isBrowser && pageRequest ? { [ORDINARY_PAGINATION_HEADER]: '1' } : {}),
+        ...(isBrowser && pageRequest ? { [options.faithPagination ? FAITH_CULTURE_PAGINATION_HEADER : ORDINARY_PAGINATION_HEADER]: '1' } : {}),
       },
       cache: 'no-store',
       signal: options.signal,
     });
 
-    const skipErrorBody = isBrowser && options.homepageRecovery && res.status === 503;
+    const skipErrorBody = (options.faithPagination && !res.ok)
+      || (isBrowser && options.homepageRecovery && res.status === 503);
     if (skipErrorBody) void res.body?.cancel().catch(() => {});
     const data = skipErrorBody ? null : pageRequest ? await res.json() : await res.json().catch(() => null);
 
@@ -219,12 +224,14 @@ export async function fetchPublicNews(options: {
         endpoint,
         status: res.status,
         retryAfter: res.headers?.get('Retry-After'),
-        error: msg ? `API ${res.status} (${msg})` : `API ${res.status}`,
+        error: options.faithPagination ? FAITH_CULTURE_NEWS_UNAVAILABLE : msg ? `API ${res.status} (${msg})` : `API ${res.status}`,
       };
     }
 
     const rawItems = unwrapArticles(pageRequest ? getOrdinaryCategoryPageItems(data) : data);
-    const pagination = pageRequest ? getOrdinaryCategoryPagination(data, pageRequest, rawItems.length) : undefined;
+    const pagination = pageRequest
+      ? (options.faithPagination ? getFaithCulturePagination : getOrdinaryCategoryPagination)(data, pageRequest, rawItems.length)
+      : undefined;
     const items = filterPubliclyPublishedArticles(rawItems);
     const meta: PublicNewsMeta = {
       total: data && typeof data === 'object' ? (data.total as number | undefined) : undefined,
@@ -242,7 +249,7 @@ export async function fetchPublicNews(options: {
       language: options.language || null,
       message: error instanceof Error ? error.message : String(error),
     });
-    return { items: [], meta: { limit: options.limit }, endpoint, error: 'Fetch failed' };
+    return { items: [], meta: { limit: options.limit }, endpoint, error: options.faithPagination ? FAITH_CULTURE_NEWS_UNAVAILABLE : 'Fetch failed' };
   }
 }
 

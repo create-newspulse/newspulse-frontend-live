@@ -7,6 +7,7 @@ import { pickFreshestArticlesForLocale } from '../../../lib/translationGroupSync
 import { withPublicReadDeadline } from '../../../lib/publicReadDeadline';
 import { getOrdinaryCategoryPageItems, getOrdinaryCategoryPagination, ORDINARY_PAGINATION_HEADER, validateOrdinaryPageRequest } from '../../../lib/ordinaryCategoryPagination';
 import { unwrapArticles } from '../../../lib/publicNewsApi';
+import { FAITH_CULTURE_NEWS_UNAVAILABLE, FAITH_CULTURE_PAGINATION_HEADER, getFaithCulturePagination, validateFaithCulturePageRequest } from '../../../lib/faithCulturePagination';
 
 export const HOMEPAGE_RECOVERY_PROXY_TIMEOUT_MS = 3500;
 export const ORDINARY_CATEGORY_PROXY_TIMEOUT_MS = 3500;
@@ -126,11 +127,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const localizedParams = new URLSearchParams(qsIndex >= 0 ? (req.url || '').slice(qsIndex + 1) : '');
   const requestedLimit = Number(localizedParams.get('limit') || 0);
   const ordinaryPagination = req.headers[ORDINARY_PAGINATION_HEADER.toLowerCase()] === '1';
+  const faithPagination = req.headers[FAITH_CULTURE_PAGINATION_HEADER.toLowerCase()] === '1';
+  const paginatedRequest = ordinaryPagination || faithPagination;
   let ordinaryPageRequest: { page: number; limit: number } | null = null;
 
-  if (ordinaryPagination) {
+  if (paginatedRequest) {
     try {
-      ordinaryPageRequest = validateOrdinaryPageRequest(normalizedCategory, localizedParams.get('page'), localizedParams.get('limit'));
+      if (faithPagination) {
+        if (ordinaryPagination) throw new Error('Conflicting category pagination contracts');
+        ordinaryPageRequest = validateFaithCulturePageRequest(normalizedCategory, localizedParams.get('page'), localizedParams.get('limit'), requestedLocale);
+        if (localizedParams.get('lang') !== requestedLocale || localizedParams.get('language') !== requestedLocale) {
+          throw new Error('Faith pagination requires matching lang and language');
+        }
+      } else {
+        ordinaryPageRequest = validateOrdinaryPageRequest(normalizedCategory, localizedParams.get('page'), localizedParams.get('limit'));
+      }
       if (!hasRequestedLocale) throw new Error('Ordinary category pagination requires a locale');
     } catch (error) {
       return res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid category pagination request' });
@@ -144,7 +155,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     && !rawCategory && requestedLimit === 40 && hasRequestedLocale
     && !req.query.q && !req.query.spotlight && !req.query.strictLocale && !req.query.page;
   const deadlineAt = homepageRecovery ? Date.now() + HOMEPAGE_RECOVERY_PROXY_TIMEOUT_MS
-    : ordinaryPagination ? Date.now() + ORDINARY_CATEGORY_PROXY_TIMEOUT_MS : undefined;
+    : paginatedRequest ? Date.now() + ORDINARY_CATEGORY_PROXY_TIMEOUT_MS : undefined;
 
   if (!candidateBases.length) {
     logDevNewsProxy('missing_upstream_base', {
@@ -153,6 +164,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
     // Keep UI alive even if env not configured.
     res.setHeader('Cache-Control', 'no-store');
+    if (faithPagination) return res.status(503).json({ error: FAITH_CULTURE_NEWS_UNAVAILABLE });
     if (ordinaryPagination) return res.status(503).json({ error: 'CATEGORY_NEWS_UNAVAILABLE' });
     if (homepageRecovery) return res.status(503).json({ error: 'HOMEPAGE_NEWS_UNAVAILABLE' });
     return res.status(200).json({ items: [], total: 0, page: 1, totalPages: 1, limit: 0 });
@@ -167,7 +179,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const candidateUrl = buildUpstreamUrl(candidateBase, localizedParams);
       try {
         const response = await fetchUpstreamJson(candidateUrl, req, deadlineAt);
-        if (homepageRecovery && response.retryAfter) res.setHeader('Retry-After', response.retryAfter);
+        if ((homepageRecovery || faithPagination) && response.retryAfter) res.setHeader('Retry-After', response.retryAfter);
         if (response.ok) {
           upstream = response;
           upstreamBase = candidateBase;
@@ -201,6 +213,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (!upstream) {
       res.setHeader('Cache-Control', 'no-store');
+      if (faithPagination) return res.status(503).json({ error: FAITH_CULTURE_NEWS_UNAVAILABLE });
       if (ordinaryPagination) return res.status(503).json({ error: 'CATEGORY_NEWS_UNAVAILABLE' });
       if (homepageRecovery) return res.status(503).json({ error: 'HOMEPAGE_NEWS_UNAVAILABLE' });
       return res.status(200).json({ items: [] });
@@ -220,7 +233,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       const json = upstream.json;
       const primaryItems = ordinaryPageRequest ? unwrapArticles(getOrdinaryCategoryPageItems(json)) : getPayloadItems(json);
-      const pagination = ordinaryPageRequest ? getOrdinaryCategoryPagination(json, ordinaryPageRequest, primaryItems.length) : null;
+      const pagination = ordinaryPageRequest
+        ? (faithPagination ? getFaithCulturePagination : getOrdinaryCategoryPagination)(json, ordinaryPageRequest, primaryItems.length)
+        : null;
       let listItems = Array.isArray(primaryItems) ? primaryItems : [];
 
       let hasCompletePulsePage = false;
@@ -251,7 +266,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           });
       }
 
-      if (shouldWidenLocaleFetch && !homepageRecovery && !hasCompletePulsePage && !ordinaryPagination) {
+      if (shouldWidenLocaleFetch && !homepageRecovery && !hasCompletePulsePage && !paginatedRequest) {
         try {
           const widenedParams = new URLSearchParams(localizedParams);
           widenedParams.delete('lang');
@@ -277,7 +292,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // - never return unpublished/deleted items
       // - requested-language records win within a translation group
       // - strict locale feeds hide cross-locale fallback; normal feeds keep English fallback
-      const itemsResolved = shouldWidenLocaleFetch
+      // Faith's backend owns locale eligibility and page membership; never refill or regroup its page.
+      const itemsResolved = faithPagination ? listItems : shouldWidenLocaleFetch
         ? pickFreshestArticlesForLocale({
             articles: listItems,
             locale: requestedLocale,
@@ -308,15 +324,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json(normalized);
     } catch (error) {
       res.setHeader('Cache-Control', 'no-store');
-      if (ordinaryPagination) {
+      if (paginatedRequest) {
         logDevNewsProxy('invalid_category_page', { error: error instanceof Error ? error.message : String(error) });
-        return res.status(503).json({ error: 'CATEGORY_NEWS_UNAVAILABLE' });
+        return res.status(503).json({ error: faithPagination ? FAITH_CULTURE_NEWS_UNAVAILABLE : 'CATEGORY_NEWS_UNAVAILABLE' });
       }
       if (homepageRecovery) return res.status(503).json({ error: 'HOMEPAGE_NEWS_UNAVAILABLE' });
       return res.status(200).json({ items: [] });
     }
   } catch {
     res.setHeader('Cache-Control', 'no-store');
+    if (faithPagination) return res.status(503).json({ error: FAITH_CULTURE_NEWS_UNAVAILABLE });
     if (ordinaryPagination) return res.status(503).json({ error: 'CATEGORY_NEWS_UNAVAILABLE' });
     if (homepageRecovery) return res.status(503).json({ error: 'HOMEPAGE_NEWS_UNAVAILABLE' });
     return res.status(200).json({ items: [] });

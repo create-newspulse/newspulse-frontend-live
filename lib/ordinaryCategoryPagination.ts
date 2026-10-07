@@ -57,6 +57,7 @@ export function getOrdinaryCategoryPagination(
   payload: unknown,
   requested: { page: number; limit: number },
   rawCount: number,
+  requireCompleteMetadata = false,
 ): OrdinaryCategoryPagination {
   const root = record(payload);
   const data = record(root.data);
@@ -64,6 +65,9 @@ export function getOrdinaryCategoryPagination(
     ...root, ...data, ...record(root.meta), ...record(data.meta),
     ...record(data.pagination), ...record(root.pagination),
   };
+  if (requireCompleteMetadata && ['page', 'limit', 'total', 'totalPages', 'hasMore'].some((key) => meta[key] == null)) {
+    throw new Error('Missing category pagination metadata');
+  }
   const page = integer(meta.page, 1, 'page') ?? requested.page;
   const limit = integer(meta.limit, 1, 'limit') ?? requested.limit;
   const total = integer(meta.total, 0, 'total');
@@ -80,6 +84,10 @@ export function getOrdinaryCategoryPagination(
     : undefined;
   if (typeof meta.hasMore === 'boolean' && remaining !== undefined && meta.hasMore !== remaining) {
     throw new Error('Inconsistent category pagination hasMore');
+  }
+  if (requireCompleteMetadata && total !== undefined
+    && rawCount !== Math.min(limit, Math.max(0, total - (page - 1) * limit))) {
+    throw new Error('Inconsistent category page record count');
   }
   return {
     page, limit,
