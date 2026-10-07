@@ -159,6 +159,20 @@
     "pulseDialogue": "Pulse Dialogue",
     "techGadgets": "Tech & Gadgets"
   },
+  "faithCulture": {
+    "filterLabel": "Faith & Culture topics",
+    "noMatches": "No stories match these filters.",
+    "topics": {
+      "all": "All",
+      "faith-spiritual-life": "Faith & Spiritual Life",
+      "living-heritage": "Living Heritage & Traditions",
+      "food-agricultural-heritage": "Food Heritage",
+      "architecture-art-public-heritage": "Architecture & Art",
+      "community-social-traditions": "Community",
+      "folk-arts-festivals-textiles": "Folk Arts",
+      "language-cultural-identity": "Language & Culture"
+    }
+  },
   "pulseDialogue": {
     "exploreSubtitle": "Ideas and independent voices",
     "discovery": {

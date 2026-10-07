@@ -159,6 +159,20 @@
     "pulseDialogue": "પલ્સ સંવાદ",
     "techGadgets": "ટેક અને ગેજેટ્સ"
   },
+  "faithCulture": {
+    "filterLabel": "આસ્થા અને સંસ્કૃતિના વિષયો",
+    "noMatches": "આ ફિલ્ટર સાથે મેળ ખાતી કોઈ વાર્તા મળી નથી.",
+    "topics": {
+      "all": "બધા",
+      "faith-spiritual-life": "આસ્થા અને આધ્યાત્મિક જીવન",
+      "living-heritage": "જીવંત વારસો અને પરંપરાઓ",
+      "food-agricultural-heritage": "ખાદ્ય વારસો",
+      "architecture-art-public-heritage": "સ્થાપત્ય અને કલા",
+      "community-social-traditions": "સમુદાય",
+      "folk-arts-festivals-textiles": "લોકકલા",
+      "language-cultural-identity": "ભાષા અને સંસ્કૃતિ"
+    }
+  },
   "pulseDialogue": {
     "exploreSubtitle": "વિચારો અને સ્વતંત્ર અવાજો",
     "discovery": {

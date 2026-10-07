@@ -8,6 +8,7 @@ import { withPublicReadDeadline } from '../../../lib/publicReadDeadline';
 import { getOrdinaryCategoryPageItems, getOrdinaryCategoryPagination, ORDINARY_PAGINATION_HEADER, validateOrdinaryPageRequest } from '../../../lib/ordinaryCategoryPagination';
 import { unwrapArticles } from '../../../lib/publicNewsApi';
 import { FAITH_CULTURE_NEWS_UNAVAILABLE, FAITH_CULTURE_PAGINATION_HEADER, getFaithCulturePagination, validateFaithCulturePageRequest } from '../../../lib/faithCulturePagination';
+import { getFaithCultureTopic } from '../../../lib/faithCultureTopics';
 
 export const HOMEPAGE_RECOVERY_PROXY_TIMEOUT_MS = 3500;
 export const ORDINARY_CATEGORY_PROXY_TIMEOUT_MS = 3500;
@@ -138,6 +139,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         ordinaryPageRequest = validateFaithCulturePageRequest(normalizedCategory, localizedParams.get('page'), localizedParams.get('limit'), requestedLocale);
         if (localizedParams.get('lang') !== requestedLocale || localizedParams.get('language') !== requestedLocale) {
           throw new Error('Faith pagination requires matching lang and language');
+        }
+        const topics = localizedParams.getAll('topic');
+        if (topics.length && (topics.length !== 1 || !getFaithCultureTopic(topics[0]))) {
+          logDevNewsProxy('invalid_faith_topic', { topics });
+          localizedParams.delete('topic');
         }
       } else {
         ordinaryPageRequest = validateOrdinaryPageRequest(normalizedCategory, localizedParams.get('page'), localizedParams.get('limit'));

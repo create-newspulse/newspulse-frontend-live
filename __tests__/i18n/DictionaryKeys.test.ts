@@ -4,6 +4,18 @@ import gu from '../../src/i18n/gu.json';
 import messagesEn from '../../messages/en.json';
 import messagesHi from '../../messages/hi.json';
 import messagesGu from '../../messages/gu.json';
+import { FAITH_CULTURE_TOPICS } from '../../lib/faithCultureTopics';
+
+const APPROVED_FAITH_TOPIC_LABELS = {
+  all: { en: 'All', hi: 'सभी', gu: 'બધા' },
+  'faith-spiritual-life': { en: 'Faith & Spiritual Life', hi: 'आस्था और आध्यात्मिक जीवन', gu: 'આસ્થા અને આધ્યાત્મિક જીવન' },
+  'living-heritage': { en: 'Living Heritage & Traditions', hi: 'जीवित विरासत और परंपराएँ', gu: 'જીવંત વારસો અને પરંપરાઓ' },
+  'food-agricultural-heritage': { en: 'Food Heritage', hi: 'खाद्य विरासत', gu: 'ખાદ્ય વારસો' },
+  'architecture-art-public-heritage': { en: 'Architecture & Art', hi: 'वास्तुकला और कला', gu: 'સ્થાપત્ય અને કલા' },
+  'community-social-traditions': { en: 'Community', hi: 'समुदाय', gu: 'સમુદાય' },
+  'folk-arts-festivals-textiles': { en: 'Folk Arts', hi: 'लोक कला', gu: 'લોકકલા' },
+  'language-cultural-identity': { en: 'Language & Culture', hi: 'भाषा और संस्कृति', gu: 'ભાષા અને સંસ્કૃતિ' },
+};
 
 const APPROVED_PULSE_DIALOGUE_DESCRIPTIONS = {
   en: 'Ideas, essays, conversations and perspectives from writers, scholars, experts and independent voices.',
@@ -43,6 +55,16 @@ describe('i18n dictionaries', () => {
     for (const lang of ['en', 'hi', 'gu'] as const) {
       expect((runtime[lang] as any).pulseDialogue.landing.description).toBe(APPROVED_PULSE_DIALOGUE_DESCRIPTIONS[lang]);
       expect((messages[lang] as any).pulseDialogue.landing.description).toBe(APPROVED_PULSE_DIALOGUE_DESCRIPTIONS[lang]);
+    }
+  });
+
+  it('keeps the exact approved Faith codes and EN/HI/GU topic labels, including living-heritage', () => {
+    const runtime = { en, hi, gu };
+    expect(FAITH_CULTURE_TOPICS).toEqual(Object.keys(APPROVED_FAITH_TOPIC_LABELS).filter(code => code !== 'all'));
+    for (const locale of ['en', 'hi', 'gu'] as const) {
+      expect(runtime[locale].faithCulture.topics).toEqual(Object.fromEntries(
+        Object.entries(APPROVED_FAITH_TOPIC_LABELS).map(([code, labels]) => [code, labels[locale]]),
+      ));
     }
   });
 });

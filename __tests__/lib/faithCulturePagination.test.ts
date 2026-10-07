@@ -3,6 +3,7 @@ import { fetchCategoryFeedPage, mergeCategoryFeedPages, selectCategoryFeedArticl
 import { getCategoryStaticProps } from '../../lib/categoryPageProps';
 import { FAITH_CULTURE_NEWS_UNAVAILABLE, FAITH_CULTURE_PAGINATION_HEADER, getFaithCulturePagination, validateFaithCulturePageRequest } from '../../lib/faithCulturePagination';
 import { ORDINARY_PAGINATION_HEADER, validateOrdinaryPageRequest } from '../../lib/ordinaryCategoryPagination';
+import { FAITH_CULTURE_TOPICS, getFaithCultureTopic } from '../../lib/faithCultureTopics';
 import { faithPage, faithStories } from '../fixtures/faithCulture';
 
 jest.mock('../../lib/publicApiBase', () => ({ getPublicApiBaseUrl: () => 'http://127.0.0.1:9' }));
@@ -59,6 +60,39 @@ describe('Faith strict page client and ISR', () => {
     expect(result.pagination).toEqual({ page: 3, limit: 30, total, totalPages: Math.ceil(total / 30), hasMore: true });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(new URL(String(fetchMock.mock.calls[0][0])).searchParams.get('limit')).toBe('30');
+  });
+
+  test.each(FAITH_CULTURE_TOPICS)('forwards the exact stable topic %s without locally filtering backend membership', async (topic) => {
+    const stories = faithStories('gu', 3);
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(faithPage(stories, 1))));
+    const result = await fetchCategoryFeedPage({
+      category: 'faith-culture', language: 'gu', page: 1, limit: 30, extraQuery: { topic, strictLocale: '1' },
+    });
+    expect(getFaithCultureTopic(topic)).toBe(topic);
+    expect(result.items).toEqual(stories);
+    expect(result.pagination).toEqual({ page: 1, limit: 30, total: 3, totalPages: 1, hasMore: false });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(Object.fromEntries(new URL(String(fetchMock.mock.calls[0][0])).searchParams)).toEqual({
+      category: 'faith-culture', lang: 'gu', language: 'gu', page: '1', limit: '30', topic, strictLocale: '1',
+    });
+  });
+
+  test.each(['unknown-value', 'Living Heritage & Traditions', 'LIVING-HERITAGE', ' living-heritage '])('invalid topic %s becomes All before any outbound request', async (topic) => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(faithPage([], 1))));
+    const result = await fetchCategoryFeedPage({
+      category: 'faith-culture', language: 'en', page: 1, limit: 30, extraQuery: { topic },
+    });
+    expect(getFaithCultureTopic(topic)).toBeUndefined();
+    expect(result.pagination.hasMore).toBe(false);
+    expect(new URL(String(fetchMock.mock.calls[0][0])).searchParams.has('topic')).toBe(false);
+    expect(console.error).toHaveBeenCalledWith('[publicNewsApi]', 'invalid_faith_topic', { topic });
+  });
+
+  test.each([
+    { value: undefined }, { value: null }, { value: '' }, { value: 1 },
+    { value: ['living-heritage'] }, { value: ['living-heritage', 'food-agricultural-heritage'] },
+  ])('does not accept a non-scalar or missing topic: %j', ({ value }) => {
+    expect(getFaithCultureTopic(value)).toBeUndefined();
   });
 
   test('a completely filtered page retains backend hasMore without scanning subsequent pages', async () => {

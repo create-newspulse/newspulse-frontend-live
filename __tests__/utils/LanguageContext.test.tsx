@@ -79,4 +79,17 @@ describe('LanguageContext route switching', () => {
       scroll: false,
     });
   });
+
+  test.each([
+    ['en', 'hi', 'Hindi'], ['en', 'gu', 'Gujarati'], ['hi', 'en', 'English'],
+    ['hi', 'gu', 'Gujarati'], ['gu', 'en', 'English'], ['gu', 'hi', 'Hindi'],
+  ] as const)('preserves Faith stable topic and search when switching %s to %s', (from, to, button) => {
+    const query = '?topic=living-heritage&q=heritage';
+    mockRouter.asPath = `${from === 'en' ? '' : `/${from}`}/faith-culture${query}`;
+    mockRouter.locale = from;
+    render(<Harness />);
+    fireEvent.click(screen.getByText(button));
+    const target = `${to === 'en' ? '' : `/${to}`}/faith-culture${query}`;
+    expect(replaceMock).toHaveBeenCalledWith(target, target, { locale: to, shallow: false, scroll: false });
+  });
 });

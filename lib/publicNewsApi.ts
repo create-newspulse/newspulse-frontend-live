@@ -4,6 +4,7 @@ import { filterPubliclyPublishedArticles } from './localizedArticleFields';
 import type { AuthorBylinePayload } from './authorByline';
 import { getOrdinaryCategoryPageItems, getOrdinaryCategoryPagination, ORDINARY_PAGINATION_HEADER, validateOrdinaryPageRequest, type OrdinaryCategoryPagination } from './ordinaryCategoryPagination';
 import { FAITH_CULTURE_NEWS_UNAVAILABLE, FAITH_CULTURE_PAGINATION_HEADER, getFaithCulturePagination, validateFaithCulturePageRequest } from './faithCulturePagination';
+import { getFaithCultureTopic } from './faithCultureTopics';
 
 export type ArticleBase = {
   _id: string;
@@ -179,6 +180,11 @@ export async function fetchPublicNews(options: {
       if (!sv) continue;
       params.set(k, sv);
     }
+  }
+
+  if (options.faithPagination && params.has('topic') && !getFaithCultureTopic(params.get('topic'))) {
+    logPublicNewsError('invalid_faith_topic', { topic: params.get('topic') });
+    params.delete('topic');
   }
 
   // In the browser, `base` may be "" which yields a same-origin request.

@@ -2,15 +2,17 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import handler, { ORDINARY_CATEGORY_PROXY_TIMEOUT_MS } from '../../../pages/api/public/news';
 import { FAITH_CULTURE_NEWS_UNAVAILABLE, FAITH_CULTURE_PAGINATION_HEADER } from '../../../lib/faithCulturePagination';
 import { ORDINARY_PAGINATION_HEADER } from '../../../lib/ordinaryCategoryPagination';
+import { FAITH_CULTURE_TOPICS } from '../../../lib/faithCultureTopics';
 import { faithPage, faithStories } from '../../fixtures/faithCulture';
 
 let mockApiBase = 'https://backend.test';
 jest.mock('../../../lib/publicApiBase', () => ({ getPublicApiBaseUrl: () => mockApiBase }));
 
-async function request(query: Record<string, string> = {}) {
+async function request(query: Record<string, string> = {}, extraTopic?: string) {
   const params = new URLSearchParams({
     category: 'faith-culture', lang: 'en', language: 'en', page: '1', limit: '30', ...query,
   });
+  if (extraTopic !== undefined) params.append('topic', extraTopic);
   const req = {
     method: 'GET', url: `/api/public/news?${params}`, query: Object.fromEntries(params),
     headers: { [FAITH_CULTURE_PAGINATION_HEADER.toLowerCase()]: '1' },
@@ -74,6 +76,37 @@ describe('Faith-specific strict News proxy', () => {
     expect(result.body.items).toHaveLength(2);
     expect(result.body.pagination.total).toBe(2);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test.each(FAITH_CULTURE_TOPICS)('forwards topic %s on page 2 without widening and preserves backend totals', async (topic) => {
+    const stories = faithStories('hi', 32);
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(faithPage(stories, 2))));
+    const result = await request({ topic, lang: 'hi', language: 'hi', page: '2' });
+    expect(result.status).toBe(200);
+    expect(result.body.items).toEqual(stories.slice(30));
+    expect(result.body.pagination).toEqual({ page: 2, limit: 30, total: 32, totalPages: 2, hasMore: false });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const url = new URL(String(fetchMock.mock.calls[0][0]));
+    expect(url.pathname).toBe('/api/public/news');
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      category: 'faith-culture', lang: 'hi', language: 'hi', page: '2', limit: '30', topic,
+    });
+  });
+
+  test.each(['unknown-value', 'Living Heritage & Traditions', 'LIVING-HERITAGE', ''])('removes invalid topic %s before forwarding to the backend', async (topic) => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(faithPage([], 1))));
+    const result = await request({ topic });
+    expect(result.status).toBe(200);
+    expect(result.body.pagination).toEqual({ page: 1, limit: 30, total: 0, totalPages: 1, hasMore: false });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(new URL(String(fetchMock.mock.calls[0][0])).searchParams.has('topic')).toBe(false);
+    expect(console.error).toHaveBeenCalledWith('[api/public/news]', 'invalid_faith_topic', { topics: [topic] });
+  });
+
+  test('repeated topics fall back to All rather than choosing a different topic than the page', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(faithPage([], 1))));
+    expect((await request({ topic: 'living-heritage' }, 'food-agricultural-heritage')).status).toBe(200);
+    expect(new URL(String(fetchMock.mock.calls[0][0])).searchParams.has('topic')).toBe(false);
   });
 
   test.each(['regional', 'national', 'international', 'business', 'tech', 'tech-gadgets', 'sports', 'lifestyle', 'glamour', 'editorial', 'web-stories', 'viral-videos', 'pulse-dialogue', 'youth-pulse', ''])(

@@ -159,6 +159,20 @@
     "pulseDialogue": "पल्स संवाद",
     "techGadgets": "टेक और गैजेट्स"
   },
+  "faithCulture": {
+    "filterLabel": "आस्था और संस्कृति के विषय",
+    "noMatches": "इन फ़िल्टर से मेल खाने वाली कोई खबर नहीं मिली।",
+    "topics": {
+      "all": "सभी",
+      "faith-spiritual-life": "आस्था और आध्यात्मिक जीवन",
+      "living-heritage": "जीवित विरासत और परंपराएँ",
+      "food-agricultural-heritage": "खाद्य विरासत",
+      "architecture-art-public-heritage": "वास्तुकला और कला",
+      "community-social-traditions": "समुदाय",
+      "folk-arts-festivals-textiles": "लोक कला",
+      "language-cultural-identity": "भाषा और संस्कृति"
+    }
+  },
   "pulseDialogue": {
     "exploreSubtitle": "विचार और स्वतंत्र आवाज़ें",
     "discovery": {

@@ -1,3 +1,6 @@
+import React from 'react';
+import { cleanup, render } from '@testing-library/react';
+import type { CategoryFeedPageProps } from '../../components/CategoryFeedPage';
 import { getCategoryStaticProps } from '../../lib/categoryPageProps';
 import { CATEGORY_FEED_TIMEOUT_MS } from '../../lib/categoryFeed';
 import { fetchPublicNews } from '../../lib/publicNewsApi';
@@ -5,6 +8,12 @@ import { fetchPublicNews } from '../../lib/publicNewsApi';
 jest.mock('../../lib/getMessages', () => ({ getMessages: jest.fn(async (locale: string) => ({ locale })) }));
 jest.mock('../../lib/publicNewsApi', () => ({ fetchPublicNews: jest.fn() }));
 jest.mock('../../lib/publicApiBase', () => ({ getPublicApiBaseUrl: () => 'https://backend.test' }));
+jest.mock('next/router', () => ({ useRouter: () => ({ query: {} }) }));
+const mockCategoryFeedPage = jest.fn((_props: CategoryFeedPageProps) => null);
+jest.mock('../../components/CategoryFeedPage', () => ({
+  __esModule: true,
+  default: (props: CategoryFeedPageProps) => mockCategoryFeedPage(props),
+}));
 
 const categories = [
   'international', 'business', 'science-technology', 'tech-gadgets', 'sports', 'lifestyle',
@@ -21,8 +30,8 @@ function story(category: string, language: string, overrides: Record<string, unk
 
 describe('shared category initial props', () => {
   const originalFetch = global.fetch;
-  beforeEach(() => { (fetchPublicNews as jest.Mock).mockReset(); });
-  afterEach(() => { global.fetch = originalFetch; jest.useRealTimers(); });
+  beforeEach(() => { (fetchPublicNews as jest.Mock).mockReset(); mockCategoryFeedPage.mockClear(); });
+  afterEach(() => { cleanup(); global.fetch = originalFetch; jest.useRealTimers(); });
 
   describe.each(categories)('/%s', (category) => {
     test.each(['en', 'hi', 'gu'])('seeds only eligible %s stories in publication order using one request', async (locale) => {
@@ -46,7 +55,8 @@ describe('shared category initial props', () => {
       expect(result.props.locale).toBe(locale);
       expect(result.props.initialItems.map((item: any) => item._id)).toEqual(['lead', 'edited-old']);
       expect(result.props.initialItems[0].content).toBeUndefined();
-      expect(route.default(result.props).props.initialItems).toBe(result.props.initialItems);
+      render(React.createElement(route.default, result.props));
+      expect(mockCategoryFeedPage.mock.calls.at(-1)?.[0].initialItems).toBe(result.props.initialItems);
       expect(fetchPublicNews).toHaveBeenCalledTimes(1);
       expect(fetchPublicNews).toHaveBeenCalledWith(expect.objectContaining({
         category, language: locale, limit: 30, extraQuery: { strictLocale: '1' },

@@ -7,6 +7,7 @@ import type { Article } from '../lib/publicNewsApi';
 import { CATEGORY_FEED_BATCH_SIZE, CATEGORY_FEED_REFRESH_MS, fetchCategoryFeed, fetchCategoryFeedPage, mergeCategoryFeedPages, selectCategoryFeedArticles, type CategoryFeedPageResult } from '../lib/categoryFeed';
 import { getOrdinaryCategoryBatchSize, isOrdinaryPaginatedCategory, type OrdinaryCategoryPagination } from '../lib/ordinaryCategoryPagination';
 import { FAITH_CULTURE_PAGE_SIZE, isFaithCultureCategory } from '../lib/faithCulturePagination';
+import { FAITH_CULTURE_TOPICS, getFaithCultureTopic } from '../lib/faithCultureTopics';
 import { getLocalizedArticleFields, STRICT_LOCALE_POLICY } from '../lib/localizedArticleFields';
 import { useLanguage } from '../utils/LanguageContext';
 import { useI18n } from '../src/i18n/LanguageProvider';
@@ -162,6 +163,8 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
   const { language } = useLanguage();
   const { t } = useI18n();
   const faithPagination = isFaithCultureCategory(categoryKey);
+  const faithTopic = faithPagination ? getFaithCultureTopic(extraQuery?.topic) : undefined;
+  const emptyTitle = t(faithTopic ? 'faithCulture.noMatches' : 'categoryPage.noStoriesYet');
   const pagedCategory = faithPagination || isOrdinaryPaginatedCategory(categoryKey);
   const batchSize = faithPagination ? FAITH_CULTURE_PAGE_SIZE : pagedCategory ? getOrdinaryCategoryBatchSize(categoryKey) : CATEGORY_FEED_BATCH_SIZE;
   const seedMatchesLocale = !initialLocale || initialLocale === language;
@@ -393,6 +396,35 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
       description={resolvedDeskCopy.description}
     >
       {editorialSearch}
+      {faithPagination ? (
+        <nav aria-label={t('faithCulture.filterLabel')} className="min-w-0 flex items-center gap-2 overflow-x-auto pb-1 md:flex-wrap">
+          {[undefined, ...FAITH_CULTURE_TOPICS].map((topic) => {
+            const query = { ...router.query };
+            delete query.topic;
+            if (topic) query.topic = topic;
+            const active = faithTopic === topic;
+            return (
+              <Link
+                key={topic || 'all'}
+                href={{ pathname: '/faith-culture', query }}
+                locale={router.locale}
+                shallow
+                scroll={false}
+                prefetch={false}
+                aria-current={active ? 'true' : undefined}
+                onFocus={(event) => event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' })}
+                className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-newsPulse-blue/40 ${
+                  active
+                    ? 'border-slate-900 bg-slate-900 text-white'
+                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900/60'
+                }`}
+              >
+                {t(`faithCulture.topics.${topic || 'all'}`)}
+              </Link>
+            );
+          })}
+        </nav>
+      ) : null}
     </CategoryDeskHeader>
   );
 
@@ -578,7 +610,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
       </div>
     ) : loaded && items.length === 0 ? (
       <div className="mt-8 rounded-2xl border border-newsPulse-slate/25 bg-newsPulse-white p-6">
-        <div className="text-lg font-semibold text-newsPulse-navy">{t('categoryPage.noStoriesYet')}</div>
+        <div className="text-lg font-semibold text-newsPulse-navy">{emptyTitle}</div>
       </div>
     ) : (
       <section className={useCategoryShell ? 'mt-3 rounded-2xl border border-newsPulse-slate/25 bg-newsPulse-white shadow-sm' : 'mt-8'}>
@@ -606,7 +638,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
       </div>
     ) : loaded && items.length === 0 && !(faithPagination && hasMore) ? (
       <div className="mt-8 rounded-2xl border border-newsPulse-slate/25 bg-newsPulse-white p-6">
-        <div className="text-lg font-semibold text-newsPulse-navy">{t('categoryPage.noStoriesYet')}</div>
+        <div className="text-lg font-semibold text-newsPulse-navy">{emptyTitle}</div>
       </div>
     ) : (
       <CategoryStoryHierarchy
@@ -616,7 +648,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
         keyLabel={isEditorialPage ? 'Key Editorials' : 'Key Stories'}
         latestLabel={routeCategoryKey === 'pulse-dialogue' ? t('pulseDialogue.landing.latestContributions') : isEditorialPage ? 'Recent Editorials' : routeCategoryKey === 'web-stories' ? 'Web Stories' : 'Latest'}
         loadMoreLabel={LOAD_MORE_LABELS[routeCategoryKey] || `Load More ${pageTitle} Stories`}
-        emptyTitle={t('categoryPage.noStoriesYet')}
+        emptyTitle={emptyTitle}
         loading={!loaded}
         variant={routeCategoryKey === 'web-stories' ? 'web-stories' : isEditorialPage ? 'editorial' : 'news'}
         initialLatestCount={routeCategoryKey === 'web-stories' ? 12 : 8}
