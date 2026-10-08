@@ -1,3 +1,5 @@
+import { getCategoryIdentity } from './categoryKeys';
+
 export type StoryTitleHookParts = {
   highlightedHook: string;
   remainingTitle: string;
@@ -34,7 +36,7 @@ export function splitStoryTitleHook(title: unknown): StoryTitleHookParts {
 }
 
 export function getStoryTitleHookColor(category: unknown): string {
-  const normalizedCategory = normalizeText(category).toLowerCase();
+  const normalizedCategory = getCategoryIdentity(category);
   if (!normalizedCategory) return '#2563EB';
 
   if (normalizedCategory.includes('breaking') || normalizedCategory.includes('crime')) return '#DC2626';

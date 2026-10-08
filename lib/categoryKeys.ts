@@ -31,6 +31,19 @@ export function getCategoryRouteKey(raw: unknown): string {
   return ROUTE_ALIASES[normalized] || sanitizeRouteKey(normalized);
 }
 
+export function getCategoryIdentity(raw: unknown): string {
+  if (typeof raw === 'string') return getCategoryRouteKey(raw);
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return '';
+
+  const identity = [
+    'slug' in raw ? raw.slug : undefined,
+    'title' in raw ? raw.title : undefined,
+    'name' in raw ? raw.name : undefined,
+  ].find((value): value is string => typeof value === 'string' && Boolean(value.trim()));
+
+  return getCategoryRouteKey(identity);
+}
+
 export function getCategoryQueryKey(raw: unknown): string {
   const routeKey = getCategoryRouteKey(raw);
   if (!routeKey) return '';

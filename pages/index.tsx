@@ -41,6 +41,7 @@ import { fetchCurrentWeather } from "../lib/fetchWeather";
 import { debugStoryCard, getStoryId, getStoryReactKey, getStorySlug, getStoryTranslationGroupId } from "../lib/storyIdentity";
 import { formatEditorialDateTime, getStoryDateTimeValue, resolveStoryDateIso } from "../lib/storyDateTime";
 import { getStoryTitleHookColor, splitStoryTitleHook } from "../lib/storyTitleHook";
+import { getCategoryIdentity } from "../lib/categoryKeys";
 import StoryImage, { TopStoryImage } from "../src/components/story/StoryImage";
 import { getTickerMarqueeText, mergeTickerItemsWithAds, type TickerMarqueeItem } from "../lib/publicTickerAds";
 import { absolutePublicUrl, NEWS_PULSE_BRAND_NAME, NEWS_PULSE_LOGO_PATH, NEWS_PULSE_PUBLISHER_NAME, NEWS_PULSE_SITE_URL, safeJsonLd } from "../lib/seo";
@@ -2638,7 +2639,7 @@ function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
   const isSponsoredFeatureCard = Boolean(sponsored.isFeatureActive);
   const primaryHref = vm?.destinationHref || vm?.href || '';
   const topStoryTitleParts = splitStoryTitleHook(vm?.title || '');
-  const topStoryTitleHookColor = getStoryTitleHookColor(vm?.category);
+  const topStoryTitleHookColor = getStoryTitleHookColor(getCategoryIdentity(article?.category));
 
   if (article && vm?.imageSrc) {
     debugStoryCard(
@@ -2957,7 +2958,7 @@ function CenterStoryFeed({ theme, items, lang }: any) {
               const storyKey = getStoryReactKey(item, href);
               const titleText = String(item?.title || '').trim();
               const titleParts = splitStoryTitleHook(titleText);
-              const titleHookColor = getStoryTitleHookColor(categoryLabel || item?.category);
+              const titleHookColor = getStoryTitleHookColor(getCategoryIdentity(item?.category));
 
               debugStoryCard('home-fresh-updates', item, imageSrc);
 
@@ -3516,7 +3517,7 @@ function HomeEditorialSection({ theme, title, href, items, lang, Icon }: any) {
             const storyKey = getStoryReactKey(item, href);
             const titleText = String(item?.title || '').trim();
             const titleParts = splitStoryTitleHook(titleText);
-            const titleHookColor = getStoryTitleHookColor(resolveCategoryLabel(item?.category) || item?.category);
+            const titleHookColor = getStoryTitleHookColor(getCategoryIdentity(item?.category));
 
             debugStoryCard('home-editorial-secondary', item, item?.imageSrc);
 

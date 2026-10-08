@@ -7,6 +7,7 @@ import { buildNewsUrl, isNavigableNewsHref } from '../../lib/newsRoutes';
 import { getStoryCategoryLabel, getStoryDateIso } from '../../lib/publicStories';
 import { formatEditorialDateTime } from '../../lib/storyDateTime';
 import { getStoryTitleHookColor, splitStoryTitleHook } from '../../lib/storyTitleHook';
+import { getCategoryIdentity } from '../../lib/categoryKeys';
 import StoryImage, { TopStoryImage } from '../../src/components/story/StoryImage';
 import { normalizeRouteLocale } from '../../lib/localizedArticleFields';
 import { getRegionalReadMinutes } from '../../lib/regionalListingStories';
@@ -89,6 +90,7 @@ function toStoryViewModel(story: AnyStory, requestedLang: 'en' | 'hi' | 'gu', fa
     title,
     summary,
     categoryLabel: String(categoryLabel || fallbackCategoryLabel).trim(),
+    categoryIdentity: getCategoryIdentity(story?.category || 'regional'),
     districtLabel,
     dateText,
     imageSrc,
@@ -116,7 +118,7 @@ function RegionalTopStory({ story, requestedLang, stateName, fallbackCategoryLab
 }) {
   const view = toStoryViewModel(story, requestedLang, fallbackCategoryLabel, getDistrictLabel);
   const titleParts = splitStoryTitleHook(view.title);
-  const titleHookColor = getStoryTitleHookColor(view.categoryLabel || fallbackCategoryLabel);
+  const titleHookColor = getStoryTitleHookColor(view.categoryIdentity);
   const canOpen = isNavigableNewsHref(view.href);
   const meta = [view.categoryLabel, view.districtLabel || stateName, view.dateText].filter(Boolean);
 
@@ -184,7 +186,7 @@ function RegionalFreshStories({ stories, requestedLang, fallbackCategoryLabel, r
         {stories.map((story) => {
           const view = toStoryViewModel(story, requestedLang, fallbackCategoryLabel, getDistrictLabel);
           const titleParts = splitStoryTitleHook(view.title);
-          const titleHookColor = getStoryTitleHookColor(view.categoryLabel || fallbackCategoryLabel);
+          const titleHookColor = getStoryTitleHookColor(view.categoryIdentity);
           const canOpen = isNavigableNewsHref(view.href);
           const meta = [view.categoryLabel, view.districtLabel, view.dateText].filter(Boolean);
           const row = (
@@ -274,7 +276,7 @@ export default function RegionalHomeStorySections({
   const hierarchyItems = visibleStories.map((story) => {
     const view = toStoryViewModel(story, requestedLang, fallbackCategoryLabel, showDistrictBadges ? getDistrictLabel : undefined);
     const titleParts = splitStoryTitleHook(view.title);
-    const titleHookColor = getStoryTitleHookColor(view.categoryLabel || fallbackCategoryLabel);
+    const titleHookColor = getStoryTitleHookColor(view.categoryIdentity);
     const title = (
       <>
         {titleParts.highlightedHook ? <span style={{ color: titleHookColor }}>{titleParts.highlightedHook}</span> : null}

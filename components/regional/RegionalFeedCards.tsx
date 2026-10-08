@@ -6,6 +6,7 @@ import { buildNewsUrl } from '../../lib/newsRoutes';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
 import { getStoryTitleHookColor, splitStoryTitleHook } from '../../lib/storyTitleHook';
+import { getCategoryIdentity } from '../../lib/categoryKeys';
 import StoryImage from '../../src/components/story/StoryImage';
 import { normalizeRouteLocale } from '../../lib/localizedArticleFields';
 import { formatPublicLocationParts } from '../../lib/publicLocation';
@@ -243,7 +244,7 @@ function StoryCard({
   const coverUrl = resolveCoverImageUrl(story);
   const footerLocation = locationLabels[0] || '';
   const titleParts = splitStoryTitleHook(title);
-  const titleHookColor = getStoryTitleHookColor(categoryLabel || badgeLabels[0] || fallbackCategoryLabel);
+  const titleHookColor = getStoryTitleHookColor(getCategoryIdentity(story?.category || 'regional'));
   const topMetaLabels = badgeLabels.slice(0, 3);
 
   return (

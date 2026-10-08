@@ -9,6 +9,7 @@ import { getLocalizedArticleFields } from '../lib/localizedArticleFields';
 import { debugStoryCard, getStoryId, getStoryReactKey } from '../lib/storyIdentity';
 import { formatEditorialDateTime, resolveStoryDateIso } from '../lib/storyDateTime';
 import { getStoryTitleHookColor, splitStoryTitleHook } from '../lib/storyTitleHook';
+import { getCategoryIdentity } from '../lib/categoryKeys';
 import { useI18n } from '../src/i18n/LanguageProvider';
 import { useLanguage } from '../utils/LanguageContext';
 import OriginalTag from '../components/OriginalTag';
@@ -180,10 +181,11 @@ export default function LatestPage() {
                       const title = String(localized.title || '').trim() || String(t('common.untitled') || 'Untitled');
                       const when = formatEditorialDateTime(resolveStoryDateIso(a as any));
                       const category = String(localized.categoryLabel || (a as any)?.category || '').trim();
+                      const categoryIdentity = getCategoryIdentity(a.category);
                       const coverSrc = resolveCoverImageUrl(a as any);
                       const fitMode = resolveCoverFitMode(a as any, { src: coverSrc, altText: title });
                       const titleParts = splitStoryTitleHook(title);
-                      const titleHookColor = getStoryTitleHookColor(category);
+                      const titleHookColor = getStoryTitleHookColor(categoryIdentity);
 
                       debugStoryCard('latest-page', a, coverSrc);
 
@@ -193,7 +195,7 @@ export default function LatestPage() {
                             href={href}
                             className="group relative block overflow-hidden rounded-2xl border border-slate-200/60 bg-white/70 backdrop-blur px-4 py-3 shadow-sm transition will-change-transform hover:-translate-y-0.5 hover:border-slate-300/60 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60"
                           >
-                            <div className={`absolute left-0 top-0 h-full w-1.5 ${categoryAccentClasses(category)}`} />
+                            <div className={`absolute left-0 top-0 h-full w-1.5 ${categoryAccentClasses(categoryIdentity)}`} />
 
                             <div className="flex items-stretch gap-3 sm:gap-4">
                               <div className="order-1 min-w-0 flex-1">
@@ -211,7 +213,7 @@ export default function LatestPage() {
                                   {category ? (
                                     <span
                                       className={`ml-auto inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${categoryBadgeClasses(
-                                        category
+                                        categoryIdentity
                                       )}`}
                                     >
                                       {category}

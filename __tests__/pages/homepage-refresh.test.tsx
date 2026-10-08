@@ -13,10 +13,12 @@ import { usePublicBroadcastTicker, type PublicBroadcastTickerState } from '../..
 import { normalizePublicBroadcast } from '../../lib/publicBroadcast';
 import { usePublicTickerAds } from '../../hooks/usePublicTickerAds';
 import { isSafeMode } from '../../utils/safeMode';
+import * as i18n from '../../src/i18n/LanguageProvider';
+import * as storyTitleHook from '../../lib/storyTitleHook';
 
 jest.mock('next/router', () => ({ useRouter: () => ({ asPath: '/', pathname: '/', locale: 'en', push: jest.fn(), replace: jest.fn() }) }));
 jest.mock('next/head', () => ({ __esModule: true, default: () => null }));
-jest.mock('../../src/i18n/LanguageProvider', () => ({ ...jest.requireActual('../../src/i18n/LanguageProvider'), useI18n: () => ({ lang: 'en', t: (key: string) => key, setLang: jest.fn() }) }));
+jest.mock('../../src/i18n/LanguageProvider', () => ({ __esModule: true, ...jest.requireActual('../../src/i18n/LanguageProvider'), useI18n: () => ({ lang: 'en', t: (key: string) => key, setLang: jest.fn() }) }));
 jest.mock('../../src/consent/CookieConsentProvider', () => ({ useCookieConsent: () => ({ hasCategoryConsent: () => false, openPreferences: jest.fn() }) }));
 jest.mock('../../src/components/ads/AdSlot', () => ({
   ...jest.requireActual('../../src/components/ads/AdSlot'),
@@ -57,6 +59,56 @@ const published = (version = '426', appPromo = false) => normalizePublicSettings
 });
 
 const wrapper = ({ children }: { children: React.ReactNode }) => <React.StrictMode><PublicSettingsProvider>{children}</PublicSettingsProvider></React.StrictMode>;
+
+describe('homepage category colour identity', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  describe.each([
+    ['regional', 'rgb(101, 163, 13)'],
+    ['national', 'rgb(37, 99, 235)'],
+    ['international', 'rgb(124, 58, 237)'],
+    ['glamour', 'rgb(192, 38, 211)'],
+    ['pulse-dialogue', 'rgb(37, 99, 235)'],
+  ])('%s', (category, color) => {
+    test.each(['en', 'hi', 'gu'] as const)('%s preserves translated labels and both lead/fresh headline colours', (locale) => {
+      const actual = jest.requireActual<typeof import('../../src/i18n/LanguageProvider')>('../../src/i18n/LanguageProvider');
+      jest.spyOn(i18n, 'useI18n').mockImplementation(actual.useI18n);
+      const colorLookup = jest.spyOn(storyTitleHook, 'getStoryTitleHookColor');
+      const label = actual.getMessagesForLang(locale).categories[category === 'pulse-dialogue' ? 'pulseDialogue' : category] as string;
+      const lead = {
+        _id: 'colour-lead', slug: 'colour-lead', category, language: locale,
+        title: `${label}: lead headline remainder`, content: '<p>Lead body</p>',
+        status: 'published', publishedAt: '2026-10-01T10:00:00.000Z',
+      };
+      const fresh = {
+        ...lead, _id: 'colour-fresh', id: 'colour-fresh', slug: 'colour-fresh',
+        lang: locale, title: `${label}: fresh headline remainder`, desc: 'Fresh summary',
+      };
+      const html = renderToString(
+        <i18n.LanguageProvider initialLang={locale}>
+          <PublicSettingsProvider initialSettings={published()}>
+            <HomePage {...props} initialTopStory={lead} initialFreshStories={[fresh]} />
+          </PublicSettingsProvider>
+        </i18n.LanguageProvider>
+      );
+      const root = document.createElement('div');
+      root.innerHTML = html;
+      const leadHook = root.querySelector<HTMLSpanElement>('#top-story h1 > span');
+      const freshHook = root.querySelector<HTMLSpanElement>('.fresh-stories-card h3 > span');
+
+      expect(leadHook?.style.color).toBe(color);
+      expect(freshHook?.style.color).toBe(color);
+      expect(leadHook?.textContent).toBe(`${label}:`);
+      expect(freshHook?.textContent).toBe(`${label}:`);
+      expect(root.querySelector('.fresh-stories-card article span.rounded-full')?.textContent).toBe(label);
+      expect(Array.from(root.querySelectorAll('#top-story .truncate')).some((node) => node.textContent === label)).toBe(true);
+      expect(colorLookup).toHaveBeenCalledWith(category);
+      expect(colorLookup).not.toHaveBeenCalledWith(label);
+    });
+  });
+});
 
 function broadcastState(overrides: Partial<PublicBroadcastTickerState> = {}): PublicBroadcastTickerState {
   return {

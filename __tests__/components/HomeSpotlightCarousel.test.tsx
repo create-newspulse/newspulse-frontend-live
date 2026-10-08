@@ -2,12 +2,16 @@ import React from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 
 import { HomeSpotlightCarousel } from '../../components/home/HomeSharedFeatureModules';
+import * as i18n from '../../src/i18n/LanguageProvider';
+import * as storyTitleHook from '../../lib/storyTitleHook';
 
 jest.mock('next/router', () => ({
   useRouter: () => ({ push: jest.fn(), asPath: '/', pathname: '/' }),
 }));
 
 jest.mock('../../src/i18n/LanguageProvider', () => ({
+  __esModule: true,
+  ...jest.requireActual('../../src/i18n/LanguageProvider'),
   useI18n: () => ({
     t: (key: string) => ({
       'common.viewAll': 'View all',
@@ -62,6 +66,34 @@ describe('HomeSpotlightCarousel', () => {
 
   afterEach(() => {
     jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  describe.each([
+    ['regional', 'rgb(101, 163, 13)'],
+    ['national', 'rgb(37, 99, 235)'],
+    ['international', 'rgb(124, 58, 237)'],
+    ['glamour', 'rgb(192, 38, 211)'],
+    ['pulse-dialogue', 'rgb(37, 99, 235)'],
+  ])('%s colour identity', (category, color) => {
+    test.each(['en', 'hi', 'gu'] as const)('keeps the %s label separate from the colour lookup', (locale) => {
+      const actual = jest.requireActual<typeof import('../../src/i18n/LanguageProvider')>('../../src/i18n/LanguageProvider');
+      jest.spyOn(i18n, 'useI18n').mockImplementation(actual.useI18n);
+      const colorLookup = jest.spyOn(storyTitleHook, 'getStoryTitleHookColor');
+      const label = actual.getMessagesForLang(locale).categories[category === 'pulse-dialogue' ? 'pulseDialogue' : category] as string;
+      const item = { ...story(1), category, title: `${label}: remaining headline text` };
+
+      render(
+        <i18n.LanguageProvider initialLang={locale}>
+          <HomeSpotlightCarousel theme={theme} title="Spotlight" href="/latest" items={[item]} lang={locale} />
+        </i18n.LanguageProvider>
+      );
+
+      expect(screen.getByText(category === 'pulse-dialogue' ? category : label)).toBeTruthy();
+      expect(screen.getByText(`${label}:`).style.color).toBe(color);
+      expect(colorLookup).toHaveBeenCalledWith(category);
+      expect(colorLookup).not.toHaveBeenCalledWith(label);
+    });
   });
 
   test('keeps slideshow controls, counter, dots, links, and 8-item cap working', () => {

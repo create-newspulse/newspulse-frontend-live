@@ -6,6 +6,8 @@ import { formatArticleBodyHtml } from '../../lib/articleBody';
 import { fetchPublicNews } from '../../lib/publicNewsApi';
 import { hasRenderedTwitterWidgetFrame, loadTwitterWidgetsIn } from '../../lib/xWidgets';
 import { getAuthorBylineMetadata } from '../../lib/authorByline';
+import { getMessagesForLang } from '../../src/i18n/LanguageProvider';
+import * as storyTitleHook from '../../lib/storyTitleHook';
 
 let mockBylinePrefix = 'By';
 
@@ -15,6 +17,7 @@ jest.mock('next/head', () => ({
 }));
 
 jest.mock('../../src/i18n/LanguageProvider', () => ({
+  ...jest.requireActual('../../src/i18n/LanguageProvider'),
   useI18n: () => ({
     t: (key: string) => ({
       'common.home': 'Home',
@@ -225,9 +228,35 @@ describe('pages/news/[slug] editorial detail', () => {
 
   afterEach(() => {
     cleanup();
+    jest.restoreAllMocks();
     document.documentElement.style.overflow = '';
     document.body.style.overflow = '';
     document.body.style.overscrollBehavior = '';
+  });
+
+  describe.each([
+    ['regional', 'rgb(101, 163, 13)'],
+    ['national', 'rgb(37, 99, 235)'],
+    ['international', 'rgb(124, 58, 237)'],
+    ['glamour', 'rgb(192, 38, 211)'],
+    ['pulse-dialogue', 'rgb(37, 99, 235)'],
+  ])('%s headline colour identity', (category, color) => {
+    test.each(['en', 'hi', 'gu'] as const)('keeps the %s display category out of the colour lookup', (locale) => {
+      const label = getMessagesForLang(locale).categories[category === 'pulse-dialogue' ? 'pulseDialogue' : category] as string;
+      const colorLookup = jest.spyOn(storyTitleHook, 'getStoryTitleHookColor');
+      renderAuthorArticle({
+        category, editorialType: undefined,
+        title: `${label}: remaining headline text`,
+        translations: { [locale]: { categoryLabel: label } },
+      }, locale);
+
+      const heading = screen.getByRole('heading', { level: 1 });
+      expect(heading.querySelector<HTMLSpanElement>('span')?.style.color).toBe(color);
+      expect(heading.textContent).toBe(`${label}: remaining headline text`);
+      expect(screen.getByText(label, { selector: 'a' }).getAttribute('href')).toBe(`${locale === 'en' ? '' : `/${locale}`}/${category}`);
+      expect(colorLookup).toHaveBeenCalledWith(category);
+      expect(colorLookup).not.toHaveBeenCalledWith(label);
+    });
   });
 
   test.each(invalidAuthorBylines)('preserves normal article markup for absent, disabled or invalid author %p', (authorByline) => {

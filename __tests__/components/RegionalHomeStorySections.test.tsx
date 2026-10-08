@@ -4,8 +4,12 @@ import { render, screen } from '@testing-library/react';
 import RegionalHomeStorySections from '../../components/regional/RegionalHomeStorySections';
 import { HomeRightRailLatestNews } from '../../components/home/HomeRightRail';
 import { compactRegionalInitialStories } from '../../lib/regionalListingStories';
+import RegionalFeedCards from '../../components/regional/RegionalFeedCards';
+import { getMessagesForLang } from '../../src/i18n/LanguageProvider';
+import * as storyTitleHook from '../../lib/storyTitleHook';
 
 jest.mock('../../src/i18n/LanguageProvider', () => ({
+  ...jest.requireActual('../../src/i18n/LanguageProvider'),
   useI18n: () => ({ t: (key: string) => key }),
 }));
 
@@ -21,6 +25,44 @@ jest.mock('../../src/components/story/StoryImage', () => ({
 }));
 
 describe('RegionalHomeStorySections', () => {
+  describe.each(['hierarchy', 'district'] as const)('%s category identity', (variant) => {
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    describe.each(['slug-title', 'slug-name', 'missing-category', 'unknown-category', 'crime'] as const)('%s', (shape) => {
+      test.each(['en', 'hi', 'gu'] as const)('preserves the %s display label and existing colour rule', (locale) => {
+        const label = getMessagesForLang(locale).categories.regional as string;
+        const category = shape === 'slug-title' ? { slug: 'regional', title: label }
+          : shape === 'slug-name' ? { slug: 'regional', name: label }
+          : shape === 'unknown-category' ? { slug: 'unknown-desk', title: label }
+          : shape === 'crime' ? 'Crime' : undefined;
+        const story = {
+          _id: 'regional-colour-story', slug: 'regional-colour-story',
+          title: `${label}: remaining headline text`, category, language: locale,
+          status: 'published', publishedAt: '2026-10-01T10:00:00.000Z',
+        };
+        const colorLookup = jest.spyOn(storyTitleHook, 'getStoryTitleHookColor');
+        const expectedIdentity = shape === 'unknown-category' ? 'unknown-desk' : shape === 'crime' ? 'crime' : 'regional';
+        const expectedColor = shape === 'unknown-category' ? 'rgb(37, 99, 235)' : shape === 'crime' ? 'rgb(220, 38, 38)' : 'rgb(101, 163, 13)';
+
+        render(variant === 'hierarchy' ? (
+          <RegionalHomeStorySections
+            stories={[story]} requestedLang={locale} stateName="Gujarat" categoryLabel={label}
+            emptyTitle="No stories" readMoreLabel="Read more" fallbackCategoryLabel={label}
+          />
+        ) : (
+          <RegionalFeedCards stories={[story]} requestedLang={locale} fallbackCategoryLabel={label} />
+        ));
+
+        expect(screen.getByText(`${label}:`).style.color).toBe(expectedColor);
+        if (shape !== 'crime') expect(screen.getAllByText(label).length).toBeGreaterThan(0);
+        expect(colorLookup).toHaveBeenCalledWith(expectedIdentity);
+        expect(colorLookup).not.toHaveBeenCalledWith(label);
+      });
+    });
+  });
+
   test.each(['en', 'hi', 'gu'] as const)('%s preserves the Regional shell right-rail fallback, including time and Original label', (locale) => {
     const story = {
       _id: 'regional-sidebar-story',

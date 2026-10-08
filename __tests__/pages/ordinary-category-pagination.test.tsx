@@ -123,6 +123,25 @@ describe('ordinary category page loading', () => {
     });
   }
 
+  describe.each(['national', 'international', 'glamour'])('%s archive title styling', (category) => {
+    test.each(['en', 'hi', 'gu'] as const)('%s keeps top, key and latest titles plain navy', async (locale) => {
+      mockLocale = locale;
+      const limit = category === 'national' ? 20 : 30;
+      const items = dataset(category, locale, 6);
+      serve(items, category, limit);
+      await act(async () => { render(pageElement(category, items, locale, limit)); });
+
+      for (const item of items) {
+        const heading = screen.getByRole('heading', { name: item.title });
+        expect(heading.classList.contains('text-newsPulse-navy')).toBe(true);
+        expect(heading.style.color).toBe('');
+        expect(heading.querySelector('[style*="color"]')).toBeNull();
+        expect(heading.textContent).toBe(item.title);
+      }
+      expect(newsCalls()).toHaveLength(0);
+    });
+  });
+
   describe.each(routes)('/%s (%s, batch %i)', (route, category, limit) => {
     test.each(['en', 'hi', 'gu'] as const)('%s appends 100 stories with no cumulative limit, gaps, duplicates or Top Story changes', async (locale) => {
       mockLocale = locale;

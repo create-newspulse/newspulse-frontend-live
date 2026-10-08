@@ -11,6 +11,7 @@ import { COVER_PLACEHOLDER_SRC, resolveCoverFitMode, resolveCoverImageUrl } from
 import { getStoryCategoryLabel } from '../../lib/publicStories';
 import { formatEditorialDateTime, resolveStoryDateIso } from '../../lib/storyDateTime';
 import { getStoryTitleHookColor, splitStoryTitleHook } from '../../lib/storyTitleHook';
+import { getCategoryIdentity } from '../../lib/categoryKeys';
 import { getStoryId, getStoryReactKey, getStorySlug } from '../../lib/storyIdentity';
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle } from '../../lib/contentFallback';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
@@ -422,7 +423,7 @@ export function HomeSpotlightCarousel({
   if (!vm) return null;
 
   const spotlightTitleParts = splitStoryTitleHook(vm.title);
-  const spotlightTitleHookColor = getStoryTitleHookColor(vm.categoryLabel);
+  const spotlightTitleHookColor = getStoryTitleHookColor(getCategoryIdentity(activeItem?.category));
   const lineClamp2: React.CSSProperties = {
     display: '-webkit-box',
     WebkitLineClamp: 2,

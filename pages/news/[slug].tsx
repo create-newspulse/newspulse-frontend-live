@@ -9,7 +9,7 @@ import { trackDiscoveryClick } from '../../lib/analytics/articleAnalytics';
 
 import AdSlot from '../../src/components/ads/AdSlot';
 import CategoryHeader from '../../src/components/category/CategoryHeader';
-import { getCategoryQueryKey, getCategoryRouteKey } from '../../lib/categoryKeys';
+import { getCategoryIdentity, getCategoryQueryKey, getCategoryRouteKey } from '../../lib/categoryKeys';
 import { filterPubliclyPublishedArticles, getLocalizedArticleFields, STRICT_LOCALE_POLICY, type RouteLocale } from '../../lib/localizedArticleFields';
 import { formatArticleBodyHtml, parseControlledFacebookBlock, parseControlledGalleryBlock, parseControlledInlineImageBlock, parseControlledInstagramBlock, parseControlledXBlock, parseControlledYouTubeBlock, splitArticleBodyBlocks, stripDuplicateOpeningParagraph, type ControlledArticleFacebookEmbed, type ControlledArticleGallery, type ControlledArticleInlineImage, type ControlledArticleInstagramEmbed, type ControlledArticleXEmbed, type ControlledArticleYouTubeEmbed } from '../../lib/articleBody';
 import { fetchPublicNewsGroup, unwrapArticle, type Article } from '../../lib/publicNewsApi';
@@ -1248,8 +1248,8 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
 
   const articleTitleParts = React.useMemo(() => splitStoryTitleHook(displayTitle), [displayTitle]);
   const articleTitleHookColor = React.useMemo(
-    () => getStoryTitleHookColor(displayCategoryLabel || (resolvedArticle as any)?.category || (resolvedArticle as any)?.section),
-    [displayCategoryLabel, resolvedArticle]
+    () => getStoryTitleHookColor(getCategoryIdentity((resolvedArticle as any)?.category || (resolvedArticle as any)?.section)),
+    [resolvedArticle]
   );
 
   return (
