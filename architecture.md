@@ -92,6 +92,7 @@ The [homepage](./pages/index.tsx), [category feed](./components/CategoryFeedPage
 - [articleBody.ts](./lib/articleBody.ts) handles article-body content and controlled embeds; [seo.ts](./lib/seo.ts) centralizes SEO helpers. [The sitemap handlers](./pages/api/sitemap.ts) and [news sitemap handler](./pages/api/news-sitemap.ts) serve the corresponding rewritten public URLs.
 - Homepage SSR reads news, sponsored content, and public settings concurrently with bounded deadlines. Those initial props seed the page before client refreshes.
 - Home Fresh Stories keeps 19 items separate from Top Story: the first four positions are eligible for the existing summary-card presentation, and the remaining 15 are compact. An eligible story without a usable summary still renders compact without substitution or reordering. The source limit remains 40; downstream exclusions include Top Story, the selected Fresh Stories, the next three More Reads items, and sponsored-feature identities.
+- Home's [lower-ad alignment hook](./hooks/useHomeLowerAdAlignment.ts) measures the rendered lower ad and Fresh Stories outer bottoms only. Above 1200px, with both left ads present, it adds positive top margin to the existing lower wrapper when the natural difference exceeds 1px. It subtracts the applied margin on subsequent measurements, observes relevant size/ad-presence changes, and clears spacing on locale changes, missing ads, shorter content, mobile, and unmount. The right rail and grid-row bottom are not alignment targets.
 
 ### Published settings and live refresh
 

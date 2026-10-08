@@ -15,6 +15,7 @@ import { usePublicTickerAds } from '../../hooks/usePublicTickerAds';
 import { isSafeMode } from '../../utils/safeMode';
 import * as i18n from '../../src/i18n/LanguageProvider';
 import * as storyTitleHook from '../../lib/storyTitleHook';
+import { useHomeLowerAdAlignment } from '../../hooks/useHomeLowerAdAlignment';
 
 jest.mock('next/router', () => ({ useRouter: () => ({ asPath: '/', pathname: '/', locale: 'en', push: jest.fn(), replace: jest.fn() }) }));
 jest.mock('next/head', () => ({ __esModule: true, default: () => null }));
@@ -59,6 +60,145 @@ const published = (version = '426', appPromo = false) => normalizePublicSettings
 });
 
 const wrapper = ({ children }: { children: React.ReactNode }) => <React.StrictMode><PublicSettingsProvider>{children}</PublicSettingsProvider></React.StrictMode>;
+
+describe('homepage lower-ad geometry alignment', () => {
+  const property = '--home-lower-ad-offset';
+  let root: HTMLDivElement;
+  let naturalBottom: number;
+  let freshBottom: number;
+  let resizeCallbacks: ResizeObserverCallback[];
+  let frames: Map<number, FrameRequestCallback>;
+  let nextFrame: number;
+  let originalObserver: typeof ResizeObserver;
+  let originalWidth: number;
+
+  const lower = () => root.querySelector<HTMLElement>('.home-lower-ad')!;
+  const offset = () => Number.parseFloat(lower()?.style.getPropertyValue(property) || '0');
+  const flush = () => {
+    const pending = [...frames.values()];
+    frames.clear();
+    pending.forEach((callback) => callback(0));
+  };
+  const resize = () => {
+    act(() => {
+      resizeCallbacks.forEach((callback) => callback([], {} as ResizeObserver));
+      flush();
+    });
+  };
+  const mount = (locale = 'en') => renderHook(({ lang }) => {
+    const refs = useHomeLowerAdAlignment(lang, true);
+    refs.leftRailRef.current = root.querySelector('.home-left');
+    refs.freshStoriesRef.current = root.querySelector('.fresh-stories-card');
+    return refs;
+  }, { initialProps: { lang: locale }, wrapper: ({ children }) => <React.StrictMode>{children}</React.StrictMode> });
+
+  beforeEach(() => {
+    originalWidth = window.innerWidth;
+    originalObserver = global.ResizeObserver;
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1920, writable: true });
+    naturalBottom = 3638.15;
+    freshBottom = 3713.413;
+    resizeCallbacks = [];
+    frames = new Map();
+    nextFrame = 0;
+    global.ResizeObserver = class {
+      constructor(callback: ResizeObserverCallback) { resizeCallbacks.push(callback); }
+      observe = jest.fn();
+      unobserve = jest.fn();
+      disconnect = jest.fn();
+    } as unknown as typeof ResizeObserver;
+    jest.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      frames.set(++nextFrame, callback);
+      return nextFrame;
+    });
+    jest.spyOn(window, 'cancelAnimationFrame').mockImplementation((frame) => { frames.delete(frame); });
+    root = document.createElement('div');
+    root.innerHTML = '<aside class="home-left"><div><div class="home-upper-ad"></div><div class="utility"></div><div class="home-lower-ad"></div></div></aside><main><div class="top-story-card"></div><div class="fresh-stories-card"></div></main><aside class="home-right"></aside>';
+    document.body.append(root);
+    jest.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function(this: HTMLElement) {
+      if (this.classList.contains('home-right')) throw new Error('Right rail must not be measured');
+      const bottom = this.classList.contains('fresh-stories-card') ? freshBottom
+        : this.classList.contains('home-lower-ad') ? naturalBottom + (window.innerWidth > 1200 ? offset() : 0) : 1000;
+      return { top: bottom - 334.5, bottom, width: 300, height: 334.5, left: 0, right: 300, x: 0, y: bottom - 334.5, toJSON: () => ({}) };
+    });
+    const computed = window.getComputedStyle.bind(window);
+    jest.spyOn(window, 'getComputedStyle').mockImplementation((element) => {
+      const style = computed(element);
+      if (element.classList.contains('home-lower-ad')) {
+        Object.defineProperty(style, 'marginTop', { value: `${window.innerWidth > 1200 ? offset() : 0}px` });
+      }
+      return style;
+    });
+  });
+
+  afterEach(() => {
+    root.remove();
+    global.ResizeObserver = originalObserver;
+    Object.defineProperty(window, 'innerWidth', { value: originalWidth });
+    jest.restoreAllMocks();
+  });
+
+  describe.each(['en', 'hi', 'gu'])('%s', (locale) => {
+    test.each([1280, 1440, 1536, 1920, 1024, 768, 375, 320])('only aligns desktop at %ipx without accumulating or following the right rail', (width) => {
+      window.innerWidth = width;
+      freshBottom = locale === 'gu' ? 3640.838 : 3713.413;
+      const result = mount(locale);
+      const expected = width > 1200 ? freshBottom - naturalBottom : 0;
+      expect(offset()).toBeCloseTo(expected, 3);
+      for (let iteration = 0; iteration < 5; iteration++) resize();
+      expect(offset()).toBeCloseTo(expected, 3);
+      expect(root.querySelector('.utility')?.getAttribute('style')).toBeNull();
+      result.unmount();
+      expect(offset()).toBe(0);
+      expect(frames.size).toBe(0);
+    });
+  });
+
+  test.each(['upper', 'lower', 'both'])('keeps natural layout with %s ads absent, including asynchronous removal and insertion', async (missing) => {
+    const upperAd = root.querySelector('.home-upper-ad')!;
+    const lowerAd = lower();
+    const stack = lowerAd.parentElement!;
+    const result = mount();
+    expect(offset()).toBeGreaterThan(0);
+    await act(async () => {
+      if (missing !== 'lower') upperAd.remove();
+      if (missing !== 'upper') lowerAd.remove();
+      await Promise.resolve();
+      flush();
+    });
+    expect(lowerAd.style.getPropertyValue(property)).toBe('');
+    await act(async () => {
+      if (missing !== 'lower') stack.prepend(upperAd);
+      if (missing !== 'upper') stack.append(lowerAd);
+      await Promise.resolve();
+      flush();
+    });
+    expect(offset()).toBeCloseTo(freshBottom - naturalBottom, 3);
+    result.unmount();
+  });
+
+  test('clears alignment for short content, tolerance, resized ads, desktop/mobile resize and locale switches', () => {
+    const result = mount();
+    freshBottom = 2000;
+    resize();
+    expect(offset()).toBe(0);
+    freshBottom = naturalBottom + 0.75;
+    resize();
+    expect(offset()).toBe(0);
+    freshBottom = 3800;
+    naturalBottom += 100;
+    resize();
+    expect(offset()).toBeCloseTo(3800 - naturalBottom, 3);
+    window.innerWidth = 1024;
+    act(() => { window.dispatchEvent(new Event('resize')); flush(); });
+    expect(offset()).toBe(0);
+    window.innerWidth = 1920;
+    freshBottom = naturalBottom + 2.688;
+    result.rerender({ lang: 'gu' });
+    expect(offset()).toBeCloseTo(2.688, 3);
+    result.unmount();
+  });
+});
 
 describe('homepage category colour identity', () => {
   afterEach(() => {
@@ -316,6 +456,10 @@ describe('homepage ad layout boundaries', () => {
     const document = new DOMParser().parseFromString(html, 'text/html');
     const leftGrid = document.querySelector('.home-left > .grid')!;
     const renderedSlots = Array.from(document.querySelectorAll('[data-ad-slot]')).map(element => element.getAttribute('data-ad-slot'));
+
+    expect(leftGrid.querySelectorAll(':scope > .home-upper-ad')).toHaveLength(enabledSlots.includes('HOME_LEFT_300x600') ? 1 : 0);
+    expect(leftGrid.querySelectorAll(':scope > .home-lower-ad')).toHaveLength(enabledSlots.includes('HOME_LEFT_300x250') ? 1 : 0);
+    expect(leftGrid.querySelector('[style*="--home-lower-ad-offset"]')).toBeNull();
 
     const topSlot = state === 'creative' && enabledSlots.includes('TOP_HOME_BILLBOARD_970x250')
       ? 'TOP_HOME_BILLBOARD_970x250'

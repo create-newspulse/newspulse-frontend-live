@@ -11,6 +11,7 @@ import { withPublicReadDeadline } from "../lib/publicReadDeadline";
 import { toTickerTexts } from "../lib/publicBroadcast";
 import { usePublicBroadcastTicker } from "../hooks/usePublicBroadcastTicker";
 import { usePublicAdSlot } from "../hooks/usePublicAdSlot";
+import { useHomeLowerAdAlignment } from "../hooks/useHomeLowerAdAlignment";
 import { usePublicTickerAds } from "../hooks/usePublicTickerAds";
 import { isSafeMode } from "../utils/safeMode";
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle } from "../lib/contentFallback";
@@ -4592,14 +4593,15 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
   const heroLeftBlocks = sidebarBlocks.filter((b) => b.key === 'explore');
   const utilityLeftBlocks = sidebarBlocks.filter((b) => b.key !== 'explore');
   const hasSafeLeftRailPlacement = heroLeftBlocks.length > 0;
+  const { leftRailRef, freshStoriesRef } = useHomeLowerAdAlignment(apiLang, hasSafeLeftRailPlacement);
   const heroGridClass = hasSafeLeftRailPlacement
     ? 'home-grid home-grid--three'
     : 'home-grid home-grid--two';
   const heroLeftRailAdNode = (
-    <AdSlot slot="HOME_LEFT_300x600" variant="right300x600" />
+    <AdSlot slot="HOME_LEFT_300x600" variant="right300x600" className="home-upper-ad" />
   );
   const leftRailAdNode = (
-    <AdSlot slot="HOME_LEFT_300x250" variant="right300" />
+    <AdSlot slot="HOME_LEFT_300x250" variant="right300" className="home-lower-ad" />
   );
   const leftRailTallAdBlock = { key: 'heroLeftRailAd', node: heroLeftRailAdNode };
   const leftRailSmallAdBlock = { key: 'leftRailAd', node: leftRailAdNode };
@@ -4820,6 +4822,9 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
           }
         }
         @media (min-width: 1201px) {
+          .home-left .home-lower-ad {
+            margin-top: var(--home-lower-ad-offset, 0px);
+          }
           .header-shell {
             padding-top: 14px;
           }
@@ -4953,7 +4958,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
           <div className="home-grid-section relative grid gap-6">
             <div className={heroGridClass}>
               {showLeftRail ? (
-                <aside className="home-left">
+                <aside className="home-left" ref={leftRailRef}>
                   <div className="grid gap-4">
                     {leftRailBlocks.map((b) => (
                       <React.Fragment key={b.key}>
@@ -4979,7 +4984,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
                       isLoading={shouldShowHomepageTopStorySkeleton(topStory, latestFromBackend, storyStatus)}
                     />
                   </div>
-                  <div className="fresh-stories-card">
+                  <div className="fresh-stories-card" ref={freshStoriesRef}>
                     <CenterStoryFeed theme={theme} items={centerFeedItems} lang={apiLang} />
                   </div>
                 </div>
