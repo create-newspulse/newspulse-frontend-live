@@ -50,6 +50,16 @@ const HOMEPAGE_UNIT_CONFIG: Record<string, HomepageUnitConfig> = {
     panelClassName: 'overflow-hidden rounded-xl border border-black/10 bg-white shadow-sm p-0',
     mediaClassName: '',
   },
+  CATEGORY_TOP_970x90: {
+    w: 970,
+    h: 90,
+    maxW: 970,
+    objectFit: 'cover',
+    label: '970×90',
+    wrapperClassName: 'max-w-[970px]',
+    panelClassName: 'overflow-hidden rounded-xl border border-black/10 bg-white shadow-sm p-0',
+    mediaClassName: '',
+  },
   HOME_BILLBOARD_970x250: {
     w: 970,
     h: 250,
@@ -83,6 +93,7 @@ export type AdSlotProps = {
 function defaultVariantForSlot(normalizedSlot: string): Variant {
   switch (normalizedSlot) {
     case 'HOME_728x90':
+    case 'CATEGORY_TOP_970x90':
       return 'homeBanner';
     case 'HOME_BILLBOARD_970x250':
     case 'TOP_HOME_BILLBOARD_970x250':
@@ -162,7 +173,8 @@ function AdPlaceholder({
   config: HomepageUnitConfig;
 }) {
   const { t } = useLanguage();
-  const compact = normalizedSlot === 'HOME_728x90';
+  const categoryTop = normalizedSlot === 'CATEGORY_TOP_970x90';
+  const compact = normalizedSlot === 'HOME_728x90' || categoryTop;
   const categories = [
     t('categories.breaking') || 'Breaking',
     t('categories.regional') || 'Regional',
@@ -189,13 +201,13 @@ function AdPlaceholder({
               <div className={compact ? 'truncate font-extrabold text-slate-900' : 'font-extrabold text-lg text-slate-900'}>
                 {t('brand.name') || 'News Pulse'}
               </div>
-              <div className={compact ? 'truncate text-xs text-slate-500' : 'mt-1 text-sm text-slate-500'}>
+              <div className={compact ? `${categoryTop ? 'hidden sm:block ' : ''}truncate text-xs text-slate-500` : 'mt-1 text-sm text-slate-500'}>
                 {t('brand.tagline') || "Your pulse on the world's latest news"}
               </div>
             </div>
 
             {categories ? (
-              <div className={compact ? 'truncate text-[12px] text-slate-600' : 'mt-2 text-sm leading-relaxed text-slate-600'}>
+              <div className={compact ? `${categoryTop ? 'hidden sm:block ' : ''}truncate text-[12px] text-slate-600` : 'mt-2 text-sm leading-relaxed text-slate-600'}>
                 {categories}
               </div>
             ) : null}
@@ -377,10 +389,14 @@ function StrictFramedAd({
 }
 
 function AdvertiseLink({ normalizedSlot, children }: { normalizedSlot?: string; children: React.ReactNode }) {
+  const spacing = normalizedSlot === 'CATEGORY_TOP_970x90'
+    ? 'px-2 py-1 text-xs sm:px-4 sm:py-2 sm:text-sm'
+    : 'px-4 py-2 text-sm';
+
   return (
     <a
       href={getAdvertiseHref(normalizedSlot)}
-      className="shrink-0 inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-bold border border-slate-200 bg-white/90 text-slate-900 hover:bg-white"
+      className={`shrink-0 inline-flex items-center justify-center rounded-full ${spacing} font-bold border border-slate-200 bg-white/90 text-slate-900 hover:bg-white`}
     >
       {children}
     </a>

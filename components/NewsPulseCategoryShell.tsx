@@ -46,6 +46,19 @@ const CATEGORY_ROUTES: Record<string, string> = {
 	'community-reporter': '/community-reporter',
 };
 
+const CATEGORY_TOP_BANNER_CATEGORIES = new Set([
+	'regional',
+	'national',
+	'international',
+	'business',
+	'sports',
+	'lifestyle',
+	'glamour',
+	'science-technology',
+	'tech-gadgets',
+	'faith-culture',
+]);
+
 const HOME_STORY_CACHE_KEY = 'newspulse-home-cache';
 
 function routeForCategory(activeCategory: string): string {
@@ -95,6 +108,7 @@ function readCachedHomeLatestItems(lang: HomeRightRailLang): any[] {
 
 export default function NewsPulseCategoryShell({ activeCategory, latestItems, lang, rightRail, tickerContent, topContent, afterColumns, children }: NewsPulseCategoryShellProps) {
 	const activePath = routeForCategory(activeCategory);
+	const topAdSlot = CATEGORY_TOP_BANNER_CATEGORIES.has(activeCategory) ? 'CATEGORY_TOP_970x90' : 'HOME_728x90';
 	const publicLatestItems = React.useMemo(
 		() => Array.isArray(latestItems) ? filterPubliclyPublishedArticles(latestItems) : latestItems,
 		[latestItems]
@@ -265,7 +279,7 @@ export default function NewsPulseCategoryShell({ activeCategory, latestItems, la
 
 			{topContent ? <div className="home-container pt-4">{topContent}</div> : null}
 
-			<AdSlot slot="HOME_728x90" variant="homeBanner" className="home-shell mx-auto mt-4" />
+			<AdSlot slot={topAdSlot} variant="homeBanner" className="home-shell mx-auto mt-4" />
 			{isModuleEnabled('trending') ? <HomeTrendingStrip theme={DEFAULT_HOME_RIGHT_RAIL_THEME} /> : null}
 
 			<div className="home-container pb-6 pt-4">

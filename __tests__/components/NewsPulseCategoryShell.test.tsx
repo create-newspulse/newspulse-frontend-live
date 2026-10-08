@@ -155,7 +155,7 @@ describe('NewsPulseCategoryShell', () => {
     expect(screen.getByTestId('explore-categories').getAttribute('data-pathname')).toBe('/business');
     expect(screen.getByTestId('home-right-rail').getAttribute('data-lang')).toBe('en');
     expect(screen.getByTestId('home-right-rail').getAttribute('data-count')).toBe('2');
-    expect(screen.getByTestId('ad-slot-HOME_728x90')).toBeTruthy();
+    expect(screen.getByTestId('ad-slot-CATEGORY_TOP_970x90')).toBeTruthy();
     expect(screen.getByTestId('home-trending-strip')).toBeTruthy();
     expect(screen.getByTestId('ad-slot-HOME_LEFT_300x600')).toBeTruthy();
     expect(screen.getByTestId('home-left-live-tv-card')).toBeTruthy();
@@ -171,17 +171,29 @@ describe('NewsPulseCategoryShell', () => {
   test.each(
     ['regional', 'national', 'international', 'business', 'sports', 'lifestyle', 'glamour', 'science-technology', 'tech-gadgets', 'faith-culture']
       .flatMap((activeCategory) => (['en', 'hi', 'gu'] as const).map((lang) => ({ activeCategory, lang })))
-  )('preserves inventory and a full-width billboard wrapper for $activeCategory/$lang', async ({ activeCategory, lang }) => {
+  )('uses category-only top inventory and preserves the lower billboard for $activeCategory/$lang', async ({ activeCategory, lang }) => {
     const { container } = render(<NewsPulseCategoryShell activeCategory={activeCategory} latestItems={[]} lang={lang}>Stories</NewsPulseCategoryShell>);
-    const topAd = screen.getByTestId('ad-slot-HOME_728x90');
+    const topAd = screen.getByTestId('ad-slot-CATEGORY_TOP_970x90');
     const billboard = screen.getByTestId('ad-slot-HOME_BILLBOARD_970x250');
     expect(topAd.getAttribute('data-variant')).toBe('homeBanner');
+    expect(topAd.className).toBe('home-shell mx-auto mt-4');
+    expect(screen.queryByTestId('ad-slot-HOME_728x90')).toBeNull();
     expect(screen.queryByTestId('ad-slot-TOP_HOME_BILLBOARD_970x250')).toBeNull();
     expect(billboard.getAttribute('data-variant')).toBe('billboard970x250');
     expect(billboard.classList.contains('w-full')).toBe(true);
     expect(billboard.classList.contains('mx-auto')).toBe(true);
     expect(billboard.parentElement).toBe(container.querySelector('.post-home-grid-ads'));
     expect(billboard.closest('.home-left, .home-center, .home-right')).toBeNull();
+    await waitFor(() => expect(spotlightCount()).toBeGreaterThan(0));
+  });
+
+  test.each(
+    ['editorial', 'web-stories', 'pulse-dialogue']
+      .flatMap((activeCategory) => (['en', 'hi', 'gu'] as const).map((lang) => ({ activeCategory, lang })))
+  )('keeps the existing top slot for excluded shared-shell route $activeCategory/$lang', async ({ activeCategory, lang }) => {
+    render(<NewsPulseCategoryShell activeCategory={activeCategory} latestItems={[]} lang={lang}>Stories</NewsPulseCategoryShell>);
+    expect(screen.getByTestId('ad-slot-HOME_728x90')).toBeTruthy();
+    expect(screen.queryByTestId('ad-slot-CATEGORY_TOP_970x90')).toBeNull();
     await waitFor(() => expect(spotlightCount()).toBeGreaterThan(0));
   });
 

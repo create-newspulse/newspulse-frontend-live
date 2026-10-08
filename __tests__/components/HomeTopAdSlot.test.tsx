@@ -16,6 +16,7 @@ jest.mock('../../src/consent/CookieConsentProvider', () => ({
 
 const PREMIUM = 'TOP_HOME_BILLBOARD_970x250';
 const STANDARD = 'HOME_728x90';
+const CATEGORY_TOP = 'CATEGORY_TOP_970x90';
 const CLASS_NAME = 'home-shell mx-auto mt-3';
 const empty: UsePublicAdSlotResult = { enabled: true, ad: null, isLoading: false, hasResolved: true };
 const disabled: UsePublicAdSlotResult = { ...empty, enabled: false };
@@ -188,6 +189,93 @@ describe('shared top-home image failures', () => {
     expect(screen.getByRole('img').getAttribute('src')).toBe(premiumAd.imageUrl);
     expect(usePublicAdSlot).toHaveBeenCalledWith({ slot: PREMIUM, language: 'hi' });
     expect(usePublicAdSlot).toHaveBeenCalledWith({ slot: STANDARD, language: 'hi' });
+  });
+});
+
+describe('category top display slot', () => {
+  test.each(['en', 'hi', 'gu'] as const)('uses only category inventory and the 970x90 frame for %s', (language) => {
+    const ad = { ...standardAd, imageUrl: '/category-banner.png', thumbnailUrl: '/category-thumbnail.png', width: 97, height: 25 };
+    jest.mocked(useLanguage).mockReturnValue({ language, t: (key) => key, setLanguage: jest.fn() });
+    jest.mocked(usePublicAdSlot).mockReturnValue({ ...empty, ad });
+    const { container } = render(<AdSlot slot={CATEGORY_TOP} className="home-shell mx-auto mt-4" />);
+    const image = screen.getByRole('img');
+    expect(usePublicAdSlot).toHaveBeenCalledTimes(1);
+    expect(usePublicAdSlot).toHaveBeenCalledWith({ slot: CATEGORY_TOP, language });
+    expect(image.getAttribute('src')).toBe(ad.imageUrl);
+    expect(image.getAttribute('src')).not.toBe(ad.thumbnailUrl);
+    expect(image.getAttribute('width')).toBeNull();
+    expect(image.getAttribute('height')).toBeNull();
+    expect((image as HTMLImageElement).style.objectFit).toBe('cover');
+    expect((image as HTMLImageElement).style.objectPosition).toBe('center');
+    expect(container.querySelector<HTMLElement>('[style*="aspect-ratio"]')?.style.aspectRatio).toBe('970 / 90');
+    expect(container.querySelector('[data-ad-slot]')?.className).toBe('mx-auto w-full max-w-[970px]');
+    expect(container.querySelector('[data-ad-slot]')?.parentElement?.className).toBe('home-shell mx-auto mt-4 not-prose');
+    expect(image.closest('a')?.getAttribute('href')).toBe(ad.targetUrl);
+    expect(image.closest('a')?.getAttribute('target')).toBe('_blank');
+    expect(image.closest('a')?.getAttribute('rel')).toBe('nofollow sponsored noopener noreferrer');
+  });
+
+  test.each([
+    { name: 'assigned creative', state: standard, creative: true, fallback: false },
+    { name: 'empty eligible inventory', state: empty, creative: false, fallback: true },
+    { name: 'disabled placement', state: disabled, creative: false, fallback: false },
+    { name: 'unresolved inventory', state: loading, creative: false, fallback: false },
+  ])('preserves exact-slot $name behavior', ({ state, creative, fallback }) => {
+    jest.mocked(usePublicAdSlot).mockImplementation(({ slot }) => {
+      expect(slot).toBe(CATEGORY_TOP);
+      return state;
+    });
+    const { container } = render(<AdSlot slot={CATEGORY_TOP} />);
+    expect(Boolean(container.querySelector('img'))).toBe(creative);
+    expect(Boolean(container.querySelector(`a[href="/advertise?slot=${CATEGORY_TOP}"]`))).toBe(fallback);
+    expect(Boolean(container.querySelector('.animate-pulse'))).toBe(state.isLoading);
+    expect(container.querySelectorAll('[data-ad-slot]')).toHaveLength(state.enabled ? 1 : 0);
+    expect(container.querySelector('[data-ad-slot]')?.getAttribute('data-ad-slot')).toBe(state.enabled ? CATEGORY_TOP : undefined);
+    expect(container.querySelector<HTMLElement>('[style*="aspect-ratio"]')?.style.aspectRatio).toBe(state.enabled ? '970 / 90' : undefined);
+    expect(usePublicAdSlot).toHaveBeenCalledTimes(1);
+  });
+
+  test('keeps image failure on the category house fallback without reading Home inventory', () => {
+    jest.mocked(usePublicAdSlot).mockReturnValue(standard);
+    const { container } = render(<AdSlot slot={CATEGORY_TOP} />);
+    fireEvent.error(screen.getByRole('img'));
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.querySelector(`a[href="/advertise?slot=${CATEGORY_TOP}"]`)).not.toBeNull();
+    expect(container.querySelector<HTMLElement>('[style*="aspect-ratio"]')?.style.aspectRatio).toBe('970 / 90');
+    expect(jest.mocked(usePublicAdSlot).mock.calls.map(([options]) => options.slot)).toEqual([CATEGORY_TOP]);
+  });
+
+  test('compacts only the category house fallback on mobile and preserves the Home fallback classes', () => {
+    const { container, rerender } = render(<ResolvedAdSlot slot={CATEGORY_TOP} state={empty} />);
+    expect(screen.getByText('brand.tagline').className).toBe('hidden sm:block truncate text-xs text-slate-500');
+    expect(screen.getByText(/categories.breaking/).className).toBe('hidden sm:block truncate text-[12px] text-slate-600');
+    expect(container.querySelector(`a[href="/advertise?slot=${CATEGORY_TOP}"]`)?.className).toContain('px-2 py-1 text-xs sm:px-4 sm:py-2 sm:text-sm');
+    rerender(<ResolvedAdSlot slot={STANDARD} state={empty} />);
+    expect(screen.getByText('brand.tagline').className).toBe('truncate text-xs text-slate-500');
+    expect(screen.getByText(/categories.breaking/).className).toBe('truncate text-[12px] text-slate-600');
+    expect(container.querySelector(`a[href="/advertise?slot=${STANDARD}"]`)?.className).toBe('shrink-0 inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-bold border border-slate-200 bg-white/90 text-slate-900 hover:bg-white');
+  });
+
+  test.each(['en', 'hi', 'gu'] as const)('does not add category inventory to Home for %s', (language) => {
+    jest.mocked(useLanguage).mockReturnValue({ language, t: (key) => key, setLanguage: jest.fn() });
+    setSlots(premium, standard);
+    render(<HomeTopAdSlot />);
+    expect(jest.mocked(usePublicAdSlot).mock.calls.map(([options]) => options.slot)).toEqual([PREMIUM, STANDARD]);
+    expect(screen.getByRole('img').getAttribute('src')).toBe(premiumAd.imageUrl);
+  });
+
+  test.each(['ARTICLE_INLINE', 'ARTICLE_END'])('leaves %s on its existing 300x250 article presentation', (slot) => {
+    const { container, rerender } = render(<ResolvedAdSlot slot={slot} renderMode="articleDisplay" state={standard} />);
+    expect(container.querySelector<HTMLElement>('[style*="aspect-ratio"]')?.style.aspectRatio).toBe('300 / 250');
+    expect(screen.getByRole('img').classList.contains('object-contain')).toBe(true);
+    rerender(<ResolvedAdSlot slot={slot} renderMode="articleDisplay" state={empty} />);
+    expect(container.querySelector(`a[href="/advertise?slot=${slot}"]`)).not.toBeNull();
+    expect(container.querySelector<HTMLElement>('[style*="aspect-ratio"]')?.style.aspectRatio).toBe('300 / 250');
+    rerender(<ResolvedAdSlot slot={slot} renderMode="articleDisplay" state={loading} />);
+    expect(container.querySelector('.animate-pulse')).not.toBeNull();
+    expect(container.querySelector<HTMLElement>('[style*="aspect-ratio"]')?.style.aspectRatio).toBe('300 / 250');
+    rerender(<ResolvedAdSlot slot={slot} renderMode="articleDisplay" state={disabled} />);
+    expect(container.firstChild).toBeNull();
   });
 });
 
