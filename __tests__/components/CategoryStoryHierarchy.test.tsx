@@ -1,7 +1,9 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 
-import CategoryStoryHierarchy, { type CategoryStoryHierarchyItem } from '../../components/category/CategoryStoryHierarchy';
+import CategoryStoryHierarchy, { useCategoryStoryHierarchy, type CategoryStoryHierarchyItem } from '../../components/category/CategoryStoryHierarchy';
+
+const { renderToStaticMarkup } = jest.requireActual('react-dom/server.node') as typeof import('react-dom/server');
 
 jest.mock('next/link', () => ({
   __esModule: true,
@@ -30,6 +32,11 @@ function story(index: number, overrides: Partial<CategoryStoryHierarchyItem> = {
     dateLabel: '1 Jan 2026',
     ...overrides,
   };
+}
+
+function SplitHierarchy(props: React.ComponentProps<typeof CategoryStoryHierarchy>) {
+  const { content, completion } = useCategoryStoryHierarchy(props);
+  return <><main data-testid="feed-column">{content}</main><section data-testid="after-columns">{completion}</section></>;
 }
 
 describe('CategoryStoryHierarchy', () => {
@@ -118,14 +125,15 @@ describe('CategoryStoryHierarchy', () => {
     expect(screen.queryByText('No stories found')).toBeNull();
   });
 
-  test('automatically requests more stories when the sentinel approaches the viewport', () => {
+  test.each([CategoryStoryHierarchy, SplitHierarchy])('automatically requests more stories when the sentinel approaches the viewport (%p)', (Hierarchy) => {
     const onLoadMore = jest.fn();
+    const observe = jest.fn();
     let observerCallback: IntersectionObserverCallback = () => undefined;
 
     global.IntersectionObserver = jest.fn((callback: IntersectionObserverCallback) => {
       observerCallback = callback;
       return {
-        observe: jest.fn(),
+        observe,
         disconnect: jest.fn(),
         root: null,
         rootMargin: '',
@@ -136,7 +144,7 @@ describe('CategoryStoryHierarchy', () => {
     }) as unknown as typeof IntersectionObserver;
 
     render(
-      <CategoryStoryHierarchy
+      <Hierarchy
         items={Array.from({ length: 6 }, (_, index) => story(index + 1))}
         categoryLabel="National News"
         loadMoreLabel="Load More National Stories"
@@ -147,16 +155,18 @@ describe('CategoryStoryHierarchy', () => {
       />
     );
 
+    expect(global.IntersectionObserver).toHaveBeenCalledWith(expect.any(Function), { root: null, rootMargin: '640px 0px', threshold: 0 });
+    if (Hierarchy === SplitHierarchy) expect(screen.getByTestId('feed-column').contains(observe.mock.calls[0][0])).toBe(true);
     observerCallback([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver);
 
     expect(onLoadMore).toHaveBeenCalledTimes(1);
   });
 
-  test('keeps loaded stories visible and shows retry for load-more errors', () => {
+  test.each([CategoryStoryHierarchy, SplitHierarchy])('keeps loaded stories visible and shows retry for load-more errors (%p)', (Hierarchy) => {
     const onLoadMore = jest.fn();
 
     render(
-      <CategoryStoryHierarchy
+      <Hierarchy
         items={Array.from({ length: 6 }, (_, index) => story(index + 1))}
         categoryLabel="National News"
         loadMoreLabel="Load More National Stories"
@@ -173,6 +183,49 @@ describe('CategoryStoryHierarchy', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
     expect(onLoadMore).toHaveBeenCalledTimes(1);
+  });
+
+  test('keeps completion outside the feed only after both local stories and backend pages are exhausted', () => {
+    const onLoadMore = jest.fn();
+    const props = {
+      items: Array.from({ length: 14 }, (_, index) => story(index + 1)),
+      categoryLabel: 'Business', loadMoreLabel: 'Load More', emptyTitle: 'No stories found', onLoadMore,
+    };
+    const { rerender } = render(<SplitHierarchy {...props} hasMore={false} />);
+    expect(screen.queryByText("You're all caught up.")).toBeNull();
+    expect(screen.queryByText('Story 14')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Load More' }));
+    expect(screen.getByText('Story 14')).toBeTruthy();
+    expect(onLoadMore).not.toHaveBeenCalled();
+    expect(screen.getByTestId('after-columns').contains(screen.getByText("You're all caught up."))).toBe(true);
+    expect(screen.getByText("You're all caught up.").closest('main')).toBeNull();
+
+    rerender(<SplitHierarchy {...props} hasMore />);
+    expect(screen.queryByText("You're all caught up.")).toBeNull();
+    expect(screen.getByRole('button', { name: 'Load More' }).closest('main')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Load More' }));
+    expect(onLoadMore).toHaveBeenCalledTimes(1);
+
+    rerender(<SplitHierarchy {...props} hasMore={false} />);
+    expect(screen.getAllByText("You're all caught up.")).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Load More' })).toBeNull();
+  });
+
+  test.each([
+    { items: [], loading: false, endOfFeedLabel: "You're all caught up." },
+    { items: [], loading: true, endOfFeedLabel: "You're all caught up." },
+    { items: [story(1)], loading: false, endOfFeedLabel: '' },
+  ])('does not add terminal content for an empty, loading, or disabled-label state (%p)', (state) => {
+    render(<SplitHierarchy {...state} categoryLabel="Business" loadMoreLabel="Load More" emptyTitle="No stories found" />);
+    expect(screen.getByTestId('after-columns').textContent).toBe('');
+  });
+
+  test('server-renders the existing terminal presentation outside the feed without a client effect', () => {
+    const markup = renderToStaticMarkup(<SplitHierarchy items={[story(1)]} categoryLabel="Business" loadMoreLabel="Load More" emptyTitle="No stories found" />);
+    const root = document.createElement('div');
+    root.innerHTML = markup;
+    expect(root.querySelector('main')?.textContent).not.toContain("You're all caught up.");
+    expect(root.querySelector('[data-testid="after-columns"]')?.textContent).toBe("You're all caught up.");
   });
 
   test('renders compact latest rows with the resolved article image and placeholder fallback', () => {

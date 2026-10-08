@@ -317,6 +317,10 @@ function LoadMoreButton({ label, loading, onClick }: { label: string; loading?: 
   );
 }
 
+function FeedCompletion({ label }: { label: string }) {
+  return <div className="py-2 text-center text-sm font-semibold text-slate-500">{label}</div>;
+}
+
 function LoadMoreBoundary({
   canLoadMore,
   loadingMore,
@@ -377,7 +381,7 @@ function LoadMoreBoundary({
     <>
       {canLoadMore ? <div ref={sentinelRef} className="h-1 w-full" aria-hidden="true" /> : null}
       {canLoadMore ? <LoadMoreButton label={loadMoreLabel} loading={loadingMore} onClick={onLoadMore} /> : null}
-      {!canLoadMore && endOfFeedLabel ? <div className="py-2 text-center text-sm font-semibold text-slate-500">{endOfFeedLabel}</div> : null}
+      {!canLoadMore && endOfFeedLabel ? <FeedCompletion label={endOfFeedLabel} /> : null}
     </>
   );
 }
@@ -452,7 +456,7 @@ function CategoryStoryHierarchySkeleton({ categoryLabel, latestLabel }: { catego
   );
 }
 
-export default function CategoryStoryHierarchy({
+export function useCategoryStoryHierarchy({
   items,
   categoryLabel,
   topLabel,
@@ -474,7 +478,7 @@ export default function CategoryStoryHierarchy({
   endOfFeedLabel = "You're all caught up.",
   onLoadMore,
   renderTopActions,
-}: Props) {
+}: Props, separateCompletion = true) {
   const stories = React.useMemo(() => dedupeStories(items), [items]);
   const resetKey = stories.map(storyKey).join('|');
   const latestInitial = initialLatestCount ?? (variant === 'web-stories' ? 12 : variant === 'editorial' ? 8 : 8);
@@ -497,10 +501,10 @@ export default function CategoryStoryHierarchy({
     else onLoadMore?.();
   }, [latestStories.length, loadMoreStep, onLoadMore, variant, visibleLatestCount, webStoryCovers.length]);
 
-  if (loading && !stories.length) return <CategoryStoryHierarchySkeleton categoryLabel={categoryLabel} latestLabel={latestLabel} />;
+  if (loading && !stories.length) return { content: <CategoryStoryHierarchySkeleton categoryLabel={categoryLabel} latestLabel={latestLabel} />, completion: null };
 
   if (!stories.length) {
-    return (
+    const content = (
       <div className="rounded-[28px] border border-slate-200/80 bg-white p-6 shadow-sm">
         <div className="text-base font-semibold text-newsPulse-navy">{emptyTitle}</div>
         {emptyHint ? <div className="mt-2 text-sm leading-6 text-newsPulse-slate">{emptyHint}</div> : null}
@@ -509,20 +513,24 @@ export default function CategoryStoryHierarchy({
         ) : null}
       </div>
     );
+    return { content, completion: null };
   }
+
+  const completion = separateCompletion && !canLoadMore && endOfFeedLabel ? <FeedCompletion label={endOfFeedLabel} /> : null;
 
   if (variant === 'web-stories') {
     const coverCount = Math.max(0, visibleLatestCount);
-    return (
+    const content = (
       <WebStoriesHierarchy stories={stories} loadMoreLabel={loadMoreLabel} visibleCount={coverCount} canLoadMore={canLoadMore} loadingMore={loadingMore} onLoadMore={handleLoadMore}>
-        <LoadMoreBoundary canLoadMore={canLoadMore} loadingMore={loadingMore} loadMoreLabel={loadMoreLabel} loadMoreError={loadMoreError} endOfFeedLabel={endOfFeedLabel} autoLoadMore={autoLoadMore} onLoadMore={handleLoadMore} />
+        <LoadMoreBoundary canLoadMore={canLoadMore} loadingMore={loadingMore} loadMoreLabel={loadMoreLabel} loadMoreError={loadMoreError} endOfFeedLabel={separateCompletion ? undefined : endOfFeedLabel} autoLoadMore={autoLoadMore} onLoadMore={handleLoadMore} />
       </WebStoriesHierarchy>
     );
+    return { content, completion };
   }
 
   const isEditorial = variant === 'editorial';
 
-  return (
+  const content = (
     <div className="grid gap-4">
       <div className="mb-1 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
@@ -558,7 +566,12 @@ export default function CategoryStoryHierarchy({
         </section>
       ) : null}
 
-      <LoadMoreBoundary canLoadMore={canLoadMore} loadingMore={loadingMore} loadMoreLabel={loadMoreLabel} loadMoreError={loadMoreError} endOfFeedLabel={endOfFeedLabel} autoLoadMore={autoLoadMore} onLoadMore={handleLoadMore} />
+      <LoadMoreBoundary canLoadMore={canLoadMore} loadingMore={loadingMore} loadMoreLabel={loadMoreLabel} loadMoreError={loadMoreError} endOfFeedLabel={separateCompletion ? undefined : endOfFeedLabel} autoLoadMore={autoLoadMore} onLoadMore={handleLoadMore} />
     </div>
   );
+  return { content, completion };
+}
+
+export default function CategoryStoryHierarchy(props: Props) {
+  return useCategoryStoryHierarchy(props, false).content;
 }

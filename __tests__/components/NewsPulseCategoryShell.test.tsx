@@ -168,6 +168,34 @@ describe('NewsPulseCategoryShell', () => {
     });
   });
 
+  test('places optional continuation after all columns and before the existing bottom ad and Spotlight', async () => {
+    const { container, rerender } = render(
+      <NewsPulseCategoryShell activeCategory="business" latestItems={[]} lang="en" afterColumns={<footer data-testid="category-continuation">Feed complete</footer>}>
+        <div data-testid="category-feed">Stories</div>
+      </NewsPulseCategoryShell>
+    );
+
+    const grid = container.querySelector('.home-grid--three');
+    const continuation = screen.getByTestId('category-continuation');
+    const postAds = container.querySelector('.post-home-grid-ads');
+    expect(grid?.contains(screen.getByTestId('category-feed'))).toBe(true);
+    expect(grid?.contains(continuation)).toBe(false);
+    expect(continuation.closest('.home-left, .home-center, .home-right')).toBeNull();
+    expect(grid!.compareDocumentPosition(continuation) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(continuation.compareDocumentPosition(postAds!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await waitFor(() => expect(spotlightCount()).toBeGreaterThan(0));
+    expect(postAds!.compareDocumentPosition(screen.getByTestId('home-spotlight')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    rerender(
+      <NewsPulseCategoryShell activeCategory="business" latestItems={[]} lang="en">
+        <div data-testid="category-feed">Stories</div>
+      </NewsPulseCategoryShell>
+    );
+    expect(container.querySelector('.category-after-columns')).toBeNull();
+    expect(screen.getByTestId('ad-slot-HOME_BILLBOARD_970x250')).toBeTruthy();
+  });
+
   test('maps route aliases used by category pages', async () => {
     render(
       <NewsPulseCategoryShell activeCategory="science-technology" latestItems={[]} lang="gu" topContent={<div data-testid="category-top-content">Regional controls</div>}>

@@ -2,12 +2,13 @@ import React from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import GujaratPage from '../../pages/regional/gujarat';
 import { compactRegionalInitialStories } from '../../lib/regionalListingStories';
+import { getStateName, toLanguageKey } from '../../utils/localizedNames';
 
 let mockLocale: 'en' | 'hi' | 'gu' = 'en';
 jest.mock('next/router', () => ({ useRouter: () => ({ asPath: '/regional/gujarat', locale: mockLocale, query: {}, push: jest.fn(async () => true) }) }));
 jest.mock('../../utils/LanguageContext', () => ({ useLanguage: () => ({ language: mockLocale }) }));
 jest.mock('../../src/i18n/LanguageProvider', () => ({ normalizeLang: (locale: string) => locale || 'en', useI18n: () => ({ t: (key: string) => key }) }));
-jest.mock('../../components/NewsPulseCategoryShell', () => ({ __esModule: true, default: ({ children, topContent }: { children: React.ReactNode; topContent?: React.ReactNode }) => <main>{topContent}{children}</main> }));
+jest.mock('../../components/NewsPulseCategoryShell', () => ({ __esModule: true, default: ({ children, topContent, afterColumns }: { children: React.ReactNode; topContent?: React.ReactNode; afterColumns?: React.ReactNode }) => <>{topContent}<div data-testid="category-columns"><main>{children}</main></div><section data-testid="category-after-columns">{afterColumns}</section></> }));
 jest.mock('next/link', () => ({
   __esModule: true,
   default: ({ href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => <a href={href} {...props}>{children}</a>,
@@ -88,9 +89,38 @@ describe('Regional fixed-page client loading', () => {
     const items = dataset(locale, 10);
     render(<GujaratPage {...initialProps(items, locale)} />);
     expect(renderedIds()).toEqual(items.map((item) => item._id));
-    expect(screen.getByText(/all caught up/i)).toBeTruthy();
+    const completion = screen.getByText(/all caught up/i);
+    const continuation = screen.getByTestId('category-after-columns');
+    const footer = continuation.querySelector('footer')!;
+    expect(continuation.contains(completion)).toBe(true);
+    expect(completion.closest('main')).toBeNull();
+    expect(footer.closest('main')).toBeNull();
+    expect(footer.textContent).toContain('regionalGujaratPage.regionalPulse');
+    expect(footer.textContent).toContain(getStateName(toLanguageKey(locale), 'gujarat'));
+    expect(footer.className).toBe('border-t border-slate-200 bg-white');
+    expect(completion.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByTestId('category-columns').compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole('button', { name: /^Load More .+ Stories$/ })).toBeNull();
     expect(screen.getByText(`October bridge ${locale}`)).toBeTruthy();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test.each(['en', 'hi', 'gu'] as const)('%s keeps the footer after columns on other tabs and resets local reveal on returning to Feed', async (locale) => {
+    mockLocale = locale;
+    const items = dataset(locale, 20);
+    render(<GujaratPage {...initialProps(items, locale)} />);
+    await revealLocalStories(20);
+    expect(screen.getByText(/all caught up/i)).toBeTruthy();
+    for (const tab of ['regionalUI.tabDistricts', 'regionalUI.tabMap']) {
+      fireEvent.click(screen.getByText(tab));
+      expect(screen.queryByText(/all caught up/i)).toBeNull();
+      expect(screen.getByTestId('category-after-columns').querySelector('footer')).toBeTruthy();
+      expect(screen.getByRole('main').querySelector('footer')).toBeNull();
+    }
+    fireEvent.click(screen.getByText('regionalUI.tabFeed'));
+    expect(renderedIds()).toEqual(items.slice(0, 13).map((item) => item._id));
+    expect(screen.queryByText(/all caught up/i)).toBeNull();
+    expect(loadMoreButton().closest('main')).toBeTruthy();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

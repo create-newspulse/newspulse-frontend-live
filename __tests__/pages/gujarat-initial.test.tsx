@@ -9,8 +9,8 @@ jest.mock('../../utils/LanguageContext', () => ({ useLanguage: () => ({ language
 jest.mock('../../src/i18n/LanguageProvider', () => ({ normalizeLang: (locale: string) => locale || 'en', useI18n: () => ({ t: (key: string) => key }) }));
 jest.mock('../../lib/getMessages', () => ({ getMessages: async () => ({}) }));
 jest.mock('../../lib/publicApiBase', () => ({ getPublicApiBaseUrl: () => 'https://backend.test' }));
-jest.mock('../../components/NewsPulseCategoryShell', () => ({ __esModule: true, default: ({ children }: any) => <main>{children}</main> }));
-jest.mock('../../components/regional/RegionalHomeStorySections', () => ({ __esModule: true, default: ({ stories, loading }: any) => <section>{loading ? 'Loading stories' : stories.map((story: any) => <h2 key={story._id}>{story.title}</h2>)}</section> }));
+jest.mock('../../components/NewsPulseCategoryShell', () => ({ __esModule: true, default: ({ children, afterColumns }: any) => <><main>{children}</main>{afterColumns}</> }));
+jest.mock('../../components/regional/RegionalHomeStorySections', () => ({ __esModule: true, useRegionalHomeStorySections: ({ stories, loading }: any) => ({ content: <section>{loading ? 'Loading stories' : stories.map((story: any) => <h2 key={story._id}>{story.title}</h2>)}</section>, completion: null }) }));
 
 function story(locale: string, title = 'Initial regional story') {
   return { _id: title, title, language: locale, category: 'regional', status: 'published', publishedAt: '2026-01-01T10:00:00Z', slug: 'regional-story' };

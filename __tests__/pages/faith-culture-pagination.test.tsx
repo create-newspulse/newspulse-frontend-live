@@ -17,7 +17,7 @@ jest.mock('../../utils/LanguageContext', () => ({ useLanguage: () => ({ language
 jest.mock('../../src/i18n/LanguageProvider', () => ({ normalizeLang: (locale: string) => locale || 'en', useI18n: () => ({ t: mockT }) }));
 jest.mock('../../components/NewsPulseCategoryShell', () => ({
   __esModule: true,
-  default: ({ children, topContent }: { children: React.ReactNode; topContent?: React.ReactNode }) => <main>{topContent}{children}</main>,
+  default: ({ children, topContent, afterColumns }: { children: React.ReactNode; topContent?: React.ReactNode; afterColumns?: React.ReactNode }) => <><main>{topContent}{children}</main><section data-testid="category-after-columns">{afterColumns}</section></>,
 }));
 jest.mock('next/link', () => ({
   __esModule: true,
@@ -102,7 +102,9 @@ describe('Faith route pagination without UI redesign', () => {
     }
     expect(requestedPages()).toEqual(['1', '2', '3', '4']);
     expect(screen.queryByRole('button', { name: 'Load More Faith & Culture Stories' })).toBeNull();
-    expect(screen.getByText(/all caught up/i)).toBeTruthy();
+    const completion = screen.getByText(/all caught up/i);
+    expect(completion.closest('main')).toBeNull();
+    expect(screen.getByTestId('category-after-columns').contains(completion)).toBe(true);
   }, 20000);
 
   test.each([0, 3, 17])('an exhausted ISR seed of %i stories does not refetch after hydration', async (total) => {
@@ -112,6 +114,8 @@ describe('Faith route pagination without UI redesign', () => {
     if (total) await reveal(total);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: 'Load More Faith & Culture Stories' })).toBeNull();
+    if (total) expect(screen.getByText(/all caught up/i).closest('main')).toBeNull();
+    else expect(screen.getByTestId('category-after-columns').textContent).toBe('');
   });
 
   test('overlapping pages append unique IDs and preserve distinct stories', async () => {

@@ -30,7 +30,7 @@ jest.mock('../../lib/publicApiBase', () => ({ getPublicApiBaseUrl: () => '' }));
 jest.mock('../../utils/LanguageContext', () => ({ useLanguage: () => ({ language: mockLocale }) }));
 jest.mock('../../components/NewsPulseCategoryShell', () => ({
   __esModule: true,
-  default: ({ children, topContent }: { children: React.ReactNode; topContent?: React.ReactNode }) => <main>{topContent}{children}</main>,
+  default: ({ children, topContent, afterColumns }: { children: React.ReactNode; topContent?: React.ReactNode; afterColumns?: React.ReactNode }) => <><main>{topContent}{children}</main><section data-testid="category-after-columns">{afterColumns}</section></>,
 }));
 type TestLinkProps = Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, 'href'> & Pick<LinkProps, 'href' | 'locale' | 'shallow' | 'scroll' | 'prefetch'>;
 jest.mock('next/link', () => ({
@@ -291,7 +291,7 @@ describe('Faith-only public topic filters', () => {
     expect(requestedPages()).toEqual(['1', '2', '3', '4']);
     expectContract(living, locale);
     expect(screen.queryByRole('button', { name: 'Load More Faith & Culture Stories' })).toBeNull();
-    expect(screen.getByText(/all caught up/i)).toBeTruthy();
+    expect(screen.getByText(/all caught up/i).closest('main')).toBeNull();
   }, 20000);
 
   test('changing topic after page 3 discards all appended pages and resets the Top Story', async () => {

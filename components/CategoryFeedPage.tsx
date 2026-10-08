@@ -20,7 +20,7 @@ import { getArticleAuthorDesignation, getArticleAuthorName, getArticleReadingTim
 import { getPulseDialogueFormatLabel, getPulseDialogueMetadata } from '../lib/pulseDialogue';
 import NewsPulseCategoryShell from './NewsPulseCategoryShell';
 import CategoryDeskHeader from '../src/components/category/CategoryDeskHeader';
-import CategoryStoryHierarchy, { type CategoryStoryHierarchyItem } from './category/CategoryStoryHierarchy';
+import { useCategoryStoryHierarchy, type CategoryStoryHierarchyItem } from './category/CategoryStoryHierarchy';
 
 export type CategoryFeedPageProps = {
   title: string;
@@ -627,6 +627,26 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
     )
   );
 
+  const hierarchy = useCategoryStoryHierarchy({
+    items: useCategoryShell && !error ? hierarchyItems : [],
+    categoryLabel: routeCategoryKey === 'web-stories' ? 'Web Stories' : pageTitle,
+    topLabel: routeCategoryKey === 'pulse-dialogue' ? t('pulseDialogue.landing.featuredDialogue') : routeCategoryKey === 'web-stories' ? 'Featured Web Story' : isEditorialPage ? 'Featured Editorial' : 'Top Story',
+    keyLabel: isEditorialPage ? 'Key Editorials' : 'Key Stories',
+    latestLabel: routeCategoryKey === 'pulse-dialogue' ? t('pulseDialogue.landing.latestContributions') : isEditorialPage ? 'Recent Editorials' : routeCategoryKey === 'web-stories' ? 'Web Stories' : 'Latest',
+    loadMoreLabel: LOAD_MORE_LABELS[routeCategoryKey] || `Load More ${pageTitle} Stories`,
+    emptyTitle,
+    loading: !loaded,
+    variant: routeCategoryKey === 'web-stories' ? 'web-stories' : isEditorialPage ? 'editorial' : 'news',
+    initialLatestCount: routeCategoryKey === 'web-stories' ? 12 : 8,
+    loadMoreStep: routeCategoryKey === 'web-stories' ? 12 : 12,
+    hasMore,
+    loadingMore,
+    loadMoreError,
+    showLoadMoreWhenEmpty: faithPagination,
+    autoLoadMore: true,
+    onLoadMore: loadNextPage,
+  }, useCategoryShell && pagedCategory);
+
   const renderHierarchyContent = () => (
     error ? (
       <div className="mt-6 rounded-2xl border border-newsPulse-slate/25 bg-newsPulse-slate/10 p-5 text-newsPulse-navy">
@@ -641,25 +661,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
         <div className="text-lg font-semibold text-newsPulse-navy">{emptyTitle}</div>
       </div>
     ) : (
-      <CategoryStoryHierarchy
-        items={hierarchyItems}
-        categoryLabel={routeCategoryKey === 'web-stories' ? 'Web Stories' : pageTitle}
-        topLabel={routeCategoryKey === 'pulse-dialogue' ? t('pulseDialogue.landing.featuredDialogue') : routeCategoryKey === 'web-stories' ? 'Featured Web Story' : isEditorialPage ? 'Featured Editorial' : 'Top Story'}
-        keyLabel={isEditorialPage ? 'Key Editorials' : 'Key Stories'}
-        latestLabel={routeCategoryKey === 'pulse-dialogue' ? t('pulseDialogue.landing.latestContributions') : isEditorialPage ? 'Recent Editorials' : routeCategoryKey === 'web-stories' ? 'Web Stories' : 'Latest'}
-        loadMoreLabel={LOAD_MORE_LABELS[routeCategoryKey] || `Load More ${pageTitle} Stories`}
-        emptyTitle={emptyTitle}
-        loading={!loaded}
-        variant={routeCategoryKey === 'web-stories' ? 'web-stories' : isEditorialPage ? 'editorial' : 'news'}
-        initialLatestCount={routeCategoryKey === 'web-stories' ? 12 : 8}
-        loadMoreStep={routeCategoryKey === 'web-stories' ? 12 : 12}
-        hasMore={hasMore}
-        loadingMore={loadingMore}
-        loadMoreError={loadMoreError}
-        showLoadMoreWhenEmpty={faithPagination}
-        autoLoadMore
-        onLoadMore={loadNextPage}
-      />
+      hierarchy.content
     )
   );
 
@@ -685,7 +687,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
       </Head>
 
       {useCategoryShell ? (
-        <NewsPulseCategoryShell activeCategory={routeCategoryKey} latestItems={items} lang={shellLang} topContent={renderHeader()}>
+        <NewsPulseCategoryShell activeCategory={routeCategoryKey} latestItems={items} lang={shellLang} topContent={renderHeader()} afterColumns={hierarchy.completion}>
           {shellCenterContent}
         </NewsPulseCategoryShell>
       ) : legacyContent}

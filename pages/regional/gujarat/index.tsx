@@ -8,7 +8,7 @@ import DistrictPicker from '../../../components/regional/DistrictPicker';
 import CategoryRail from '../../../components/regional/CategoryRail';
 import RegionalTabs, { type RegionalTabKey } from '../../../components/regional/RegionalTabs';
 import BreakingTicker from '../../../components/regional/BreakingTicker';
-import RegionalHomeStorySections from '../../../components/regional/RegionalHomeStorySections';
+import { useRegionalHomeStorySections } from '../../../components/regional/RegionalHomeStorySections';
 import NewsPulseCategoryShell from '../../../components/NewsPulseCategoryShell';
 
 import { getStoryCategoryLabel } from '../../../lib/publicStories';
@@ -492,6 +492,25 @@ export default function GujaratIndexPage({
     </div>
   );
 
+  const regionalPresentation = useRegionalHomeStorySections({
+    stories: tab !== 'Districts' && tab !== 'Map' ? filteredStories : [],
+    requestedLang: uiLang,
+    loading,
+    stateName,
+    categoryLabel: `${t('regionalGujaratPage.latestFrom')} ${stateName}`,
+    showDistrictBadges: districtFilteringEnabled,
+    getDistrictLabel: getLocalizedDistrictFromStory,
+    emptyTitle: t('regionalUI.emptyTitle'),
+    emptyHint: t('regionalUI.emptyHint'),
+    readMoreLabel: t('regionalUI.readMore'),
+    loadMoreLabel: regionalLoadMoreLabel,
+    hasMore,
+    loadingMore,
+    loadMoreError,
+    onLoadMore: loadNextRegionalPage,
+    fallbackCategoryLabel: tHeading(language as any, 'regional'),
+  });
+
   return (
     <>
       <Head>
@@ -514,6 +533,16 @@ export default function GujaratIndexPage({
           />
         )}
         topContent={regionalTopControls}
+        afterColumns={(
+          <>
+            {regionalPresentation.completion}
+            <footer className="border-t border-slate-200 bg-white">
+              <div className="mx-auto max-w-6xl px-4 py-6 text-sm text-slate-600">
+                {t('regionalGujaratPage.regionalPulse')} – {stateName}
+              </div>
+            </footer>
+          </>
+        )}
       >
       <div className="min-w-0 text-slate-900">
       <div className="py-4">
@@ -566,26 +595,7 @@ export default function GujaratIndexPage({
             </div>
           </div>
         ) : (
-          <>
-            <RegionalHomeStorySections
-              stories={filteredStories}
-              requestedLang={uiLang}
-              loading={loading}
-              stateName={stateName}
-              categoryLabel={`${t('regionalGujaratPage.latestFrom')} ${stateName}`}
-              showDistrictBadges={districtFilteringEnabled}
-              getDistrictLabel={getLocalizedDistrictFromStory}
-              emptyTitle={t('regionalUI.emptyTitle')}
-              emptyHint={t('regionalUI.emptyHint')}
-              readMoreLabel={t('regionalUI.readMore')}
-              loadMoreLabel={regionalLoadMoreLabel}
-              hasMore={hasMore}
-              loadingMore={loadingMore}
-              loadMoreError={loadMoreError}
-              onLoadMore={loadNextRegionalPage}
-              fallbackCategoryLabel={tHeading(language as any, 'regional')}
-            />
-          </>
+          regionalPresentation.content
         )}
       </div>
 
@@ -602,13 +612,6 @@ export default function GujaratIndexPage({
         onPickAll={() => pushPath('/regional/gujarat')}
         onPickDistrict={onSelectDistrict}
       />
-
-
-      <footer className="border-t border-slate-200 bg-white">
-        <div className="mx-auto max-w-6xl px-4 py-6 text-sm text-slate-600">
-          {t('regionalGujaratPage.regionalPulse')} – {stateName}
-        </div>
-      </footer>
       </div>
       </NewsPulseCategoryShell>
     </>

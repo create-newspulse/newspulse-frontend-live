@@ -30,7 +30,7 @@ jest.mock('../../utils/LanguageContext', () => ({ useLanguage: () => ({ language
 jest.mock('../../src/i18n/LanguageProvider', () => ({ normalizeLang: (locale: string) => locale || 'en', useI18n: () => ({ t: mockT }) }));
 jest.mock('../../components/NewsPulseCategoryShell', () => ({
   __esModule: true,
-  default: ({ children, topContent }: { children: React.ReactNode; topContent?: React.ReactNode }) => <main>{topContent}{children}</main>,
+  default: ({ children, topContent, afterColumns }: { children: React.ReactNode; topContent?: React.ReactNode; afterColumns?: React.ReactNode }) => <>{topContent}<div data-testid="category-columns"><main>{children}</main></div><section data-testid="category-after-columns">{afterColumns}</section></>,
 }));
 jest.mock('../../components/regional/BreakingTicker', () => ({ __esModule: true, default: () => null }));
 jest.mock('next/link', () => ({
@@ -81,6 +81,7 @@ function moreButton() {
 }
 
 async function clickMore() {
+  expect(moreButton().closest('main')).toBeTruthy();
   await act(async () => { fireEvent.click(moreButton()); });
 }
 
@@ -158,6 +159,11 @@ describe('ordinary category page loading', () => {
         expect(renderedIds()).toEqual(items.slice(0, page * limit).map((item) => item._id));
         expect(screen.getByText(items[0].title)).toBeTruthy();
         expect(Boolean(screen.queryByText(/all caught up/i))).toBe(page * limit >= 100);
+        const completion = screen.queryByText(/all caught up/i);
+        if (completion) {
+          expect(completion.closest('main')).toBeNull();
+          expect(screen.getByTestId('category-after-columns').contains(completion)).toBe(true);
+        }
       }
       expect(newsCalls().map(([input]) => new URL(String(input), 'https://frontend.test').searchParams.get('page'))).toEqual(
         Array.from({ length: Math.ceil(100 / limit) - 1 }, (_, index) => String(index + 2))
@@ -172,7 +178,11 @@ describe('ordinary category page loading', () => {
       await act(async () => { render(pageElement(route, items, 'en', limit)); });
       if (total) {
         await reveal(total);
-        expect(screen.getByText(/all caught up/i)).toBeTruthy();
+        const completion = screen.getByText(/all caught up/i);
+        expect(screen.getByTestId('category-after-columns').contains(completion)).toBe(true);
+        expect(completion.closest('main')).toBeNull();
+      } else {
+        expect(screen.getByTestId('category-after-columns').textContent).toBe('');
       }
       expect(newsCalls()).toHaveLength(0);
       expect(screen.queryByRole('button', { name: /^Load More .+ Stories$/ })).toBeNull();

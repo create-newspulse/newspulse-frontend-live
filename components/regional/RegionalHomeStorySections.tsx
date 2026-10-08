@@ -11,7 +11,7 @@ import { getCategoryIdentity } from '../../lib/categoryKeys';
 import StoryImage, { TopStoryImage } from '../../src/components/story/StoryImage';
 import { normalizeRouteLocale } from '../../lib/localizedArticleFields';
 import { getRegionalReadMinutes } from '../../lib/regionalListingStories';
-import CategoryStoryHierarchy, { type CategoryStoryHierarchyItem } from '../category/CategoryStoryHierarchy';
+import { useCategoryStoryHierarchy, type CategoryStoryHierarchyItem } from '../category/CategoryStoryHierarchy';
 
 type AnyStory = any;
 
@@ -238,7 +238,7 @@ function RegionalFreshStories({ stories, requestedLang, fallbackCategoryLabel, r
   );
 }
 
-export default function RegionalHomeStorySections({
+export function useRegionalHomeStorySections({
   stories,
   requestedLang,
   loading,
@@ -255,7 +255,7 @@ export default function RegionalHomeStorySections({
   fallbackCategoryLabel,
   showDistrictBadges,
   getDistrictLabel,
-}: RegionalHomeStorySectionsProps) {
+}: RegionalHomeStorySectionsProps, separateCompletion = true) {
   const visibleStories = React.useMemo(() => {
     const seen = new Set<string>();
     return (Array.isArray(stories) ? stories : []).filter((story) => {
@@ -266,12 +266,6 @@ export default function RegionalHomeStorySections({
       return true;
     });
   }, [requestedLang, stories]);
-
-  if (loading && !visibleStories.length) return null;
-
-  if (!visibleStories.length) {
-    return <EmptyRegionalStories title={emptyTitle} hint={emptyHint} />;
-  }
 
   const hierarchyItems = visibleStories.map((story) => {
     const view = toStoryViewModel(story, requestedLang, fallbackCategoryLabel, showDistrictBadges ? getDistrictLabel : undefined);
@@ -303,29 +297,35 @@ export default function RegionalHomeStorySections({
     } satisfies CategoryStoryHierarchyItem;
   });
 
-  return (
-    <CategoryStoryHierarchy
-      items={hierarchyItems}
-      categoryLabel={categoryLabel}
-      topLabel="Gujarat Top Story"
-      keyLabel="Gujarat Key Stories"
-      latestLabel="Gujarat Latest"
-      loadMoreLabel={loadMoreLabel || `Load More ${stateName} Stories`}
-      emptyTitle={emptyTitle}
-      emptyHint={emptyHint}
-      loading={loading}
-      hasMore={hasMore}
-      loadingMore={loadingMore}
-      loadMoreError={loadMoreError}
-      autoLoadMore
-      onLoadMore={onLoadMore}
-      renderTopActions={(item) => (
-        item.href ? (
-          <Link href={item.href} className="inline-flex items-center justify-center rounded-2xl bg-newsPulse-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-newsPulse-blue/40">
-            {readMoreLabel}
-          </Link>
-        ) : null
-      )}
-    />
-  );
+  const hierarchy = useCategoryStoryHierarchy({
+    items: hierarchyItems,
+    categoryLabel,
+    topLabel: 'Gujarat Top Story',
+    keyLabel: 'Gujarat Key Stories',
+    latestLabel: 'Gujarat Latest',
+    loadMoreLabel: loadMoreLabel || `Load More ${stateName} Stories`,
+    emptyTitle,
+    emptyHint,
+    loading,
+    hasMore,
+    loadingMore,
+    loadMoreError,
+    autoLoadMore: true,
+    onLoadMore,
+    renderTopActions: (item) => (
+      item.href ? (
+        <Link href={item.href} className="inline-flex items-center justify-center rounded-2xl bg-newsPulse-blue px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-newsPulse-blue/40">
+          {readMoreLabel}
+        </Link>
+      ) : null
+    ),
+  }, separateCompletion);
+
+  if (loading && !visibleStories.length) return { content: null, completion: null };
+  if (!visibleStories.length) return { content: <EmptyRegionalStories title={emptyTitle} hint={emptyHint} />, completion: null };
+  return hierarchy;
+}
+
+export default function RegionalHomeStorySections(props: RegionalHomeStorySectionsProps) {
+  return useRegionalHomeStorySections(props, false).content;
 }

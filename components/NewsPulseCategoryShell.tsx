@@ -22,6 +22,7 @@ type NewsPulseCategoryShellProps = {
 	rightRail?: React.ReactNode;
 	tickerContent?: React.ReactNode;
 	topContent?: React.ReactNode;
+	afterColumns?: React.ReactNode;
 	children: React.ReactNode;
 };
 
@@ -92,7 +93,7 @@ function readCachedHomeLatestItems(lang: HomeRightRailLang): any[] {
 	return [];
 }
 
-export default function NewsPulseCategoryShell({ activeCategory, latestItems, lang, rightRail, tickerContent, topContent, children }: NewsPulseCategoryShellProps) {
+export default function NewsPulseCategoryShell({ activeCategory, latestItems, lang, rightRail, tickerContent, topContent, afterColumns, children }: NewsPulseCategoryShellProps) {
 	const activePath = routeForCategory(activeCategory);
 	const publicLatestItems = React.useMemo(
 		() => Array.isArray(latestItems) ? filterPubliclyPublishedArticles(latestItems) : latestItems,
@@ -292,6 +293,8 @@ export default function NewsPulseCategoryShell({ activeCategory, latestItems, la
 						</div>
 					</div>
 				</div>
+
+				{afterColumns ? <div className="category-after-columns min-w-0">{afterColumns}</div> : null}
 
 				<div className="post-home-grid-ads grid gap-4">
 					<AdSlot slot="HOME_BILLBOARD_970x250" variant="billboard970x250" className="mx-auto" />

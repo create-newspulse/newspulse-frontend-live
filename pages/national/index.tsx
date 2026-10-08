@@ -23,7 +23,7 @@ import { getStoryTitleHookColor, splitStoryTitleHook } from '../../lib/storyTitl
 import StoryImage, { TopStoryImage } from '../../src/components/story/StoryImage';
 import { getPublicApiBaseUrl } from '../../lib/publicApiBase';
 import CategoryDeskHeader from '../../src/components/category/CategoryDeskHeader';
-import CategoryStoryHierarchy, { type CategoryStoryHierarchyItem } from '../../components/category/CategoryStoryHierarchy';
+import { useCategoryStoryHierarchy, type CategoryStoryHierarchyItem } from '../../components/category/CategoryStoryHierarchy';
 import { formatPublicArticleLocation } from '../../lib/publicLocation';
 
 type AnyStory = any;
@@ -953,6 +953,49 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
     </CategoryDeskHeader>
   );
 
+  const nationalHierarchy = useCategoryStoryHierarchy({
+    items: nationalHierarchyItems,
+    categoryLabel: 'National News',
+    topLabel: t('nationalPage.topStory'),
+    keyLabel: 'Key National Stories',
+    latestLabel: 'Latest National Stories',
+    loadMoreLabel: 'Load More National Stories',
+    emptyTitle: 'No news found',
+    loading,
+    hasMore,
+    loadingMore,
+    loadMoreError,
+    autoLoadMore: true,
+    onLoadMore: loadNextPage,
+    renderTopActions: () => (
+      hero ? (
+        <>
+          <a
+            href={storyHref(hero, effectiveLang)}
+            className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+          >
+            {t('common.read')}
+          </a>
+          <button
+            type="button"
+            onClick={() => voice.toggle(heroListenText)}
+            className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900/60"
+            aria-pressed={voice.speaking}
+          >
+            {voice.speaking ? t('common.mute') : t('common.listen')}
+          </button>
+          <button
+            type="button"
+            onClick={shareHero}
+            className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900/60"
+          >
+            {t('common.share')}
+          </button>
+        </>
+      ) : null
+    ),
+  });
+
   return (
     <>
       <Head>
@@ -968,6 +1011,7 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
           <BreakingTicker items={breaking as any} variant="live" className="overflow-hidden rounded-xl border-0" />
         )}
         topContent={nationalTopContent}
+        afterColumns={nationalHierarchy.completion}
       >
         <div className="min-w-0 text-slate-900 dark:text-gray-100">
         {error ? (
@@ -976,48 +1020,7 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
           </div>
         ) : null}
 
-          <CategoryStoryHierarchy
-            items={nationalHierarchyItems}
-            categoryLabel="National News"
-            topLabel={t('nationalPage.topStory')}
-            keyLabel="Key National Stories"
-            latestLabel="Latest National Stories"
-            loadMoreLabel="Load More National Stories"
-            emptyTitle="No news found"
-            loading={loading}
-            hasMore={hasMore}
-            loadingMore={loadingMore}
-            loadMoreError={loadMoreError}
-            autoLoadMore
-            onLoadMore={loadNextPage}
-            renderTopActions={() => (
-              hero ? (
-                <>
-                  <a
-                    href={storyHref(hero, effectiveLang)}
-                    className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-                  >
-                    {t('common.read')}
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() => voice.toggle(heroListenText)}
-                    className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900/60"
-                    aria-pressed={voice.speaking}
-                  >
-                    {voice.speaking ? t('common.mute') : t('common.listen')}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={shareHero}
-                    className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900/60"
-                  >
-                    {t('common.share')}
-                  </button>
-                </>
-              ) : null
-            )}
-          />
+          {nationalHierarchy.content}
         </div>
       </NewsPulseCategoryShell>
     </>
