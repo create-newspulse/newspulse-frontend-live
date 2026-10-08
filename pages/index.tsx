@@ -3657,7 +3657,7 @@ function SnapshotsCard({ theme }: any) {
       <div className="grid gap-3 p-4">
         {[
           { k: t('home.snapshotWeather'), v: weatherValue || '—' },
-          { k: t('home.snapshotMarkets'), v: "Stable" },
+          { k: t('home.snapshotMarkets'), v: "— unavailable" },
           { k: t('home.snapshotGold'), v: "₹ — (api)" },
         ].map((x) => (
           <div key={x.k} className="rounded-[22px] border px-3 py-3 shadow-[0_14px_28px_-26px_rgba(15,23,42,0.24)]" style={{ background: theme.surface2, borderColor: theme.border }}>

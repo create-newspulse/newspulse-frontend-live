@@ -499,6 +499,10 @@ describe('homepage ad layout boundaries', () => {
     expect(document.querySelector('.fresh-stories-card')).not.toBeNull();
     expect(leftGrid.textContent).toContain('home.exploreCategories');
     expect(leftGrid.textContent).toContain('home.snapshotsTitle');
+    const marketLabel = Array.from(leftGrid.querySelectorAll('div')).find(element => element.textContent === 'home.snapshotMarkets');
+    const goldLabel = Array.from(leftGrid.querySelectorAll('div')).find(element => element.textContent === 'home.snapshotGold');
+    expect(marketLabel?.nextElementSibling?.textContent).toBe('— unavailable');
+    expect(goldLabel?.nextElementSibling?.textContent).toBe('₹ — (api)');
     expect(document.querySelector('.home-right')?.textContent).toContain('YOUTH DESK');
     expect(document.querySelector('.home-grid')!.compareDocumentPosition(document.querySelector('.post-home-grid-ads')!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(document.querySelector('.post-home-grid-ads')!.compareDocumentPosition(document.querySelector('a[href="/monthly-compliance"]')!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
