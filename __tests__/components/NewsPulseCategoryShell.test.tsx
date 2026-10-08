@@ -71,7 +71,7 @@ jest.mock('../../lib/publicSponsoredFeature', () => ({
 
 jest.mock('../../src/components/ads/AdSlot', () => ({
   __esModule: true,
-  default: ({ slot }: { slot: string }) => <div data-testid={`ad-slot-${slot}`} />,
+  default: ({ slot, variant, className }: { slot: string; variant?: string; className?: string }) => <div data-testid={`ad-slot-${slot}`} data-variant={variant} className={className} />,
 }));
 
 const fetchPublicNewsMock = fetchPublicNews as jest.Mock;
@@ -166,6 +166,23 @@ describe('NewsPulseCategoryShell', () => {
     await waitFor(() => {
       expect(spotlightCount()).toBeGreaterThan(0);
     });
+  });
+
+  test.each(
+    ['regional', 'national', 'international', 'business', 'sports', 'lifestyle', 'glamour', 'science-technology', 'tech-gadgets', 'faith-culture']
+      .flatMap((activeCategory) => (['en', 'hi', 'gu'] as const).map((lang) => ({ activeCategory, lang })))
+  )('preserves inventory and a full-width billboard wrapper for $activeCategory/$lang', async ({ activeCategory, lang }) => {
+    const { container } = render(<NewsPulseCategoryShell activeCategory={activeCategory} latestItems={[]} lang={lang}>Stories</NewsPulseCategoryShell>);
+    const topAd = screen.getByTestId('ad-slot-HOME_728x90');
+    const billboard = screen.getByTestId('ad-slot-HOME_BILLBOARD_970x250');
+    expect(topAd.getAttribute('data-variant')).toBe('homeBanner');
+    expect(screen.queryByTestId('ad-slot-TOP_HOME_BILLBOARD_970x250')).toBeNull();
+    expect(billboard.getAttribute('data-variant')).toBe('billboard970x250');
+    expect(billboard.classList.contains('w-full')).toBe(true);
+    expect(billboard.classList.contains('mx-auto')).toBe(true);
+    expect(billboard.parentElement).toBe(container.querySelector('.post-home-grid-ads'));
+    expect(billboard.closest('.home-left, .home-center, .home-right')).toBeNull();
+    await waitFor(() => expect(spotlightCount()).toBeGreaterThan(0));
   });
 
   test('places optional continuation after all columns and before the existing bottom ad and Spotlight', async () => {

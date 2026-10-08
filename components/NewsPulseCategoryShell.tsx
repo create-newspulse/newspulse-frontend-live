@@ -297,7 +297,7 @@ export default function NewsPulseCategoryShell({ activeCategory, latestItems, la
 				{afterColumns ? <div className="category-after-columns min-w-0">{afterColumns}</div> : null}
 
 				<div className="post-home-grid-ads grid gap-4">
-					<AdSlot slot="HOME_BILLBOARD_970x250" variant="billboard970x250" className="mx-auto" />
+					<AdSlot slot="HOME_BILLBOARD_970x250" variant="billboard970x250" className="mx-auto w-full" />
 				</div>
 
 				{spotlightItems.length ? (

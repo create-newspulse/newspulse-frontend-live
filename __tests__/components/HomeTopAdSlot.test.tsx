@@ -237,6 +237,43 @@ describe('shared ad presentation compatibility', () => {
     expect(topHtml.replace(PREMIUM, 'HOME_BILLBOARD_970x250')).toBe(existingHtml);
   });
 
+  test.each(['en', 'hi', 'gu'] as const)('category billboard retains the selected full creative and slot dimensions for %s', (language) => {
+    const slot = 'HOME_BILLBOARD_970x250';
+    const ad = { ...premiumAd, thumbnailUrl: '/admin-thumbnail.png', width: 97, height: 25 };
+    jest.mocked(useLanguage).mockReturnValue({ language, t: (key) => key, setLanguage: jest.fn() });
+    jest.mocked(usePublicAdSlot).mockReturnValue({ ...premium, ad });
+    const { container } = render(<AdSlot slot={slot} variant="billboard970x250" className="mx-auto w-full" />);
+    const image = screen.getByRole('img');
+    const link = image.closest('a');
+    expect(usePublicAdSlot).toHaveBeenCalledWith({ slot, language });
+    expect(image.getAttribute('src')).toBe(premiumAd.imageUrl);
+    expect(image.getAttribute('src')).not.toBe(ad.thumbnailUrl);
+    expect(image.getAttribute('width')).toBeNull();
+    expect(image.getAttribute('height')).toBeNull();
+    expect((image as HTMLImageElement).style.objectFit).toBe('cover');
+    expect(container.querySelector<HTMLElement>('[style*="aspect-ratio"]')?.style.aspectRatio).toBe('970 / 250');
+    expect(container.querySelector('[data-ad-slot]')?.className).toBe('mx-auto w-full max-w-[970px] xl:max-w-[1200px]');
+    expect(container.querySelector('[data-ad-slot]')?.parentElement?.className).toBe('mx-auto w-full not-prose');
+    expect(link?.getAttribute('href')).toBe(premiumAd.targetUrl);
+    expect(link?.getAttribute('target')).toBe('_blank');
+    expect(link?.getAttribute('rel')).toBe('nofollow sponsored noopener noreferrer');
+    expect(container.querySelector(`a[href="/advertise?slot=${slot}"]`)).toBeNull();
+  });
+
+  test.each([
+    { name: 'assigned creative', state: premium, creative: true, fallback: false },
+    { name: 'empty eligible inventory', state: empty, creative: false, fallback: true },
+    { name: 'disabled inventory', state: disabled, creative: false, fallback: false },
+    { name: 'unresolved inventory', state: loading, creative: false, fallback: false },
+  ])('independent billboard preserves $name behavior', ({ state, creative, fallback }) => {
+    const slot = 'HOME_BILLBOARD_970x250';
+    const { container } = render(<ResolvedAdSlot slot={slot} variant="billboard970x250" className="mx-auto w-full" state={state} />);
+    expect(Boolean(container.querySelector('img'))).toBe(creative);
+    expect(Boolean(container.querySelector(`a[href="/advertise?slot=${slot}"]`))).toBe(fallback);
+    expect(Boolean(container.querySelector('.animate-pulse'))).toBe(state.isLoading);
+    expect(Boolean(container.querySelector('[data-ad-slot]'))).toBe(state.enabled);
+  });
+
   test('resolved rendering never fetches, and Strict Mode does not introduce tracking', () => {
     const fetchSpy = jest.spyOn(global, 'fetch').mockRejectedValue(new Error('Unexpected fetch from presentation'));
     setSlots(premium, standard);
