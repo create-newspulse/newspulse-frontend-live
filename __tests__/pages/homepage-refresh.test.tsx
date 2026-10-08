@@ -110,6 +110,140 @@ describe('homepage category colour identity', () => {
   });
 });
 
+describe('homepage Fresh Stories presentation', () => {
+  type Locale = 'en' | 'hi' | 'gu';
+
+  function storiesFor(locale: Locale) {
+    const categories = ['national', 'regional', 'international', 'glamour'];
+    return Array.from({ length: 27 }, (_, index) => {
+      const publishedAt = new Date(Date.parse('2026-10-01T12:00:00Z') - index * 60_000).toISOString();
+      return {
+        _id: `fresh-${index}`, id: `fresh-${index}`, slug: `fresh-${index}`,
+        language: locale, lang: locale, status: 'published',
+        title: `Fresh story ${index}`, summary: `Summary for fresh story ${index}`,
+        desc: `Summary for fresh story ${index}`, content: '<p>Published story body.</p>',
+        category: categories[index % categories.length],
+        imageUrl: '/logo.png', imageSrc: '/logo.png',
+        publishedAt, iso: publishedAt,
+        updatedAt: new Date(Date.parse('2026-10-02T12:00:00Z') + index * 60_000).toISOString(),
+      };
+    });
+  }
+
+  async function renderFreshStories(locale: Locale, stories = storiesFor(locale)) {
+    const actual = jest.requireActual<typeof import('../../src/i18n/LanguageProvider')>('../../src/i18n/LanguageProvider');
+    jest.spyOn(i18n, 'useI18n').mockImplementation(actual.useI18n);
+    jest.mocked(fetchPublicSettings).mockResolvedValue(published());
+    jest.mocked(fetchPublicNews).mockImplementation(async (options) => ({
+      items: options?.category === 'web-stories' || (!options?.category && !options?.extraQuery?.spotlight) ? stories : [],
+      meta: {},
+      endpoint: '/api/public/news',
+    }));
+    let result!: ReturnType<typeof render>;
+    await act(async () => {
+      result = render(
+        <i18n.LanguageProvider initialLang={locale}>
+          <PublicSettingsProvider initialSettings={published()}>
+            <HomePage {...props} initialTopStory={stories[0]} initialFreshStories={stories} />
+          </PublicSettingsProvider>
+        </i18n.LanguageProvider>
+      );
+    });
+    return result.container;
+  }
+
+  function freshCards(container: HTMLElement) {
+    return Array.from(container.querySelectorAll<HTMLElement>('.fresh-stories-card article'));
+  }
+
+  function hrefFor(locale: Locale, index: number) {
+    return `${locale === 'en' ? '' : `/${locale}`}/news/fresh-${index}`;
+  }
+
+  beforeEach(() => {
+    jest.mocked(fetchPublicNews).mockClear();
+    jest.mocked(AdSlot).mockClear();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    jest.mocked(fetchPublicNews).mockReset().mockResolvedValue({ items: [], meta: {}, endpoint: '/api/public/news' });
+    jest.mocked(fetchPublicSettings).mockReset();
+  });
+
+  describe.each(['en', 'hi', 'gu'] as const)('%s', (locale) => {
+    test('keeps the same 17 ordered stories and excludes the unchanged Top Story', async () => {
+      const stories = storiesFor(locale);
+      stories.splice(5, 0, stories[4]);
+      const container = await renderFreshStories(locale, stories);
+      const hrefs = freshCards(container).map((card) => card.closest('a')?.getAttribute('href'));
+
+      expect(hrefs).toEqual(Array.from({ length: 17 }, (_, index) => hrefFor(locale, index + 1)));
+      expect(new Set(hrefs).size).toBe(17);
+      expect(hrefs).not.toContain(hrefFor(locale, 0));
+      expect(hrefs).not.toContain(hrefFor(locale, 18));
+      expect(container.querySelector('#top-story h1')?.textContent).toBe('Fresh story 0');
+      expect(container.querySelector(`#top-story a[href="${hrefFor(locale, 0)}"]`)).not.toBeNull();
+      expect(container.querySelectorAll('#top-story')).toHaveLength(1);
+      expect(container.querySelector('.home-grid')?.classList.contains('home-grid--three')).toBe(true);
+      expect(container.querySelector('#top-story')?.nextElementSibling?.classList.contains('fresh-stories-card')).toBe(true);
+      expect(jest.mocked(AdSlot).mock.calls.map(([slotProps]) => slotProps.slot)).toEqual(expect.arrayContaining([
+        'HOME_LEFT_300x600', 'HOME_LEFT_300x250', 'HOME_BILLBOARD_970x250',
+      ]));
+    });
+
+    test('uses four existing summary cards followed by thirteen compact cards', async () => {
+      const container = await renderFreshStories(locale);
+      const cards = freshCards(container);
+      expect(cards).toHaveLength(17);
+      expect(cards.filter((card) => card.classList.contains('md:grid-cols-[1fr_148px]'))).toHaveLength(4);
+      expect(cards.filter((card) => card.classList.contains('md:grid-cols-[1fr_116px]'))).toHaveLength(13);
+      cards.forEach((card, index) => {
+        expect(card.classList.contains('grid-cols-[1fr_96px]')).toBe(true);
+        expect(card.classList.contains(index < 4 ? 'md:grid-cols-[1fr_148px]' : 'md:grid-cols-[1fr_116px]')).toBe(true);
+        expect(card.querySelector('h3')?.classList.contains(index < 4 ? 'text-lg' : 'text-base')).toBe(true);
+        expect(card.textContent?.includes(`Summary for fresh story ${index + 1}`)).toBe(index < 4);
+      });
+      expect(cards[3].closest('a')?.getAttribute('href')).toBe(hrefFor(locale, 4));
+      expect(cards[4].closest('a')?.getAttribute('href')).toBe(hrefFor(locale, 5));
+    });
+
+    test('keeps a summary-less fourth story compact without substituting the fifth', async () => {
+      const stories = storiesFor(locale);
+      stories[4] = { ...stories[4], summary: '   ', desc: '   ' };
+      const container = await renderFreshStories(locale, stories);
+      const cards = freshCards(container);
+      expect(cards.map((card) => card.closest('a')?.getAttribute('href')))
+        .toEqual(Array.from({ length: 17 }, (_, index) => hrefFor(locale, index + 1)));
+      expect(cards.filter((card) => card.classList.contains('md:grid-cols-[1fr_148px]'))).toHaveLength(3);
+      expect(cards.filter((card) => card.classList.contains('md:grid-cols-[1fr_116px]'))).toHaveLength(14);
+      expect(cards[3].classList.contains('md:grid-cols-[1fr_116px]')).toBe(true);
+      expect(cards[4].textContent).not.toContain('Summary for fresh story 5');
+    });
+
+    test('preserves the downstream exclusion boundary and existing API limits', async () => {
+      const container = await renderFreshStories(locale);
+      const section = container.querySelector('.home-container > .mt-8.grid');
+      expect(section).not.toBeNull();
+      const sectionHrefs = Array.from(section!.querySelectorAll('a[href*="/news/"]')).map((link) => link.getAttribute('href'));
+      expect([...new Set(sectionHrefs)]).toEqual(Array.from({ length: 5 }, (_, index) => hrefFor(locale, index + 21)));
+      const mainReads = jest.mocked(fetchPublicNews).mock.calls
+        .map(([options]) => options)
+        .filter((options) => !options?.category && !options?.extraQuery?.spotlight);
+      expect(mainReads).toHaveLength(1);
+      expect(mainReads[0]).toEqual(expect.objectContaining({ language: locale, limit: 40 }));
+    });
+
+    test('preserves the existing image-priority sequence rather than adding a new sort', async () => {
+      const stories = storiesFor(locale);
+      stories[2] = { ...stories[2], imageUrl: '', imageSrc: '' };
+      const container = await renderFreshStories(locale, stories);
+      expect(freshCards(container).map((card) => card.closest('a')?.getAttribute('href')))
+        .toEqual([1, ...Array.from({ length: 16 }, (_, index) => index + 3)].map((index) => hrefFor(locale, index)));
+    });
+  });
+});
+
 function broadcastState(overrides: Partial<PublicBroadcastTickerState> = {}): PublicBroadcastTickerState {
   return {
     broadcast: normalizePublicBroadcast({
