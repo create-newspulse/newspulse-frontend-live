@@ -115,7 +115,7 @@ describe('homepage Fresh Stories presentation', () => {
 
   function storiesFor(locale: Locale) {
     const categories = ['national', 'regional', 'international', 'glamour'];
-    return Array.from({ length: 27 }, (_, index) => {
+    return Array.from({ length: 29 }, (_, index) => {
       const publishedAt = new Date(Date.parse('2026-10-01T12:00:00Z') - index * 60_000).toISOString();
       return {
         _id: `fresh-${index}`, id: `fresh-${index}`, slug: `fresh-${index}`,
@@ -172,16 +172,16 @@ describe('homepage Fresh Stories presentation', () => {
   });
 
   describe.each(['en', 'hi', 'gu'] as const)('%s', (locale) => {
-    test('keeps the same 17 ordered stories and excludes the unchanged Top Story', async () => {
+    test('keeps 19 consecutive ordered stories and excludes the unchanged Top Story', async () => {
       const stories = storiesFor(locale);
       stories.splice(5, 0, stories[4]);
       const container = await renderFreshStories(locale, stories);
       const hrefs = freshCards(container).map((card) => card.closest('a')?.getAttribute('href'));
 
-      expect(hrefs).toEqual(Array.from({ length: 17 }, (_, index) => hrefFor(locale, index + 1)));
-      expect(new Set(hrefs).size).toBe(17);
+      expect(hrefs).toEqual(Array.from({ length: 19 }, (_, index) => hrefFor(locale, index + 1)));
+      expect(new Set(hrefs).size).toBe(19);
       expect(hrefs).not.toContain(hrefFor(locale, 0));
-      expect(hrefs).not.toContain(hrefFor(locale, 18));
+      expect(hrefs).not.toContain(hrefFor(locale, 20));
       expect(container.querySelector('#top-story h1')?.textContent).toBe('Fresh story 0');
       expect(container.querySelector(`#top-story a[href="${hrefFor(locale, 0)}"]`)).not.toBeNull();
       expect(container.querySelectorAll('#top-story')).toHaveLength(1);
@@ -192,12 +192,12 @@ describe('homepage Fresh Stories presentation', () => {
       ]));
     });
 
-    test('uses four existing summary cards followed by thirteen compact cards', async () => {
+    test('uses four existing summary cards followed by fifteen compact cards', async () => {
       const container = await renderFreshStories(locale);
       const cards = freshCards(container);
-      expect(cards).toHaveLength(17);
+      expect(cards).toHaveLength(19);
       expect(cards.filter((card) => card.classList.contains('md:grid-cols-[1fr_148px]'))).toHaveLength(4);
-      expect(cards.filter((card) => card.classList.contains('md:grid-cols-[1fr_116px]'))).toHaveLength(13);
+      expect(cards.filter((card) => card.classList.contains('md:grid-cols-[1fr_116px]'))).toHaveLength(15);
       cards.forEach((card, index) => {
         expect(card.classList.contains('grid-cols-[1fr_96px]')).toBe(true);
         expect(card.classList.contains(index < 4 ? 'md:grid-cols-[1fr_148px]' : 'md:grid-cols-[1fr_116px]')).toBe(true);
@@ -214,9 +214,9 @@ describe('homepage Fresh Stories presentation', () => {
       const container = await renderFreshStories(locale, stories);
       const cards = freshCards(container);
       expect(cards.map((card) => card.closest('a')?.getAttribute('href')))
-        .toEqual(Array.from({ length: 17 }, (_, index) => hrefFor(locale, index + 1)));
+        .toEqual(Array.from({ length: 19 }, (_, index) => hrefFor(locale, index + 1)));
       expect(cards.filter((card) => card.classList.contains('md:grid-cols-[1fr_148px]'))).toHaveLength(3);
-      expect(cards.filter((card) => card.classList.contains('md:grid-cols-[1fr_116px]'))).toHaveLength(14);
+      expect(cards.filter((card) => card.classList.contains('md:grid-cols-[1fr_116px]'))).toHaveLength(16);
       expect(cards[3].classList.contains('md:grid-cols-[1fr_116px]')).toBe(true);
       expect(cards[4].textContent).not.toContain('Summary for fresh story 5');
     });
@@ -226,12 +226,13 @@ describe('homepage Fresh Stories presentation', () => {
       const section = container.querySelector('.home-container > .mt-8.grid');
       expect(section).not.toBeNull();
       const sectionHrefs = Array.from(section!.querySelectorAll('a[href*="/news/"]')).map((link) => link.getAttribute('href'));
-      expect([...new Set(sectionHrefs)]).toEqual(Array.from({ length: 5 }, (_, index) => hrefFor(locale, index + 21)));
+      expect([...new Set(sectionHrefs)]).toEqual(Array.from({ length: 5 }, (_, index) => hrefFor(locale, index + 23)));
       const mainReads = jest.mocked(fetchPublicNews).mock.calls
         .map(([options]) => options)
         .filter((options) => !options?.category && !options?.extraQuery?.spotlight);
       expect(mainReads).toHaveLength(1);
       expect(mainReads[0]).toEqual(expect.objectContaining({ language: locale, limit: 40 }));
+      expect(mainReads[0]).not.toHaveProperty('page');
     });
 
     test('preserves the existing image-priority sequence rather than adding a new sort', async () => {
@@ -239,7 +240,7 @@ describe('homepage Fresh Stories presentation', () => {
       stories[2] = { ...stories[2], imageUrl: '', imageSrc: '' };
       const container = await renderFreshStories(locale, stories);
       expect(freshCards(container).map((card) => card.closest('a')?.getAttribute('href')))
-        .toEqual([1, ...Array.from({ length: 16 }, (_, index) => index + 3)].map((index) => hrefFor(locale, index)));
+        .toEqual([1, ...Array.from({ length: 18 }, (_, index) => index + 3)].map((index) => hrefFor(locale, index)));
     });
   });
 });

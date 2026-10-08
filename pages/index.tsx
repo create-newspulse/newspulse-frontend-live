@@ -256,7 +256,7 @@ function StoryLinkShell({
 }
 const HOME_SPOTLIGHT_FRESH_HOURS = 72;
 const HOME_FRESH_SUMMARY_STORY_LIMIT = 4;
-const HOME_FRESH_COMPACT_STORY_LIMIT = 13;
+const HOME_FRESH_COMPACT_STORY_LIMIT = 15;
 const HOME_FRESH_STORY_LIMIT = HOME_FRESH_SUMMARY_STORY_LIMIT + HOME_FRESH_COMPACT_STORY_LIMIT;
 
 const CATEGORY_THEME: Record<string, { base: string; icon: string; hover: string; ring: string; active: string; dot: string }> = {
