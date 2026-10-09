@@ -52,7 +52,7 @@ Production is identified using `VERCEL_ENV=production` or the explicit `NEWS_PUL
 - Public-version watching, route-language synchronization, SEO alternates, shared navigation, Firebase foreground messaging, and analytics integrations.
 - A reporter-auth provider around protected reporter pages.
 
-[pages/_document.tsx](./pages/_document.tsx) owns the document shell. Page-level layouts and content remain in the individual page/component trees.
+[pages/_document.tsx](./pages/_document.tsx) owns the document shell and includes one static `google-adsense-account` meta tag in the global head for AdSense site verification. This tag does not load advertising scripts or enable Auto Ads; existing advertising consent gates remain unchanged. Page-level layouts and content remain in the individual page/component trees.
 
 | Location | Responsibility |
 | --- | --- |

@@ -17,6 +17,7 @@ export default class MyDocument extends Document {
           <meta name="msapplication-TileColor" content="#3b82f6" />
           <meta name="msapplication-tap-highlight" content="no" />
           <meta name="application-name" content="News Pulse" />
+          <meta name="google-adsense-account" content="ca-pub-9257940786279478" />
           <link rel="manifest" href="/manifest.webmanifest" />
           
           {/* App Icons (favicons) */}
