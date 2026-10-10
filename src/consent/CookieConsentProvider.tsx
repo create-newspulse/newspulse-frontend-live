@@ -4,6 +4,7 @@ import React from 'react';
 import { Bell, Cookie, LockKeyhole, Settings, ShieldCheck, X } from 'lucide-react';
 
 import { useI18n } from '../i18n/LanguageProvider';
+import { clearAnalyticsMemory } from '../../lib/analytics/articleAnalytics';
 import { getFirebaseClientConfig } from '../../lib/firebaseClient';
 import {
   FIREBASE_MESSAGING_SERVICE_WORKER_PATH,
@@ -83,6 +84,7 @@ function cleanupOptionalTechnologies(categories: CookieConsentCategories) {
   }
 
   if (!categories.analytics) {
+    clearAnalyticsMemory();
     clearStorageKeys(['np_visitor_id_v1', 'np_session_id_v1', 'np_session_last_activity_v1']);
     deleteCookie('np_vid');
   }

@@ -61,6 +61,23 @@ const COOKIE_VISITOR_MAX_AGE_SEC = 60 * 60 * 24 * 365 * 2; // ~2y
 
 export const DEFAULT_INACTIVITY_WINDOW_MS = 30 * 60 * 1000; // 30 min
 
+let memoryVisitorId = '';
+let memorySession: { sessionId: string; lastActivity: number } | null = null;
+const queuedArticleViews = new Set<string>();
+let warnedAboutStorage = false;
+
+export function clearAnalyticsMemory(): void {
+  memoryVisitorId = '';
+  memorySession = null;
+  queuedArticleViews.clear();
+}
+
+function warnUnavailableStorage() {
+  if (warnedAboutStorage) return;
+  warnedAboutStorage = true;
+  console.warn('[analytics] Browser storage unavailable; using in-memory analytics state.');
+}
+
 function now() {
   return Date.now();
 }
@@ -91,6 +108,7 @@ function safeGetLocalStorage(): Storage | null {
     window.localStorage.removeItem(test);
     return window.localStorage;
   } catch {
+    warnUnavailableStorage();
     return null;
   }
 }
@@ -104,7 +122,25 @@ function safeGetSessionStorage(): Storage | null {
     window.sessionStorage.removeItem(test);
     return window.sessionStorage;
   } catch {
+    warnUnavailableStorage();
     return null;
+  }
+}
+
+function readStorageValue(storage: Storage | null, key: string): string {
+  try {
+    return String(storage?.getItem(key) || '').trim();
+  } catch {
+    warnUnavailableStorage();
+    return '';
+  }
+}
+
+function writeStorageValue(storage: Storage | null, key: string, value: string): void {
+  try {
+    storage?.setItem(key, value);
+  } catch {
+    warnUnavailableStorage();
   }
 }
 
@@ -136,77 +172,67 @@ function writeCookie(name: string, value: string, maxAgeSec: number) {
 }
 
 export function getOrCreateVisitorId(): string {
-  if (!hasStoredConsentForCategory('analytics')) return '';
-  // Prefer localStorage, fallback to cookie.
+  if (!hasStoredConsentForCategory('analytics')) {
+    clearAnalyticsMemory();
+    return '';
+  }
   const ls = safeGetLocalStorage();
-  if (ls) {
-    const existing = String(ls.getItem(VISITOR_ID_KEY) || '').trim();
-    if (existing) return existing;
-    const created = safeRandomId();
-    try {
-      ls.setItem(VISITOR_ID_KEY, created);
-    } catch {
-      // ignore
-    }
-    // also set cookie for redundancy
-    writeCookie(COOKIE_VISITOR, created, COOKIE_VISITOR_MAX_AGE_SEC);
-    return created;
+  const existing = readStorageValue(ls, VISITOR_ID_KEY);
+  if (existing) {
+    memoryVisitorId = existing;
+    return existing;
   }
 
-  const fromCookie = readCookie(COOKIE_VISITOR);
-  if (fromCookie) return fromCookie;
-
-  const created = safeRandomId();
-  writeCookie(COOKIE_VISITOR, created, COOKIE_VISITOR_MAX_AGE_SEC);
-  return created;
+  memoryVisitorId = readCookie(COOKIE_VISITOR).trim() || memoryVisitorId || safeRandomId();
+  writeStorageValue(ls, VISITOR_ID_KEY, memoryVisitorId);
+  writeCookie(COOKIE_VISITOR, memoryVisitorId, COOKIE_VISITOR_MAX_AGE_SEC);
+  return memoryVisitorId;
 }
 
 export function getOrCreateSessionId(options?: {
   inactivityWindowMs?: number;
 }): { sessionId: string; isNew: boolean } {
-  if (!hasStoredConsentForCategory('analytics')) return { sessionId: '', isNew: true };
+  if (!hasStoredConsentForCategory('analytics')) {
+    clearAnalyticsMemory();
+    return { sessionId: '', isNew: true };
+  }
   const inactivityWindowMs = options?.inactivityWindowMs ?? DEFAULT_INACTIVITY_WINDOW_MS;
   const ss = safeGetSessionStorage();
   const ts = now();
 
-  if (!ss) {
-    // per-tab persistence not available; create ephemeral
-    return { sessionId: safeRandomId(), isNew: true };
-  }
-
-  const existing = String(ss.getItem(SESSION_ID_KEY) || '').trim();
-  const lastActivityRaw = String(ss.getItem(SESSION_LAST_ACTIVITY_KEY) || '').trim();
-  const lastActivity = lastActivityRaw ? Number(lastActivityRaw) : NaN;
+  const storedId = readStorageValue(ss, SESSION_ID_KEY);
+  const existing = storedId || memorySession?.sessionId || '';
+  const lastActivityRaw = readStorageValue(ss, SESSION_LAST_ACTIVITY_KEY);
+  const lastActivity = storedId
+    ? (lastActivityRaw ? Number(lastActivityRaw) : NaN)
+    : (memorySession?.lastActivity ?? NaN);
   const inactiveTooLong = Number.isFinite(lastActivity) ? (ts - lastActivity > inactivityWindowMs) : false;
 
-  if (existing && !inactiveTooLong) {
-    try {
-      ss.setItem(SESSION_LAST_ACTIVITY_KEY, String(ts));
-    } catch {
-      // ignore
-    }
-    return { sessionId: existing, isNew: false };
-  }
-
-  const created = safeRandomId();
-  try {
-    ss.setItem(SESSION_ID_KEY, created);
-    ss.setItem(SESSION_LAST_ACTIVITY_KEY, String(ts));
-  } catch {
-    // ignore
-  }
-  return { sessionId: created, isNew: true };
+  const isNew = !existing || inactiveTooLong;
+  const sessionId = isNew ? safeRandomId() : existing;
+  memorySession = { sessionId, lastActivity: ts };
+  writeStorageValue(ss, SESSION_ID_KEY, sessionId);
+  writeStorageValue(ss, SESSION_LAST_ACTIVITY_KEY, String(ts));
+  return { sessionId, isNew };
 }
 
 export function touchSessionActivity() {
   if (!hasStoredConsentForCategory('analytics')) return;
+  const ts = now();
+  if (memorySession) memorySession.lastActivity = ts;
   const ss = safeGetSessionStorage();
-  if (!ss) return;
-  try {
-    ss.setItem(SESSION_LAST_ACTIVITY_KEY, String(now()));
-  } catch {
-    // ignore
-  }
+  writeStorageValue(ss, SESSION_LAST_ACTIVITY_KEY, String(ts));
+}
+
+export function hasQueuedArticleView(articleId: string, sessionId: string): boolean {
+  const key = `np_article_session_${articleId}:view:${sessionId}`;
+  return queuedArticleViews.has(key) || readStorageValue(safeGetSessionStorage(), key) === '1';
+}
+
+export function markArticleViewQueued(articleId: string, sessionId: string): void {
+  const key = `np_article_session_${articleId}:view:${sessionId}`;
+  queuedArticleViews.add(key);
+  writeStorageValue(safeGetSessionStorage(), key, '1');
 }
 
 export function isProbablyBotUserAgent(userAgent: string): boolean {

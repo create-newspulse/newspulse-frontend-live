@@ -93,10 +93,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return
     }
 
-    // Let the backend override `tracked` when it intentionally skips or dedupes an event.
-    const json = await resp.json().catch(() => null)
-    const merged = json && typeof json === 'object' && !Array.isArray(json) ? json : {}
-    res.status(200).json({ success: true, tracked: true, ...merged })
+    const json: unknown = await resp.json()
+    if (!json || typeof json !== 'object' || Array.isArray(json)) {
+      warnForwardingFailureThrottled(safeType, 'error')
+      res.status(502).json({ success: false, tracked: false })
+      return
+    }
+    const merged = json as Record<string, unknown>
+    const hasOutcome = merged.ok === true || merged.success === true ||
+      typeof merged.tracked === 'boolean' || typeof merged.skipped === 'boolean'
+    if (!hasOutcome || merged.ok === false || merged.success === false) {
+      warnForwardingFailureThrottled(safeType, 'error')
+      res.status(502).json({ success: false, tracked: false })
+      return
+    }
+    const tracked = merged.skipped !== true && merged.tracked !== false
+    res.status(200).json({ ...merged, success: true, tracked })
   } catch {
     // Never expose backend internals; log only the event name and outcome.
     warnForwardingFailureThrottled(safeType, 'error')

@@ -51,7 +51,7 @@ describe('/api/analytics/[event] proxy', () => {
     (global as any).fetch = jest.fn().mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({}),
+      json: async () => ({ ok: true, skipped: false }),
     });
     warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
@@ -85,6 +85,7 @@ describe('/api/analytics/[event] proxy', () => {
     const [, init] = ((global as any).fetch as jest.Mock).mock.calls[0];
     const sent = JSON.parse(init.body);
 
+    expect(init.headers).toEqual({ 'Content-Type': 'application/json', Accept: 'application/json' });
     expect(sent.type).toBeUndefined();
     expect(sent.data).toBeUndefined();
     expect(sent).toMatchObject({
@@ -131,6 +132,43 @@ describe('/api/analytics/[event] proxy', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.body).toMatchObject({ success: true, tracked: false, reason: 'duplicate' });
+  });
+
+  it.each([
+    [{ ok: true, skipped: false }, true],
+    [{ ok: true, skipped: true }, false],
+    [{ ok: true, skipped: true, tracked: true }, false],
+    [{ ok: true, tracked: false }, false],
+    [{ ok: true }, true],
+    [{ success: true, tracked: true }, true],
+  ])('reports the acknowledged backend outcome %j as tracked:%s', async (outcome, tracked) => {
+    jest.mocked(global.fetch).mockResolvedValue(new Response(JSON.stringify(outcome), { status: 200 }));
+    const res = createRes();
+    await handler(createReq('article-heartbeat', BASE_PAYLOAD), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({ success: true, tracked });
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { ok: false }, { success: false }, { ok: false, tracked: true },
+    { success: false, ok: true, skipped: true }, {}, null, [], 'not-an-outcome',
+  ])('does not convert a failed or unacknowledged 200 response %j into tracked:true', async (outcome) => {
+    jest.mocked(global.fetch).mockResolvedValue(new Response(JSON.stringify(outcome), { status: 200 }));
+    const res = createRes();
+    await handler(createReq('article-view', BASE_PAYLOAD), res);
+    expect(res.statusCode).toBe(502);
+    expect(res.body).toEqual({ success: false, tracked: false });
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports invalid upstream JSON as a forwarding failure', async () => {
+    jest.mocked(global.fetch).mockResolvedValue(new Response('{invalid JSON', { status: 200 }));
+    const res = createRes();
+    await handler(createReq('engaged-read', BASE_PAYLOAD), res);
+    expect(res.statusCode).toBe(502);
+    expect(res.body).toEqual({ success: false, tracked: false });
+    expect(warnSpy).toHaveBeenCalledTimes(1);
   });
 
   it('does not report a false success when the backend rejects the event', async () => {
