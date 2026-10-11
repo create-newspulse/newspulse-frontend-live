@@ -462,7 +462,12 @@
     "title": "વિષય",
     "titleWithQuery": "વિષય: {{query}}",
     "unableToLoadStories": "સ્ટોરીઝ લોડ થઈ શકી નથી",
-    "noStoriesYet": "હમણાં કોઈ સ્ટોરી નથી."
+    "noStoriesYet": "હમણાં કોઈ સ્ટોરી નથી.",
+    "featuredStory": "મુખ્ય સમાચાર",
+    "pagination": "વિષયનાં પૃષ્ઠો",
+    "previous": "પાછલું",
+    "next": "આગળનું",
+    "page": "પૃષ્ઠ"
   },
   "offlinePage": {
     "title": "તમે ઑફલાઇન છો",

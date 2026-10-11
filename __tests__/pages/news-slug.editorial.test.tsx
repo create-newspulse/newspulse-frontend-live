@@ -234,6 +234,12 @@ describe('pages/news/[slug] editorial detail', () => {
     document.body.style.overscrollBehavior = '';
   });
 
+  test.each(['en', 'hi', 'gu'] as const)('ordinary %s article tags retain explicit keyword routing for an editorial slug', (locale) => {
+    renderAuthorArticle({ tags: ['Navratri 2026'] }, locale);
+    const tag = screen.getByRole('link', { name: '#navratri 2026' });
+    expect(tag.getAttribute('href')).toBe(`${locale === 'en' ? '' : `/${locale}`}/topic/navratri-2026?q=navratri%202026`);
+  });
+
   describe.each([
     ['regional', 'rgb(101, 163, 13)'],
     ['national', 'rgb(37, 99, 235)'],

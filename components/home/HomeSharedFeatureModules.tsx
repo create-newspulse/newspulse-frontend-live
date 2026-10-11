@@ -217,22 +217,23 @@ function toSpotlightViewModel(story: any, lang: HomeRightRailLang) {
 
 export function HomeTrendingStrip({ theme = DEFAULT_SHARED_THEME, onPick }: { theme?: SharedTheme; onPick?: (label: string) => void }) {
   const router = useRouter();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [topics, setTopics] = React.useState<TrendingTopic[]>(DEFAULT_TRENDING_TOPICS);
   const [path, setPath] = React.useState('');
   const tapState = React.useRef({ down: false, startX: 0, startY: 0, moved: false, touchNavigatedAt: 0 });
 
   React.useEffect(() => {
     setPath(window.location.pathname);
+    setTopics(DEFAULT_TRENDING_TOPICS);
 
     let cancelled = false;
-    getTrendingTopics().then((next) => {
+    getTrendingTopics(lang).then((next) => {
       if (!cancelled) setTopics(next);
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [lang]);
 
   return (
     <div className="home-shell trending-shell">
@@ -255,7 +256,7 @@ export function HomeTrendingStrip({ theme = DEFAULT_SHARED_THEME, onPick }: { th
                 {topics.map((topic) => {
                   const active = path === topic.href;
                   const chipTheme = TRENDING_CHIP_THEME[topic.colorKey] || TRENDING_CHIP_THEME.__default;
-                  const labelKey = labelKeyForTrendingTopic(String(topic.key));
+                  const labelKey = topic.source === 'editorial' ? null : labelKeyForTrendingTopic(String(topic.key));
                   const label = labelKey ? t(labelKey) : topic.label;
                   const navigate = () => {
                     onPick?.(label);

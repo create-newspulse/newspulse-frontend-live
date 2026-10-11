@@ -1,5 +1,6 @@
 import { DEFAULT_TRENDING_TOPICS, type TrendingTopic } from '../src/config/trendingTopics';
 import { getPublicApiBaseUrl } from './publicApiBase';
+import type { RouteLocale } from './localizedArticleFields';
 
 function trimTrailingSlashes(value: string): string {
   return value.replace(/\/+$/, '');
@@ -19,7 +20,7 @@ function normalizeItems(payload: unknown): unknown[] {
     const items = payload.items;
     if (Array.isArray(items)) return items;
   }
-  return [];
+  throw new Error('Invalid legacy trending response');
 }
 
 function toSearchHref(label: string): string {
@@ -29,65 +30,85 @@ function toSearchHref(label: string): string {
 function normalizeTopic(raw: unknown): TrendingTopic | null {
   if (!isRecord(raw)) return null;
 
+  const editorial = raw.source === 'editorial';
   const key = typeof raw.key === 'string' ? raw.key.trim() : '';
-  const label = typeof raw.label === 'string' ? raw.label.trim() : '';
+  const label = typeof raw.label === 'string' ? (editorial ? raw.label : raw.label.trim()) : '';
   const rawHref = typeof raw.href === 'string' ? raw.href.trim() : '';
-  const colorKey = typeof raw.colorKey === 'string' ? raw.colorKey.trim() : '';
+  const rawColorKey = typeof raw.colorKey === 'string' ? raw.colorKey.trim() : '';
 
-  if (!key || !label || !colorKey) return null;
+  if (!key || !label.trim() || !rawColorKey) return null;
+  if (editorial && rawHref !== `/topic/${encodeURIComponent(key)}`) return null;
 
   // If backend doesn't provide a valid href, route to search temporarily.
   // (UI/route still works and avoids a "dead" chip.)
   const href = rawHref && rawHref.startsWith('/') ? rawHref : toSearchHref(label);
+  const colorKey = DEFAULT_TRENDING_TOPICS.find((topic) => topic.colorKey === rawColorKey)?.colorKey
+    ?? (rawColorKey === 'trending' ? 'trending' : '__default');
 
   return {
     key,
     label,
     href,
-    // Keep runtime validation permissive, but fall back to __default if unexpected.
-    colorKey: (colorKey as TrendingTopic['colorKey']) || '__default',
+    colorKey,
+    ...(editorial ? { source: 'editorial' as const } : {}),
   };
 }
 
-export function getTrendingTopicsRequestUrl(): string {
-  const base = getApiOrigin();
-  // In the browser, base may be "" which yields a same-origin request.
-  if (typeof window !== 'undefined') return `${base}/api/public/trending-topics`;
-  return `${base}/api/public/trending-topics`;
+export function normalizeTrendingTopics(payload: unknown): TrendingTopic[] {
+  const seen = new Set<string>();
+  const rawItems = normalizeItems(payload);
+  const normalized = rawItems.map(normalizeTopic);
+  if (normalized.some((topic) => !topic)) console.warn('[trending-topics] Discarding malformed trending items');
+  return normalized.filter((topic): topic is TrendingTopic => {
+    if (!topic) return false;
+    const key = topic.key.toLowerCase();
+    if ((!topic.source && key === 'trending') || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
-export async function getTrendingTopics(): Promise<TrendingTopic[]> {
+export function mergeTrendingTopics(editorial: TrendingTopic[], legacy: TrendingTopic[]): TrendingTopic[] {
+  const keys = new Set<string>();
+  const editorialHrefs = new Set<string>();
+  const items = editorial.filter((topic) => {
+    const key = topic.key.toLowerCase();
+    if (keys.has(key) || editorialHrefs.has(topic.href)) return false;
+    keys.add(key);
+    editorialHrefs.add(topic.href);
+    return true;
+  });
+  // Gold, fuel and markets intentionally share /business; only editorial hrefs take precedence.
+  for (const topic of legacy) {
+    const key = topic.key.toLowerCase();
+    if (keys.has(key) || editorialHrefs.has(topic.href)) continue;
+    keys.add(key);
+    items.push(topic);
+  }
+  return items;
+}
+
+export function getTrendingTopicsRequestUrl(lang: RouteLocale = 'en'): string {
+  const base = getApiOrigin();
+  return `${base}/api/public/trending-topics?lang=${lang}`;
+}
+
+export async function getTrendingTopics(lang: RouteLocale = 'en'): Promise<TrendingTopic[]> {
   // In SSR/Node contexts, return defaults (never fetch from backend in SSR here).
   if (typeof window === 'undefined') return DEFAULT_TRENDING_TOPICS;
 
   try {
-    const url = getTrendingTopicsRequestUrl();
+    const url = getTrendingTopicsRequestUrl(lang);
     const res = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) return DEFAULT_TRENDING_TOPICS;
+    if (!res.ok) throw new Error(`Trending request failed (${res.status})`);
 
     const json = (await res.json()) as unknown;
-    const rawItems = normalizeItems(json);
-
-    const seen = new Set<string>();
-    const topics = rawItems
-      .map(normalizeTopic)
-      .filter((t): t is TrendingTopic => {
-        if (!t) return false;
-
-        // The UI already renders a special "Trending" label chip.
-        // Prevent duplicates if backend accidentally includes it.
-        const normalizedKey = t.key.toLowerCase();
-        if (normalizedKey === 'trending') return false;
-
-        // Case-insensitive de-dupe by key, keep first occurrence.
-        if (seen.has(normalizedKey)) return false;
-        seen.add(normalizedKey);
-        return true;
-      });
+    const topics = normalizeTrendingTopics(json);
 
     // If API returns empty, keep defaults.
     return topics.length ? topics : DEFAULT_TRENDING_TOPICS;
-  } catch {
+  } catch (error) {
+    console.warn('[trending-topics] Using default shortcuts', error);
     return DEFAULT_TRENDING_TOPICS;
   }
 }

@@ -464,7 +464,12 @@
     "title": "Topic",
     "titleWithQuery": "Topic: {{query}}",
     "unableToLoadStories": "Unable to load stories",
-    "noStoriesYet": "No stories yet."
+    "noStoriesYet": "No stories yet.",
+    "featuredStory": "Featured story",
+    "pagination": "Topic pages",
+    "previous": "Previous",
+    "next": "Next",
+    "page": "Page"
   }
   ,
   "offlinePage": {

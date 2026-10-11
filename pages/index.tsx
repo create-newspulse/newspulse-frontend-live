@@ -1781,7 +1781,7 @@ function useTickerSponsor(kind: 'breaking' | 'live', lang: 'en' | 'hi' | 'gu') {
 
 function TrendingStrip({ theme, onPick }: any) {
   const router = useRouter();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [topics, setTopics] = useState<TrendingTopic[]>(DEFAULT_TRENDING_TOPICS);
   const [path, setPath] = useState<string>("");
   const tapState = useRef({
@@ -1794,16 +1794,17 @@ function TrendingStrip({ theme, onPick }: any) {
 
   React.useEffect(() => {
     setPath(window.location.pathname);
+    setTopics(DEFAULT_TRENDING_TOPICS);
 
     let cancelled = false;
-    getTrendingTopics().then((next) => {
+    getTrendingTopics(lang).then((next) => {
       if (cancelled) return;
       setTopics(next);
     });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [lang]);
 
   return (
     <div className="home-shell trending-shell">
@@ -1826,7 +1827,7 @@ function TrendingStrip({ theme, onPick }: any) {
                 {topics.map((topic) => {
                   const active = !!path && path === topic.href;
                   const chipTheme = TRENDING_CHIP_THEME[topic.colorKey] || TRENDING_CHIP_THEME.__default;
-                  const k = labelKeyForTrendingTopic(String(topic.key));
+                  const k = topic.source === 'editorial' ? null : labelKeyForTrendingTopic(String(topic.key));
                   const label = k ? t(k) : topic.label;
 
                   const navigate = () => {

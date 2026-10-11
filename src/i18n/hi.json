@@ -462,7 +462,12 @@
     "title": "विषय",
     "titleWithQuery": "विषय: {{query}}",
     "unableToLoadStories": "स्टोरीज़ लोड नहीं हो सकीं",
-    "noStoriesYet": "अभी कोई स्टोरी नहीं।"
+    "noStoriesYet": "अभी कोई स्टोरी नहीं।",
+    "featuredStory": "प्रमुख खबर",
+    "pagination": "विषय के पृष्ठ",
+    "previous": "पिछला",
+    "next": "अगला",
+    "page": "पृष्ठ"
   },
   "offlinePage": {
     "title": "आप ऑफलाइन हैं",

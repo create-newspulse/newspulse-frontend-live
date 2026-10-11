@@ -16,6 +16,9 @@ import { isSafeMode } from '../../utils/safeMode';
 import * as i18n from '../../src/i18n/LanguageProvider';
 import * as storyTitleHook from '../../lib/storyTitleHook';
 import { useHomeLowerAdAlignment } from '../../hooks/useHomeLowerAdAlignment';
+import { getTrendingTopics } from '../../lib/getTrendingTopics';
+import { DEFAULT_TRENDING_TOPICS } from '../../src/config/trendingTopics';
+import { topicNames } from '../fixtures/editorialTopics';
 
 jest.mock('next/router', () => ({ useRouter: () => ({ asPath: '/', pathname: '/', locale: 'en', push: jest.fn(), replace: jest.fn() }) }));
 jest.mock('next/head', () => ({ __esModule: true, default: () => null }));
@@ -409,6 +412,43 @@ beforeEach(() => {
   jest.mocked(usePublicBroadcastTicker).mockReturnValue(broadcastState());
   jest.mocked(usePublicTickerAds).mockReturnValue({ ads: [], isLoading: false, error: null, lastUpdatedAt: null, refetch: jest.fn() });
   jest.mocked(isSafeMode).mockReturnValue(false);
+});
+
+describe('homepage hybrid Trending Strip', () => {
+  beforeEach(() => {
+    jest.mocked(fetchPublicSettings).mockResolvedValue(published());
+    jest.mocked(fetchPublicNews).mockResolvedValue({ items: [], meta: {}, endpoint: '/api/public/news' });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    jest.mocked(getTrendingTopics).mockReset().mockResolvedValue([]);
+  });
+
+  test.each(['en', 'hi', 'gu'] as const)('preserves %s backend labels and all nine dictionary shortcuts in one strip', async (lang) => {
+    const actual = jest.requireActual<typeof i18n>('../../src/i18n/LanguageProvider');
+    jest.spyOn(i18n, 'useI18n').mockImplementation(actual.useI18n);
+    const editorial = { key: 'navratri-2026', label: topicNames[lang], href: '/topic/navratri-2026', colorKey: 'sports' as const, source: 'editorial' as const };
+    jest.mocked(getTrendingTopics).mockClear().mockResolvedValue([editorial, ...DEFAULT_TRENDING_TOPICS]);
+    let container!: HTMLElement;
+    await act(async () => {
+      container = render(
+        <i18n.LanguageProvider initialLang={lang}>
+          <PublicSettingsProvider initialSettings={published()}>
+            <HomePage {...props} />
+          </PublicSettingsProvider>
+        </i18n.LanguageProvider>
+      ).container;
+    });
+    expect(container.querySelectorAll('.trending-shell')).toHaveLength(1);
+    const links = Array.from(container.querySelectorAll('.trending-shell a'));
+    expect(links.map((link) => link.getAttribute('href'))).toEqual([editorial.href, ...DEFAULT_TRENDING_TOPICS.map((topic) => topic.href)]);
+    expect(links[0].textContent).toBe(topicNames[lang]);
+    expect(links[1].textContent).toBe(actual.getMessagesForLang(lang).trending.breaking);
+    expect(container.querySelectorAll('.trending-shell a[href="/business"]')).toHaveLength(3);
+    expect(jest.mocked(getTrendingTopics)).toHaveBeenCalledTimes(1);
+    expect(jest.mocked(getTrendingTopics)).toHaveBeenCalledWith(lang);
+  });
 });
 
 describe('homepage ad layout boundaries', () => {

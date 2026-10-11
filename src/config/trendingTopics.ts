@@ -16,9 +16,10 @@ export type TrendingTopic = {
   label: string;
   href: string;
   colorKey: TrendingColorKey;
+  source?: 'editorial';
 };
 
-// Edit defaults here. To temporarily override without touching code, edit public/trending-topics.override.json.
+// Both active strips use these defaults through lib/getTrendingTopics.ts.
 // Keep this list in the exact order requested.
 // NOTE: `href` values are intentionally routed to existing pages to avoid 404s.
 export const DEFAULT_TRENDING_TOPICS: TrendingTopic[] = [

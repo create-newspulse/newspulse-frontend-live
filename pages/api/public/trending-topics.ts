@@ -1,5 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
+import { mergeTrendingTopics, normalizeTrendingTopics } from '../../../lib/getTrendingTopics';
+import { EDITORIAL_TOPICS_TIMEOUT_MS, fetchEditorialTopics } from '../../../lib/publicEditorialTopics';
+import { withPublicReadDeadline } from '../../../lib/publicReadDeadline';
+import { DEFAULT_TRENDING_TOPICS, type TrendingTopic } from '../../../src/config/trendingTopics';
 
 function getApiBase(): string {
   return getPublicApiBaseUrl().trim().replace(/\/+$/, '');
@@ -11,38 +15,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ ok: false, message: 'METHOD_NOT_ALLOWED' });
   }
 
+  const lang = req.query.lang ?? 'en';
+  if (lang !== 'en' && lang !== 'hi' && lang !== 'gu') {
+    return res.status(400).json({ ok: false, message: 'INVALID_LANGUAGE' });
+  }
+  res.setHeader('Cache-Control', 'no-store');
   const base = getApiBase();
   if (!base) {
-    // Avoid breaking the UI when env isn't configured.
+    console.warn('[trending-topics] No backend configured; using default shortcuts');
     return res.status(200).json([]);
   }
 
-  const targetUrl = `${base}/api/public/trending-topics`;
+  const [editorialResult, legacyResult] = await Promise.allSettled([
+    fetchEditorialTopics(lang),
+    withPublicReadDeadline(EDITORIAL_TOPICS_TIMEOUT_MS, async (signal) => {
+      const upstream = await fetch(`${base}/api/public/trending-topics`, {
+        method: 'GET', headers: { Accept: 'application/json' }, signal,
+      });
+      if (!upstream.ok) throw new Error(`Legacy trending request failed (${upstream.status})`);
+      // Retain the existing array/{items} contract and its fixed-shortcut fallback.
+      return normalizeTrendingTopics(await upstream.json()).map(({ source, ...topic }) => topic);
+    }),
+  ]);
+  if (editorialResult.status === 'rejected') console.warn('[trending-topics] Editorial topics unavailable', editorialResult.reason);
+  if (legacyResult.status === 'rejected') console.warn('[trending-topics] Using default legacy shortcuts', legacyResult.reason);
 
-  try {
-    const upstream = await fetch(targetUrl, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-    });
-
-    // If the backend route doesn't exist yet, don't break the UI.
-    if (upstream.status === 404) {
-      return res.status(200).json([]);
-    }
-
-    const text = await upstream.text().catch(() => '');
-    if (!upstream.ok) {
-      // Conservative fallback: keep UI alive.
-      return res.status(200).json([]);
-    }
-
-    try {
-      const json = text ? JSON.parse(text) : [];
-      return res.status(200).json(json);
-    } catch {
-      return res.status(200).json([]);
-    }
-  } catch {
-    return res.status(200).json([]);
-  }
+  const editorial: TrendingTopic[] = editorialResult.status === 'fulfilled'
+    ? editorialResult.value.map((topic) => ({
+      key: topic.slug, label: topic.label, href: topic.href,
+      colorKey: topic.colorKey === 'blue' ? 'sports' : '__default',
+      source: 'editorial',
+    })) : [];
+  const legacy = legacyResult.status === 'fulfilled' && legacyResult.value.length
+    ? legacyResult.value : DEFAULT_TRENDING_TOPICS;
+  return res.status(200).json({ items: mergeTrendingTopics(editorial, legacy) });
 }

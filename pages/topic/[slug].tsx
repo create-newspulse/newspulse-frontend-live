@@ -2,7 +2,8 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useEffect, useMemo, useState } from 'react';
-import type { GetStaticProps } from 'next';
+import type { GetServerSideProps } from 'next';
+import { ArrowLeft, ArrowRight } from 'lucide-react';
 
 import { fetchPublicNews, type Article } from '../../lib/publicNewsApi';
 import { resolveArticleSummaryOrExcerpt, resolveArticleTitle } from '../../lib/contentFallback';
@@ -14,6 +15,39 @@ import { resolveArticleSlug } from '../../lib/articleSlugs';
 import { COVER_PLACEHOLDER_SRC, resolveCoverFitMode, resolveCoverImageUrl } from '../../lib/coverImages';
 import { formatEditorialDateTime, resolveStoryDateIso } from '../../lib/storyDateTime';
 import StoryImage from '../../src/components/story/StoryImage';
+import { KeyStoryCard, type CategoryStoryHierarchyItem } from '../../components/category/CategoryStoryHierarchy';
+import {
+  editorialTopicPath,
+  fetchEditorialTopic,
+  fetchEditorialTopicStories,
+  type EditorialTopicStory,
+  type EditorialTopicSummary,
+} from '../../lib/publicEditorialTopics';
+import { normalizeRouteLocale, type RouteLocale } from '../../lib/localizedArticleFields';
+import { getMessages } from '../../lib/getMessages';
+import { absolutePublicUrl, NEWS_PULSE_PUBLISHER_NAME, removeUndefined, resolvePublicSiteUrl, safeJsonLd, type SeoAlternate } from '../../lib/seo';
+
+export type TopicPageProps = {
+  messages: Record<string, unknown>;
+  locale: RouteLocale;
+} & (
+  | { mode: 'legacy' }
+  | { mode: 'unavailable'; seo: { disableAlternates: true } }
+  | {
+    mode: 'editorial';
+    topic: EditorialTopicSummary;
+    pinnedArticle: CategoryStoryHierarchyItem | null;
+    items: CategoryStoryHierarchyItem[];
+    pagination: { page: number; totalPages: number; hasNextPage: boolean };
+    seo: {
+      title: string;
+      description: string;
+      canonicalUrl: string;
+      alternates: SeoAlternate[];
+      jsonLd: Record<string, unknown>;
+    };
+  }
+);
 
 function slugToQuery(slug: string) {
   const s = String(slug || '').trim();
@@ -21,7 +55,7 @@ function slugToQuery(slug: string) {
   return s.replace(/[-_]+/g, ' ').trim();
 }
 
-export default function TopicPage() {
+function LegacyTopicPage() {
   const router = useRouter();
   const { language } = useLanguage();
   const { t } = useI18n();
@@ -168,18 +202,142 @@ export default function TopicPage() {
   );
 }
 
-export const getStaticProps: GetStaticProps = async ({ locale }) => {
-  const { getMessages } = await import('../../lib/getMessages');
-  return {
-    props: {
-      messages: await getMessages(locale as string),
-    },
-  };
-};
+export default function TopicPage(props: TopicPageProps) {
+  const { t } = useI18n();
+  if (props.mode === 'legacy') return <LegacyTopicPage />;
+  if (props.mode === 'unavailable') return (
+    <main className="mx-auto max-w-6xl px-4 py-10">
+      <Head>
+        <title>{`${t('topicPage.title')} | ${t('brand.name')}`}</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Head>
+      <h1 className="text-2xl font-bold text-newsPulse-navy">{t('topicPage.unableToLoadStories')}</h1>
+      <p className="mt-3 text-newsPulse-slate">{t('errors.fetchFailed')}</p>
+    </main>
+  );
 
-export async function getStaticPaths() {
-  return {
-    paths: [],
-    fallback: 'blocking',
-  };
+  const { topic, locale, pinnedArticle, items, pagination, seo } = props;
+  const path = (page: number) => editorialTopicPath(topic.slug, locale, page);
+  return (
+    <>
+      <Head>
+        <title>{seo.title}</title>
+        {seo.description ? <meta name="description" content={seo.description} /> : null}
+        <meta property="og:type" content="website" />
+        <meta property="og:title" content={seo.title} />
+        {seo.description ? <meta property="og:description" content={seo.description} /> : null}
+        <meta property="og:url" content={seo.canonicalUrl} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(seo.jsonLd) }} />
+      </Head>
+      <main className="min-h-screen bg-white">
+        <div className="max-w-6xl mx-auto px-4 py-10">
+          <header className="flex flex-col gap-2">
+            <h1 className="text-4xl font-extrabold tracking-tight text-slate-900">{topic.label}</h1>
+            {topic.description[locale] ? <p className="max-w-3xl whitespace-pre-line text-slate-600">{topic.description[locale]}</p> : null}
+            <div className="text-sm text-slate-600">
+              <Link href="/search" className="text-newsPulse-blue hover:underline">{t('common.search')}</Link>
+              <span> · </span>
+              <Link href="/" className="text-newsPulse-blue hover:underline">{t('common.home')}</Link>
+            </div>
+          </header>
+          {pinnedArticle ? (
+            <section className="mt-8 max-w-2xl" aria-labelledby="topic-featured-story">
+              <h2 id="topic-featured-story" className="mb-3 text-sm font-bold text-newsPulse-navy">{t('topicPage.featuredStory')}</h2>
+              <KeyStoryCard item={pinnedArticle} locale={false} />
+            </section>
+          ) : null}
+          {items.length ? (
+            <section className="mt-8">
+              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                {items.map((item) => <KeyStoryCard key={item.id} item={item} locale={false} />)}
+              </div>
+            </section>
+          ) : !pinnedArticle ? (
+            <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6">
+              <div className="text-lg font-semibold text-slate-900">{t('topicPage.noStoriesYet')}</div>
+            </div>
+          ) : null}
+          {pagination.page > 1 || pagination.hasNextPage ? (
+            <nav aria-label={t('topicPage.pagination')} className="mt-7 flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 pt-5 text-sm font-semibold">
+              {pagination.page > 1 ? (
+                <Link href={path(pagination.page - 1)} locale={false} className="inline-flex items-center gap-2 text-newsPulse-blue hover:underline">
+                  <ArrowLeft size={18} aria-hidden="true" />{t('topicPage.previous')}
+                </Link>
+              ) : <span />}
+              <span>{t('topicPage.page')} {pagination.page}{pagination.totalPages >= pagination.page ? ` / ${pagination.totalPages}` : ''}</span>
+              {pagination.hasNextPage ? (
+                <Link href={path(pagination.page + 1)} locale={false} className="inline-flex items-center gap-2 text-newsPulse-blue hover:underline">
+                  {t('topicPage.next')}<ArrowRight size={18} aria-hidden="true" />
+                </Link>
+              ) : <span />}
+            </nav>
+          ) : null}
+        </div>
+      </main>
+    </>
+  );
 }
+
+function topicStoryCard(story: EditorialTopicStory): CategoryStoryHierarchyItem {
+  const image = resolveCoverImageUrl(story, { lang: story.language }) || COVER_PLACEHOLDER_SRC;
+  const dateIso = resolveStoryDateIso(story);
+  return removeUndefined({
+    id: story._id, title: story.title, titleText: story.title, summary: story.summary,
+    href: buildNewsUrl({ id: story._id, slug: story.slug, lang: story.language }),
+    imageSrc: image, imageFitMode: resolveCoverFitMode(story, { src: image, altText: story.title }),
+    dateIso, dateLabel: formatEditorialDateTime(dateIso),
+  });
+}
+
+export const getServerSideProps: GetServerSideProps<TopicPageProps> = async (ctx) => {
+  const locale = normalizeRouteLocale(ctx.locale);
+  const common = { locale, messages: await getMessages(locale) };
+  ctx.res.setHeader('Cache-Control', 'no-store');
+  // Existing article tag links explicitly use q and must not change meaning.
+  if ('q' in ctx.query) return { props: { ...common, mode: 'legacy' } };
+  const slug = ctx.params?.slug;
+  if (typeof slug !== 'string' || !slug) return { notFound: true };
+
+  try {
+    const detail = await fetchEditorialTopic(slug, locale);
+    if (!detail) return { props: { ...common, mode: 'legacy' } };
+    const rawPage = ctx.query.page;
+    const page = rawPage === undefined ? 1
+      : typeof rawPage === 'string' && /^[1-9]\d*$/.test(rawPage) ? Number(rawPage) : NaN;
+    if (!Number.isSafeInteger(page) || page < 1 || page > 10000) {
+      return { redirect: { destination: editorialTopicPath(detail.topic.slug, locale), permanent: false } };
+    }
+    const stories = await fetchEditorialTopicStories(detail.topic.slug, locale, page);
+    const pin = detail.pinnedArticle;
+    const pinGroup = pin?.translationGroupId || pin?.translationKey;
+    const items = stories.items.filter((story) => story._id !== pin?._id
+      && (!pinGroup || (story.translationGroupId !== pinGroup && story.translationKey !== pinGroup)));
+    const siteUrl = resolvePublicSiteUrl(ctx.req);
+    const canonicalUrl = absolutePublicUrl(editorialTopicPath(detail.topic.slug, locale, page), siteUrl);
+    const description = detail.topic.description[locale];
+    const alternates: SeoAlternate[] = (['en', 'hi', 'gu'] as const).map((lang) => ({
+      hrefLang: lang, href: absolutePublicUrl(editorialTopicPath(detail.topic.slug, lang, page), siteUrl),
+    }));
+    alternates.push({ hrefLang: 'x-default', href: alternates[0].href });
+    return {
+      props: {
+        ...common, mode: 'editorial', topic: detail.topic,
+        pinnedArticle: pin ? topicStoryCard(pin) : null, items: items.map(topicStoryCard),
+        pagination: { page: stories.page, totalPages: stories.totalPages, hasNextPage: stories.hasNextPage },
+        seo: {
+          title: `${detail.topic.label} | News Pulse`, description, canonicalUrl, alternates,
+          jsonLd: removeUndefined({
+            '@context': 'https://schema.org', '@type': 'CollectionPage', name: detail.topic.label,
+            description, url: canonicalUrl, inLanguage: locale,
+            publisher: { '@type': 'Organization', name: NEWS_PULSE_PUBLISHER_NAME, url: siteUrl },
+          }),
+        },
+      },
+    };
+  } catch (error) {
+    console.error('[editorial-topics] Topic archive unavailable', error);
+    ctx.res.statusCode = 503;
+    ctx.res.setHeader('Retry-After', '60');
+    return { props: { ...common, mode: 'unavailable', seo: { disableAlternates: true } } };
+  }
+};
