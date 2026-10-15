@@ -43,20 +43,6 @@ export const DEFAULT_HOME_RIGHT_RAIL_THEME: HomeRightRailTheme = {
 };
 
 const HOME_YOUTH_TRENDING_VISIBLE_LIMIT = 9;
-const HOME_YOUTH_TRENDING_FALLBACK_ITEMS = [
-  {
-    id: 'home-youth-trending-fallback-study-habits',
-    title: 'How Students Can Build Better Study Habits With Simple Daily Routines',
-  },
-  {
-    id: 'home-youth-trending-fallback-exam-stress',
-    title: 'Smart Ways To Prepare For Exams Without Last-Minute Stress',
-  },
-  {
-    id: 'home-youth-trending-fallback-career-skills',
-    title: 'Simple Career Skills Every Student Should Learn Early',
-  },
-];
 
 function safeTitle(raw: unknown): string {
   return String(raw || '').trim();
@@ -150,7 +136,7 @@ export function articleToHomeRightRailFeedItem(article: Article, requestedLang: 
   };
 }
 
-export function HomeRightRailLatestNews({ theme = DEFAULT_HOME_RIGHT_RAIL_THEME, items, lang }: { theme?: HomeRightRailTheme; items: any[] | null; lang: HomeRightRailLang }) {
+export function HomeRightRailLatestNews({ theme = DEFAULT_HOME_RIGHT_RAIL_THEME, items, lang, hasReadError = false }: { theme?: HomeRightRailTheme; items: any[] | null; lang: HomeRightRailLang; hasReadError?: boolean }) {
   const { t } = useI18n();
   const safeLang = lang === 'hi' || lang === 'gu' ? lang : 'en';
   const prefix = safeLang === 'en' ? '' : `/${safeLang}`;
@@ -175,8 +161,6 @@ export function HomeRightRailLatestNews({ theme = DEFAULT_HOME_RIGHT_RAIL_THEME,
 
     return filtered.slice(0, 8);
   }, [activeFilter, listItems]);
-
-  if (!isLoading && !orderedItems.length) return null;
 
   const filterOptions = [
     { key: 'all', label: 'All' },
@@ -243,7 +227,13 @@ export function HomeRightRailLatestNews({ theme = DEFAULT_HOME_RIGHT_RAIL_THEME,
       </div>
 
       <div className="px-2 pb-2 pt-2">
-        {isLoading ? (
+        {hasReadError ? (
+          <div role="alert" className="px-4 pb-4 pt-2 text-sm" style={{ color: theme.sub }}>
+            <p>{t('categoryPage.unableToLoadTitle')}</p>
+            {orderedItems.length ? <p className="mt-1">{t('errors.showingPreviousStories')}</p> : null}
+          </div>
+        ) : null}
+        {isLoading && !hasReadError ? (
           <div className="px-2">
             {Array.from({ length: 5 }).map((_, index) => (
               <div key={`sk-${index}`} className="border-b border-slate-100 py-2.5 last:border-b-0">
@@ -253,7 +243,7 @@ export function HomeRightRailLatestNews({ theme = DEFAULT_HOME_RIGHT_RAIL_THEME,
             ))}
           </div>
         ) : !orderedItems.length ? (
-          <div className="px-4 pb-4 pt-2 text-sm text-slate-500">No fresh updates right now</div>
+          hasReadError ? null : <div role="status" className="px-4 pb-4 pt-2 text-sm text-slate-500">{t('categoryPage.noStoriesYet')}</div>
         ) : (
           orderedItems.map((item: any) => {
             const storyId = getStoryId(item);
@@ -533,13 +523,10 @@ export function HomeRightRailYouthDesk({ theme = DEFAULT_HOME_RIGHT_RAIL_THEME, 
   const { t } = useI18n();
   const youth = useYouthPulse();
   const localizedYouthPulseHref = localizePath('/youth-pulse', lang);
-  const rightRailYouthTrendingItems = React.useMemo(() => {
-    const items = Array.isArray(youth.trending) ? youth.trending.slice(0, HOME_YOUTH_TRENDING_VISIBLE_LIMIT) : [];
-    if (!youth.loading && items.length > 0 && items.length < HOME_YOUTH_TRENDING_VISIBLE_LIMIT) {
-      return [...items, ...HOME_YOUTH_TRENDING_FALLBACK_ITEMS].slice(0, HOME_YOUTH_TRENDING_VISIBLE_LIMIT);
-    }
-    return items;
-  }, [youth.loading, youth.trending]);
+  const rightRailYouthTrendingItems = React.useMemo(
+    () => Array.isArray(youth.trending) ? youth.trending.slice(0, HOME_YOUTH_TRENDING_VISIBLE_LIMIT) : [],
+    [youth.trending]
+  );
 
   if (!youth.loading && rightRailYouthTrendingItems.length === 0) return null;
 
@@ -596,12 +583,14 @@ export default function HomeRightRail({
   theme = DEFAULT_HOME_RIGHT_RAIL_THEME,
   lang,
   latestItems,
+  latestReadError = false,
   includeTallAd = true,
   sticky = true,
 }: {
   theme?: HomeRightRailTheme;
   lang: HomeRightRailLang;
   latestItems: any[] | null;
+  latestReadError?: boolean;
   includeTallAd?: boolean;
   sticky?: boolean;
 }) {
@@ -609,7 +598,7 @@ export default function HomeRightRail({
     <div className={`${sticky ? 'sticky top-4 ' : ''}grid w-full min-w-0 gap-4`}>
       <AdSlot slot="HOME_RIGHT_300x250" variant="right300" />
 
-      <HomeRightRailLatestNews theme={theme} items={latestItems} lang={lang} />
+      <HomeRightRailLatestNews theme={theme} items={latestItems} hasReadError={latestReadError} lang={lang} />
 
       {includeTallAd ? <AdSlot slot="HOME_RIGHT_300x600" variant="right300x600" /> : null}
 

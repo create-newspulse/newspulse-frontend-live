@@ -456,6 +456,7 @@
   },
   "errors": {
     "fetchFailed": "ડેટા લોડ થઈ શક્યો નથી",
+    "showingPreviousStories": "અગાઉ લોડ કરેલા લેખો બતાવવામાં આવી રહ્યા છે.",
     "networkError": "નેટવર્ક ભૂલ થઈ"
   },
   "topicPage": {

@@ -2483,7 +2483,7 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick, founderToggle
   );
 }
 
-function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
+function FeaturedCard({ theme, item, onToast, isLoading = false, hasReadError = false }: any) {
   const { t } = useI18n();
   const { isBookmarked, toggleBookmark } = useBookmarks();
 
@@ -2492,25 +2492,7 @@ function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
   const sponsored = useMemo(() => resolveSponsoredContentMeta(article, requestedLang), [article, requestedLang]);
 
   const vm = useMemo(() => {
-    if (!article) {
-      const href = localizePath('/latest', requestedLang);
-      return {
-        id: `homepage-safe-fallback-${requestedLang}`,
-        href,
-        title: 'News Pulse Front Page',
-        summary: 'Stay with the homepage desk for the latest curated stories, explainers, and regional updates as the next lead feature arrives.',
-        titleIsOriginal: false,
-        summaryIsOriginal: false,
-        time: 'Live now',
-        iso: '',
-        source: 'News Pulse',
-        category: 'Homepage',
-        location: '',
-        readMinutes: 1,
-        imageSrc: '',
-        coverFitMode: 'cover',
-      };
-    }
+    if (!article) return null;
 
     const id = safeTitle((article as any)?._id || (article as any)?.id || (article as any)?.slug) || '';
     const slug = resolveArticleSlug(article as any, requestedLang);
@@ -2696,8 +2678,28 @@ function FeaturedCard({ theme, item, onToast, isLoading = false }: any) {
     );
   }
 
+  if (!vm) {
+    return (
+      <Surface theme={theme} className="group overflow-hidden">
+        <div
+          role={hasReadError ? 'alert' : 'status'}
+          className="px-5 py-5 text-sm sm:px-6 sm:py-6 lg:px-7 lg:py-6"
+          style={{ color: theme.sub }}
+        >
+          {t(hasReadError ? 'categoryPage.unableToLoadTitle' : 'categoryPage.noStoriesYet')}
+        </div>
+      </Surface>
+    );
+  }
+
   return (
     <Surface theme={theme} className="group overflow-hidden">
+      {hasReadError ? (
+        <div role="alert" className="border-b px-5 py-3 text-sm sm:px-6 lg:px-7" style={{ borderColor: theme.border, color: theme.sub }}>
+          <p>{t('categoryPage.unableToLoadTitle')}</p>
+          <p className="mt-1">{t('errors.showingPreviousStories')}</p>
+        </div>
+      ) : null}
       <div
         className={cx('relative overflow-hidden px-5 py-5 sm:px-6 sm:py-6 lg:px-7 lg:py-6', vm ? 'cursor-pointer' : '')}
       >
@@ -4615,7 +4617,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
     : [];
   const showLeftRail = leftRailBlocks.length > 0;
   const rightRailNode = (
-    <HomeRightRail theme={theme} latestItems={latestFromBackend} lang={apiLang} />
+    <HomeRightRail theme={theme} latestItems={latestFromBackend} latestReadError={storyStatus === 'error'} lang={apiLang} />
   );
 
   const hasSnapshotsBlock = sidebarBlocks.some((b) => b.key === 'snapshots');
@@ -4983,6 +4985,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
                       }}
                       onToast={onToast}
                       isLoading={shouldShowHomepageTopStorySkeleton(topStory, latestFromBackend, storyStatus)}
+                      hasReadError={storyStatus === 'error'}
                     />
                   </div>
                   <div className="fresh-stories-card" ref={freshStoriesRef}>

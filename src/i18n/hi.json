@@ -456,6 +456,7 @@
   },
   "errors": {
     "fetchFailed": "डेटा लोड नहीं हो सका",
+    "showingPreviousStories": "पहले लोड किए गए लेख दिखाए जा रहे हैं।",
     "networkError": "नेटवर्क त्रुटि हुई"
   },
   "topicPage": {

@@ -59,51 +59,9 @@ const CATEGORY_TOP_BANNER_CATEGORIES = new Set([
 	'faith-culture',
 ]);
 
-const HOME_STORY_CACHE_KEY = 'newspulse-home-cache';
-
 function routeForCategory(activeCategory: string): string {
 	const key = String(activeCategory || '').trim().toLowerCase();
 	return CATEGORY_ROUTES[key] || `/${key || ''}`;
-}
-
-function safeJsonParse(raw: string): any {
-	try {
-		return JSON.parse(raw);
-	} catch {
-		return null;
-	}
-}
-
-function readCachedHomeLatestItems(lang: HomeRightRailLang): any[] {
-	if (typeof window === 'undefined') return [];
-
-	const stores = [window.localStorage, window.sessionStorage];
-	for (const store of stores) {
-		try {
-			const raw = store.getItem(HOME_STORY_CACHE_KEY);
-			const cache = raw ? safeJsonParse(raw) : null;
-			if (!cache || typeof cache !== 'object') continue;
-			if (cache.lang && cache.lang !== lang) continue;
-
-			const freshStories = filterPubliclyPublishedArticles(cache.freshStories);
-			const topStory = cache.topStory && typeof cache.topStory === 'object'
-				? filterPubliclyPublishedArticles([cache.topStory]).map((article) => articleToHomeRightRailFeedItem(article as any, lang))[0] || null
-				: null;
-			const items = [topStory, ...freshStories].filter(Boolean);
-			if (!items.length) continue;
-
-			const seen = new Set<string>();
-			return items.filter((item: any) => {
-				const key = String(item?.id || item?._id || item?.slug || item?.title || '').trim();
-				if (!key) return true;
-				if (seen.has(key)) return false;
-				seen.add(key);
-				return true;
-			});
-		} catch {}
-	}
-
-	return [];
 }
 
 export default function NewsPulseCategoryShell({ activeCategory, latestItems, lang, rightRail, tickerContent, topContent, afterColumns, children }: NewsPulseCategoryShellProps) {
@@ -115,12 +73,15 @@ export default function NewsPulseCategoryShell({ activeCategory, latestItems, la
 	);
 	const { settings, isModuleEnabled, moduleOrder } = usePublicSettings();
 	const [globalLatestItems, setGlobalLatestItems] = React.useState<any[] | null>(null);
+	const [latestReadError, setLatestReadError] = React.useState(false);
 	const [homeSpotlightItems, setHomeSpotlightItems] = React.useState<any[] | null>(null);
 
 	React.useEffect(() => {
 		let cancelled = false;
-		const cachedItems = readCachedHomeLatestItems(lang);
-		if (!rightRail) setGlobalLatestItems(cachedItems.length ? cachedItems : null);
+		if (!rightRail) {
+			setGlobalLatestItems(null);
+			setLatestReadError(false);
+		}
 		setHomeSpotlightItems(null);
 
 		const controller = new AbortController();
@@ -136,18 +97,23 @@ export default function NewsPulseCategoryShell({ activeCategory, latestItems, la
 			const spotlightArticles = spotlightResult.status === 'fulfilled' ? spotlightResult.value : [];
 
 			if (!rightRail) {
-				const editorialLatestItems = latestArticles
+				const readFailed = latestResult.status === 'rejected' || Boolean(latestResp?.error);
+				const editorialLatestItems = readFailed ? [] : latestArticles
 					.filter((article) => !isHomeSpotlightSponsoredContent(article, lang))
 					.map((article) => articleToHomeRightRailFeedItem(article as any, lang));
-				setGlobalLatestItems(editorialLatestItems.length ? editorialLatestItems : cachedItems.length ? cachedItems : null);
+				setGlobalLatestItems(editorialLatestItems);
+				setLatestReadError(readFailed);
 			}
 
 			setHomeSpotlightItems(spotlightArticles.map((article: Article) => articleToHomeRightRailFeedItem(article as any, lang)));
 		};
 
 		void loadHomeSharedNews().catch(() => {
-			if (cancelled) return;
-			if (!rightRail && cachedItems.length) setGlobalLatestItems(cachedItems);
+			if (cancelled || controller.signal.aborted) return;
+			if (!rightRail) {
+				setGlobalLatestItems([]);
+				setLatestReadError(true);
+			}
 			setHomeSpotlightItems([]);
 		});
 
@@ -157,10 +123,10 @@ export default function NewsPulseCategoryShell({ activeCategory, latestItems, la
 		};
 	}, [lang, rightRail]);
 
-	const rightRailLatestItems = globalLatestItems && globalLatestItems.length > 0 ? globalLatestItems : publicLatestItems;
+	const rightRailLatestItems = globalLatestItems ?? publicLatestItems;
 	const spotlightItems = Array.isArray(homeSpotlightItems) ? homeSpotlightItems : [];
 	const resolvedRightRail = rightRail ?? (
-		<HomeRightRail theme={DEFAULT_HOME_RIGHT_RAIL_THEME} latestItems={rightRailLatestItems} lang={lang} />
+		<HomeRightRail theme={DEFAULT_HOME_RIGHT_RAIL_THEME} latestItems={rightRailLatestItems} latestReadError={latestReadError} lang={lang} />
 	);
 	const liveTvSettings = settings?.liveTv ?? DEFAULT_NORMALIZED_PUBLIC_SETTINGS.liveTv;
 	const hasLiveTvMedia = Boolean(

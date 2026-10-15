@@ -676,7 +676,8 @@ describe('homepage published visibility', () => {
     expect(container.querySelector('a[href="/national"]')).not.toBeNull();
     expect(fetchPublicSettings).toHaveBeenCalledTimes(1);
     expect(container.querySelector('#top-story .animate-pulse')).toBeNull();
-    expect(screen.getByRole('heading', { name: 'News Pulse Front Page' })).toBeTruthy();
+    expect(container.querySelector('#top-story [role="status"]')?.textContent).toBe('categoryPage.noStoriesYet');
+    expect(container.querySelector('#top-story h1')).toBeNull();
   });
 
   test('failed initial settings load does not enable default modules', async () => {
@@ -689,7 +690,7 @@ describe('homepage published visibility', () => {
     expect(fetchPublicSettings).toHaveBeenCalledTimes(1);
   });
 
-  test('homepage fallback survives 503 trigger bursts and is replaced by one successful retry', async () => {
+  test('homepage unavailable state survives 503 trigger bursts and is replaced by one successful retry', async () => {
     jest.useFakeTimers();
     const story = { _id: 'recovered', title: 'Recovered homepage lead', slug: 'recovered', language: 'en', status: 'published', publishedAt: '2026-01-01T10:00:00Z' };
     let attempts = 0;
@@ -702,8 +703,9 @@ describe('homepage published visibility', () => {
     const { container, unmount } = render(<PublicSettingsProvider initialSettings={published()}><HomePage {...props} /></PublicSettingsProvider>);
     try {
       await act(async () => {});
-      expect(screen.getByRole('heading', { name: 'News Pulse Front Page' })).toBeTruthy();
-      const fallbackMarkup = container.querySelector('#top-story')?.innerHTML;
+      expect(container.querySelector('#top-story [role="alert"]')?.textContent).toBe('categoryPage.unableToLoadTitle');
+      expect(container.querySelector('#top-story h1, #top-story a, #top-story button')).toBeNull();
+      const unavailableMarkup = container.querySelector('#top-story')?.innerHTML;
       const navigation = Array.from(container.querySelectorAll('nav')).map(element => element.innerHTML);
       for (let iteration = 0; iteration < 10; iteration++) {
         await act(async () => {
@@ -713,7 +715,7 @@ describe('homepage published visibility', () => {
         });
       }
       expect(attempts).toBe(1);
-      expect(container.querySelector('#top-story')?.innerHTML).toBe(fallbackMarkup);
+      expect(container.querySelector('#top-story')?.innerHTML).toBe(unavailableMarkup);
       await act(async () => { await jest.advanceTimersByTimeAsync(44_999); });
       expect(attempts).toBe(1);
       await act(async () => { await jest.advanceTimersByTimeAsync(1); });
@@ -751,6 +753,128 @@ describe('homepage published visibility', () => {
     expect(result.current.settings?.modules.appPromo.order).toBe(7);
     expect(result.current.settings?.modules.footer.enabled).toBe(false);
     expect(fetchPublicSettings).toHaveBeenCalledTimes(4);
+  });
+});
+
+describe.each(['en', 'hi', 'gu'] as const)('homepage truthful read states (%s)', (lang) => {
+  const actualI18n = jest.requireActual<typeof i18n>('../../src/i18n/LanguageProvider');
+  const messages = actualI18n.getMessagesForLang(lang);
+  const emptyResponse = { items: [], meta: {}, endpoint: '/api/public/news' };
+  const story = {
+    _id: `reported-${lang}`, slug: `reported-${lang}`, title: `Reported lead ${lang}`,
+    content: '<p>Reported article content.</p>', summary: 'Reported article summary.',
+    language: lang, status: 'published', category: 'national', publishedAt: '2026-10-01T10:00:00Z',
+  };
+  const storyHref = `${lang === 'en' ? '' : `/${lang}`}/news/${story.slug}`;
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.clearAllMocks();
+    jest.spyOn(i18n, 'useI18n').mockImplementation(actualI18n.useI18n);
+    jest.spyOn(global, 'fetch').mockImplementation(async () => new Response(JSON.stringify({ items: [] }), { status: 200 }));
+    jest.mocked(fetchPublicSettings).mockResolvedValue(published());
+    jest.mocked(fetchPublicNews).mockReset().mockResolvedValue(emptyResponse);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+    jest.mocked(fetchPublicNews).mockReset().mockResolvedValue(emptyResponse);
+  });
+
+  function renderHomepage(initialProps: Partial<React.ComponentProps<typeof HomePage>> = {}) {
+    return render(
+      <i18n.LanguageProvider initialLang={lang}>
+        <PublicSettingsProvider initialSettings={published()}>
+          <HomePage {...props} initialFreshStories={null} {...initialProps} />
+        </PublicSettingsProvider>
+      </i18n.LanguageProvider>
+    );
+  }
+
+  function expectNeutralState(container: HTMLElement, role: 'alert' | 'status', message: string) {
+    const region = container.querySelector('#top-story');
+    expect(region?.querySelector(`[role="${role}"]`)?.textContent).toBe(message);
+    expect(region?.querySelector('h1, a, button, time, img')).toBeNull();
+    expect(region?.querySelector('.animate-pulse')).toBeNull();
+    expect(region?.textContent).not.toMatch(/News Pulse Front Page|Live now|Updated|Homepage|News Pulse/);
+  }
+
+  test.each(['returned', 'rejected'] as const)('cold %s failure is unavailable, not a fabricated article', async (failure) => {
+    jest.mocked(fetchPublicNews).mockImplementation(async (options) => {
+      if (!options.homepageRecovery) return emptyResponse;
+      if (failure === 'rejected') throw new Error('Read unavailable');
+      return { ...emptyResponse, error: 'API 503', status: 503 };
+    });
+    const { container } = renderHomepage();
+    await act(async () => {});
+    expectNeutralState(container, 'alert', messages.categoryPage.unableToLoadTitle);
+    expect(jest.mocked(HomeRightRail).mock.calls.at(-1)?.[0].latestReadError).toBe(true);
+  });
+
+  test('successful empty response produces a genuine empty state', async () => {
+    const { container } = renderHomepage({ initialFreshStories: [] });
+    expectNeutralState(container, 'status', messages.categoryPage.noStoriesYet);
+    await act(async () => {});
+    expectNeutralState(container, 'status', messages.categoryPage.noStoriesYet);
+    expect(jest.mocked(HomeRightRail).mock.calls.at(-1)?.[0].latestReadError).toBe(false);
+  });
+
+  test('pending read keeps neutral skeletons and resolves to an empty state', async () => {
+    let resolveRead!: (result: Awaited<ReturnType<typeof fetchPublicNews>>) => void;
+    jest.mocked(fetchPublicNews).mockImplementation((options) => options.homepageRecovery
+      ? new Promise(resolve => { resolveRead = resolve; })
+      : Promise.resolve(emptyResponse));
+    const { container } = renderHomepage();
+    await act(async () => {});
+    expect(container.querySelector('#top-story .animate-pulse')).not.toBeNull();
+    expect(container.querySelector('#top-story h1, #top-story a, #top-story [role="alert"]')).toBeNull();
+    await act(async () => { resolveRead(emptyResponse); });
+    expectNeutralState(container, 'status', messages.categoryPage.noStoriesYet);
+  });
+
+  test('background failure after an empty success becomes unavailable without creating a story', async () => {
+    const { container } = renderHomepage({ initialFreshStories: [] });
+    await act(async () => {});
+    expectNeutralState(container, 'status', messages.categoryPage.noStoriesYet);
+    jest.mocked(fetchPublicNews).mockImplementation(async (options) => options.homepageRecovery
+      ? { ...emptyResponse, error: 'API 503', status: 503 }
+      : emptyResponse);
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    expectNeutralState(container, 'alert', messages.categoryPage.unableToLoadTitle);
+  });
+
+  test('real stories and neutral image placeholders survive a clearly labelled failed refresh and recovery', async () => {
+    let readFailed = false;
+    jest.mocked(fetchPublicNews).mockImplementation(async (options) => {
+      if (!options.homepageRecovery) return emptyResponse;
+      return readFailed
+        ? { ...emptyResponse, error: 'API 503', status: 503 }
+        : { ...emptyResponse, items: [story] };
+    });
+    const { container } = renderHomepage({ initialTopStory: story, initialFreshStories: [story] });
+    await act(async () => {});
+    expect(container.querySelector('#top-story h1')?.textContent).toBe(story.title);
+    expect(container.querySelector(`#top-story a[href="${storyHref}"]`)).not.toBeNull();
+    expect(container.querySelector('#top-story .select-none')?.textContent).toBe('News Pulse');
+    expect(container.querySelector('#top-story [role="alert"]')).toBeNull();
+
+    readFailed = true;
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    const notice = container.querySelector('#top-story [role="alert"]');
+    expect(notice?.textContent).toContain(messages.categoryPage.unableToLoadTitle);
+    expect(notice?.textContent).toContain(messages.errors.showingPreviousStories);
+    expect(notice?.closest('a')).toBeNull();
+    expect(container.querySelector('#top-story h1')?.textContent).toBe(story.title);
+    expect(container.querySelector(`#top-story a[href="${storyHref}"]`)).not.toBeNull();
+    expect(container.querySelector('#top-story')?.textContent).not.toMatch(/News Pulse Front Page|Live now|Updated/);
+    expect(jest.mocked(HomeRightRail).mock.calls.at(-1)?.[0].latestReadError).toBe(true);
+
+    readFailed = false;
+    await act(async () => { await jest.advanceTimersByTimeAsync(5_000); });
+    expect(container.querySelector('#top-story h1')?.textContent).toBe(story.title);
+    expect(container.querySelector('#top-story [role="alert"]')).toBeNull();
+    expect(jest.mocked(HomeRightRail).mock.calls.at(-1)?.[0].latestReadError).toBe(false);
   });
 });
 

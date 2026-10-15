@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 
 import NewsPulseCategoryShell from '../../components/NewsPulseCategoryShell';
 import { fetchHomepageSponsoredFeature } from '../../lib/publicSponsoredFeature';
@@ -30,8 +30,14 @@ jest.mock('../../components/home/HomeRightRail', () => ({
     publishedAt: undefined,
     iso: article.publishedAt,
   }),
-  default: ({ latestItems, lang }: { latestItems: any[] | null; lang: string }) => (
-    <aside data-testid="home-right-rail" data-lang={lang} data-count={Array.isArray(latestItems) ? latestItems.length : -1} />
+  default: ({ latestItems, latestReadError = false, lang }: { latestItems: any[] | null; latestReadError?: boolean; lang: string }) => (
+    <aside
+      data-testid="home-right-rail"
+      data-lang={lang}
+      data-count={Array.isArray(latestItems) ? latestItems.length : -1}
+      data-ids={Array.isArray(latestItems) ? latestItems.map(item => item._id || item.id).join(',') : ''}
+      data-read-error={String(latestReadError)}
+    />
   ),
 }));
 
@@ -347,6 +353,68 @@ describe('NewsPulseCategoryShell', () => {
       expect(fetchPublicNewsMock).toHaveBeenCalledWith(expect.objectContaining({ language: 'en', limit: 40 }));
     });
     expect(screen.queryByTestId('home-spotlight')).toBeNull();
+  });
+
+  describe.each(['en', 'hi', 'gu'] as const)('historical homepage cache (%s)', (lang) => {
+    describe.each(['localStorage', 'sessionStorage'] as const)('%s', (storage) => {
+      beforeEach(() => {
+        window[storage].setItem('newspulse-home-cache', JSON.stringify({
+          lang,
+          timestamp: 1,
+          topStory: publicArticle('cached-lead', 'national', '2020-01-01T10:00:00Z'),
+          freshStories: [publicArticle('cached-fresh', 'business', '2020-01-01T09:00:00Z')],
+        }));
+      });
+
+      function renderShell(latestItems: any[] | null = [publicArticle('category-prop', 'business', '2026-09-05T10:00:00Z')]) {
+        return render(
+          <NewsPulseCategoryShell activeCategory="business" latestItems={latestItems} lang={lang}>
+            <h1>Business</h1>
+          </NewsPulseCategoryShell>
+        );
+      }
+
+      test('does not seed a pending read from historical storage', async () => {
+        let resolveRead!: (result: Awaited<ReturnType<typeof fetchPublicNews>>) => void;
+        fetchPublicNewsMock.mockImplementation((request) => request.extraQuery?.spotlight === '1'
+          ? Promise.resolve({ items: [] })
+          : new Promise(resolve => { resolveRead = resolve; }));
+        renderShell(null);
+        expect(screen.getByTestId('home-right-rail').getAttribute('data-count')).toBe('-1');
+        expect(screen.getByTestId('home-right-rail').getAttribute('data-ids')).toBe('');
+        await act(async () => { resolveRead({ items: [], meta: {}, endpoint: '/api/public/news' }); });
+        expect(screen.getByTestId('home-right-rail').getAttribute('data-count')).toBe('0');
+      });
+
+      test('fresh empty is authoritative over cached stories and category props', async () => {
+        mockPublicNews({ global: [] });
+        renderShell();
+        await waitFor(() => expect(screen.getByTestId('home-right-rail').getAttribute('data-count')).toBe('0'));
+        expect(screen.getByTestId('home-right-rail').getAttribute('data-ids')).toBe('');
+        expect(screen.getByTestId('home-right-rail').getAttribute('data-read-error')).toBe('false');
+        expect(window[storage].getItem('newspulse-home-cache')).not.toBeNull();
+      });
+
+      test.each(['returned', 'rejected'] as const)('%s read failure is unavailable, not historical/current news', async (failure) => {
+        fetchPublicNewsMock.mockImplementation(async (request) => {
+          if (request.extraQuery?.spotlight === '1') return { items: [] };
+          if (failure === 'rejected') throw new Error('Read unavailable');
+          return { items: [publicArticle('failed-response', 'national', '2026-09-05T11:00:00Z')], error: 'API 503' };
+        });
+        renderShell();
+        await waitFor(() => expect(screen.getByTestId('home-right-rail').getAttribute('data-read-error')).toBe('true'));
+        expect(screen.getByTestId('home-right-rail').getAttribute('data-count')).toBe('0');
+        expect(screen.getByTestId('home-right-rail').getAttribute('data-ids')).toBe('');
+      });
+
+      test('fresh real stories replace props without merging historical storage', async () => {
+        mockPublicNews({ global: [publicArticle('fresh-public', 'national', '2026-09-05T12:00:00Z')] });
+        renderShell();
+        await waitFor(() => expect(screen.getByTestId('home-right-rail').getAttribute('data-ids')).toBe('fresh-public'));
+        expect(screen.getByTestId('home-right-rail').getAttribute('data-count')).toBe('1');
+        expect(screen.getByTestId('home-right-rail').getAttribute('data-read-error')).toBe('false');
+      });
+    });
   });
 
   test('does not filter canonical Spotlight by activeCategory', async () => {

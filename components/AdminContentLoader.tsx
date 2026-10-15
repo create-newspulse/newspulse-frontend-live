@@ -28,7 +28,7 @@ const AdminContentLoader: React.FC<AdminContentLoaderProps> = ({
   showBreaking = true,
   children
 }) => {
-  const { lang } = useI18n();
+  const { lang, t } = useI18n();
   const refreshInterval = 300000; // 5 minutes
   const [news, setNews] = useState<any[]>([]);
   const [breakingNews, setBreakingNews] = useState<any[]>([]);
@@ -40,15 +40,12 @@ const AdminContentLoader: React.FC<AdminContentLoaderProps> = ({
     setLoading(true);
 
     try {
-      if (category) {
-        const res = await fetchCategoryNews({ categoryKey: category, limit, language: lang });
-        if (signal?.aborted) return;
-        setNews(res.items || []);
-      } else {
-        const res = await fetchPublicNews({ limit, language: lang, signal });
-        if (signal?.aborted) return;
-        setNews(res.items || []);
-      }
+      const res = category
+        ? await fetchCategoryNews({ categoryKey: category, limit, language: lang })
+        : await fetchPublicNews({ limit, language: lang, signal });
+      if (signal?.aborted) return;
+      if (res.error) throw new Error(res.error);
+      setNews(res.items || []);
 
       // We intentionally do not fetch breaking news via admin endpoints.
       // Breaking ticker (if enabled) can be wired to a public endpoint elsewhere.
@@ -58,6 +55,7 @@ const AdminContentLoader: React.FC<AdminContentLoaderProps> = ({
     } catch (err) {
       if (signal?.aborted) return;
       setIsConnected(false);
+      setLastUpdated(null);
       setBreakingNews([]);
     } finally {
       if (!signal?.aborted) setLoading(false);
@@ -89,6 +87,7 @@ const AdminContentLoader: React.FC<AdminContentLoaderProps> = ({
       <AnimatePresence>
         {!isConnected && (
           <motion.div
+            role="alert"
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
@@ -97,7 +96,8 @@ const AdminContentLoader: React.FC<AdminContentLoaderProps> = ({
             <div className="flex items-center space-x-2">
               <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
               <span className="text-sm font-medium">
-                Admin Panel Offline - Using Cached Content
+                {t('categoryPage.unableToLoadTitle')}
+                {news.length > 0 ? <span className="block text-xs">{t('errors.showingPreviousStories')}</span> : null}
               </span>
             </div>
           </motion.div>
