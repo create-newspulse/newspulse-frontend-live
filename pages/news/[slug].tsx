@@ -1,6 +1,7 @@
 import type { GetServerSideProps } from 'next';
 import { withPublicReadDeadline } from '../../lib/publicReadDeadline';
 import Head from 'next/head';
+import NextError from 'next/error';
 import Link from 'next/link';
 import React from 'react';
 import { useRouter } from 'next/router';
@@ -12,9 +13,9 @@ import CategoryHeader from '../../src/components/category/CategoryHeader';
 import { getCategoryIdentity, getCategoryQueryKey, getCategoryRouteKey } from '../../lib/categoryKeys';
 import { filterPubliclyPublishedArticles, getLocalizedArticleFields, STRICT_LOCALE_POLICY, type RouteLocale } from '../../lib/localizedArticleFields';
 import { formatArticleBodyHtml, parseControlledFacebookBlock, parseControlledGalleryBlock, parseControlledInlineImageBlock, parseControlledInstagramBlock, parseControlledXBlock, parseControlledYouTubeBlock, splitArticleBodyBlocks, stripDuplicateOpeningParagraph, type ControlledArticleFacebookEmbed, type ControlledArticleGallery, type ControlledArticleInlineImage, type ControlledArticleInstagramEmbed, type ControlledArticleXEmbed, type ControlledArticleYouTubeEmbed } from '../../lib/articleBody';
-import { fetchPublicNewsGroup, unwrapArticle, type Article } from '../../lib/publicNewsApi';
+import { fetchPublicNewsById, fetchPublicNewsGroup, parsePublicNewsArticle, unwrapArticle, type Article } from '../../lib/publicNewsApi';
 import { subscribePublicDataRefresh } from '../../lib/publicDataRefresh';
-import { pickFreshestArticleForLocale, shouldReplaceArticleWithFreshCandidate } from '../../lib/translationGroupSync';
+import { compareArticleFreshness, findFreshestArticleById, pickFreshestArticleForLocale, shouldReplaceArticleWithFreshCandidate } from '../../lib/translationGroupSync';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { tHeading, toLanguageKey } from '../../utils/localizedNames';
 import { buildNewsUrl, isNavigableNewsHref } from '../../lib/newsRoutes';
@@ -943,6 +944,11 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
   const [pendingTranslate, setPendingTranslate] = React.useState<boolean>(Boolean(pending));
   const [pendingError, setPendingError] = React.useState<string | null>(error || null);
   const [pendingExhausted, setPendingExhausted] = React.useState<boolean>(false);
+  const [articleWithdrawn, setArticleWithdrawn] = React.useState(false);
+  const [refreshFailed, setRefreshFailed] = React.useState(false);
+  const resolvedArticleRef = React.useRef<Article | null>(article);
+  const lastArticleRef = React.useRef<Article | null>(article);
+  const articleReadRef = React.useRef<AbortController | null>(null);
   const pendingTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingAttemptsRef = React.useRef<number>(0);
 
@@ -962,28 +968,69 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
     }
   }, []);
 
-  const refreshFromTranslationGroup = React.useCallback(async () => {
-    const current = resolvedArticle;
-    const translationGroupId = String((current as any)?.translationGroupId || '').trim();
-    if (!translationGroupId) return;
+  const beginArticleRead = React.useCallback(() => {
+    articleReadRef.current?.abort();
+    const controller = new AbortController();
+    articleReadRef.current = controller;
+    return controller;
+  }, []);
 
-    const group = await fetchPublicNewsGroup({ translationGroupId, language: lang });
-    if (group.error || !Array.isArray(group.items) || !group.items.length) return;
+  const refreshCurrentArticle = React.useCallback(async () => {
+    const current = resolvedArticleRef.current;
+    const source = lastArticleRef.current;
+    const id = getStoryId(source);
+    if (!id) return;
+    const translationGroupId = String(source?.translationGroupId || '').trim();
+    const controller = beginArticleRead();
 
-    const freshest = pickFreshestArticleForLocale({
-      currentArticle: current,
-      groupArticles: group.items,
-      locale: toRouteLocale(lang),
-      policy: STRICT_LOCALE_POLICY,
-    });
-    if (!shouldReplaceArticleWithFreshCandidate(current, freshest, toRouteLocale(lang))) return;
+    try {
+      const items = await withPublicReadDeadline(4000, async (signal) => {
+        if (translationGroupId) {
+          const group = await fetchPublicNewsGroup({ translationGroupId, language: lang, signal });
+          if (group.error) throw new Error('ARTICLE_REFRESH_UNAVAILABLE');
+          return group.items;
+        }
+        const result = await fetchPublicNewsById({ id, language: lang, signal });
+        if (result.status === 404 || result.status === 410) return [];
+        if (result.error || !result.article) throw new Error('ARTICLE_REFRESH_UNAVAILABLE');
+        return [result.article];
+      }, controller.signal);
+      if (controller.signal.aborted) return;
 
-    const localizedFreshest = getLocalizedArticleFields(freshest || {}, lang, STRICT_LOCALE_POLICY);
-    if (!localizedFreshest.isVisible) return;
-
-    setResolvedArticle(freshest as Article);
-    setResolvedSafeHtml(sanitizeContent(localizedFreshest.bodyHtml || ''));
-  }, [lang, resolvedArticle]);
+      // A successful lifecycle read replaces the candidate set, not just its members.
+      const freshest = pickFreshestArticleForLocale({
+        currentArticle: null,
+        groupArticles: items,
+        locale: toRouteLocale(lang),
+        policy: STRICT_LOCALE_POLICY,
+      });
+      const localizedFreshest = getLocalizedArticleFields(freshest, lang, STRICT_LOCALE_POLICY);
+      if (!freshest || !localizedFreshest.isVisible) {
+        const sameIdentity = current && findFreshestArticleById(items, getStoryId(current));
+        if (sameIdentity) {
+          const freshness = compareArticleFreshness(sameIdentity, current);
+          if (freshness === null || freshness < 0) throw new Error('ARTICLE_REFRESH_AMBIGUOUS');
+        }
+        resolvedArticleRef.current = null;
+        setResolvedArticle(null);
+        setResolvedSafeHtml('');
+        setArticleWithdrawn(true);
+      } else if (shouldReplaceArticleWithFreshCandidate(current, freshest, toRouteLocale(lang))) {
+        resolvedArticleRef.current = freshest;
+        lastArticleRef.current = freshest;
+        setResolvedArticle(freshest);
+        setResolvedSafeHtml(sanitizeContent(localizedFreshest.bodyHtml || ''));
+        setArticleWithdrawn(false);
+      }
+      setRefreshFailed(false);
+      setPendingError(null);
+      setPendingTranslate(false);
+      setPendingExhausted(false);
+      clearPendingTimer();
+    } catch {
+      if (!controller.signal.aborted) setRefreshFailed(true);
+    }
+  }, [beginArticleRead, clearPendingTimer, lang]);
 
   const schedulePendingRetry = React.useCallback(
     (pollOnce: () => Promise<void>) => {
@@ -1005,6 +1052,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
     }
 
     pendingAttemptsRef.current += 1;
+    const controller = beginArticleRead();
 
     const params = new URLSearchParams();
     params.set('lang', lang);
@@ -1016,9 +1064,11 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
         method: 'GET',
         headers: { Accept: 'application/json' },
         cache: 'no-store',
+        signal: controller.signal,
       });
 
       const json = await res.json().catch(() => null);
+      if (controller.signal.aborted) return;
 
       if (isPendingTranslationPayload(json)) {
         setPendingTranslate(true);
@@ -1043,19 +1093,24 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
       }
 
       const html = localizedNext.bodyHtml;
+      resolvedArticleRef.current = next;
+      lastArticleRef.current = next;
       setResolvedArticle(next);
       setResolvedSafeHtml(sanitizeContent(html));
+      setArticleWithdrawn(false);
+      setRefreshFailed(false);
       setPendingTranslate(false);
       setPendingError(null);
       setPendingExhausted(false);
       pendingAttemptsRef.current = 0;
       clearPendingTimer();
     } catch {
+      if (controller.signal.aborted) return;
       setPendingTranslate(false);
       setPendingError('Try again');
       setPendingExhausted(true);
     }
-  }, [clearPendingTimer, lang, router.query, schedulePendingRetry, slug]);
+  }, [beginArticleRead, clearPendingTimer, lang, router.query, schedulePendingRetry, slug]);
 
   React.useEffect(() => {
     // When SSR says we're pending translation, start the polling loop.
@@ -1069,24 +1124,31 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
 
   React.useEffect(() => {
     // If navigation changes to a different slug or language, reset pending state.
+    articleReadRef.current?.abort();
+    resolvedArticleRef.current = article;
+    lastArticleRef.current = article;
     setResolvedArticle(article);
     setResolvedSafeHtml(safeHtml || '');
     setPendingError(error || null);
     setPendingTranslate(Boolean(pending));
     setPendingExhausted(false);
+    setArticleWithdrawn(false);
+    setRefreshFailed(false);
     pendingAttemptsRef.current = 0;
     clearPendingTimer();
+    return () => {
+      articleReadRef.current?.abort();
+      clearPendingTimer();
+    };
   }, [article, clearPendingTimer, error, lang, pending, safeHtml, slug]);
 
   React.useEffect(() => {
-    if (!resolvedArticle?._id) return;
-
     // SSR already delivered the freshest article for this locale, so only re-sync
-    // when a publish actually happens instead of refetching on every mount.
+    // on public-version events. Keep listening after withdrawal to allow restoration.
     return subscribePublicDataRefresh(() => {
-      void refreshFromTranslationGroup();
+      void refreshCurrentArticle();
     });
-  }, [refreshFromTranslationGroup, resolvedArticle?._id]);
+  }, [refreshCurrentArticle]);
 
   const articleBodyHtml = React.useMemo(
     () => stripDuplicateOpeningParagraph(resolvedSafeHtml, displaySummary),
@@ -1252,6 +1314,15 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
     [resolvedArticle]
   );
 
+  if (articleWithdrawn) {
+    return (
+      <>
+        <Head><meta name="robots" content="noindex, nofollow" /></Head>
+        <NextError statusCode={404} />
+      </>
+    );
+  }
+
   return (
     <>
       <Head>
@@ -1360,6 +1431,11 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
                       {articleTitleParts.remainingTitle ? <span>{` ${articleTitleParts.remainingTitle}`}</span> : null}
                     </h1>
 
+                    {refreshFailed ? (
+                      <div role="status" className="text-sm text-red-600">
+                        {tx('errors.fetchFailed', 'Fetch failed')}. {tx('errors.showingPreviousStories', 'Showing previously loaded stories.')}
+                      </div>
+                    ) : null}
                     {pendingError ? <div className="text-sm text-red-600">{pendingError}</div> : null}
 
                     {pendingTranslate ? (
@@ -2392,21 +2468,25 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
       let article: Article | null = null;
       for (const endpoint of endpoints) {
         const res = await fetch(endpoint, { method: 'GET', headers, cache: 'no-store', signal });
-        if (res.status === 404) { data = null; continue; }
-        if (res.ok === false && res.status !== 404) throw new Error('Article upstream unavailable');
+        if (res.status === 404 || res.status === 410) { data = null; continue; }
+        if (res.ok === false) throw new Error('Article upstream unavailable');
         const next = await res.json();
         signal.throwIfAborted();
         if (isPendingTranslationPayload(next)) {
           data = next;
           break;
         }
-        const candidate = unwrapArticle(next);
-        if (candidate?._id) {
-          data = next;
-          article = candidate;
-          break;
+        // The legacy slug contract also represents an explicit missing article as null.
+        if (next && next.article === null && next.ok !== false && next.success !== false &&
+          !next.error && !next.errors && !next.stack && !next.stackTrace) {
+          data = null;
+          continue;
         }
+        const candidate = parsePublicNewsArticle(next);
+        if (!candidate) throw new Error('Invalid article response');
         data = next;
+        article = candidate;
+        break;
       }
       return { data, article };
     });

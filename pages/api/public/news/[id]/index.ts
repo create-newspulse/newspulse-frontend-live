@@ -2,8 +2,10 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 
 import { getPublicApiBaseUrl } from '../../../../../lib/publicApiBase';
 import { getLocalizedArticleFields, normalizeRouteLocale, STRICT_LOCALE_POLICY } from '../../../../../lib/localizedArticleFields';
-import { unwrapArticle } from '../../../../../lib/publicNewsApi';
+import { parsePublicNewsArticle, parsePublicNewsGroupItems } from '../../../../../lib/publicNewsApi';
 import { pickFreshestArticleForLocale } from '../../../../../lib/translationGroupSync';
+import { withPublicReadDeadline } from '../../../../../lib/publicReadDeadline';
+import { getSafeRetryAfter } from '../../../../../lib/retryAfter';
 
 function asSingleQueryValue(value: string | string[] | undefined): string {
   return String(Array.isArray(value) ? value[0] : value || '').trim();
@@ -11,16 +13,6 @@ function asSingleQueryValue(value: string | string[] | undefined): string {
 
 function getApiBase(): string {
   return String(getPublicApiBaseUrl() || '').trim().replace(/\/+$/, '');
-}
-
-function getPayloadItems(payload: any): any[] {
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.items)) return payload.items;
-  if (Array.isArray(payload?.articles)) return payload.articles;
-  if (Array.isArray(payload?.data)) return payload.data;
-  if (Array.isArray(payload?.data?.items)) return payload.data.items;
-  if (Array.isArray(payload?.data?.articles)) return payload.data.articles;
-  return [];
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -32,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const base = getApiBase();
   if (!base) {
     res.setHeader('Cache-Control', 'no-store');
-    return res.status(200).json({});
+    return res.status(503).json({ error: 'PUBLIC_NEWS_UNAVAILABLE' });
   }
 
   const id = String(req.query.id || '').trim();
@@ -48,35 +40,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const requestedLocale = normalizeRouteLocale(
     asSingleQueryValue(req.query.language as any) || asSingleQueryValue(req.query.lang as any)
   );
+  let retryAfter: string | undefined;
 
   try {
-    const upstream = await fetch(targetUrl, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-        cookie: String(req.headers.cookie || ''),
-        authorization: String(req.headers.authorization || ''),
-      },
+    const { status, json } = await withPublicReadDeadline(4000, async (signal) => {
+      const upstream = await fetch(targetUrl, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          cookie: String(req.headers.cookie || ''),
+          authorization: String(req.headers.authorization || ''),
+        },
+        cache: 'no-store',
+        signal,
+      });
+      retryAfter = getSafeRetryAfter(upstream.headers?.get('Retry-After'));
+      const json: unknown = upstream.ok ? JSON.parse(await upstream.text()) : null;
+      return { status: upstream.status, json };
     });
 
-    const text = await upstream.text().catch(() => '');
-    if (upstream.status === 404) {
+    if (status === 404 || status === 410) {
       res.setHeader('Cache-Control', 'no-store');
-      return res.status(404).json({ ok: false, message: 'NOT_FOUND' });
+      return res.status(status).json({ ok: false, message: 'NOT_FOUND' });
     }
 
-    if (!upstream.ok) {
-      res.setHeader('Cache-Control', 'no-store');
-      return res.status(200).json({});
+    if (status < 200 || status >= 300 || !json || typeof json !== 'object' || Array.isArray(json)) {
+      throw new Error('PUBLIC_NEWS_UNAVAILABLE');
     }
+    const directArticle = parsePublicNewsArticle(json);
+    if (!directArticle) throw new Error('INVALID_PUBLIC_NEWS_ARTICLE');
+    let article = directArticle;
+    const translationGroupId = String(article.translationGroupId || '').trim();
 
-    try {
-      const json = text ? JSON.parse(text) : {};
-      let article = unwrapArticle(json);
-      const translationGroupId = String((article as any)?.translationGroupId || '').trim();
-
-      if (article?._id && translationGroupId) {
-        try {
+    if (translationGroupId) {
+      try {
+        const groupItems = await withPublicReadDeadline(1500, async (signal) => {
           const groupUrl = `${base}/api/public/news/group/${encodeURIComponent(translationGroupId)}${qs}`;
           const groupRes = await fetch(groupUrl, {
             method: 'GET',
@@ -85,35 +83,47 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               cookie: String(req.headers.cookie || ''),
               authorization: String(req.headers.authorization || ''),
             },
+            cache: 'no-store',
+            signal,
           });
-          const groupText = await groupRes.text().catch(() => '');
-          const groupJson = groupText ? JSON.parse(groupText) : { items: [] };
-          const groupItems = groupRes.ok ? getPayloadItems(groupJson) : [];
-          article = pickFreshestArticleForLocale({
-            currentArticle: article,
-            groupArticles: groupItems,
-            locale: requestedLocale,
-            policy: STRICT_LOCALE_POLICY,
-          }) as any;
-        } catch {
-          // Keep the direct article if the group lookup is unavailable.
+          if (groupRes.status === 404 || groupRes.status === 410) return [];
+          if (!groupRes.ok) throw new Error('PUBLIC_NEWS_GROUP_UNAVAILABLE');
+          const items = parsePublicNewsGroupItems(JSON.parse(await groupRes.text()));
+          if (!items) throw new Error('INVALID_PUBLIC_NEWS_GROUP');
+          return items;
+        });
+        const picked = pickFreshestArticleForLocale({
+          currentArticle: article,
+          groupArticles: groupItems,
+          locale: requestedLocale,
+          policy: STRICT_LOCALE_POLICY,
+        });
+        if (!picked) {
+          res.setHeader('Cache-Control', 'no-store, max-age=0');
+          return res.status(404).json({ ok: false, message: 'NOT_FOUND' });
+        }
+        article = picked;
+      } catch {
+        // The direct read is still authoritative when the optional locale lookup fails.
+        if (process.env.NODE_ENV !== 'production') console.error('[api/public/news/[id]] translation_group_unavailable');
+        const directLocale = getLocalizedArticleFields(directArticle, requestedLocale, STRICT_LOCALE_POLICY);
+        if (directLocale.status === 'published' && !directLocale.isVisible) {
+          throw new Error('PUBLIC_NEWS_GROUP_UNAVAILABLE');
         }
       }
-
-      const localized = getLocalizedArticleFields(article, requestedLocale, STRICT_LOCALE_POLICY);
-      if (!localized.isVisible) {
-        res.setHeader('Cache-Control', 'no-store, max-age=0');
-        return res.status(404).json({ ok: false, message: 'NOT_FOUND' });
-      }
-
-      res.setHeader('Cache-Control', 'no-store, max-age=0');
-      return res.status(200).json(article && article !== unwrapArticle(json) ? { ...json, article } : json);
-    } catch {
-      res.setHeader('Cache-Control', 'no-store');
-      return res.status(200).json({});
     }
+
+    const localized = getLocalizedArticleFields(article, requestedLocale, STRICT_LOCALE_POLICY);
+    if (!localized.isVisible) {
+      res.setHeader('Cache-Control', 'no-store, max-age=0');
+      return res.status(404).json({ ok: false, message: 'NOT_FOUND' });
+    }
+
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
+    return res.status(200).json({ article });
   } catch {
     res.setHeader('Cache-Control', 'no-store');
-    return res.status(200).json({});
+    if (retryAfter) res.setHeader('Retry-After', retryAfter);
+    return res.status(503).json({ error: 'PUBLIC_NEWS_UNAVAILABLE' });
   }
 }

@@ -2,9 +2,11 @@ import {
   DEFAULT_FALLBACK_POLICY,
   getLocalizedArticleFields,
   normalizeRouteLocale,
+  STRICT_LOCALE_POLICY,
   type LocaleFallbackPolicy,
   type RouteLocale,
 } from './localizedArticleFields';
+import { projectPublicNewsArticle } from './publicNewsApi';
 
 function normalizeArticleLocale(article: any): RouteLocale | null {
   const raw = String(article?.sourceLang || article?.sourceLanguage || article?.language || article?.lang || '').trim();
@@ -41,17 +43,49 @@ function getArticleRank(article: any, locale: RouteLocale, policy: LocaleFallbac
   return 1;
 }
 
-function dedupeById<T>(items: T[]): T[] {
-  const seen = new Set<string>();
-  const out: T[] = [];
-  for (const item of items) {
-    const id = String((item as any)?._id || (item as any)?.id || '').trim();
-    const key = id || JSON.stringify(item);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(item);
+export function compareArticleFreshness(left: unknown, right: unknown): number | null {
+  const leftVersion = getArticleSyncVersion(left);
+  const rightVersion = getArticleSyncVersion(right);
+  const leftNumeric = /^\d+$/.test(leftVersion);
+  const rightNumeric = /^\d+$/.test(rightVersion);
+  if (leftNumeric && rightNumeric) {
+    const leftNumber = Number(leftVersion);
+    const rightNumber = Number(rightVersion);
+    if (Number.isSafeInteger(leftNumber) && Number.isSafeInteger(rightNumber)) {
+      if (leftNumber !== rightNumber) return leftNumber - rightNumber;
+    }
+  } else if (!leftNumeric && !rightNumeric) {
+    const leftTime = toTimestamp(leftVersion);
+    const rightTime = toTimestamp(rightVersion);
+    if (leftTime && rightTime && leftTime !== rightTime) return leftTime - rightTime;
   }
-  return out;
+
+  const updatedAt = (article: unknown) => {
+    const fields = article && typeof article === 'object' ? article as Record<string, unknown> : {};
+    return toTimestamp(fields.updatedAt || fields.publishedAt || fields.createdAt);
+  };
+  const leftUpdated = updatedAt(left);
+  const rightUpdated = updatedAt(right);
+  if (leftUpdated && rightUpdated) return leftUpdated - rightUpdated;
+  return leftVersion && leftVersion === rightVersion ? 0 : null;
+}
+
+function dedupeById<T>(items: T[]): T[] {
+  const byId = new Map<string, T>();
+  for (const item of items) {
+    const id = getArticleId(item);
+    const key = id || JSON.stringify(item);
+    const previous = byId.get(key);
+    // The later read wins ties, including lifecycle edits with unchanged timestamps.
+    if (previous === undefined || (compareArticleFreshness(item, previous) ?? 0) >= 0) {
+      byId.set(key, item);
+    }
+  }
+  return Array.from(byId.values());
+}
+
+export function findFreshestArticleById<T>(articles: T[], id: string): T | undefined {
+  return dedupeById(articles.filter((article) => getArticleId(article) === id))[0];
 }
 
 export function pickFreshestArticleForLocale<T>(options: {
@@ -69,25 +103,20 @@ export function pickFreshestArticleForLocale<T>(options: {
     ...groupArticles,
   ]).filter((item) => !!String((item as any)?._id || (item as any)?.id || '').trim());
 
-  if (!candidates.length) return currentArticle as T | null;
+  if (!candidates.length) return null;
 
   const sorted = [...candidates].sort((left, right) => {
     const rankDiff = getArticleRank(right, locale, policy) - getArticleRank(left, locale, policy);
     if (rankDiff !== 0) return rankDiff;
 
-    const versionDiff = toTimestamp(getArticleSyncVersion(right)) - toTimestamp(getArticleSyncVersion(left));
-    if (versionDiff !== 0) return versionDiff;
-
-    const updatedDiff =
-      toTimestamp((right as any)?.updatedAt || (right as any)?.publishedAt || (right as any)?.createdAt) -
-      toTimestamp((left as any)?.updatedAt || (left as any)?.publishedAt || (left as any)?.createdAt);
-    if (updatedDiff !== 0) return updatedDiff;
+    const freshnessDiff = compareArticleFreshness(right, left) ?? 0;
+    if (freshnessDiff !== 0) return freshnessDiff;
 
     return String((right as any)?._id || '').localeCompare(String((left as any)?._id || ''));
   });
 
   const picked = sorted.find((item) => getArticleRank(item, locale, policy) >= 0) || null;
-  return picked || (currentArticle as T | null);
+  return picked;
 }
 
 function getArticleId(article: any): string {
@@ -142,18 +171,41 @@ export function pickFreshestArticlesForLocale<T>(options: {
   return dedupeById(resolved);
 }
 
-export function shouldReplaceArticleWithFreshCandidate(currentArticle: any, nextArticle: any, locale: RouteLocale): boolean {
-  if (!nextArticle?._id) return false;
-  if (!currentArticle?._id) return true;
+function hasMaterialValue(value: unknown): boolean {
+  if (value == null || value === '') return false;
+  if (typeof value !== 'object') return true;
+  return Object.values(value).some(hasMaterialValue);
+}
 
-  const currentLocalized = getLocalizedArticleFields(currentArticle, locale);
-  const nextLocalized = getLocalizedArticleFields(nextArticle, locale);
+function samePublicFields(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (!hasMaterialValue(left) && !hasMaterialValue(right)) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left) && Array.isArray(right) && left.length === right.length &&
+      left.every((value, index) => samePublicFields(value, right[index]));
+  }
+  if (!left || !right || typeof left !== 'object' || typeof right !== 'object') return false;
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+  const keys = Object.keys(leftRecord).filter((key) => hasMaterialValue(leftRecord[key]));
+  return keys.length === Object.keys(rightRecord).filter((key) => hasMaterialValue(rightRecord[key])).length &&
+    keys.every((key) => Object.prototype.hasOwnProperty.call(rightRecord, key) && samePublicFields(leftRecord[key], rightRecord[key]));
+}
+
+export function shouldReplaceArticleWithFreshCandidate(currentArticle: unknown, nextArticle: unknown, locale: RouteLocale): boolean {
+  if (!getArticleId(nextArticle)) return false;
+  if (!getArticleId(currentArticle)) return true;
+  if (getArticleId(currentArticle) !== getArticleId(nextArticle)) return true;
+  const freshness = compareArticleFreshness(nextArticle, currentArticle);
+  if (freshness !== null && freshness < 0) return false;
 
   return (
-    String(currentArticle?._id || '').trim() !== String(nextArticle?._id || '').trim() ||
     getArticleSyncVersion(currentArticle) !== getArticleSyncVersion(nextArticle) ||
-    String(currentLocalized.bodyHtml || '').trim() !== String(nextLocalized.bodyHtml || '').trim() ||
-    String(currentLocalized.title || '').trim() !== String(nextLocalized.title || '').trim() ||
-    String(currentLocalized.slug || '').trim() !== String(nextLocalized.slug || '').trim()
+    // Empty legacy containers can affect alias precedence even without material fields.
+    [locale, ...(['en', 'hi', 'gu'] as const).filter((lang) => lang !== locale)].some((lang) => !samePublicFields(
+      getLocalizedArticleFields(currentArticle, lang, STRICT_LOCALE_POLICY),
+      getLocalizedArticleFields(nextArticle, lang, STRICT_LOCALE_POLICY)
+    )) ||
+    !samePublicFields(projectPublicNewsArticle(currentArticle), projectPublicNewsArticle(nextArticle))
   );
 }

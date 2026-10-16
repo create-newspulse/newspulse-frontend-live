@@ -1,6 +1,6 @@
 import { getPublicApiBaseUrl } from './publicApiBase';
 import { getCategoryQueryKey } from './categoryKeys';
-import { filterPubliclyPublishedArticles } from './localizedArticleFields';
+import { filterPubliclyPublishedArticles, getPublicArticleStatus } from './localizedArticleFields';
 import type { AuthorBylinePayload } from './authorByline';
 import { getOrdinaryCategoryPageItems, getOrdinaryCategoryPagination, ORDINARY_PAGINATION_HEADER, validateOrdinaryPageRequest, type OrdinaryCategoryPagination } from './ordinaryCategoryPagination';
 import { FAITH_CULTURE_NEWS_UNAVAILABLE, FAITH_CULTURE_PAGINATION_HEADER, getFaithCulturePagination, validateFaithCulturePageRequest } from './faithCulturePagination';
@@ -109,6 +109,253 @@ export function unwrapArticle(payload: any): Article | null {
   if (payload.data && typeof payload.data === 'object' && !Array.isArray(payload.data)) return payload.data as Article;
   if (typeof payload === 'object' && !Array.isArray(payload) && payload._id) return payload as Article;
   return null;
+}
+
+function responseRecord(payload: unknown): Record<string, unknown> | null {
+  return payload && typeof payload === 'object' && !Array.isArray(payload)
+    ? payload as Record<string, unknown>
+    : null;
+}
+
+function failedPublicNewsPayload(payload: Record<string, unknown> | null): boolean {
+  return Boolean(payload && (
+    payload.ok === false || payload.success === false || payload.error ||
+    (Array.isArray(payload.errors) ? payload.errors.length : payload.errors) ||
+    payload.stack || payload.stackTrace
+  ));
+}
+
+type PublicFields = { [field: string]: true | PublicFields };
+
+function publicScalars(names: string): PublicFields {
+  return Object.fromEntries(names.split(/\s+/).filter(Boolean).map((name) => [name, true]));
+}
+
+function publicLocales(fields: true | PublicFields): PublicFields {
+  return { en: fields, hi: fields, gu: fields, in: fields };
+}
+
+const publicText = publicScalars('text value html content body label name displayName fullName designation role slug key title status translationStatus');
+const publicLocalizedText: PublicFields = {
+  ...publicText, ...publicLocales(publicText), value: { ...publicText, ...publicLocales(publicText) },
+};
+const localizedFieldNames = 'title headline name summary excerpt description dek html content body bodyHtml slug categoryLabel categoryName category section'.split(' ');
+const publicTextFields: PublicFields = Object.fromEntries(localizedFieldNames.map((field) => [field, publicLocalizedText]));
+for (const locale of ['en', 'hi', 'gu', 'in']) {
+  for (const field of localizedFieldNames) {
+    for (const alias of [
+      `${field}_${locale}`, `${field}${locale[0].toUpperCase()}${locale.slice(1)}`,
+      `${locale}_${field}`, `${locale}${field[0].toUpperCase()}${field.slice(1)}`,
+      ...(field === 'slug' ? [`slug${locale.toUpperCase()}`] : []),
+    ]) publicTextFields[alias] = publicLocalizedText;
+  }
+}
+
+const mediaScalars = publicScalars(
+  'url src assetUrl mediaUrl secureUrl secure_url cloudinaryUrl publicId alt altText caption credit ' +
+  'width height fitMode coverFitMode objectFit status mediaStatus state'
+);
+let publicMedia: PublicFields = mediaScalars;
+for (let depth = 0; depth < 4; depth += 1) {
+  publicMedia = {
+    ...mediaScalars, ...publicLocales(publicMedia),
+    ...Object.fromEntries('asset image media file photo cover thumbnail'.split(' ').map((field) => [field, publicMedia])),
+  };
+}
+const publicImages: PublicFields = {
+  ...Object.fromEntries(
+    ('image images coverImage coverImages heroImage featuredImage thumbnail media imageUrl imageURL coverImageUrl featuredImageUrl thumbnailUrl')
+      .split(' ').map((field) => [field, publicMedia])
+  ),
+  ...publicScalars(
+    'coverFitMode fitMode imageFit objectFit ' +
+    'coverWidth coverHeight imageWidth imageHeight imageCaption caption featuredImageCaption imageCredit credit ' +
+    'photoCredit featuredImageCredit imageAlt imageAltText altText alt'
+  ),
+};
+const publicSeo = publicScalars(
+  'pageTitle seoTitle metaTitle title metaDescription seoDescription description summary excerpt ogTitle openGraphTitle ' +
+  'ogDescription openGraphDescription socialDescription ogImage openGraphImage image twitterTitle twitterDescription twitterImage ' +
+  'canonicalUrl canonical url robots'
+);
+const publicSeoFields: PublicFields = Object.fromEntries(
+  ['seo', 'meta', 'openGraph', 'og'].map((field) => [field, { ...publicSeo, ...publicLocales(publicSeo) }])
+);
+const publicByline = publicScalars('name publicDesignation photoUrl shortBio designation affiliation photoAlt contributorPhotoUrl contributorPhotoAlt');
+const publicSponsorScalars = publicScalars(
+  'sponsorName brandName brand advertiserName partnerName sponsoredBy sponsorDisclosure disclosure disclaimer sponsoredDisclosure ' +
+  'sponsorshipDisclosure partnerDisclosure advertiserDisclosure isSponsored sponsored isSponsoredContent isPartnerContent isBrandedContent ' +
+  'isSponsoredFeature sponsoredFeatureActive featureActive isSponsoredArticle isPartnerArticle partnerArticle sponsoredStatus ' +
+  'sponsoredFeatureStatus sponsoredArticleStatus campaignStatus sponsoredStartAt campaignStartAt startAt startsAt startDate goLiveAt ' +
+  'sponsoredEndAt campaignEndAt endAt endsAt endDate expiresAt linkedArticleSlug sponsoredArticleSlug targetArticleSlug destinationArticleSlug ' +
+  'articleSlug linkedArticleId sponsoredArticleId targetArticleId destinationArticleId linkedSponsoredArticleId linkedSponsoredArticleSlug ' +
+  'destinationUrl targetUrl linkUrl ctaUrl href url permalink canonicalUrl sponsorFeatureLinkedId linkedSponsoredFeatureId linkedFeatureId ' +
+  'sponsoredFeatureId featureId campaignId featureStatus active enabled _id id published isPublished status ' +
+  'ctaText ctaLabel buttonText buttonLabel actionLabel actionText linkText sponsorCtaText sponsorCtaLabel sponsorDestinationUrl sponsorDestinationHref sponsorTargetUrl sponsorCtaUrl ' +
+  'tag label badge featureType featureLabel type storyType articleType contentType format placement slot position topic'
+);
+const publicSponsor: PublicFields = {
+  ...publicSponsorScalars,
+  ...Object.fromEntries('tags labels badges keywords topics'.split(' ').map((field) => [field, publicText])),
+  ...Object.fromEntries(
+    'callToAction cta ctaButton action sponsorCallToAction sponsorCta sponsorButton'.split(' ')
+      .map((field) => [field, publicScalars('label text title name buttonText url href link targetUrl destinationUrl linkUrl ctaUrl')])
+  ),
+};
+const publicSponsorFields: PublicFields = {
+  ...publicSponsor,
+  ...Object.fromEntries(
+    ('sponsoredContent sponsorship sponsor sponsorDetails sponsorMeta sponsoredArticle brandedContent partnerContent advertiser ' +
+    'linkedSponsoredFeature linkedFeature homepageSponsoredFeature sponsoredFeature sponsoredCampaign campaign promotion promo')
+      .split(' ').map((field) => [field, publicSponsor])
+  ),
+};
+const publicArticleFields: PublicFields = {
+  ...publicSeo, ...publicSeoFields, ...publicSponsorFields, ...publicTextFields, ...publicImages,
+  ...publicScalars(
+    '_id id translationGroupId translationKey updatedAt modifiedAt createdAt publishedAt publishAt publishDate ' +
+    'syncVersion translationSyncVersion version status state deleted isDeleted deletedAt archived isArchived archivedAt isPublished published ' +
+    'language lang sourceLang sourceLanguage provider generatedAt sourceNewsId categoryKey region district desk type editorialType editorial_type ' +
+    'storyType story_type authorName writerName reporterName createdByName userName authorDesignation authorRole authorTitle designation bylineDesignation ' +
+    'readingTime readTime readingTimeText estimatedReadingTime readingMinutes readTimeMinutes estimatedReadMinutes ' +
+    'originalTitle sourceTitle titleOriginal originalSummary sourceSummary summaryOriginal originalExcerpt sourceExcerpt excerptOriginal ' +
+    'originalContent sourceContent contentOriginal originalHtml sourceHtml htmlOriginal originalBody sourceBody bodyOriginal ' +
+    'seoSlug originalSlug sourceSlug baseSlug canonicalSlug'
+  ),
+  source: publicScalars('title summary excerpt content html body'),
+  slugs: publicLocales(publicText),
+  translationStatus: publicLocales(true),
+  author: publicScalars('name displayName fullName title label designation role'),
+  byline: publicScalars('name displayName fullName title label designation role'),
+  authorByline: { enabled: true, snapshot: publicByline },
+  pulseDialogue: {
+    ...publicScalars(
+      'contributorId contributorSlug profileAvailable dialogueFormat series bylineDesignationOverride contributorPhotoUrl ' +
+      'contributorPhotoAlt contributorDisclosure editorNote contributorDisclaimer showAboutContributor'
+    ),
+    bylineSnapshot: { ...publicByline, photo: publicMedia },
+    contributor: {
+      ...publicByline, ...publicScalars('id canonicalName slug website'), photo: publicMedia,
+      socialLinks: publicScalars('website facebook instagram twitter x linkedin youtube'),
+    },
+  },
+};
+for (const field of (
+  'authorName writerName reporterName createdByName userName authorDesignation authorRole authorTitle designation bylineDesignation ' +
+  'readingTime readTime readingTimeText estimatedReadingTime imageCaption caption featuredImageCaption imageCredit credit photoCredit ' +
+  'featuredImageCredit imageAlt imageAltText altText alt'
+).split(' ')) publicArticleFields[field] = publicText;
+publicArticleFields.meta = { ...publicSeo, ...publicLocales(publicSeo), ...publicSponsorFields };
+for (const field of ['metadata', 'attributes', 'flags', 'settings']) publicArticleFields[field] = publicSponsorFields;
+const publicTranslationFields: PublicFields = {
+  ...publicArticleFields,
+  ...Object.fromEntries(localizedFieldNames.map((field) => [field, publicLocalizedText])),
+};
+for (const field of ['translations', 'translation', 'i18n', 'localized', 'locales', 'byLang', 'textByLang']) {
+  publicArticleFields[field] = {
+    ...publicLocales(publicTranslationFields),
+    ...Object.fromEntries(localizedFieldNames.map((name) => [name, publicLocales(publicText)])),
+  };
+}
+
+function projectPublicFields(record: Record<string, unknown>, fields: PublicFields): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, selection] of Object.entries(fields)) {
+    const value = record[key];
+    if (value === undefined) continue;
+    const project = (entry: unknown): unknown => {
+      if (entry === null || ['string', 'number', 'boolean'].includes(typeof entry)) return entry;
+      const nested = responseRecord(entry);
+      return nested && selection !== true ? projectPublicFields(nested, selection) : undefined;
+    };
+    const projected = Array.isArray(value) ? value.map(project).filter((entry) => entry !== undefined) : project(value);
+    if (projected !== undefined) result[key] = projected;
+  }
+  return result;
+}
+
+/** The same bounded public field selection is used by the read boundary and refresh comparison. */
+export function projectPublicNewsArticle(article: unknown): Record<string, unknown> {
+  return projectPublicFields(responseRecord(article) || {}, publicArticleFields);
+}
+
+function hasPublicRecordDiagnostics(record: Record<string, unknown>, fields: PublicFields): boolean {
+  if (failedPublicNewsPayload(record)) return true;
+  return Object.entries(fields).some(([key, selection]) => {
+    if (selection === true) return false;
+    const value = record[key];
+    const values = Array.isArray(value) ? value : [value];
+    return values.some((value) => {
+      const nested = responseRecord(value);
+      return Boolean(nested && hasPublicRecordDiagnostics(nested, selection));
+    });
+  });
+}
+
+function validTranslationStatus(value: unknown): boolean {
+  if (value == null || value === '') return true;
+  return typeof value === 'string' && ['APPROVED', 'READY', 'BLOCKED', 'PENDING', 'REJECTED', 'DRAFT', 'UNKNOWN'].includes(value.trim().toUpperCase());
+}
+
+function validLifecycleFields(record: Record<string, unknown>): boolean {
+  for (const key of ['status', 'state', 'language', 'lang', 'sourceLang', 'sourceLanguage', 'translationGroupId']) {
+    if (record[key] != null && typeof record[key] !== 'string') return false;
+  }
+  for (const key of ['deleted', 'isDeleted', 'archived', 'isArchived', 'isPublished', 'published']) {
+    if (record[key] != null && typeof record[key] !== 'boolean') return false;
+  }
+  for (const key of ['deletedAt', 'archivedAt', 'publishedAt', 'publishAt', 'updatedAt', 'createdAt']) {
+    const value = record[key];
+    if (value != null && value !== '' && (typeof value !== 'string' || !Number.isFinite(Date.parse(value)))) return false;
+  }
+  for (const key of ['version', 'syncVersion', 'translationSyncVersion']) {
+    const value = record[key];
+    if (value != null && typeof value !== 'string' && !(typeof value === 'number' && Number.isSafeInteger(value))) return false;
+  }
+  const translationStatus = responseRecord(record.translationStatus);
+  if (translationStatus) {
+    if (!['en', 'hi', 'gu', 'in'].every((lang) => validTranslationStatus(translationStatus[lang]))) return false;
+  } else if (!validTranslationStatus(record.translationStatus)) return false;
+  for (const key of ['translations', 'translation', 'i18n', 'localized', 'locales', 'byLang', 'textByLang']) {
+    const container = responseRecord(record[key]);
+    if (record[key] != null && !container) return false;
+    for (const lang of ['en', 'hi', 'gu', 'in']) {
+      const variant = responseRecord(container?.[lang]);
+      if (container?.[lang] != null && !variant) return false;
+      if (variant && (!validTranslationStatus(variant.status) || !validTranslationStatus(variant.translationStatus))) return false;
+      for (const field of localizedFieldNames) {
+        for (const value of [variant?.[field], responseRecord(container?.[field])?.[lang]]) {
+          const translated = responseRecord(value);
+          if (translated && (!validTranslationStatus(translated.status) || !validTranslationStatus(translated.translationStatus))) return false;
+        }
+      }
+    }
+  }
+  return getPublicArticleStatus(record) !== 'unknown';
+}
+
+function parsePublicNewsRecord(payload: unknown): Article | null {
+  const record = responseRecord(payload);
+  if (!record || typeof record._id !== 'string' || !record._id.trim() ||
+    !validLifecycleFields(record) || hasPublicRecordDiagnostics(record, publicArticleFields)) return null;
+  return { ...projectPublicNewsArticle(record), _id: record._id };
+}
+
+export function parsePublicNewsArticle(payload: unknown): Article | null {
+  if (failedPublicNewsPayload(responseRecord(payload))) return null;
+  return parsePublicNewsRecord(unwrapArticle(payload));
+}
+
+/** Null is an invalid read; an empty array is an authoritative empty group. */
+export function parsePublicNewsGroupItems(payload: unknown): Article[] | null {
+  const record = responseRecord(payload);
+  const nested = responseRecord(record?.data);
+  if (failedPublicNewsPayload(record) || failedPublicNewsPayload(nested)) return null;
+  const items = [payload, record?.items, record?.articles, record?.data, record?.result, nested?.items, nested?.articles]
+    .find(Array.isArray);
+  if (!items) return null;
+  const articles = items.map(parsePublicNewsRecord);
+  return articles.every((article): article is Article => article !== null) ? articles : null;
 }
 
 export type PublicNewsMeta = {
@@ -370,20 +617,19 @@ export async function fetchPublicNewsById(options: {
       signal: options.signal,
     });
 
-    const data = await res.json().catch(() => null);
-
     if (!res.ok) {
-      const msg =
-        (data && typeof data === 'object' && (data.message || data.error || data.code))
-          ? String(data.message || data.error || data.code)
-          : '';
-      return { article: null, status: res.status, endpoint, error: msg ? `API ${res.status} (${msg})` : `API ${res.status}` };
+      logPublicNewsError('article_read_failed', { status: res.status });
+      return { article: null, status: res.status, endpoint, error: `API ${res.status}` };
     }
 
-    const article = unwrapArticle(data);
-    if (!article?._id) return { article: null, endpoint, status: 404, error: 'Article not found' };
+    const article = parsePublicNewsArticle(await res.json());
+    if (!article) {
+      logPublicNewsError('invalid_article_response', { status: res.status });
+      return { article: null, endpoint, error: 'Invalid article response' };
+    }
     return { article, endpoint };
   } catch {
+    if (!options.signal?.aborted) logPublicNewsError('article_read_failed', {});
     return { article: null, endpoint, error: 'Fetch failed' };
   }
 }
@@ -409,21 +655,23 @@ export async function fetchPublicNewsGroup(options: {
     const res = await fetch(endpoint, {
       method: 'GET',
       headers: { Accept: 'application/json' },
+      cache: 'no-store',
       signal: options.signal,
     });
 
-    const data = await res.json().catch(() => null);
-
     if (!res.ok) {
-      const msg =
-        (data && typeof data === 'object' && (data.message || data.error || data.code))
-          ? String(data.message || data.error || data.code)
-          : '';
-      return { items: [], status: res.status, endpoint, error: msg ? `API ${res.status} (${msg})` : `API ${res.status}` };
+      logPublicNewsError('group_read_failed', { status: res.status });
+      return { items: [], status: res.status, endpoint, error: `API ${res.status}` };
     }
 
-    return { items: unwrapArticles(data), endpoint };
+    const items = parsePublicNewsGroupItems(await res.json());
+    if (!items) {
+      logPublicNewsError('invalid_group_response', { status: res.status });
+      return { items: [], endpoint, error: 'Invalid translation group response' };
+    }
+    return { items, endpoint };
   } catch {
+    if (!options.signal?.aborted) logPublicNewsError('group_read_failed', {});
     return { items: [], endpoint, error: 'Fetch failed' };
   }
 }

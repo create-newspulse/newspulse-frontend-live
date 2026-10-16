@@ -155,4 +155,158 @@ describe('translationGroupSync', () => {
     expect(gujaratiItems).toHaveLength(1);
     expect(gujaratiItems[0]?._id).toBe('article-en-2');
   });
+
+  const published = {
+    _id: 'same-id',
+    language: 'en',
+    status: 'published',
+    title: 'Original title',
+    summary: 'Original summary',
+    content: '<p>Original body</p>',
+    slug: 'original-slug',
+    category: 'national',
+    syncVersion: 'shared-version',
+    updatedAt: '2026-01-01T10:00:00.000Z',
+  };
+
+  test.each([false, true])('deduplicates by freshness before selection (newest first: %s)', (newestFirst) => {
+    const newer = { ...published, title: 'New title', content: '<p>New body</p>', updatedAt: '2026-01-02T10:00:00.000Z' };
+    const picked = pickFreshestArticleForLocale({
+      currentArticle: published,
+      groupArticles: newestFirst ? [newer, published] : [published, newer],
+      locale: 'en',
+      policy: STRICT_LOCALE_POLICY,
+    });
+    expect(picked).toBe(newer);
+    expect(shouldReplaceArticleWithFreshCandidate(published, picked, 'en')).toBe(true);
+    expect(shouldReplaceArticleWithFreshCandidate(newer, published, 'en')).toBe(false);
+  });
+
+  test.each([
+    { summary: 'New summary' },
+    { category: 'business' },
+    { category: { slug: 'business', name: 'Business' } },
+    { imageCredit: 'Updated credit' },
+    { authorByline: { enabled: true, snapshot: { name: 'New author' } } },
+    { translations: { hi: { title: 'Localized title', content: '<p>Localized body</p>' } } },
+    { translationStatus: { hi: 'APPROVED' } },
+  ])('detects same-version render metadata changes: %j', (changes) => {
+    const updated = { ...published, ...changes };
+    const picked = pickFreshestArticleForLocale<Record<string, unknown>>({
+      currentArticle: published,
+      groupArticles: [updated],
+      locale: 'en',
+      policy: STRICT_LOCALE_POLICY,
+    });
+    expect(picked).toBe(updated);
+    expect(shouldReplaceArticleWithFreshCandidate(published, picked, 'en')).toBe(true);
+    expect(shouldReplaceArticleWithFreshCandidate(updated, { ...updated }, 'en')).toBe(false);
+  });
+
+  test.each([
+    { status: 'unpublished' },
+    { status: 'draft' },
+    { status: 'scheduled' },
+    { isDeleted: true },
+    { deletedAt: '2026-01-02T10:00:00.000Z' },
+    { archived: true },
+  ])('never falls back to the old published object after a same-ID withdrawal: %j', (changes) => {
+    expect(pickFreshestArticleForLocale({
+      currentArticle: published,
+      groupArticles: [{ ...published, ...changes }],
+      locale: 'en',
+      policy: STRICT_LOCALE_POLICY,
+    })).toBeNull();
+  });
+
+  test('an authoritative candidate set can be empty or have no eligible locale', () => {
+    for (const groupArticles of [[], [{ ...published, language: 'hi' }]]) {
+      expect(pickFreshestArticleForLocale({
+        currentArticle: null,
+        groupArticles,
+        locale: 'gu',
+        policy: STRICT_LOCALE_POLICY,
+      })).toBeNull();
+    }
+  });
+
+  test('numeric versions are compared numerically, not parsed as calendar dates', () => {
+    const older = { ...published, syncVersion: '12' };
+    const newer = { ...published, syncVersion: '13' };
+    expect(pickFreshestArticleForLocale({
+      currentArticle: older, groupArticles: [newer], locale: 'en',
+    })).toBe(newer);
+    expect(shouldReplaceArticleWithFreshCandidate(newer, older, 'en')).toBe(false);
+  });
+
+  test('uses timestamps when only one record has a numeric version', () => {
+    const current = { ...published, syncVersion: '12' };
+    const older = { ...published, syncVersion: '', updatedAt: '2025-01-01T00:00:00.000Z' };
+    expect(shouldReplaceArticleWithFreshCandidate(current, older, 'en')).toBe(false);
+    expect(pickFreshestArticleForLocale({
+      currentArticle: current, groupArticles: [older], locale: 'en',
+    })).toBe(current);
+  });
+
+  test('keeps the existing id alias for same-ID freshness', () => {
+    const older = { ...published, _id: undefined, id: 'legacy-id' };
+    const newer = { ...older, summary: 'Updated legacy summary' };
+    expect(shouldReplaceArticleWithFreshCandidate(older, newer, 'en')).toBe(true);
+    expect(pickFreshestArticleForLocale({
+      currentArticle: older, groupArticles: [newer], locale: 'en',
+    })).toBe(newer);
+  });
+
+  test('ignores top-level and nested property insertion order', () => {
+    const current = {
+      ...published,
+      category: { slug: 'national', name: 'National' },
+      translations: { hi: { title: 'Localized title', content: '<p>Localized body</p>', status: 'APPROVED' } },
+    };
+    const reordered = Object.fromEntries(Object.entries({
+      ...current,
+      category: { name: 'National', slug: 'national' },
+      translations: { hi: { status: 'APPROVED', content: '<p>Localized body</p>', title: 'Localized title' } },
+    }).reverse());
+    expect(shouldReplaceArticleWithFreshCandidate(current, reordered, 'en')).toBe(false);
+  });
+
+  test('ignores irrelevant diagnostics and transport metadata, including nested metadata', () => {
+    const current = {
+      ...published,
+      category: { slug: 'national', name: 'National' },
+      seo: { metaDescription: 'Public description' },
+      translations: { hi: { title: 'Localized title', content: '<p>Localized body</p>' } },
+    };
+    const next = {
+      ...current,
+      requestId: 'new-request', diagnostics: { elapsed: 45 }, error: 'unused diagnostic',
+      metadata: { requestId: 'ignored' }, attributes: { transport: 'ignored' },
+      category: { ...current.category, debug: 'ignored' },
+      seo: { ...current.seo, requestId: 'ignored' },
+      translations: { hi: { ...current.translations.hi, providerRequestId: 'ignored' } },
+    };
+    expect(shouldReplaceArticleWithFreshCandidate(current, next, 'en')).toBe(false);
+  });
+
+  test('ignores empty serializer metadata but retains locale alias-precedence changes', () => {
+    const current = {
+      ...published,
+      translation: { hi: { title: 'Localized title', content: '<p>Localized body</p>', status: 'APPROVED' } },
+    };
+    expect(shouldReplaceArticleWithFreshCandidate(current, { ...current, metadata: {}, seo: null }, 'en')).toBe(false);
+    expect(shouldReplaceArticleWithFreshCandidate(current, { ...current, translations: {} }, 'en')).toBe(true);
+  });
+
+  test.each([
+    { title: 'Edited title' }, { summary: 'Edited summary' }, { content: '<p>Edited content</p>' },
+    { bodyHtml: '<p>Edited body</p>' }, { slug: 'edited-slug' },
+    { status: 'draft' }, { deletedAt: '2026-01-02T00:00:00.000Z' }, { archived: true },
+    { translations: { hi: { title: 'Edited title', content: '<p>Edited body</p>' } } },
+    { translationStatus: { hi: 'BLOCKED' } },
+    { seo: { canonicalUrl: '/news/editorial-canonical' } },
+    { tags: ['one', 'two'] },
+  ])('still detects meaningful edits with the same version and timestamp: %j', (change) => {
+    expect(shouldReplaceArticleWithFreshCandidate(published, { ...published, ...change }, 'en')).toBe(true);
+  });
 });
