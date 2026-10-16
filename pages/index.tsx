@@ -6,7 +6,8 @@ import { usePublicMode } from "../utils/PublicModeProvider";
 import { usePublicSettings } from "../src/context/PublicSettingsContext";
 import { DEFAULT_TRENDING_TOPICS, type TrendingTopic } from "../src/config/trendingTopics";
 import { getTrendingTopics } from "../lib/getTrendingTopics";
-import { fetchPublicNews, type Article } from "../lib/publicNewsApi";
+import { fetchPublicNews, projectPublicNewsListArticle, type Article } from "../lib/publicNewsApi";
+import { shouldReplaceArticleWithFreshCandidate } from "../lib/translationGroupSync";
 import { withPublicReadDeadline } from "../lib/publicReadDeadline";
 import { toTickerTexts } from "../lib/publicBroadcast";
 import { usePublicBroadcastTicker } from "../hooks/usePublicBroadcastTicker";
@@ -14,7 +15,7 @@ import { usePublicAdSlot } from "../hooks/usePublicAdSlot";
 import { useHomeLowerAdAlignment } from "../hooks/useHomeLowerAdAlignment";
 import { usePublicTickerAds } from "../hooks/usePublicTickerAds";
 import { isSafeMode } from "../utils/safeMode";
-import { resolveArticleSummaryOrExcerpt, resolveArticleTitle } from "../lib/contentFallback";
+import { resolveArticleField, resolveArticleSummaryOrExcerpt, resolveArticleTitle } from "../lib/contentFallback";
 import OriginalTag from "../components/OriginalTag";
 import { DEFAULT_NORMALIZED_PUBLIC_SETTINGS, type PublicLiveTvSettings } from "../src/lib/publicSettings";
 import AdSlot from "../src/components/ads/AdSlot";
@@ -27,6 +28,7 @@ import {
   fetchHomeSpotlightSectionArticles,
   HOME_FRESH_SOURCE_LIMIT,
   HOME_SPOTLIGHT_RENDER_FILTER_KEYS,
+  HOME_SPOTLIGHT_SECTION_KEYS,
 } from "../lib/homeSpotlight";
 import { resolveSponsoredContentMeta } from "../lib/sponsoredContent";
 import HomepageSponsoredFeatureCard from "../components/home/HomepageSponsoredFeatureCard";
@@ -672,19 +674,21 @@ function getHomepageStableStoryTime(story: any): string {
   return '';
 }
 
-export function getHomepageLatestStoriesSignature(
-  snapshot: HomepageLatestStoriesSnapshot,
-  requestedLang: UiLangCode
-): string {
-  const sourceStories = Array.isArray(snapshot.rawStories) && snapshot.rawStories.length
+function getHomepageSnapshotStories(snapshot: HomepageLatestStoriesSnapshot) {
+  return Array.isArray(snapshot.rawStories) && snapshot.rawStories.length
     ? snapshot.rawStories
     : Array.isArray(snapshot.freshStories)
       ? snapshot.freshStories
       : snapshot.topStory
         ? [snapshot.topStory]
         : [];
+}
 
-  return sourceStories
+export function getHomepageLatestStoriesSignature(
+  snapshot: HomepageLatestStoriesSnapshot,
+  requestedLang: UiLangCode
+): string {
+  return getHomepageSnapshotStories(snapshot)
     .map((story, index) => `${getHomepageStableStoryIdentifier(story, requestedLang, index)}:${getHomepageStableStoryTime(story)}`)
     .join('|');
 }
@@ -694,17 +698,21 @@ export function shouldApplyHomepageLatestStoriesUpdate(
   next: HomepageLatestStoriesSnapshot,
   requestedLang: UiLangCode
 ): boolean {
-  return getHomepageLatestStoriesSignature(current, requestedLang) !== getHomepageLatestStoriesSignature(next, requestedLang);
+  if (getHomepageLatestStoriesSignature(current, requestedLang) !== getHomepageLatestStoriesSignature(next, requestedLang)) return true;
+  const currentStories = getHomepageSnapshotStories(current);
+  return getHomepageSnapshotStories(next).some((story, index) =>
+    shouldReplaceArticleWithFreshCandidate(currentStories[index], story, requestedLang, projectPublicNewsListArticle)
+  );
 }
 
 export function shouldCommitHomepageLatestStoriesRefresh({
-  currentSignature,
+  current,
   error,
   mode,
   next,
   requestedLang,
 }: {
-  currentSignature: string;
+  current: HomepageLatestStoriesSnapshot;
   error?: string;
   mode: HomepageLatestRefreshMode;
   next: HomepageLatestStoriesSnapshot;
@@ -712,7 +720,7 @@ export function shouldCommitHomepageLatestStoriesRefresh({
 }): boolean {
   if (error) return false;
   if (mode !== 'background') return true;
-  return currentSignature !== getHomepageLatestStoriesSignature(next, requestedLang);
+  return shouldApplyHomepageLatestStoriesUpdate(current, next, requestedLang);
 }
 
 export function useHomepageLatestStories({
@@ -780,7 +788,7 @@ export function useHomepageLatestStories({
           freshStories: latest.freshStories || [],
         };
         const shouldApply = shouldCommitHomepageLatestStoriesRefresh({
-          currentSignature: getHomepageLatestStoriesSignature(previous, apiLang),
+          current: previous,
           mode,
           next,
           requestedLang: apiLang,
@@ -1068,9 +1076,9 @@ function resolveTopStoryTitle(article: any, requestedLang: 'en' | 'hi' | 'gu') {
 }
 
 function resolveTopStorySummary(article: any, requestedLang: 'en' | 'hi' | 'gu') {
-  if (requestedLang !== 'en') {
-    const translated = pickTranslatedField(article, requestedLang, 'summary');
-    if (translated) return { text: translated, isOriginal: false };
+  const translated = pickTranslatedField(article, requestedLang, 'summary');
+  if (translated && (requestedLang !== 'en' || resolveArticleField(article, 'summary', requestedLang).text === translated)) {
+    return { text: translated, isOriginal: false };
   }
 
   // Top Story rule: use summary if present; otherwise generate a dek.
@@ -3387,7 +3395,7 @@ function LiveTVWidget({ theme, liveTvSettings }: { theme: any; liveTvSettings: P
   );
 }
 
-function HomeEditorialSection({ theme, title, href, items, lang, Icon }: any) {
+function HomeEditorialSection({ theme, title, href, items, lang, Icon, error = false }: any) {
   const { t } = useI18n();
   const safeLang = lang === 'hi' || lang === 'gu' ? lang : 'en';
   const spotlightLeadMediaClasses = 'relative overflow-hidden rounded-[30px] bg-slate-100 shadow-[0_24px_54px_-36px_rgba(15,23,42,0.26)] ring-1 ring-slate-200/70';
@@ -3411,7 +3419,7 @@ function HomeEditorialSection({ theme, title, href, items, lang, Icon }: any) {
     [t]
   );
 
-  if (!Array.isArray(items) || !items.length) return null;
+  if (!Array.isArray(items) || (!items.length && !error)) return null;
 
   const lead = items[0];
   const secondary = items.slice(1, 5);
@@ -3455,7 +3463,13 @@ function HomeEditorialSection({ theme, title, href, items, lang, Icon }: any) {
         </div>
       </div>
 
-      <div className="grid gap-4 p-4 sm:p-5 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)] xl:items-start">
+      {error ? (
+        <p role="alert" className="px-4 py-3 text-sm sm:px-5" style={{ color: theme.sub }}>
+          {t('categoryPage.unableToLoadTitle')}
+          {items.length ? ` ${t('errors.showingPreviousStories')}` : ''}
+        </p>
+      ) : null}
+      {items.length ? <div className="grid gap-4 p-4 sm:p-5 xl:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)] xl:items-start">
         {lead ? (
           <Link
             href={buildNewsUrl({ id: getStoryId(lead) || getStorySlug(lead), slug: getStorySlug(lead), lang: safeLang })}
@@ -3564,7 +3578,7 @@ function HomeEditorialSection({ theme, title, href, items, lang, Icon }: any) {
             );
           })}
         </div>
-      </div>
+      </div> : null}
     </Surface>
   );
 }
@@ -4057,8 +4071,20 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
   const effectiveSettings = settings ?? DEFAULT_NORMALIZED_PUBLIC_SETTINGS;
   const settingsResolved = settings != null && settingsError !== 'PUBLIC_SETTINGS_PROVIDER_MISSING';
   const [homepageSponsoredFeature, setHomepageSponsoredFeature] = useState<HomepageSponsoredFeature | null>(initialHomepageSponsoredFeature);
-  const [homeSectionNews, setHomeSectionNews] = useState<Record<string, Article[]>>({});
-  const [homeSpotlightItems, setHomeSpotlightItems] = useState<any[] | null>(null);
+  const [homeSharedNews, setHomeSharedNews] = useState<{
+    lang: UiLangCode;
+    sections: Record<string, Article[]>;
+    spotlight: Article[];
+    sectionErrors: Record<string, boolean>;
+    spotlightError: boolean;
+  }>({ lang: apiLang, sections: {}, spotlight: [], sectionErrors: {}, spotlightError: false });
+  const homeSectionNews = homeSharedNews.lang === apiLang ? homeSharedNews.sections : {};
+  const homeSectionErrors = homeSharedNews.lang === apiLang ? homeSharedNews.sectionErrors : {};
+  const spotlightReadError = homeSharedNews.lang === apiLang && homeSharedNews.spotlightError;
+  const homeSpotlightItems = useMemo(
+    () => homeSharedNews.lang === apiLang ? homeSharedNews.spotlight.map((article) => articleToFeedItem(article, apiLang)) : [],
+    [apiLang, homeSharedNews.lang, homeSharedNews.spotlight]
+  );
   const [homepagePublicRefreshTick, setHomepagePublicRefreshTick] = useState(0);
   const [hydrated, setHydrated] = useState(false);
   const { topStory, latestFromBackend, latestRawStories, storyStatus, refreshHomepageLatestStories } = useHomepageLatestStories({
@@ -4134,28 +4160,32 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
 
   React.useEffect(() => {
     const controller = new AbortController();
-    const isBackgroundRefresh = homepagePublicRefreshTick > 0;
+    setHomeSharedNews((current) => current.lang === apiLang ? current : {
+      lang: apiLang, sections: {}, spotlight: [], sectionErrors: {}, spotlightError: false,
+    });
 
-    if (!isBackgroundRefresh) {
-      setHomeSectionNews({});
-      setHomeSpotlightItems(null);
-    }
-
-    (async () => {
-      const [sectionResult, spotlightResult] = await Promise.allSettled([
-        fetchHomeSpotlightSectionArticles({ lang: apiLang, signal: controller.signal }),
-        fetchHomeSpotlightArticles({ lang: apiLang, signal: controller.signal }),
-      ]);
-
+    void Promise.allSettled([
+      fetchHomeSpotlightSectionArticles({ lang: apiLang, signal: controller.signal }),
+      fetchHomeSpotlightArticles({ lang: apiLang, signal: controller.signal }),
+    ]).then(([sectionResult, spotlightResult]) => {
       if (controller.signal.aborted) return;
-      const sectionArticlesByKey = sectionResult.status === 'fulfilled' ? sectionResult.value : {};
-      const spotlightArticles = spotlightResult.status === 'fulfilled' ? spotlightResult.value : [];
-      setHomeSectionNews(sectionArticlesByKey as Record<string, Article[]>);
-      setHomeSpotlightItems(spotlightArticles.map((article) => articleToFeedItem(article as any, apiLang)));
-    })().catch(() => {
-      if (controller.signal.aborted) return;
-      setHomeSectionNews({});
-      setHomeSpotlightItems([]);
+      setHomeSharedNews((current) => {
+        const previous = current.lang === apiLang ? current : { sections: {}, spotlight: [] };
+        const sections = { ...previous.sections };
+        const sectionErrors: Record<string, boolean> = {};
+        for (const key of HOME_SPOTLIGHT_SECTION_KEYS) {
+          const result = sectionResult.status === 'fulfilled' ? sectionResult.value[key] : undefined;
+          if (result?.status === 'fulfilled') sections[key] = result.value;
+          else sectionErrors[key] = true;
+        }
+        return {
+          lang: apiLang,
+          sections,
+          sectionErrors,
+          spotlight: spotlightResult.status === 'fulfilled' ? spotlightResult.value : previous.spotlight,
+          spotlightError: spotlightResult.status === 'rejected',
+        };
+      });
     });
 
     return () => controller.abort();
@@ -4578,9 +4608,10 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
         ...section,
         title: t(labelKeyForCategory(section.key)),
         items,
+        error: Boolean(homeSectionErrors[section.key]),
       };
-    }).filter((section) => section.items.length > 0);
-  }, [apiLang, homeSectionNews, homepageLeadIdentitySet, t]);
+    }).filter((section) => section.items.length > 0 || section.error);
+  }, [apiLang, homeSectionNews, homeSectionErrors, homepageLeadIdentitySet, t]);
 
   const spotlightItems = Array.isArray(homeSpotlightItems) ? homeSpotlightItems : [];
 
@@ -5041,13 +5072,20 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
                 items={section.items}
                 lang={apiLang}
                 Icon={section.Icon}
+                error={section.error}
               />
             ))}
           </div>
         ) : null}
 
-        {spotlightItems.length ? (
+        {spotlightItems.length || spotlightReadError ? (
           <div className="spotlight-section">
+            {spotlightReadError ? (
+              <p role="alert" aria-label="News Pulse Spotlight" className="px-4 py-3 text-sm" style={{ color: theme.sub }}>
+                {t('categoryPage.unableToLoadTitle')}
+                {spotlightItems.length ? ` ${t('errors.showingPreviousStories')}` : ''}
+              </p>
+            ) : null}
             <SharedHomeSpotlightCarousel
               theme={theme}
               title="News Pulse Spotlight"

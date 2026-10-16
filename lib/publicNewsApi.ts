@@ -2,7 +2,7 @@ import { getPublicApiBaseUrl } from './publicApiBase';
 import { getCategoryQueryKey } from './categoryKeys';
 import { filterPubliclyPublishedArticles, getPublicArticleStatus } from './localizedArticleFields';
 import type { AuthorBylinePayload } from './authorByline';
-import { getOrdinaryCategoryPageItems, getOrdinaryCategoryPagination, ORDINARY_PAGINATION_HEADER, validateOrdinaryPageRequest, type OrdinaryCategoryPagination } from './ordinaryCategoryPagination';
+import { getOrdinaryCategoryPagination, ORDINARY_PAGINATION_HEADER, validateOrdinaryPageRequest, type OrdinaryCategoryPagination } from './ordinaryCategoryPagination';
 import { FAITH_CULTURE_NEWS_UNAVAILABLE, FAITH_CULTURE_PAGINATION_HEADER, getFaithCulturePagination, validateFaithCulturePageRequest } from './faithCulturePagination';
 import { getFaithCultureTopic } from './faithCultureTopics';
 import { getSafeRetryAfter } from './retryAfter';
@@ -292,12 +292,15 @@ function hasPublicRecordDiagnostics(record: Record<string, unknown>, fields: Pub
   });
 }
 
-function validTranslationStatus(value: unknown): boolean {
+function validTranslationStatus(value: unknown, allowFailedTranslation = false): boolean {
   if (value == null || value === '') return true;
-  return typeof value === 'string' && ['APPROVED', 'READY', 'BLOCKED', 'PENDING', 'REJECTED', 'DRAFT', 'UNKNOWN'].includes(value.trim().toUpperCase());
+  return typeof value === 'string' && (
+    ['APPROVED', 'READY', 'BLOCKED', 'PENDING', 'REJECTED', 'DRAFT', 'UNKNOWN'].includes(value.trim().toUpperCase())
+    || (allowFailedTranslation && value.trim().toUpperCase() === 'FAILED')
+  );
 }
 
-function validLifecycleFields(record: Record<string, unknown>): boolean {
+function validLifecycleFields(record: Record<string, unknown>, allowFailedTranslation = false): boolean {
   for (const key of ['status', 'state', 'language', 'lang', 'sourceLang', 'sourceLanguage', 'translationGroupId']) {
     if (record[key] != null && typeof record[key] !== 'string') return false;
   }
@@ -314,19 +317,19 @@ function validLifecycleFields(record: Record<string, unknown>): boolean {
   }
   const translationStatus = responseRecord(record.translationStatus);
   if (translationStatus) {
-    if (!['en', 'hi', 'gu', 'in'].every((lang) => validTranslationStatus(translationStatus[lang]))) return false;
-  } else if (!validTranslationStatus(record.translationStatus)) return false;
+    if (!['en', 'hi', 'gu', 'in'].every((lang) => validTranslationStatus(translationStatus[lang], allowFailedTranslation))) return false;
+  } else if (!validTranslationStatus(record.translationStatus, allowFailedTranslation)) return false;
   for (const key of ['translations', 'translation', 'i18n', 'localized', 'locales', 'byLang', 'textByLang']) {
     const container = responseRecord(record[key]);
     if (record[key] != null && !container) return false;
     for (const lang of ['en', 'hi', 'gu', 'in']) {
       const variant = responseRecord(container?.[lang]);
       if (container?.[lang] != null && !variant) return false;
-      if (variant && (!validTranslationStatus(variant.status) || !validTranslationStatus(variant.translationStatus))) return false;
+      if (variant && (!validTranslationStatus(variant.status, allowFailedTranslation) || !validTranslationStatus(variant.translationStatus, allowFailedTranslation))) return false;
       for (const field of localizedFieldNames) {
         for (const value of [variant?.[field], responseRecord(container?.[field])?.[lang]]) {
           const translated = responseRecord(value);
-          if (translated && (!validTranslationStatus(translated.status) || !validTranslationStatus(translated.translationStatus))) return false;
+          if (translated && (!validTranslationStatus(translated.status, allowFailedTranslation) || !validTranslationStatus(translated.translationStatus, allowFailedTranslation))) return false;
         }
       }
     }
@@ -334,11 +337,12 @@ function validLifecycleFields(record: Record<string, unknown>): boolean {
   return getPublicArticleStatus(record) !== 'unknown';
 }
 
-function parsePublicNewsRecord(payload: unknown): Article | null {
+function parsePublicNewsRecord(payload: unknown, listRecord = false): Article | null {
   const record = responseRecord(payload);
+  const fields = listRecord ? publicListingFields : publicArticleFields;
   if (!record || typeof record._id !== 'string' || !record._id.trim() ||
-    !validLifecycleFields(record) || hasPublicRecordDiagnostics(record, publicArticleFields)) return null;
-  return { ...projectPublicNewsArticle(record), _id: record._id };
+    !validLifecycleFields(record, listRecord) || hasPublicRecordDiagnostics(record, fields)) return null;
+  return { ...projectPublicFields(record, fields), _id: record._id };
 }
 
 export function parsePublicNewsArticle(payload: unknown): Article | null {
@@ -354,8 +358,80 @@ export function parsePublicNewsGroupItems(payload: unknown): Article[] | null {
   const items = [payload, record?.items, record?.articles, record?.data, record?.result, nested?.items, nested?.articles]
     .find(Array.isArray);
   if (!items) return null;
-  const articles = items.map(parsePublicNewsRecord);
+  const articles = items.map((item) => parsePublicNewsRecord(item));
   return articles.every((article): article is Article => article !== null) ? articles : null;
+}
+
+const publicLocationFields = publicScalars('city district state region country citySlug districtSlug stateSlug');
+const publicListingFields: PublicFields = {
+  ...publicArticleFields,
+  ...publicScalars(
+    'city country locationLabel locationText citySlug stateSlug districtName districtSlug district_slug ' +
+    'districtCode district_code districtId district_id time titleIsOriginal regionalReadMinutes'
+  ),
+  location: publicLocationFields,
+  geo: publicLocationFields,
+  region: publicLocationFields,
+  source: publicScalars('name title summary excerpt content html body'),
+};
+
+export function projectPublicNewsListArticle(article: unknown): Record<string, unknown> {
+  return projectPublicFields(responseRecord(article) || {}, publicListingFields);
+}
+
+const publicPaginationFields = publicScalars('page limit total totalPages hasMore');
+const publicListMetadataFields: PublicFields = {
+  ...publicPaginationFields, meta: publicPaginationFields, pagination: publicPaginationFields,
+};
+const publicListCollectionKeys = ['items', 'articles', 'stories', 'news', 'result', 'data'] as const;
+
+export type PublicNewsListRead = {
+  items: Article[];
+  payload: Article[] | Record<string, unknown>;
+};
+
+/** Validate every record before filtering/deduplication, preserving supported public envelope shapes. */
+export function parsePublicNewsList(payload: unknown): PublicNewsListRead | null {
+  if (Array.isArray(payload)) {
+    const items = payload.map((item) => {
+      const record = responseRecord(item);
+      const candidate = record?._id == null && typeof record?.id === 'string' ? { ...record, _id: record.id } : record;
+      return parsePublicNewsRecord(candidate, true);
+    });
+    return items.every((item): item is Article => item !== null) ? { items, payload: items } : null;
+  }
+  const record = responseRecord(payload);
+  const data = responseRecord(record?.data);
+  if (!record || failedPublicNewsPayload(record) || failedPublicNewsPayload(data)) return null;
+  for (const container of [record, data]) {
+    for (const key of ['meta', 'pagination']) {
+      if (container?.[key] != null && !responseRecord(container[key])) return null;
+    }
+  }
+  for (const metadata of [record, data, responseRecord(record.meta), responseRecord(data?.meta), responseRecord(record.pagination), responseRecord(data?.pagination)]) {
+    if (!metadata) continue;
+    if (failedPublicNewsPayload(metadata)) return null;
+    for (const key of ['page', 'limit', 'total', 'totalPages']) {
+      const value = metadata[key];
+      if (value != null && !(typeof value === 'number' && Number.isSafeInteger(value))
+        && !(typeof value === 'string' && /^\d+$/.test(value.trim()))) return null;
+    }
+    if (metadata.hasMore != null && typeof metadata.hasMore !== 'boolean') return null;
+  }
+  let selected: { key: string; read: PublicNewsListRead } | null = null;
+  for (const key of publicListCollectionKeys) {
+    const collection = record[key];
+    if (collection == null) continue;
+    if (key === 'data' && data && selected && !publicListCollectionKeys.some((key) => data[key] != null)) continue;
+    if (!Array.isArray(collection) && !(key === 'data' && data)) return null;
+    const parsed = parsePublicNewsList(collection);
+    if (!parsed) return null;
+    if (!selected) selected = { key, read: parsed };
+  }
+  if (!selected) return null;
+  const metadata = projectPublicFields(record, publicListMetadataFields);
+  if (data) metadata.data = projectPublicFields(data, publicListMetadataFields);
+  return { items: selected.read.items, payload: { ...metadata, [selected.key]: selected.read.payload } };
 }
 
 export type PublicNewsMeta = {
@@ -455,20 +531,11 @@ export async function fetchPublicNews(options: {
       signal: options.signal,
     });
 
-    const skipErrorBody = (pageRequest && !res.ok)
-      || (isBrowser && options.homepageRecovery && res.status === 503);
-    if (skipErrorBody) void res.body?.cancel().catch(() => {});
-    const data = skipErrorBody ? null : pageRequest ? await res.json() : await res.json().catch(() => null);
-
     if (!res.ok) {
-      const msg =
-        (data && typeof data === 'object' && (data.message || data.error || data.code))
-          ? String(data.message || data.error || data.code)
-          : '';
+      void res.body?.cancel().catch(() => {});
       logPublicNewsError('http_error', {
         endpoint,
         status: res.status,
-        message: msg || null,
         category: options.category || null,
         language: options.language || null,
       });
@@ -478,11 +545,14 @@ export async function fetchPublicNews(options: {
         endpoint,
         status: res.status,
         retryAfter: getSafeRetryAfter(res.headers?.get('Retry-After')),
-        error: options.faithPagination ? FAITH_CULTURE_NEWS_UNAVAILABLE : msg ? `API ${res.status} (${msg})` : `API ${res.status}`,
+        error: options.faithPagination ? FAITH_CULTURE_NEWS_UNAVAILABLE : `API ${res.status}`,
       };
     }
 
-    const rawItems = unwrapArticles(pageRequest ? getOrdinaryCategoryPageItems(data) : data);
+    const data = await res.json();
+    const parsed = parsePublicNewsList(data);
+    if (!parsed) throw new Error('Invalid news list response');
+    const rawItems = parsed.items;
     const pagination = pageRequest
       ? (options.faithPagination ? getFaithCulturePagination : getOrdinaryCategoryPagination)(data, pageRequest, rawItems.length)
       : undefined;

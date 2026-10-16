@@ -162,6 +162,70 @@ describe('public News failure and empty contracts', () => {
     if (localized) expect(fetchMock.mock.calls[0][0]).not.toBe(fetchMock.mock.calls[1][0]);
   });
 
+  describe.each(['en', 'hi', 'gu'])('%s News list record trust', (lang) => {
+    test.each([
+      { _id: 'incomplete' },
+      { ...pulseStory(), deletedAt: { unexpected: true } },
+      { ...pulseStory(), status: { value: 'published' } },
+      { ...pulseStory(), error: 'synthetic-private-diagnostic' },
+      null,
+    ])('malformed record %j is a safe failure, not an empty Home or ordinary page', async (record) => {
+      for (const mode of ['home', 'ordinary', 'plain']) {
+        fetchMock.mockResolvedValue(jsonResponse({
+          items: [pulseStory(lang), record], page: 1, limit: 30, total: 2, totalPages: 1,
+        }));
+        const query: Record<string, string> = mode === 'home' ? { lang, language: lang, limit: '40' } : {
+          category: 'business', lang, language: lang, strictLocale: '1', page: '1', limit: '30',
+        };
+        const res = await request(query, mode === 'ordinary'
+          ? { [ORDINARY_PAGINATION_HEADER.toLowerCase()]: '1' }
+          : mode === 'home' ? { 'x-newspulse-homepage-recovery': '1' } : {});
+        expect(res.statusCode).toBe(503);
+        expect(res.body.error).toBe(mode === 'ordinary' ? 'CATEGORY_NEWS_UNAVAILABLE'
+          : mode === 'home' ? 'HOMEPAGE_NEWS_UNAVAILABLE' : 'PUBLIC_NEWS_UNAVAILABLE');
+        expect(JSON.stringify(res.body)).not.toContain('synthetic-private');
+        expect(res.body.items).toBeUndefined();
+      }
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    });
+
+    test.each([
+      {}, { items: null }, { ok: false, items: [] }, { data: { success: false, items: [] } },
+      { items: [pulseStory(lang)], meta: 'synthetic-private-metadata' },
+      { items: [pulseStory(lang)], pagination: ['synthetic-private-pagination'] },
+      { items: [pulseStory(lang)], data: { meta: 'synthetic-private-metadata' } },
+      { items: [pulseStory(lang)], data: 'synthetic-private-data' },
+      { items: [], data: [{ _id: 'incomplete' }] },
+      { items: [], meta: { error: 'synthetic-private-error' } },
+    ])(
+      'malformed envelope %j cannot manufacture empty success',
+      async (payload) => {
+        fetchMock.mockResolvedValue(jsonResponse(payload));
+        const res = await request({ lang, language: lang, strictLocale: '1' });
+        expect(res.statusCode).toBe(503);
+        expect(res.body).toEqual({ error: 'PUBLIC_NEWS_UNAVAILABLE' });
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+      }
+    );
+
+    test('allowlists successful envelopes and article fields without losing legacy metadata', async () => {
+      const { status: _status, translationGroupId: _group, ...legacy } = pulseStory(lang);
+      fetchMock.mockResolvedValue(jsonResponse({
+        items: [{ ...legacy, token: 'synthetic-private-article', category: { slug: 'business', name: 'Business', secret: 'synthetic-private-category' } }],
+        total: 1, page: 1, limit: 30, totalPages: 1, diagnostics: 'synthetic-private-envelope',
+        meta: { total: 1, backendUrl: 'synthetic-private-url' },
+      }));
+      const res = await request({ lang, language: lang, strictLocale: '1', category: 'business', page: '1', limit: '30' }, {
+        [ORDINARY_PAGINATION_HEADER.toLowerCase()]: '1',
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.body.items).toHaveLength(1);
+      expect(res.body.items[0]).toMatchObject({ _id: legacy._id, title: legacy.title, category: { slug: 'business', name: 'Business' } });
+      expect(res.body.pagination).toMatchObject({ total: 1, page: 1, totalPages: 1 });
+      expect(JSON.stringify(res.body)).not.toContain('synthetic-private');
+    });
+  });
+
   test.each(['empty', 'filtered', 'visible'])('failed widening does not fabricate an empty result from a %s primary', async (primary) => {
     const story = pulseStory('hi', { status: primary === 'filtered' ? 'draft' : 'published' });
     fetchMock.mockResolvedValueOnce(jsonResponse({ items: primary === 'empty' ? [] : [story] }))
@@ -350,7 +414,6 @@ describe('public news route localization', () => {
     ['scheduled', { items: [pulseStory('en', { publishedAt: '2999-01-01' })], total: 1 }],
     ['missing title', { items: [pulseStory('en', { title: '' })], total: 1 }],
     ['missing language', { items: [pulseStory('en', { language: '' })], total: 1 }],
-    ['missing id', { items: [pulseStory('en', { _id: '' })], total: 1 }],
     ['wrong category', { items: [pulseStory('en', { category: 'national' })], total: 1 }],
     ['duplicate group', { items: [pulseStory(), pulseStory('en', { _id: 'duplicate' })], total: 1 }],
     ['wrong response page', { items: [pulseStory()], total: 1, page: 2 }],
@@ -365,6 +428,19 @@ describe('public news route localization', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(res.statusCode).toBe(200);
+  });
+
+  test('strict Pulse rejects missing article identity instead of widening an invalid primary', async () => {
+    const fetchMock = jest.fn().mockResolvedValue(jsonResponse({
+      items: [pulseStory('en', { _id: '' })], total: 1,
+    }));
+    global.fetch = fetchMock;
+    const query = { category: 'pulse-dialogue', lang: 'en', language: 'en', strictLocale: '1', limit: '30' };
+    const res = createRes();
+    await newsHandler(createReq({ query, url: `/api/public/news?${new URLSearchParams(query)}` }) as any, res as any);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(res.statusCode).toBe(503);
+    expect(res.body).toEqual({ error: 'PUBLIC_NEWS_UNAVAILABLE' });
   });
 
   test.each(['national', 'regional', 'international', 'business', 'sports'])('keeps existing %s category widening', async (category) => {

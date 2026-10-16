@@ -2,6 +2,7 @@ import { getPublicApiBaseUrl } from './publicApiBase';
 import { dedupeRegionalFeedPayload, unwrapRegionalFeedItems } from './unwrapRegionalFeed';
 import { filterPubliclyPublishedArticles, getLocalizedArticleFields, normalizeRouteLocale, STRICT_LOCALE_POLICY } from './localizedArticleFields';
 import { withPublicReadDeadline } from './publicReadDeadline';
+import { parsePublicNewsList } from './publicNewsApi';
 
 export const REGIONAL_BLOCKED_IDS = new Set([
   '69a9d5f74c3cb9a18ef5a179', '69a9ca4a4c3cb9a18ef5a16f',
@@ -123,7 +124,9 @@ async function readRegionalPayload(params: URLSearchParams, options: RegionalRea
     method: 'GET', cache: 'no-store', headers: { Accept: 'application/json' }, signal,
   });
   if (!response.ok) throw new Error(`Regional feed unavailable (${response.status})`);
-  return { payload: await response.json() };
+  const parsed = parsePublicNewsList(await response.json());
+  if (!parsed) throw new Error('Invalid Regional feed response');
+  return { payload: parsed.payload };
 }
 
 export async function fetchRegionalInitialStories(params: URLSearchParams, options: RegionalReadOptions = {}): Promise<any[]> {

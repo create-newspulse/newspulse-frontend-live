@@ -35,7 +35,7 @@ jest.mock('../../hooks/usePublicBroadcastTicker', () => ({ usePublicBroadcastTic
 jest.mock('../../hooks/usePublicTickerAds', () => ({ usePublicTickerAds: jest.fn() }));
 jest.mock('../../utils/safeMode', () => ({ isSafeMode: jest.fn(() => false) }));
 jest.mock('../../hooks/usePublicAdSlot', () => ({ usePublicAdSlot: jest.fn(() => ({ enabled: false, ad: null, isLoading: false, hasResolved: true })) }));
-jest.mock('../../lib/publicNewsApi', () => ({ fetchPublicNews: jest.fn(async () => ({ items: [], endpoint: '/api/public/news' })) }));
+jest.mock('../../lib/publicNewsApi', () => ({ ...jest.requireActual('../../lib/publicNewsApi'), fetchPublicNews: jest.fn(async () => ({ items: [], endpoint: '/api/public/news' })) }));
 jest.mock('../../lib/publicSponsoredFeature', () => ({ ...jest.requireActual('../../lib/publicSponsoredFeature'), fetchHomepageSponsoredFeature: jest.fn(async () => null) }));
 jest.mock('../../lib/getTrendingTopics', () => ({ getTrendingTopics: jest.fn(async () => []) }));
 jest.mock('../../lib/fetchWeather', () => ({ fetchCurrentWeather: jest.fn(async () => null) }));
@@ -792,6 +792,10 @@ describe.each(['en', 'hi', 'gu'] as const)('homepage truthful read states (%s)',
     );
   }
 
+  function refreshHomepage() {
+    dispatchPublicDataRefresh({ version: '3b1-test', previousVersion: null, source: 'test' });
+  }
+
   function expectNeutralState(container: HTMLElement, role: 'alert' | 'status', message: string) {
     const region = container.querySelector('#top-story');
     expect(region?.querySelector(`[role="${role}"]`)?.textContent).toBe(message);
@@ -842,6 +846,184 @@ describe.each(['en', 'hi', 'gu'] as const)('homepage truthful read states (%s)',
       : emptyResponse);
     await act(async () => { window.dispatchEvent(new Event('focus')); });
     expectNeutralState(container, 'alert', messages.categoryPage.unableToLoadTitle);
+  });
+
+  test('renders same-ID localized edits and images without changing publication time or article URL', async () => {
+    const localized = {
+      title: `${topicNames[lang]} original`,
+      summary: `${topicNames[lang]} original summary`,
+      content: `<p>${topicNames[lang]} original body</p>`,
+    };
+    const current = {
+      ...story, sourceLanguage: lang === 'en' ? 'gu' : 'en',
+      translationStatus: { [lang]: 'APPROVED' }, translations: { [lang]: localized },
+      imageUrl: 'https://res.cloudinary.com/demo/image/upload/original-home-cover.jpg',
+    };
+    const changedFields = {
+      title: `${topicNames[lang]} edited`,
+      summary: `${topicNames[lang]} edited summary`,
+      content: `<p>${topicNames[lang]} edited body</p>`,
+    };
+    let currentRead = current;
+    jest.mocked(fetchPublicNews).mockImplementation(async (options) =>
+      options.homepageRecovery ? { ...emptyResponse, items: [currentRead] } : emptyResponse
+    );
+    const { container } = renderHomepage({ initialTopStory: current, initialFreshStories: [current] });
+    await act(async () => {});
+    expect(container.querySelector('#top-story h1')?.textContent).toContain(localized.title);
+    currentRead = {
+      ...current, translations: { [lang]: changedFields },
+      imageUrl: 'https://res.cloudinary.com/demo/image/upload/edited-home-cover.jpg',
+    };
+    await act(async () => { refreshHomepage(); });
+    expect(container.querySelector('#top-story h1')?.textContent).toContain(changedFields.title);
+    expect(container.querySelector('#top-story')?.textContent).toContain(changedFields.summary);
+    expect(container.querySelector('#top-story img')?.getAttribute('src')).toContain('edited-home-cover.jpg');
+    expect(container.querySelector(`#top-story a[href="${storyHref}"]`)).not.toBeNull();
+    expect(currentRead.publishedAt).toBe(story.publishedAt);
+  });
+
+  test('malformed initial refresh retains SSR content, but authoritative empty recovery withdraws it', async () => {
+    const actualNews = jest.requireActual<typeof import('../../lib/publicNewsApi')>('../../lib/publicNewsApi');
+    let malformed = true;
+    jest.mocked(global.fetch).mockImplementation(async () => new Response(JSON.stringify({
+      items: malformed ? [{ _id: story._id }] : [],
+    })));
+    jest.mocked(fetchPublicNews).mockImplementation(async (options) =>
+      options.homepageRecovery ? actualNews.fetchPublicNews(options) : emptyResponse
+    );
+    const { container } = renderHomepage({ initialTopStory: story, initialFreshStories: [story] });
+    await act(async () => {});
+    expect(container.querySelector('#top-story h1')?.textContent).toBe(story.title);
+    expect(container.querySelector('#top-story [role="alert"]')?.textContent).toContain(messages.errors.showingPreviousStories);
+    malformed = false;
+    await act(async () => { await jest.advanceTimersByTimeAsync(5_000); });
+    expectNeutralState(container, 'status', messages.categoryPage.noStoriesYet);
+    expect(container.querySelector(`#top-story a[href="${storyHref}"]`)).toBeNull();
+  });
+
+  test.each(['HTTP 503', 'network', 'malformed'])('Spotlight and section content survive %s, recover with new content, then genuine empty clears them', async (failure) => {
+    const spotlight = { ...story, _id: `spotlight-${lang}`, slug: `spotlight-${lang}`, title: `Spotlight report ${lang}` };
+    const section = { ...story, _id: `web-${lang}`, slug: `web-${lang}`, title: `Web report ${lang}`, category: 'web-stories' };
+    const actualNews = jest.requireActual<typeof import('../../lib/publicNewsApi')>('../../lib/publicNewsApi');
+    let mode: 'content' | 'failure' | 'recovered' | 'empty' = 'content';
+    jest.mocked(global.fetch).mockImplementation(async () => {
+      if (failure === 'network') throw new Error('synthetic-private-network');
+      return new Response(JSON.stringify(failure === 'malformed'
+        ? { items: [{ _id: 'incomplete' }] } : { error: 'synthetic-private-upstream' }),
+      { status: failure === 'HTTP 503' ? 503 : 200 });
+    });
+    jest.mocked(fetchPublicNews).mockImplementation(async (options) => {
+      const featured = options.extraQuery?.spotlight === '1' ? spotlight : options.category === 'web-stories' ? section : null;
+      if (!featured || mode === 'empty') return emptyResponse;
+      if (mode === 'failure') return actualNews.fetchPublicNews(options);
+      if (mode === 'recovered') return {
+        ...emptyResponse, items: [{ ...featured, title: `${featured.title} updated`, content: '<p>Updated public report</p>' }],
+      };
+      return { ...emptyResponse, items: [featured] };
+    });
+    const { container } = renderHomepage({ initialFreshStories: [] });
+    await act(async () => {});
+    expect(container.querySelector('.spotlight-section')?.textContent).toContain(spotlight.title);
+    expect(screen.queryByText(section.title)).not.toBeNull();
+
+    mode = 'failure';
+    await act(async () => { refreshHomepage(); });
+    expect(container.querySelector('.spotlight-section')?.textContent).toContain(spotlight.title);
+    expect(screen.queryByText(section.title)).not.toBeNull();
+    const alerts = screen.getAllByRole('alert');
+    expect(alerts).toHaveLength(2);
+    for (const alert of alerts) {
+      expect(alert.textContent).toContain(messages.categoryPage.unableToLoadTitle);
+      expect(alert.textContent).toContain(messages.errors.showingPreviousStories);
+      expect(alert.textContent).not.toContain('synthetic-private');
+    }
+
+    mode = 'recovered';
+    await act(async () => { refreshHomepage(); });
+    expect(container.querySelector('.spotlight-section')?.textContent).toContain(`${spotlight.title} updated`);
+    expect(screen.queryByText(`${section.title} updated`)).not.toBeNull();
+    expect(screen.queryByText(spotlight.title)).toBeNull();
+    expect(screen.queryByText(section.title)).toBeNull();
+    expect(screen.queryAllByRole('alert')).toHaveLength(0);
+
+    mode = 'empty';
+    await act(async () => { refreshHomepage(); });
+    expect(screen.queryByText(`${spotlight.title} updated`)).toBeNull();
+    expect(screen.queryByText(`${section.title} updated`)).toBeNull();
+    expect(container.querySelector('.spotlight-section')).toBeNull();
+    expect(screen.queryAllByRole('alert')).toHaveLength(0);
+  });
+
+  test.each(['Spotlight', 'section'])('partial %s failure does not prevent the other successful empty from applying', async (failed) => {
+    const spotlight = { ...story, _id: 'featured', slug: 'featured', title: 'Featured report' };
+    const section = { ...story, _id: 'web', slug: 'web', title: 'Web report', category: 'web-stories' };
+    let refreshing = false;
+    jest.mocked(fetchPublicNews).mockImplementation(async (options) => {
+      const kind = options.extraQuery?.spotlight === '1' ? 'Spotlight' : options.category === 'web-stories' ? 'section' : null;
+      if (!kind) return emptyResponse;
+      if (refreshing) return kind === failed ? { ...emptyResponse, error: 'API 503' } : emptyResponse;
+      return { ...emptyResponse, items: [kind === 'Spotlight' ? spotlight : section] };
+    });
+    renderHomepage({ initialFreshStories: [] });
+    await act(async () => {});
+    refreshing = true;
+    await act(async () => { refreshHomepage(); });
+    expect(screen.queryByText(failed === 'Spotlight' ? spotlight.title : section.title)).not.toBeNull();
+    expect(screen.queryByText(failed === 'Spotlight' ? section.title : spotlight.title)).toBeNull();
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+  });
+
+  test('cold Spotlight and section failures expose unavailable state without invented content', async () => {
+    jest.mocked(fetchPublicNews).mockImplementation(async (options) =>
+      options.extraQuery?.spotlight === '1' || options.category === 'web-stories'
+        ? { ...emptyResponse, error: 'Invalid news list response' } : emptyResponse
+    );
+    const { container } = renderHomepage({ initialFreshStories: [] });
+    await act(async () => {});
+    expect(screen.getAllByRole('alert')).toHaveLength(2);
+    expect(container.querySelector('.spotlight-section')?.textContent).toContain(messages.categoryPage.unableToLoadTitle);
+    expect(container.querySelector('.spotlight-section a')).toBeNull();
+    expect(container.textContent).not.toContain(messages.errors.showingPreviousStories);
+  });
+
+  test('a locale switch and late/unmounted Spotlight requests cannot resurrect previous-locale content', async () => {
+    const nextLang = lang === 'en' ? 'hi' : lang === 'hi' ? 'gu' : 'en';
+    const featured = { ...story, _id: 'featured', slug: 'featured', title: `Previous locale ${lang}` };
+    type NewsResult = Awaited<ReturnType<typeof fetchPublicNews>>;
+    const late: Array<(result: NewsResult) => void> = [];
+    const signals: AbortSignal[] = [];
+    let holding = false;
+    jest.mocked(fetchPublicNews).mockImplementation(async (options) => {
+      if (options.signal && (options.extraQuery?.spotlight === '1' || options.category === 'web-stories')) signals.push(options.signal);
+      if (options.extraQuery?.spotlight !== '1') return emptyResponse;
+      if (holding) return new Promise(resolve => { late.push(resolve); });
+      return { ...emptyResponse, items: [featured] };
+    });
+    const tree = (routeLang: typeof lang) => (
+      <i18n.LanguageProvider initialLang={routeLang}>
+        <PublicSettingsProvider initialSettings={published()}>
+          <HomePage {...props} />
+        </PublicSettingsProvider>
+      </i18n.LanguageProvider>
+    );
+    const { container, rerender, unmount } = render(tree(lang));
+    await act(async () => {});
+    expect(container.querySelector('.spotlight-section')?.textContent).toContain(featured.title);
+    holding = true;
+    await act(async () => { refreshHomepage(); });
+    await act(async () => { rerender(tree(nextLang)); });
+    expect(screen.queryByText(featured.title)).toBeNull();
+    await act(async () => { late[0]({ ...emptyResponse, items: [featured] }); });
+    expect(screen.queryByText(featured.title)).toBeNull();
+    await act(async () => { late[1]({ ...emptyResponse, error: 'API 503' }); });
+    expect(screen.queryByText(featured.title)).toBeNull();
+    expect(container.querySelector('.spotlight-section')?.textContent).toContain(actualI18n.getMessagesForLang(nextLang).categoryPage.unableToLoadTitle);
+    await act(async () => { refreshHomepage(); });
+    unmount();
+    expect(signals.every(signal => signal.aborted)).toBe(true);
+    await act(async () => { late.slice(2).forEach(resolve => resolve({ ...emptyResponse, items: [featured] })); });
+    expect(container.childElementCount).toBe(0);
   });
 
   test('real stories and neutral image placeholders survive a clearly labelled failed refresh and recovery', async () => {

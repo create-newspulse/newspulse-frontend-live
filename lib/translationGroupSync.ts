@@ -192,7 +192,12 @@ function samePublicFields(left: unknown, right: unknown): boolean {
     keys.every((key) => Object.prototype.hasOwnProperty.call(rightRecord, key) && samePublicFields(leftRecord[key], rightRecord[key]));
 }
 
-export function shouldReplaceArticleWithFreshCandidate(currentArticle: unknown, nextArticle: unknown, locale: RouteLocale): boolean {
+export function shouldReplaceArticleWithFreshCandidate(
+  currentArticle: unknown,
+  nextArticle: unknown,
+  locale: RouteLocale,
+  project = projectPublicNewsArticle
+): boolean {
   if (!getArticleId(nextArticle)) return false;
   if (!getArticleId(currentArticle)) return true;
   if (getArticleId(currentArticle) !== getArticleId(nextArticle)) return true;
@@ -206,6 +211,6 @@ export function shouldReplaceArticleWithFreshCandidate(currentArticle: unknown, 
       getLocalizedArticleFields(currentArticle, lang, STRICT_LOCALE_POLICY),
       getLocalizedArticleFields(nextArticle, lang, STRICT_LOCALE_POLICY)
     )) ||
-    !samePublicFields(projectPublicNewsArticle(currentArticle), projectPublicNewsArticle(nextArticle))
+    !samePublicFields(project(currentArticle), project(nextArticle))
   );
 }

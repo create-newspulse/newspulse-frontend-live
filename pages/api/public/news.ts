@@ -5,8 +5,8 @@ import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
 import { filterVisibleArticlesForLocale, getLocalizedArticleFields, normalizeRouteLocale, STRICT_LOCALE_POLICY } from '../../../lib/localizedArticleFields';
 import { pickFreshestArticlesForLocale } from '../../../lib/translationGroupSync';
 import { withPublicReadDeadline } from '../../../lib/publicReadDeadline';
-import { getOrdinaryCategoryPageItems, getOrdinaryCategoryPagination, ORDINARY_PAGINATION_HEADER, validateOrdinaryPageRequest } from '../../../lib/ordinaryCategoryPagination';
-import { unwrapArticles } from '../../../lib/publicNewsApi';
+import { getOrdinaryCategoryPagination, ORDINARY_PAGINATION_HEADER, validateOrdinaryPageRequest } from '../../../lib/ordinaryCategoryPagination';
+import { parsePublicNewsList, type PublicNewsListRead } from '../../../lib/publicNewsApi';
 import { FAITH_CULTURE_NEWS_UNAVAILABLE, FAITH_CULTURE_PAGINATION_HEADER, getFaithCulturePagination, validateFaithCulturePageRequest } from '../../../lib/faithCulturePagination';
 import { getFaithCultureTopic } from '../../../lib/faithCultureTopics';
 import { getSafeRetryAfter } from '../../../lib/retryAfter';
@@ -25,10 +25,11 @@ function replaceItems(payload: any, nextItems: any[]): any {
   if (Array.isArray((payload as any).items)) return { ...(payload as any), items: nextItems };
   if (Array.isArray((payload as any).articles)) return { ...(payload as any), articles: nextItems };
   if (Array.isArray((payload as any).data)) return { ...(payload as any), data: nextItems };
+  if (Array.isArray((payload as any).result)) return { ...(payload as any), result: nextItems };
+  if (Array.isArray((payload as any).stories)) return { ...(payload as any), stories: nextItems };
+  if (Array.isArray((payload as any).news)) return { ...(payload as any), news: nextItems };
   if ((payload as any).data && typeof (payload as any).data === 'object') {
-    const data = (payload as any).data;
-    if (Array.isArray(data.items)) return { ...(payload as any), data: { ...data, items: nextItems } };
-    if (Array.isArray(data.articles)) return { ...(payload as any), data: { ...data, articles: nextItems } };
+    return { ...payload, data: replaceItems(payload.data, nextItems) };
   }
 
   return { ...(payload as any), items: nextItems };
@@ -43,16 +44,6 @@ function getApiBase(): string {
 function isTruthyQueryValue(value: string | string[] | undefined): boolean {
   const normalized = String(Array.isArray(value) ? value[0] : value || '').trim().toLowerCase();
   return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
-}
-
-function getPayloadItems(payload: any): any[] {
-  return Array.isArray(payload) ? payload :
-    Array.isArray(payload?.items) ? payload.items :
-    Array.isArray(payload?.articles) ? payload.articles :
-    Array.isArray(payload?.data) ? payload.data :
-    Array.isArray(payload?.data?.items) ? payload.data.items :
-    Array.isArray(payload?.data?.articles) ? payload.data.articles :
-    [];
 }
 
 function buildUpstreamUrl(base: string, params: URLSearchParams): string {
@@ -76,9 +67,14 @@ function logDevNewsProxy(event: string, payload: Record<string, unknown>) {
   console.error('[api/public/news]', event, payload);
 }
 
-async function fetchUpstreamJson(url: string, req: NextApiRequest, deadlineAt?: number): Promise<{ ok: boolean; status: number; json: any; retryAfter?: string | null }> {
+type UpstreamNewsResult = (
+  | { ok: true; json: PublicNewsListRead['payload']; items: PublicNewsListRead['items'] }
+  | { ok: false; json: null }
+) & { status: number; retryAfter?: string };
+
+async function fetchUpstreamJson(url: string, req: NextApiRequest, deadlineAt?: number): Promise<UpstreamNewsResult> {
   let retryAfter: string | undefined;
-  const read = async (signal?: AbortSignal) => {
+  const read = async (signal?: AbortSignal): Promise<UpstreamNewsResult> => {
     const upstream = await fetch(url, {
       method: 'GET',
       headers: {
@@ -96,8 +92,9 @@ async function fetchUpstreamJson(url: string, req: NextApiRequest, deadlineAt?: 
     }
     const text = await upstream.text();
     if (deadlineAt && (!text || signal?.aborted)) throw new Error('HOMEPAGE_NEWS_UNAVAILABLE');
-    const json = text ? JSON.parse(text) : { items: [] };
-    return { ok: upstream.ok, status: upstream.status, json, retryAfter };
+    const parsed = parsePublicNewsList(JSON.parse(text));
+    if (!parsed) throw new Error('Invalid news list response');
+    return { ok: true, status: upstream.status, json: parsed.payload, items: parsed.items, retryAfter };
   };
   try {
     return await (deadlineAt
@@ -191,7 +188,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    let upstream: { ok: boolean; status: number; json: any } | null = null;
+    let upstream: Extract<UpstreamNewsResult, { ok: true }> | null = null;
     let upstreamBase = '';
     let targetUrl = '';
 
@@ -237,22 +234,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     try {
       const json = upstream.json;
-      const primaryItems = ordinaryPageRequest ? unwrapArticles(getOrdinaryCategoryPageItems(json)) : getPayloadItems(json);
+      const primaryItems = upstream.items;
       const pagination = ordinaryPageRequest
         ? (faithPagination ? getFaithCulturePagination : getOrdinaryCategoryPagination)(json, ordinaryPageRequest, primaryItems.length)
         : null;
-      let listItems = Array.isArray(primaryItems) ? primaryItems : [];
+      let listItems = primaryItems;
       let widenedReadFailed = false;
 
       let hasCompletePulsePage = false;
       if (strictLocale && normalizedCategory === 'pulse-dialogue' && hasRequestedLocale) {
+        const metadata = Array.isArray(json) ? {} : json;
         const localeValues = [asSingleQueryValue(req.query.lang), asSingleQueryValue(req.query.language)].filter(Boolean);
         const requestedPage = Number(localizedParams.get('page') || 1);
         const validPagination = Number.isSafeInteger(requestedLimit) && requestedLimit > 0
           && Number.isSafeInteger(requestedPage) && requestedPage > 0
-          && (json?.page === undefined || json.page === requestedPage);
-        const expectedCount = Number.isSafeInteger(json?.total) && json.total >= 0
-          ? Math.min(requestedLimit, Math.max(0, json.total - (requestedPage - 1) * requestedLimit))
+          && (metadata.page === undefined || metadata.page === requestedPage);
+        const expectedCount = typeof metadata.total === 'number' && Number.isSafeInteger(metadata.total) && metadata.total >= 0
+          ? Math.min(requestedLimit, Math.max(0, metadata.total - (requestedPage - 1) * requestedLimit))
           : requestedLimit;
         const primaryResolved = pickFreshestArticlesForLocale({
           articles: primaryItems,
@@ -266,7 +264,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           && primaryResolved.length === primaryItems.length
           && primaryResolved.every((item) => {
             const localized = getLocalizedArticleFields(item, requestedLocale, STRICT_LOCALE_POLICY);
-            return String(item?._id || item?.id || '').trim()
+            return item._id.trim()
               && getCategoryQueryKey(item?.category) === normalizedCategory
               && localized.sourceLocale && localized.title.trim();
           });
@@ -281,11 +279,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
           const widened = await fetchUpstreamJson(buildUpstreamUrl(upstreamBase, widenedParams), req, deadlineAt);
           if (widened.ok) {
-            const widenedItems = getPayloadItems(widened.json);
-            listItems = [
-              ...(Array.isArray(primaryItems) ? primaryItems : []),
-              ...(Array.isArray(widenedItems) ? widenedItems : []),
-            ];
+            listItems = [...primaryItems, ...widened.items];
           } else {
             widenedReadFailed = true;
             if (widened.retryAfter) retryAfter = widened.retryAfter;
@@ -325,7 +319,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         routeSlug: routeSlug || rawCategory || null,
         normalizedCategory: normalizedCategory || null,
         numberOfStoriesReturned: items.length,
-        storyIds: items.map((item) => String(item?._id || item?.id || '').trim() || null),
+        storyIds: items.map((item) => item._id.trim() || null),
         translationGroupIds: items.map((item) => String(item?.translationGroupId || '').trim() || null),
       });
 

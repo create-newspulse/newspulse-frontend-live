@@ -31,6 +31,7 @@ jest.mock('../../src/lib/publicSettings', () => ({
 }));
 
 jest.mock('../../lib/publicNewsApi', () => ({
+  ...jest.requireActual('../../lib/publicNewsApi'),
   fetchPublicNews: jest.fn(),
 }));
 
@@ -469,16 +470,10 @@ describe('homepage Top Story freshness', () => {
 
     const current = await resolveHomepageLatestStories('en');
     const next = await resolveHomepageLatestStories('en');
-    const currentSignature = getHomepageLatestStoriesSignature({
-      topStory: current.topStory,
-      rawStories: current.rawStories,
-      freshStories: current.freshStories,
-    }, 'en');
-
     expect(current.topStory?._id).toBe('sept-9');
     expect(next.topStory?._id).toBe('sept-9-later');
     expect(shouldCommitHomepageLatestStoriesRefresh({
-      currentSignature,
+      current,
       mode: 'background',
       next: {
         topStory: next.topStory,
@@ -502,11 +497,9 @@ describe('homepage Top Story freshness', () => {
       rawStories: current.rawStories,
       freshStories: current.freshStories,
     };
-    const currentSignature = getHomepageLatestStoriesSignature(currentSnapshot, 'en');
-
     expect(shouldApplyHomepageLatestStoriesUpdate(currentSnapshot, currentSnapshot, 'en')).toBe(false);
     expect(shouldCommitHomepageLatestStoriesRefresh({
-      currentSignature,
+      current: currentSnapshot,
       mode: 'background',
       next: currentSnapshot,
       requestedLang: 'en',
@@ -519,10 +512,8 @@ describe('homepage Top Story freshness', () => {
       rawStories: [article({ _id: 'sept-9', title: '9 Sept article', slug: 'sept-9', publishedAt: '2026-09-09T08:00:00.000Z' })],
       freshStories: null,
     };
-    const currentSignature = getHomepageLatestStoriesSignature(currentSnapshot, 'en');
-
     expect(shouldCommitHomepageLatestStoriesRefresh({
-      currentSignature,
+      current: currentSnapshot,
       error: 'Fetch failed',
       mode: 'background',
       next: {
@@ -532,6 +523,90 @@ describe('homepage Top Story freshness', () => {
       },
       requestedLang: 'en',
     })).toBe(false);
+  });
+
+  describe.each(['en', 'hi', 'gu'] as const)('%s same-ID Homepage refresh', (apiLang) => {
+    const edits = [
+      { title: 'Edited headline' },
+      { summary: 'Edited summary' },
+      { content: '<p>Edited body</p>' },
+      { imageUrl: 'https://images.test/edited.jpg' },
+      { category: { slug: 'business', name: 'Business update' } },
+      { location: { city: 'Surat', district: 'Surat', state: 'Gujarat' } },
+      { source: { name: 'Updated public source' } },
+      { translations: { [apiLang]: { title: 'Edited localized headline', summary: 'Edited localized summary', content: '<p>Localized body</p>' } } },
+      { updatedAt: '2026-09-02T12:00:00.000Z' },
+    ];
+
+    test.each(edits)('applies material edit %j without changing publication time or order', async (patch) => {
+      const current = article({ language: apiLang, content: '<p>Original body</p>' });
+      const second = article({ _id: 'second', language: apiLang, publishedAt: '2026-08-01T00:00:00Z' });
+      const edited = article({ ...current, ...patch });
+      expect(getHomepageLatestStoriesSignature({ topStory: current, rawStories: [current], freshStories: null }, apiLang))
+        .toBe(getHomepageLatestStoriesSignature({ topStory: edited, rawStories: [edited], freshStories: null }, apiLang));
+      (fetchPublicNews as jest.Mock).mockReset()
+        .mockResolvedValueOnce({ items: [current, second], endpoint: '/api/public/news' })
+        .mockResolvedValueOnce({ items: [edited, second], endpoint: '/api/public/news' });
+      const { result, unmount } = renderHook(() => useHomepageLatestStories({
+        apiLang, hydrated: true, initialTopStory: null, initialFreshStories: null,
+      }));
+      await act(async () => {});
+      const previous = result.current.topStory;
+      await act(async () => { result.current.refreshHomepageLatestStories('background'); });
+      expect(result.current.topStory).not.toBe(previous);
+      expect(result.current.topStory).toMatchObject(patch);
+      expect(result.current.topStory?.publishedAt).toBe(current.publishedAt);
+      expect(result.current.latestRawStories?.map((item) => item._id)).toEqual([current._id, second._id]);
+      expect(fetchPublicNews).toHaveBeenCalledTimes(2);
+      unmount();
+    });
+
+    test.each(['property order', 'transport metadata', 'empty metadata', 'known older edit'])(
+      'does not replace content for %s',
+      async (difference) => {
+        const current = article({ language: apiLang, content: '<p>Original body</p>' });
+        const next = difference === 'property order' ? Object.fromEntries(Object.entries(current).reverse())
+          : difference === 'transport metadata' ? { ...current, requestId: 'another-request', diagnostics: { elapsed: 20 } }
+          : difference === 'empty metadata' ? { ...current, metadata: {}, translations: {} }
+          : { ...current, title: 'Older title', updatedAt: '2026-09-01T10:00:00.000Z' };
+        (fetchPublicNews as jest.Mock).mockReset()
+          .mockResolvedValueOnce({ items: [current], endpoint: '/api/public/news' })
+          .mockResolvedValueOnce({ items: [next], endpoint: '/api/public/news' });
+        const { result, unmount } = renderHook(() => useHomepageLatestStories({
+          apiLang, hydrated: true, initialTopStory: null, initialFreshStories: null,
+        }));
+        await act(async () => {});
+        const previous = result.current.topStory;
+        await act(async () => { result.current.refreshHomepageLatestStories('background'); });
+        expect(result.current.topStory).toBe(previous);
+        expect(fetchPublicNews).toHaveBeenCalledTimes(2);
+        unmount();
+      }
+    );
+
+    test.each(['empty', 'draft', 'scheduled', 'deleted', 'archived'])(
+      'authoritative %s withdraws; only Published restore returns',
+      async (withdrawal) => {
+        const current = article({ language: apiLang });
+        (fetchPublicNews as jest.Mock).mockReset().mockResolvedValue({ items: [current], endpoint: '/api/public/news' });
+        const { result, unmount } = renderHook(() => useHomepageLatestStories({
+          apiLang, hydrated: true, initialTopStory: null, initialFreshStories: null,
+        }));
+        await act(async () => {});
+        expect(result.current.topStory?._id).toBe(current._id);
+        const withdrawn = withdrawal === 'empty' ? [] : [{ ...current, status: withdrawal }];
+        (fetchPublicNews as jest.Mock).mockResolvedValue({ items: withdrawn, endpoint: '/api/public/news' });
+        await act(async () => { result.current.refreshHomepageLatestStories('background'); });
+        expect(result.current.topStory).toBeNull();
+        expect(result.current.latestRawStories).toEqual([]);
+        for (const status of ['draft', 'scheduled', 'published']) {
+          (fetchPublicNews as jest.Mock).mockResolvedValue({ items: [{ ...current, status }], endpoint: '/api/public/news' });
+          await act(async () => { result.current.refreshHomepageLatestStories('background'); });
+          expect(result.current.topStory?._id ?? null).toBe(status === 'published' ? current._id : null);
+        }
+        unmount();
+      }
+    );
   });
 
   test('background latest-news refetch keeps the active homepage language', async () => {

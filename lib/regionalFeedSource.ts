@@ -5,6 +5,7 @@ import {
 } from './unwrapRegionalFeed';
 import { normalizeRouteLocale } from './localizedArticleFields';
 import { getSafeRetryAfter } from './retryAfter';
+import { parsePublicNewsList } from './publicNewsApi';
 
 import { getRegionalPagination, REGIONAL_BLOCKED_IDS as BLOCKED_IDS, type RegionalPagination } from './regionalInitialStories';
 
@@ -242,7 +243,9 @@ async function fetchRegionalFallbackFromNews(options: {
       void upstream.body?.cancel().catch(() => {});
       return { payload: null, retryAfter };
     }
-    json = safeJson(await upstream.text());
+    const parsed = parsePublicNewsList(safeJson(await upstream.text()));
+    if (!parsed) throw new Error('Invalid Regional News fallback response');
+    json = parsed.payload;
   } catch (error) {
     if (options.upstreamInit.signal?.aborted) throw error;
     return { payload: null, retryAfter };
@@ -431,8 +434,10 @@ export async function fetchRegionalFeedSource(req: RegionalFeedSourceRequest): P
           return { status: legacy.status, payload: { ok: false, message: 'UPSTREAM_ERROR', status: legacy.status }, retryAfter };
         }
 
-        const legacyJson = safeJson(legacyText);
-        const deduped = dedupeRegionalFeedPayload(legacyJson ?? [], requestedLang);
+        const legacyRead = parsePublicNewsList(safeJson(legacyText));
+        if (!legacyRead) throw new Error('Invalid legacy Regional feed response');
+        const legacyJson = legacyRead.payload;
+        const deduped = dedupeRegionalFeedPayload(legacyJson, requestedLang);
         if (debug) {
           const rawItems = unwrapRegionalFeedItems(deduped);
           const keptItems = unwrapRegionalFeedItems(
@@ -477,8 +482,10 @@ export async function fetchRegionalFeedSource(req: RegionalFeedSourceRequest): P
       return { status: upstream.status, payload: { ok: false, message: 'UPSTREAM_ERROR', status: upstream.status }, retryAfter };
     }
 
-    const json = safeJson(text);
-    const deduped = dedupeRegionalFeedPayload(json ?? [], requestedLang);
+    const parsed = parsePublicNewsList(safeJson(text));
+    if (!parsed) throw new Error('Invalid Regional feed response');
+    const json = parsed.payload;
+    const deduped = dedupeRegionalFeedPayload(json, requestedLang);
     if (debug) {
       const rawItems = unwrapRegionalFeedItems(deduped);
       const keptItems = unwrapRegionalFeedItems(

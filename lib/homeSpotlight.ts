@@ -213,15 +213,15 @@ export async function fetchHomeSpotlightArticles(options: {
     signal: options.signal,
   });
 
-  if (response.error) return [];
-  return Array.isArray(response.items) ? response.items.slice(0, HOME_SPOTLIGHT_MAX_ITEMS) : [];
+  if (response.error) throw new Error(response.error);
+  return response.items.slice(0, HOME_SPOTLIGHT_MAX_ITEMS);
 }
 
 export async function fetchHomeSpotlightSectionArticles(options: {
   lang: HomeSpotlightLang;
   signal: AbortSignal;
-}): Promise<Partial<Record<HomeSpotlightSectionKey, Article[]>>> {
-  const sectionEntries = await Promise.all(
+}): Promise<Partial<Record<HomeSpotlightSectionKey, PromiseSettledResult<Article[]>>>> {
+  const sectionResults = await Promise.allSettled(
     HOME_SPOTLIGHT_SECTION_KEYS.map(async (sectionKey) => {
       const response = await fetchPublicNews({
         category: sectionKey,
@@ -231,16 +231,14 @@ export async function fetchHomeSpotlightSectionArticles(options: {
         signal: options.signal,
       });
 
-      const items = Array.isArray(response?.items)
-        ? filterPubliclyPublishedArticles(response.items)
-            .filter((article) => !isHomeSpotlightSponsoredContent(article, options.lang))
-            .slice()
-            .sort((left, right) => getStoryDateTimeValue(right) - getStoryDateTimeValue(left))
-        : [];
+      if (response.error) throw new Error(response.error);
 
-      return [sectionKey, items] as const;
+      return filterPubliclyPublishedArticles(response.items)
+        .filter((article) => !isHomeSpotlightSponsoredContent(article, options.lang))
+        .slice()
+        .sort((left, right) => getStoryDateTimeValue(right) - getStoryDateTimeValue(left));
     })
   );
 
-  return Object.fromEntries(sectionEntries);
+  return Object.fromEntries(HOME_SPOTLIGHT_SECTION_KEYS.map((sectionKey, index) => [sectionKey, sectionResults[index]]));
 }

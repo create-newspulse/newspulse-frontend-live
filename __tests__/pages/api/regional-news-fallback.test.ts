@@ -64,6 +64,68 @@ describe('Regional News fallback', () => {
       .mockResolvedValueOnce(upstream({ items }));
   }
 
+  describe.each(['en', 'hi', 'gu'] as const)('%s Regional trust boundary', (language) => {
+    const malformed = [
+      {}, { items: null }, { ok: false, items: [] },
+      { items: [{ _id: 'incomplete' }] },
+      { items: [{ ...story(language), deletedAt: { unexpected: true } }] },
+      { items: [{ ...story(language), error: 'synthetic-private-diagnostic' }] },
+      { items: [story(language), { _id: OCTOBER_IDS[language], slug: OCTOBER_IDS[language] }] },
+    ];
+
+    test.each(malformed)('rejects malformed primary/fallback %j without a duplicate News attempt', async (payload) => {
+      fetchMock.mockImplementation(async () => upstream(payload));
+      const result = await requestRegional({ lang: language, page: '1', district: 'surat' });
+      expect(result.res.status).toHaveBeenCalledWith(503);
+      expect(result.payload).toEqual({ ok: false, message: 'REGIONAL_FEED_UNAVAILABLE' });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock.mock.calls.filter(([input]) => new URL(String(input)).pathname === '/api/public/news')).toHaveLength(1);
+      expect(JSON.stringify(result.payload)).not.toContain('synthetic-private');
+    });
+
+    test.each(['populated', 'empty'])('a separately validated %s fallback remains authoritative after malformed primary', async (kind) => {
+      fetchMock.mockResolvedValueOnce(upstream({ items: [{ _id: 'incomplete' }] }))
+        .mockResolvedValueOnce(upstream({ items: kind === 'empty' ? [] : [story(language)] }));
+      const result = await requestRegional({ lang: language, page: '1' });
+      expect(result.res.status).toHaveBeenCalledWith(200);
+      expect(unwrapRegionalFeedItems(result.payload)).toEqual(kind === 'empty' ? [] : [story(language)]);
+      expect(result.payload.pagination.hasMore).toBe(false);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    test('validates the legacy response before treating it as a feed', async () => {
+      fetchMock.mockResolvedValueOnce(upstream({}, 404))
+        .mockResolvedValueOnce(upstream({ items: [{ _id: 'incomplete' }] }))
+        .mockResolvedValueOnce(upstream({ items: [{ _id: 'incomplete' }] }));
+      const result = await requestRegional({ lang: language });
+      expect(result.res.status).toHaveBeenCalledWith(503);
+      expect(result.payload).toEqual({ ok: false, message: 'REGIONAL_FEED_UNAVAILABLE' });
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(fetchMock.mock.calls.filter(([input]) => new URL(String(input)).pathname === '/api/public/news')).toHaveLength(1);
+    });
+
+    test('keeps district metadata and safe pagination while removing private upstream fields', async () => {
+      fetchMock.mockResolvedValueOnce(upstream({ items: [] })).mockResolvedValueOnce(upstream({
+        data: {
+          items: [{
+            ...story(language), location: { district: 'surat', city: 'surat', token: 'synthetic-private-location' },
+            districtSlug: 'surat', citySlug: 'surat', token: 'synthetic-private-article',
+          }],
+          pagination: { page: 1, limit: 30, total: 1, totalPages: 1, diagnostics: 'synthetic-private-pagination' },
+          diagnostics: 'synthetic-private-data',
+        },
+        diagnostics: 'synthetic-private-envelope',
+      }));
+      const result = await requestRegional({ lang: language, page: '1', district: 'surat' });
+      expect(result.res.status).toHaveBeenCalledWith(200);
+      expect(unwrapRegionalFeedItems(result.payload)[0]).toMatchObject({
+        _id: OCTOBER_IDS[language], location: { district: 'surat', city: 'surat' }, districtSlug: 'surat', citySlug: 'surat',
+      });
+      expect(result.payload.pagination).toMatchObject({ page: 1, total: 1, hasMore: false });
+      expect(JSON.stringify(result.payload)).not.toContain('synthetic-private');
+    });
+  });
+
   test.each(['en', 'hi', 'gu'] as const)('%s current ten-story fallback reports real exhaustion', async (language) => {
     const items = Array.from({ length: 10 }, (_, index) => story(language, index ? `story-${index}` : OCTOBER_IDS[language], new Date(Date.parse('2026-10-03T20:15:33.097Z') - index * 86400000).toISOString()));
     fetchMock
@@ -488,7 +550,7 @@ describe('Regional News fallback', () => {
     }
 
     await expect(fetchRegionalInitialStories(new URLSearchParams({ state: 'gujarat', lang: 'en', limit: '30' }), { server: true }))
-      .rejects.toThrow('Regional News fallback unavailable');
+      .rejects.toThrow(primary === 'empty' ? 'Regional News fallback unavailable' : 'Invalid Regional feed response');
     const { res, payload } = await requestRegional();
 
     expect(res.status).toHaveBeenCalledWith(503);
