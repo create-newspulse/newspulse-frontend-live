@@ -28,6 +28,31 @@ describe('publicNewsApi visibility filtering', () => {
     process.env = originalEnv;
   });
 
+  afterEach(() => { jest.useRealTimers(); });
+
+  test.each(['45', 'Fri, 16 Oct 2026 00:00:00 GMT'])('keeps status and Retry-After %s for non-JSON errors without retrying', async (retryAfter) => {
+    jest.useFakeTimers();
+    const { fetchPublicNews } = await import('../../lib/publicNewsApi');
+    for (const mode of ['plain', 'ordinary', 'faith'] as const) {
+      const response = new Response('private diagnostics', { status: 503, headers: { 'Retry-After': retryAfter } });
+      const readBody = jest.spyOn(response, 'json');
+      (global.fetch as jest.Mock).mockResolvedValueOnce(response);
+      const result = await fetchPublicNews({
+        category: mode === 'faith' ? 'faith-culture' : 'business',
+        language: 'gu', page: 1, limit: 30,
+        ordinaryPagination: mode === 'ordinary', faithPagination: mode === 'faith',
+      });
+      expect(result.items).toEqual([]);
+      expect(result.status).toBe(503);
+      expect(result.retryAfter).toBe(retryAfter);
+      expect(result.error).toBeTruthy();
+      expect(result.error).not.toContain('private');
+      if (mode !== 'plain') expect(readBody).not.toHaveBeenCalled();
+    }
+    await jest.advanceTimersByTimeAsync(60_000);
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+  });
+
   test('filters draft articles even when the public API response contains them', async () => {
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,

@@ -766,10 +766,6 @@ export function useHomepageLatestStories({
     let retryAfter: string | null | undefined;
 
     void withPublicReadDeadline(HOMEPAGE_LATEST_NEWS_TIMEOUT_MS, (signal) =>
-      fetchPublicNews({ category: 'breaking', language: apiLang, limit: 10, signal }), controller.signal
-    ).catch(() => null);
-
-    void withPublicReadDeadline(HOMEPAGE_LATEST_NEWS_TIMEOUT_MS, (signal) =>
       resolveHomepageLatestStories(apiLang, signal, true), controller.signal
     ).then((latest) => {
       if (controller.signal.aborted) return;

@@ -230,7 +230,8 @@ describe('ordinary category page loading', () => {
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Temporary failure' }), { status: 503 }));
     await clickMore();
     expect(renderedIds()).toEqual(items.slice(0, limit).map((item) => item._id));
-    expect(screen.getByText(/Temporary failure/)).toBeTruthy();
+    expect(screen.getByText(/API 503/)).toBeTruthy();
+    expect(screen.queryByText(/Temporary failure/)).toBeNull();
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Retry' })); });
     await reveal(items.length);
     expect(newsCalls().map(([input]) => new URL(String(input), 'https://frontend.test').searchParams.get('page'))).toEqual(['2', '2']);

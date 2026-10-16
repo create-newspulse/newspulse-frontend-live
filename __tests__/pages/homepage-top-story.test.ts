@@ -749,6 +749,7 @@ describe('homepage Top Story freshness', () => {
       });
     }
     expect(canonicalCalls()).toHaveLength(1);
+    expect(fetchPublicNews).toHaveBeenCalledTimes(1);
     expect(canonicalCalls()[0][0]).toEqual({ language: apiLang, limit: 40, homepageRecovery: true, signal: expect.any(AbortSignal) });
     unmount();
     await act(async () => { await jest.advanceTimersByTimeAsync(0); });
@@ -828,6 +829,7 @@ describe('homepage Top Story freshness', () => {
       await act(async () => { result.current.refreshHomepageLatestStories('background'); });
     }
     expect(canonicalCalls()).toHaveLength(5);
+    expect(fetchPublicNews).toHaveBeenCalledTimes(5);
     await act(async () => { await jest.advanceTimersByTimeAsync(0); });
     expect(jest.getTimerCount()).toBe(0);
     unmount();

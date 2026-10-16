@@ -1,5 +1,6 @@
 import { getLocalizedArticleFields, STRICT_LOCALE_POLICY, type RouteLocale } from '../../lib/localizedArticleFields';
 import { REGIONAL_BLOCKED_IDS, selectRegionalInitialStories } from '../../lib/regionalInitialStories';
+import { compactRegionalInitialStories } from '../../lib/regionalListingStories';
 
 type TranslatedFields = {
   title?: string | null;
@@ -81,6 +82,24 @@ describe.each(['en', 'hi'] as const)('Regional %s ready translations', (locale) 
 });
 
 describe('Regional ready compatibility safeguards', () => {
+  test.each((['en', 'hi', 'gu'] as const).flatMap(locale =>
+    ['APPROVED', ''].map(status => ({ locale, status }))
+  ))('$locale/$status compact listings keep the localized body required by strict selection', ({ locale, status }) => {
+    const body = '<p>Localized content</p>'.repeat(1000);
+    const article = {
+      ...regionalArticle(locale, status, { title: 'Localized title', content: body }),
+      sourceLanguage: locale === 'gu' ? 'en' : 'gu',
+    };
+    const compact = compactRegionalInitialStories([article], locale);
+    expect(compact).toHaveLength(1);
+    expect(selectRegionalInitialStories(compact, locale)).toHaveLength(1);
+    const localized = getLocalizedArticleFields(compact[0], locale, STRICT_LOCALE_POLICY);
+    expect(localized.isVisible).toBe(true);
+    expect(localized.title).toBe('Localized title');
+    expect(localized.bodyHtml).toBe(body.slice(0, 256));
+    expect(compact[0].content).toBeUndefined();
+  });
+
   test.each(['ready', 'pending', 'failed', 'rejected'])('preserves Gujarati source behavior with %s translation status', (status) => {
     const article = regionalArticle('gu', status, {});
 

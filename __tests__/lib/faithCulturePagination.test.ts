@@ -5,6 +5,7 @@ import { FAITH_CULTURE_NEWS_UNAVAILABLE, FAITH_CULTURE_PAGINATION_HEADER, getFai
 import { ORDINARY_PAGINATION_HEADER, validateOrdinaryPageRequest } from '../../lib/ordinaryCategoryPagination';
 import { FAITH_CULTURE_TOPICS, getFaithCultureTopic } from '../../lib/faithCultureTopics';
 import { faithPage, faithStories } from '../fixtures/faithCulture';
+import { getLocalizedArticleFields, STRICT_LOCALE_POLICY } from '../../lib/localizedArticleFields';
 
 jest.mock('../../lib/publicApiBase', () => ({ getPublicApiBaseUrl: () => 'http://127.0.0.1:9' }));
 jest.mock('../../lib/getMessages', () => ({ getMessages: async (locale: string) => ({ locale }) }));
@@ -47,6 +48,32 @@ describe('Faith strict page client and ISR', () => {
     fetchMock.mockResolvedValue(new Response('private database diagnostics', { status: 503 }));
     await expect(getCategoryStaticProps({ locale: 'en', revalidateReason }, 'faith-culture'))
       .rejects.toThrow(FAITH_CULTURE_NEWS_UNAVAILABLE);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test.each((['en', 'hi', 'gu'] as const).flatMap(locale =>
+    ['faith-culture', 'business'].map(category => ({ locale, category }))
+  ))('$category/$locale compact initial props preserve valid strict translations after hydration', async ({ locale, category }) => {
+    const body = '<p>Localized body content.</p>'.repeat(1000);
+    const item = {
+      ...faithStories(locale, 1)[0], category,
+      sourceLanguage: locale === 'gu' ? 'en' : 'gu',
+      title: 'Source title', content: '<p>Source content</p>',
+      translationStatus: { [locale]: 'APPROVED' },
+      translations: { [locale]: { title: 'Localized title', content: body, summary: 'Localized summary' } },
+    };
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(faithPage([item], 1))));
+    const result = await getCategoryStaticProps({ locale }, category);
+    if (!('props' in result)) throw new Error('Expected static props');
+    const props = await result.props;
+    expect(props.initialItems).toHaveLength(1);
+    expect(selectCategoryFeedArticles(props.initialItems, category, locale).map(article => article._id)).toEqual([item._id]);
+    const localized = getLocalizedArticleFields(props.initialItems[0], locale, STRICT_LOCALE_POLICY);
+    expect(localized.isVisible).toBe(true);
+    expect(localized.title).toBe('Localized title');
+    expect(localized.summary).toBe('Localized summary');
+    expect(localized.bodyHtml).toBe(body.slice(0, 256));
+    expect(props.initialItems[0].content).toBeUndefined();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 

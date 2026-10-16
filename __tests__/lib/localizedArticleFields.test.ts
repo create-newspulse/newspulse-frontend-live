@@ -9,6 +9,73 @@ import {
   isPubliclyPublishedArticle,
 } from '../../lib/localizedArticleFields';
 
+describe.each(['en', 'hi', 'gu'] as const)('strict translated fields (%s)', (locale) => {
+  const base = {
+    _id: 'approved-translation',
+    status: 'published',
+    language: locale,
+    sourceLanguage: locale === 'gu' ? 'en' : 'gu',
+    title: 'Source title',
+    summary: 'Source summary',
+    content: '<p>Source body</p>',
+    slug: 'canonical-source-slug',
+    category: 'faith-culture',
+    translationStatus: { [locale]: 'APPROVED' },
+  };
+
+  test.each([
+    {},
+    { title: 'Localized title' },
+    { content: '<p>Localized body</p>' },
+    { title: ' \n ', content: '<p>Localized body</p>' },
+    { title: 'Localized title', content: ' \n ' },
+    { title: null, content: '<p>Localized body</p>' },
+    { title: 'Localized title', content: null },
+    { summary: 'Localized summary', slug: 'localized-slug' },
+  ])('rejects APPROVED without both actual localized title and body: %j', (fields) => {
+    const result = getLocalizedArticleFields({ ...base, translations: { [locale]: fields } }, locale, STRICT_LOCALE_POLICY);
+    expect(result.isVisible).toBe(false);
+    expect(result.isFallback).toBe(false);
+    expect(result.title).toBe('');
+    expect(result.summary).toBe('');
+    expect(result.bodyHtml).toBe('');
+  });
+
+  test('accepts complete localized APPROVED fields without borrowing the source summary', () => {
+    const article = { ...base, translations: { [locale]: { title: 'Localized title', content: '<p>Localized body</p>' } } };
+    const result = getLocalizedArticleFields(article, locale, STRICT_LOCALE_POLICY);
+    expect(result.isVisible).toBe(true);
+    expect(result.isFallback).toBe(false);
+    expect(result.title).toBe('Localized title');
+    expect(result.bodyHtml).toBe('<p>Localized body</p>');
+    expect(result.summary).toBe('');
+    expect(result.slug).toBe(base.slug);
+    expect(result.categoryLabel).toBe(base.category);
+  });
+
+  test('preserves existing non-strict fallback and standalone text helpers', () => {
+    const article = { ...base, translations: { [locale]: { title: 'Localized title' } } };
+    const result = getLocalizedArticleFields(article, locale);
+    expect(result.isVisible).toBe(true);
+    expect(result.title).toBe('Localized title');
+    expect(result.summary).toBe(base.summary);
+    expect(result.bodyHtml).toBe(base.content);
+    expect(getLocalizedSummary(article, locale)).toBe(base.summary);
+    expect(getLocalizedContent(article, locale)).toBe(base.content);
+  });
+
+  test('does not borrow another locale body to complete an APPROVED translation', () => {
+    const article = {
+      ...base,
+      translations: {
+        [base.sourceLanguage]: { title: 'Other locale title', content: '<p>Other locale body</p>' },
+        [locale]: { title: 'Localized title' },
+      },
+    };
+    expect(getLocalizedArticleFields(article, locale, STRICT_LOCALE_POLICY).isVisible).toBe(false);
+  });
+});
+
 describe('localizedArticleFields', () => {
   test('keeps published articles visible on Gujarati routes with base fallback', () => {
     const article: any = {

@@ -39,8 +39,9 @@ export function compactRegionalInitialStories(payload: unknown, locale: string):
         [requestedLocale]: {
           title: localized.title,
           slug: resolveArticleSlug(story, requestedLocale),
-          // READY checks still require real localized body evidence after hydration.
-          ...(translationStatus === 'READY' ? { content: localized.bodyHtml.slice(0, 256) } : {}),
+          // Strict translated records still need real localized body evidence after hydration.
+          ...(translationStatus === 'READY' || (localized.sourceLocale !== requestedLocale && localized.translationFound)
+            ? { content: localized.bodyHtml.slice(0, 256) } : {}),
         },
       },
     };

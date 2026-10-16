@@ -1,6 +1,8 @@
 import newsHandler, { HOMEPAGE_RECOVERY_PROXY_TIMEOUT_MS } from '../../../pages/api/public/news';
 import newsByIdHandler from '../../../pages/api/public/news/[id]/index';
 import newsBySlugHandler from '../../../pages/api/public/news/slug/[slug]';
+import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
+import { ORDINARY_PAGINATION_HEADER } from '../../../lib/ordinaryCategoryPagination';
 
 jest.mock('../../../lib/publicApiBase', () => ({
   getPublicApiBaseUrl: jest.fn(() => 'https://backend.test'),
@@ -88,6 +90,124 @@ function pulseStory(locale = 'en', overrides: Record<string, any> = {}) {
     ...overrides,
   };
 }
+
+describe('public News failure and empty contracts', () => {
+  const originalFetch = global.fetch;
+  const fetchMock = jest.fn();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    global.fetch = fetchMock;
+    jest.mocked(getPublicApiBaseUrl).mockReturnValue('https://backend.test');
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest.spyOn(console, 'info').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    jest.restoreAllMocks();
+  });
+
+  async function request(query: Record<string, string> = {}, headers: Record<string, string> = {}) {
+    const res = createRes();
+    await newsHandler(createReq({ query, headers, url: `/api/public/news?${new URLSearchParams(query)}` }) as any, res as any);
+    return res;
+  }
+
+  test.each<Record<string, string>>([
+    {},
+    { lang: 'en', language: 'en', limit: '40' },
+    { category: 'business', lang: 'hi', language: 'hi', strictLocale: '1', limit: '30' },
+    { category: 'regional', lang: 'gu', language: 'gu', limit: '30' },
+    { q: 'news' },
+  ])('upstream 503 stays failure for %j without a second request or private diagnostics', async (query) => {
+    fetchMock.mockResolvedValue(jsonResponse({ error: 'https://backend.test/private fake-token stack trace' }, 503));
+    const res = await request(query);
+    expect(res.statusCode).toBe(503);
+    expect(res.body).toEqual({ error: 'PUBLIC_NEWS_UNAVAILABLE' });
+    expect(res.headers['Cache-Control']).toBe('no-store');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('missing backend configuration is unavailable rather than successful empty', async () => {
+    jest.mocked(getPublicApiBaseUrl).mockReturnValueOnce('');
+    const res = await request();
+    expect(res.statusCode).toBe(503);
+    expect(res.body).toEqual({ error: 'PUBLIC_NEWS_UNAVAILABLE' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test.each(['network', 'body', 'JSON'])('%s read failure does not become successful empty', async (stage) => {
+    if (stage === 'network') fetchMock.mockRejectedValue(new Error('https://backend.test/private fake-token'));
+    else fetchMock.mockResolvedValue({
+      ok: true, status: 200,
+      headers: { get: () => '45' },
+      text: stage === 'body'
+        ? async () => { throw new Error('private body failure'); }
+        : async () => 'invalid JSON',
+    });
+    const res = await request();
+    expect(res.statusCode).toBe(503);
+    expect(res.body).toEqual({ error: 'PUBLIC_NEWS_UNAVAILABLE' });
+    if (stage !== 'network') expect(res.headers['Retry-After']).toBe('45');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([false, true])('genuine empty success remains empty (locale resolution: %s)', async (localized) => {
+    fetchMock.mockImplementation(async () => jsonResponse({ items: [] }));
+    const res = await request(localized ? { lang: 'gu', language: 'gu', limit: '40' } : {});
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ items: [] });
+    expect(fetchMock).toHaveBeenCalledTimes(localized ? 2 : 1);
+    if (localized) expect(fetchMock.mock.calls[0][0]).not.toBe(fetchMock.mock.calls[1][0]);
+  });
+
+  test.each(['empty', 'filtered', 'visible'])('failed widening does not fabricate an empty result from a %s primary', async (primary) => {
+    const story = pulseStory('hi', { status: primary === 'filtered' ? 'draft' : 'published' });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ items: primary === 'empty' ? [] : [story] }))
+      .mockResolvedValueOnce({
+        ...jsonResponse(null, 503),
+        headers: { get: () => 'Fri, 16 Oct 2026 00:00:00 GMT' },
+      });
+    const res = await request({ lang: 'hi', language: 'hi', strictLocale: '1', limit: '40' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(new URL(fetchMock.mock.calls[0][0]).searchParams.get('lang')).toBe('hi');
+    expect(new URL(fetchMock.mock.calls[1][0]).searchParams.has('lang')).toBe(false);
+    if (primary === 'visible') {
+      expect(res.statusCode).toBe(200);
+      expect(res.body.items).toEqual([story]);
+      expect(res.headers['Retry-After']).toBeUndefined();
+    } else {
+      expect(res.statusCode).toBe(503);
+      expect(res.body).toEqual({ error: 'PUBLIC_NEWS_UNAVAILABLE' });
+      expect(res.headers['Retry-After']).toBe('Fri, 16 Oct 2026 00:00:00 GMT');
+    }
+  });
+
+  test.each(['45', 'Fri, 16 Oct 2026 00:00:00 GMT'])('legacy and ordinary proxies preserve Retry-After %s without reading an error body', async (retryAfter) => {
+    for (const ordinary of [false, true]) {
+      const readBody = jest.fn(async () => 'private diagnostics');
+      fetchMock.mockResolvedValueOnce({ ok: false, status: 503, headers: { get: () => retryAfter }, text: readBody });
+      const res = await request(
+        { category: 'business', lang: 'gu', language: 'gu', page: '1', limit: '30', strictLocale: '1' },
+        ordinary ? { [ORDINARY_PAGINATION_HEADER.toLowerCase()]: '1' } : {},
+      );
+      expect(res.statusCode).toBe(503);
+      expect(res.headers['Retry-After']).toBe(retryAfter);
+      expect(res.body).toEqual({ error: ordinary ? 'CATEGORY_NEWS_UNAVAILABLE' : 'PUBLIC_NEWS_UNAVAILABLE' });
+      expect(readBody).not.toHaveBeenCalled();
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  test.each(['-1', '1.5', '45\r\nX-Private: fake-token', 'https://backend.test/private'])('does not relay unsafe Retry-After %s', async (retryAfter) => {
+    fetchMock.mockResolvedValue({ ok: false, status: 503, headers: { get: () => retryAfter } });
+    const res = await request();
+    expect(res.statusCode).toBe(503);
+    expect(res.headers['Retry-After']).toBeUndefined();
+    expect(res.body).toEqual({ error: 'PUBLIC_NEWS_UNAVAILABLE' });
+  });
+});
 
 describe('public news route localization', () => {
   beforeEach(() => {

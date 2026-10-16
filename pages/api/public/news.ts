@@ -9,6 +9,7 @@ import { getOrdinaryCategoryPageItems, getOrdinaryCategoryPagination, ORDINARY_P
 import { unwrapArticles } from '../../../lib/publicNewsApi';
 import { FAITH_CULTURE_NEWS_UNAVAILABLE, FAITH_CULTURE_PAGINATION_HEADER, getFaithCulturePagination, validateFaithCulturePageRequest } from '../../../lib/faithCulturePagination';
 import { getFaithCultureTopic } from '../../../lib/faithCultureTopics';
+import { getSafeRetryAfter } from '../../../lib/retryAfter';
 
 export const HOMEPAGE_RECOVERY_PROXY_TIMEOUT_MS = 3500;
 export const ORDINARY_CATEGORY_PROXY_TIMEOUT_MS = 3500;
@@ -76,6 +77,7 @@ function logDevNewsProxy(event: string, payload: Record<string, unknown>) {
 }
 
 async function fetchUpstreamJson(url: string, req: NextApiRequest, deadlineAt?: number): Promise<{ ok: boolean; status: number; json: any; retryAfter?: string | null }> {
+  let retryAfter: string | undefined;
   const read = async (signal?: AbortSignal) => {
     const upstream = await fetch(url, {
       method: 'GET',
@@ -87,19 +89,27 @@ async function fetchUpstreamJson(url: string, req: NextApiRequest, deadlineAt?: 
       ...(signal ? { signal } : {}),
     });
 
-    if (deadlineAt && !upstream.ok) {
-      const retryAfter = upstream.headers?.get('Retry-After');
-      await upstream.body?.cancel().catch(() => {});
+    retryAfter = getSafeRetryAfter(upstream.headers?.get('Retry-After'));
+    if (!upstream.ok) {
+      void upstream.body?.cancel().catch(() => {});
       return { ok: false, status: upstream.status, json: null, retryAfter };
     }
-    const text = await upstream.text().catch(() => '');
+    const text = await upstream.text();
     if (deadlineAt && (!text || signal?.aborted)) throw new Error('HOMEPAGE_NEWS_UNAVAILABLE');
     const json = text ? JSON.parse(text) : { items: [] };
-    return { ok: upstream.ok, status: upstream.status, json };
+    return { ok: upstream.ok, status: upstream.status, json, retryAfter };
   };
-  return deadlineAt
-    ? withPublicReadDeadline(Math.max(1, deadlineAt - Date.now()), read)
-    : read();
+  try {
+    return await (deadlineAt
+      ? withPublicReadDeadline(Math.max(1, deadlineAt - Date.now()), read)
+      : read());
+  } catch (error) {
+    logDevNewsProxy('upstream_fetch_failed', {
+      targetUrl: url,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { ok: false, status: 503, json: null, retryAfter };
+  }
 }
 
 function debugCategoryList(payload: Record<string, unknown>) {
@@ -162,18 +172,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     && !req.query.q && !req.query.spotlight && !req.query.strictLocale && !req.query.page;
   const deadlineAt = homepageRecovery ? Date.now() + HOMEPAGE_RECOVERY_PROXY_TIMEOUT_MS
     : paginatedRequest ? Date.now() + ORDINARY_CATEGORY_PROXY_TIMEOUT_MS : undefined;
+  const unavailableCode = faithPagination ? FAITH_CULTURE_NEWS_UNAVAILABLE
+    : ordinaryPagination ? 'CATEGORY_NEWS_UNAVAILABLE'
+    : homepageRecovery ? 'HOMEPAGE_NEWS_UNAVAILABLE' : 'PUBLIC_NEWS_UNAVAILABLE';
+  let retryAfter: string | null | undefined;
+  const unavailableResponse = () => {
+    res.setHeader('Cache-Control', 'no-store');
+    if (retryAfter) res.setHeader('Retry-After', retryAfter);
+    return res.status(503).json({ error: unavailableCode });
+  };
 
   if (!candidateBases.length) {
     logDevNewsProxy('missing_upstream_base', {
       requestedLocale,
       category: normalizedCategory || rawCategory || null,
     });
-    // Keep UI alive even if env not configured.
-    res.setHeader('Cache-Control', 'no-store');
-    if (faithPagination) return res.status(503).json({ error: FAITH_CULTURE_NEWS_UNAVAILABLE });
-    if (ordinaryPagination) return res.status(503).json({ error: 'CATEGORY_NEWS_UNAVAILABLE' });
-    if (homepageRecovery) return res.status(503).json({ error: 'HOMEPAGE_NEWS_UNAVAILABLE' });
-    return res.status(200).json({ items: [], total: 0, page: 1, totalPages: 1, limit: 0 });
+    return unavailableResponse();
   }
 
   try {
@@ -185,7 +199,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const candidateUrl = buildUpstreamUrl(candidateBase, localizedParams);
       try {
         const response = await fetchUpstreamJson(candidateUrl, req, deadlineAt);
-        if ((homepageRecovery || faithPagination) && response.retryAfter) res.setHeader('Retry-After', response.retryAfter);
+        if (response.retryAfter) retryAfter = response.retryAfter;
         if (response.ok) {
           upstream = response;
           upstreamBase = candidateBase;
@@ -218,22 +232,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (!upstream) {
-      res.setHeader('Cache-Control', 'no-store');
-      if (faithPagination) return res.status(503).json({ error: FAITH_CULTURE_NEWS_UNAVAILABLE });
-      if (ordinaryPagination) return res.status(503).json({ error: 'CATEGORY_NEWS_UNAVAILABLE' });
-      if (homepageRecovery) return res.status(503).json({ error: 'HOMEPAGE_NEWS_UNAVAILABLE' });
-      return res.status(200).json({ items: [] });
-    }
-
-    // If backend is missing the route (or temporarily down), fail open.
-    if (upstream.status === 404) {
-      res.setHeader('Cache-Control', 'no-store');
-      return res.status(200).json({ items: [] });
-    }
-
-    if (!upstream.ok) {
-      res.setHeader('Cache-Control', 'no-store');
-      return res.status(200).json({ items: [] });
+      return unavailableResponse();
     }
 
     try {
@@ -243,6 +242,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         ? (faithPagination ? getFaithCulturePagination : getOrdinaryCategoryPagination)(json, ordinaryPageRequest, primaryItems.length)
         : null;
       let listItems = Array.isArray(primaryItems) ? primaryItems : [];
+      let widenedReadFailed = false;
 
       let hasCompletePulsePage = false;
       if (strictLocale && normalizedCategory === 'pulse-dialogue' && hasRequestedLocale) {
@@ -280,16 +280,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           widenedParams.set('limit', String(Math.max(requestedLimit > 0 ? requestedLimit * 3 : 0, 90)));
 
           const widened = await fetchUpstreamJson(buildUpstreamUrl(upstreamBase, widenedParams), req, deadlineAt);
-          if (homepageRecovery && !widened.ok && !primaryItems.length) throw new Error('HOMEPAGE_NEWS_UNAVAILABLE');
           if (widened.ok) {
             const widenedItems = getPayloadItems(widened.json);
             listItems = [
               ...(Array.isArray(primaryItems) ? primaryItems : []),
               ...(Array.isArray(widenedItems) ? widenedItems : []),
             ];
+          } else {
+            widenedReadFailed = true;
+            if (widened.retryAfter) retryAfter = widened.retryAfter;
           }
         } catch (error) {
-          if (homepageRecovery && !primaryItems.length) throw error;
+          widenedReadFailed = true;
+          logDevNewsProxy('widened_fetch_failed', { error: error instanceof Error ? error.message : String(error) });
           // Keep the locale-specific list when the wider translation-group fetch is unavailable.
         }
       }
@@ -311,6 +314,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             strictLocale ? STRICT_LOCALE_POLICY : undefined
           );
       const items = requestedLimit > 0 ? itemsResolved.slice(0, requestedLimit) : itemsResolved;
+      if (widenedReadFailed && !items.length) return unavailableResponse();
       const replaced = replaceItems(json, items);
       const normalized = pagination
         ? { ...(Array.isArray(replaced) ? { items: replaced } : replaced), pagination }
@@ -329,19 +333,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       res.setHeader('Cache-Control', 'no-store, max-age=0');
       return res.status(200).json(normalized);
     } catch (error) {
-      res.setHeader('Cache-Control', 'no-store');
-      if (paginatedRequest) {
-        logDevNewsProxy('invalid_category_page', { error: error instanceof Error ? error.message : String(error) });
-        return res.status(503).json({ error: faithPagination ? FAITH_CULTURE_NEWS_UNAVAILABLE : 'CATEGORY_NEWS_UNAVAILABLE' });
-      }
-      if (homepageRecovery) return res.status(503).json({ error: 'HOMEPAGE_NEWS_UNAVAILABLE' });
-      return res.status(200).json({ items: [] });
+      logDevNewsProxy(paginatedRequest ? 'invalid_category_page' : 'invalid_news_response', { error: error instanceof Error ? error.message : String(error) });
+      return unavailableResponse();
     }
-  } catch {
-    res.setHeader('Cache-Control', 'no-store');
-    if (faithPagination) return res.status(503).json({ error: FAITH_CULTURE_NEWS_UNAVAILABLE });
-    if (ordinaryPagination) return res.status(503).json({ error: 'CATEGORY_NEWS_UNAVAILABLE' });
-    if (homepageRecovery) return res.status(503).json({ error: 'HOMEPAGE_NEWS_UNAVAILABLE' });
-    return res.status(200).json({ items: [] });
+  } catch (error) {
+    logDevNewsProxy('news_proxy_failed', { error: error instanceof Error ? error.message : String(error) });
+    return unavailableResponse();
   }
 }

@@ -149,12 +149,12 @@ describe('Faith-specific strict News proxy', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  test('503 stays 503, preserves Retry-After and never exposes backend diagnostics', async () => {
-    fetchMock.mockResolvedValue(new Response('private database diagnostics', { status: 503, headers: { 'Retry-After': '10' } }));
+  test.each(['10', 'Fri, 16 Oct 2026 00:00:00 GMT'])('503 stays 503, preserves Retry-After %s and never exposes backend diagnostics', async (retryAfter) => {
+    fetchMock.mockResolvedValue(new Response('private database diagnostics', { status: 503, headers: { 'Retry-After': retryAfter } }));
     const result = await request();
     expect(result.status).toBe(503);
     expect(result.body).toEqual({ error: FAITH_CULTURE_NEWS_UNAVAILABLE });
-    expect(result.setHeader).toHaveBeenCalledWith('Retry-After', '10');
+    expect(result.setHeader).toHaveBeenCalledWith('Retry-After', retryAfter);
     expect(result.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-store');
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

@@ -4,6 +4,7 @@ import {
   unwrapRegionalFeedItems,
 } from './unwrapRegionalFeed';
 import { normalizeRouteLocale } from './localizedArticleFields';
+import { getSafeRetryAfter } from './retryAfter';
 
 import { getRegionalPagination, REGIONAL_BLOCKED_IDS as BLOCKED_IDS, type RegionalPagination } from './regionalInitialStories';
 
@@ -20,6 +21,7 @@ type RegionalFeedSourceResult = {
   payload: unknown;
   pagination?: RegionalPagination;
   upstreamError?: unknown;
+  retryAfter?: string;
 };
 
 function shouldKeepRegionalItem(item: any): boolean {
@@ -210,7 +212,7 @@ async function fetchRegionalFallbackFromNews(options: {
   districtSlug: string;
   upstreamInit: RequestInit;
   timeoutMs: number;
-}): Promise<any | null> {
+}): Promise<{ payload: unknown; retryAfter?: string; upstreamError?: unknown }> {
   const params = new URLSearchParams((options.qs || '').replace(/^\?/, ''));
   params.set('category', 'regional');
   const language = normalizeRouteLocale(options.requestedLang);
@@ -230,26 +232,32 @@ async function fetchRegionalFallbackFromNews(options: {
     if (raw != null && isInvalidOptionalToken(normalizeGeoToken(raw))) params.delete(k);
   }
 
-  const tryFetch = async (tryParams: URLSearchParams): Promise<any | null> => {
-    const url = `${options.base}/api/public/news?${tryParams.toString()}`;
-    try {
-      const upstream = await fetchWithTimeout(url, options.upstreamInit, options.timeoutMs);
-      const text = await upstream.text().catch(() => '');
-      if (upstream.status === 404) return null;
-      if (!upstream.ok) return null;
-      return safeJson(text);
-    } catch {
-      return null;
+  let json: any;
+  let retryAfter: string | undefined;
+  try {
+    const url = `${options.base}/api/public/news?${params.toString()}`;
+    const upstream = await fetchWithTimeout(url, options.upstreamInit, options.timeoutMs);
+    retryAfter = getSafeRetryAfter(upstream.headers?.get('Retry-After'));
+    if (!upstream.ok) {
+      void upstream.body?.cancel().catch(() => {});
+      return { payload: null, retryAfter };
     }
-  };
+    json = safeJson(await upstream.text());
+  } catch (error) {
+    if (options.upstreamInit.signal?.aborted) throw error;
+    return { payload: null, retryAfter };
+  }
 
-  const json = await tryFetch(params);
-  if (json == null) return null;
-  const pagination = params.has('page') ? getRegionalPagination(json, { page: params.get('page'), limit: params.get('limit') }) : undefined;
-  const items = unwrapRegionalFeedItems(json).filter((item) => item?.category === 'regional');
-  const filteredItems = filterByStateDistrict(items, isGujaratCategory ? '' : options.stateSlug, options.districtSlug);
-  const payload = setPayloadItems(json, filteredItems);
-  return pagination ? { ...(Array.isArray(payload) ? { items: payload } : payload), pagination } : payload;
+  if (json == null) return { payload: null, retryAfter };
+  try {
+    const pagination = params.has('page') ? getRegionalPagination(json, { page: params.get('page'), limit: params.get('limit') }) : undefined;
+    const items = unwrapRegionalFeedItems(json).filter((item) => item?.category === 'regional');
+    const filteredItems = filterByStateDistrict(items, isGujaratCategory ? '' : options.stateSlug, options.districtSlug);
+    const payload = setPayloadItems(json, filteredItems);
+    return { payload: pagination ? { ...(Array.isArray(payload) ? { items: payload } : payload), pagination } : payload, retryAfter };
+  } catch (upstreamError) {
+    return { payload: null, retryAfter, upstreamError };
+  }
 }
 
 function itemHasUsefulGeoOrTags(item: any): boolean {
@@ -317,6 +325,13 @@ export async function fetchRegionalFeedSource(req: RegionalFeedSourceRequest): P
   const citySlug = isInvalidOptionalToken(citySlugRaw) ? '' : citySlugRaw;
 
   const wantsGeoFilter = !!districtSlug || !!citySlug;
+  let retryAfter: string | undefined;
+  const unavailableResult = (upstreamError: unknown): RegionalFeedSourceResult => ({
+    status: 503,
+    payload: { ok: false, message: 'REGIONAL_FEED_UNAVAILABLE' },
+    upstreamError,
+    ...(retryAfter ? { retryAfter } : {}),
+  });
 
   const successfulResult = (raw: unknown, filtered: unknown): RegionalFeedSourceResult => ({
     status: 200,
@@ -329,24 +344,33 @@ export async function fetchRegionalFeedSource(req: RegionalFeedSourceRequest): P
     } : {}),
   });
 
-  const fetchFilteredNewsFallback = async (): Promise<RegionalFeedSourceResult | null> => {
-    const fallback = await fetchRegionalFallbackFromNews({
-      base,
-      qs: sanitized.qs,
-      requestedLang,
-      stateSlug,
-      districtSlug,
-      upstreamInit,
-      timeoutMs,
-    });
-    if (fallback == null) return null;
+  let fallbackPromise: Promise<RegionalFeedSourceResult | null> | undefined;
+  const fetchFilteredNewsFallback = (): Promise<RegionalFeedSourceResult | null> => {
+    if (!fallbackPromise) {
+      fallbackPromise = (async () => {
+        const result = await fetchRegionalFallbackFromNews({
+          base,
+          qs: sanitized.qs,
+          requestedLang,
+          stateSlug,
+          districtSlug,
+          upstreamInit,
+          timeoutMs,
+        });
+        if (result.retryAfter) retryAfter = result.retryAfter;
+        if ('upstreamError' in result) throw result.upstreamError;
+        const fallback = result.payload;
+        if (fallback == null) return null;
 
-    const dedupedFallback = dedupeRegionalFeedPayload(fallback ?? [], requestedLang);
-    const filteredFallback = filterRegionalFeedPayload(
-      dedupedFallback,
-      (it) => shouldKeepRegionalItem(it) && isLocaleCompatible(it, requestedLocale)
-    );
-    return successfulResult(fallback, filteredFallback);
+        const dedupedFallback = dedupeRegionalFeedPayload(fallback, requestedLang);
+        const filteredFallback = filterRegionalFeedPayload(
+          dedupedFallback,
+          (it) => shouldKeepRegionalItem(it) && isLocaleCompatible(it, requestedLocale)
+        );
+        return successfulResult(fallback, filteredFallback);
+      })();
+    }
+    return fallbackPromise;
   };
 
   // Preferred upstream endpoint (query-string based): /api/public/regional?state=...
@@ -364,7 +388,9 @@ export async function fetchRegionalFeedSource(req: RegionalFeedSourceRequest): P
     });
 
     const upstream = await fetchWithTimeout(primaryUrl, upstreamInit, timeoutMs);
-    const text = await upstream.text().catch(() => '');
+    retryAfter = getSafeRetryAfter(upstream.headers?.get('Retry-After'));
+    if (!upstream.ok) void upstream.body?.cancel().catch(() => {});
+    const text = upstream.ok ? await upstream.text() : '';
 
     debugLog('upstream', {
       status: upstream.status,
@@ -383,7 +409,9 @@ export async function fetchRegionalFeedSource(req: RegionalFeedSourceRequest): P
       if (state) {
         const legacyUrl = `${base}/api/public/regional/${encodeURIComponent(state)}${sanitized.qs}`;
         const legacy = await fetchWithTimeout(legacyUrl, upstreamInit, timeoutMs);
-        const legacyText = await legacy.text().catch(() => '');
+        retryAfter = getSafeRetryAfter(legacy.headers?.get('Retry-After')) || retryAfter;
+        if (!legacy.ok) void legacy.body?.cancel().catch(() => {});
+        const legacyText = legacy.ok ? await legacy.text() : '';
 
         debugLog('upstream-legacy', {
           url: legacyUrl,
@@ -396,11 +424,11 @@ export async function fetchRegionalFeedSource(req: RegionalFeedSourceRequest): P
           if (legacy.status >= 500) {
             const fallback = await fetchFilteredNewsFallback();
             if (fallback == null) {
-              return { status: 200, payload: [], upstreamError: new Error(`Regional feed unavailable (${legacy.status})`) };
+              return unavailableResult(new Error(`Regional feed unavailable (${legacy.status})`));
             }
             return fallback;
           }
-          return { status: legacy.status, payload: { ok: false, message: 'UPSTREAM_ERROR', status: legacy.status } };
+          return { status: legacy.status, payload: { ok: false, message: 'UPSTREAM_ERROR', status: legacy.status }, retryAfter };
         }
 
         const legacyJson = safeJson(legacyText);
@@ -429,21 +457,9 @@ export async function fetchRegionalFeedSource(req: RegionalFeedSourceRequest): P
 
         // If upstream returns an empty feed, fall back to Regional News.
         if (!unwrapRegionalFeedItems(filtered).length) {
-          const fallback = await fetchRegionalFallbackFromNews({
-            base,
-            qs: sanitized.qs,
-            requestedLang,
-            stateSlug,
-            districtSlug,
-            upstreamInit,
-            timeoutMs,
-          });
-          if (fallback) {
-            const dedupedFallback = dedupeRegionalFeedPayload(fallback ?? [], requestedLang);
-            const filteredFallback = filterRegionalFeedPayload(dedupedFallback, (it) => shouldKeepRegionalItem(it) && isLocaleCompatible(it, requestedLocale));
-            return successfulResult(fallback, filteredFallback);
-          }
-          return { status: 200, payload: limitRegionalPayload(filtered, requestedLimit), upstreamError: new Error('Regional News fallback unavailable') };
+          const fallback = await fetchFilteredNewsFallback();
+          if (fallback) return fallback;
+          return unavailableResult(new Error('Regional News fallback unavailable'));
         }
 
         return successfulResult(legacyJson, filtered);
@@ -454,11 +470,11 @@ export async function fetchRegionalFeedSource(req: RegionalFeedSourceRequest): P
       if (upstream.status >= 500) {
         const fallback = await fetchFilteredNewsFallback();
         if (fallback == null) {
-          return { status: 200, payload: [], upstreamError: new Error(`Regional feed unavailable (${upstream.status})`) };
+          return unavailableResult(new Error(`Regional feed unavailable (${upstream.status})`));
         }
         return fallback;
       }
-      return { status: upstream.status, payload: { ok: false, message: 'UPSTREAM_ERROR', status: upstream.status } };
+      return { status: upstream.status, payload: { ok: false, message: 'UPSTREAM_ERROR', status: upstream.status }, retryAfter };
     }
 
     const json = safeJson(text);
@@ -491,40 +507,16 @@ export async function fetchRegionalFeedSource(req: RegionalFeedSourceRequest): P
     const upstreamItems = unwrapRegionalFeedItems(filtered);
     const shouldPreferFallback = wantsGeoFilter || isLowFidelityRegionalFeed(upstreamItems);
     if (shouldPreferFallback) {
-      const fallback = await fetchRegionalFallbackFromNews({
-        base,
-        qs: sanitized.qs,
-        requestedLang,
-        stateSlug,
-        districtSlug,
-        upstreamInit,
-        timeoutMs,
-      });
-      if (fallback) {
-        const dedupedFallback = dedupeRegionalFeedPayload(fallback ?? [], requestedLang);
-        const filteredFallback = filterRegionalFeedPayload(dedupedFallback, (it) => shouldKeepRegionalItem(it) && isLocaleCompatible(it, requestedLocale));
-        if (unwrapRegionalFeedItems(filteredFallback).length) return successfulResult(fallback, filteredFallback);
-      }
+      const fallback = await fetchFilteredNewsFallback();
+      if (fallback && unwrapRegionalFeedItems(fallback.payload).length) return fallback;
     }
 
     // Fallback: some deployments have /api/public/regional wired up but returning empty.
     // Use /api/public/news?category=regional as a source-of-truth.
     if (!unwrapRegionalFeedItems(filtered).length) {
-      const fallback = await fetchRegionalFallbackFromNews({
-        base,
-        qs: sanitized.qs,
-        requestedLang,
-        stateSlug,
-        districtSlug,
-        upstreamInit,
-        timeoutMs,
-      });
-      if (fallback) {
-        const dedupedFallback = dedupeRegionalFeedPayload(fallback ?? [], requestedLang);
-        const filteredFallback = filterRegionalFeedPayload(dedupedFallback, (it) => shouldKeepRegionalItem(it) && isLocaleCompatible(it, requestedLocale));
-        return successfulResult(fallback, filteredFallback);
-      }
-      return { status: 200, payload: limitRegionalPayload(filtered, requestedLimit), upstreamError: new Error('Regional News fallback unavailable') };
+      const fallback = await fetchFilteredNewsFallback();
+      if (fallback) return fallback;
+      return unavailableResult(new Error('Regional News fallback unavailable'));
     }
 
     return successfulResult(json, filtered);
@@ -533,6 +525,6 @@ export async function fetchRegionalFeedSource(req: RegionalFeedSourceRequest): P
     const fallback = await fetchFilteredNewsFallback().catch(() => null);
     if (fallback != null) return fallback;
 
-    return { status: 200, payload: [], upstreamError: e };
+    return unavailableResult(e);
   }
 }

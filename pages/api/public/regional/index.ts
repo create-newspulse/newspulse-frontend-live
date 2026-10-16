@@ -25,7 +25,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     query: req.query,
     headers: req.headers,
   });
-  if (req.query.page !== undefined && 'upstreamError' in result) {
+  if (result.retryAfter) res.setHeader('Retry-After', result.retryAfter);
+  if ('upstreamError' in result) {
     return res.status(503).json({ ok: false, message: 'REGIONAL_FEED_UNAVAILABLE' });
   }
   if (result.pagination) {

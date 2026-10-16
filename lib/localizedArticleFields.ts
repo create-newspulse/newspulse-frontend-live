@@ -453,7 +453,11 @@ export function getLocalizedArticleFields(
     titleResolved.translationFound &&
     bodyResolved.translationFound;
   const hasLocaleVariant =
-    isSourceLocale || hasReadyTranslation || (translationStatus ? translationStatus === 'APPROVED' : translationFound);
+    isSourceLocale || (
+      titleResolved.translationFound &&
+      bodyResolved.translationFound &&
+      (hasReadyTranslation || (translationStatus ? translationStatus === 'APPROVED' : translationFound))
+    );
 
   if (policy.requireLocaleVariant && !hasLocaleVariant) {
     return {
@@ -486,7 +490,7 @@ export function getLocalizedArticleFields(
     isFallback: shouldFallback,
     translationFound,
     title: titleResolved.value,
-    summary: summaryResolved.value,
+    summary: policy.requireLocaleVariant && !isSourceLocale && !summaryResolved.translationFound ? '' : summaryResolved.value,
     bodyHtml: bodyResolved.value,
     categoryLabel: categoryResolved.value,
     slug,

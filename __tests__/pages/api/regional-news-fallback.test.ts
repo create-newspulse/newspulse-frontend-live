@@ -160,6 +160,67 @@ describe('Regional News fallback', () => {
     expect(payload).toEqual({ ok: false, message: 'REGIONAL_FEED_UNAVAILABLE' });
   });
 
+  describe.each(['en', 'hi', 'gu'] as const)('%s single-attempt district fallback', (lang) => {
+    test.each(['empty', '503', 'network'])('executes the identical News fallback only once for %s', async (outcome) => {
+      fetchMock.mockResolvedValueOnce(upstream({ items: [] }));
+      if (outcome === 'network') fetchMock.mockRejectedValueOnce(new Error('private upstream network failure'));
+      else fetchMock.mockResolvedValueOnce(outcome === 'empty'
+        ? upstream({ items: [] })
+        : new Response('private database diagnostics', { status: 503, headers: { 'Retry-After': '45' } }));
+      const { res, payload } = await requestRegional({ lang, district: 'ahmedabad' });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      const newsCalls = fetchMock.mock.calls.filter(([input]) => new URL(String(input)).pathname === '/api/public/news');
+      expect(newsCalls).toHaveLength(1);
+      expect(Object.fromEntries(new URL(String(newsCalls[0][0])).searchParams)).toEqual({
+        category: 'regional', lang, language: lang, limit: '30', district: 'ahmedabad',
+      });
+      expect(res.status).toHaveBeenCalledWith(outcome === 'empty' ? 200 : 503);
+      if (outcome === 'empty') expect(unwrapRegionalFeedItems(payload)).toEqual([]);
+      else expect(payload).toEqual({ ok: false, message: 'REGIONAL_FEED_UNAVAILABLE' });
+      if (outcome === '503') expect(res.setHeader).toHaveBeenCalledWith('Retry-After', '45');
+    });
+  });
+
+  test.each(['45', 'Fri, 16 Oct 2026 00:00:00 GMT'])('forwards safe fallback Retry-After %s', async (retryAfter) => {
+    fetchMock.mockResolvedValueOnce(upstream({ items: [] })).mockResolvedValueOnce(
+      new Response('private failure', { status: 503, headers: { 'Retry-After': retryAfter } }),
+    );
+    const { res, payload } = await requestRegional();
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(res.setHeader).toHaveBeenCalledWith('Retry-After', retryAfter);
+    expect(payload).toEqual({ ok: false, message: 'REGIONAL_FEED_UNAVAILABLE' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  test('retains the primary failure Retry-After when the failed News fallback has none', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('private failure', { status: 503, headers: { 'Retry-After': '90' } }))
+      .mockResolvedValueOnce(upstream({}, 503));
+    const { res } = await requestRegional();
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(res.setHeader).toHaveBeenCalledWith('Retry-After', '90');
+  });
+
+  test.each(['45', 'Fri, 16 Oct 2026 00:00:00 GMT'])('does not reissue an invalid pagination fallback and retains Retry-After %s', async (retryAfter) => {
+    fetchMock.mockResolvedValueOnce(upstream({ items: [] }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [], page: 2, limit: 30, total: 0, totalPages: 1 }), {
+        headers: { 'Retry-After': retryAfter },
+      }));
+    const { res, payload } = await requestRegional({ page: '1', district: 'ahmedabad' });
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(payload).toEqual({ ok: false, message: 'REGIONAL_FEED_UNAVAILABLE' });
+    expect(res.setHeader).toHaveBeenCalledWith('Retry-After', retryAfter);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  test('does not share fallback results across independent geography requests', async () => {
+    fetchMock.mockImplementation(async () => upstream({ items: [] }));
+    await requestRegional({ district: 'ahmedabad' });
+    await requestRegional({ district: 'surat' });
+    const newsCalls = fetchMock.mock.calls.filter(([input]) => new URL(String(input)).pathname === '/api/public/news');
+    expect(newsCalls.map(([input]) => new URL(String(input)).searchParams.get('district'))).toEqual(['ahmedabad', 'surat']);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
   test('rejects incorrect page/limit metadata instead of appending a repeated or truncated page', () => {
     expect(() => getRegionalPagination({ page: 1, limit: 30 }, { page: 2, limit: 30 })).toThrow('unexpected page or limit');
     expect(() => getRegionalPagination({ page: 1, limit: 60 }, { page: 1, limit: 30 })).toThrow('unexpected page or limit');
@@ -419,7 +480,7 @@ describe('Regional News fallback', () => {
       .rejects.toThrow('Regional feed unavailable (503)');
   });
 
-  test.each(['empty', 'malformed'])('initial %s primary plus unavailable News rejects without changing the browser error response', async (primary) => {
+  test.each(['empty', 'malformed'])('initial %s primary plus unavailable News rejects and the browser also receives failure', async (primary) => {
     for (let read = 0; read < 2; read++) {
       fetchMock
         .mockResolvedValueOnce(primary === 'empty' ? upstream({ items: [] }) : new Response('Invalid JSON'))
@@ -430,8 +491,8 @@ describe('Regional News fallback', () => {
       .rejects.toThrow('Regional News fallback unavailable');
     const { res, payload } = await requestRegional();
 
-    expect(res.status).toHaveBeenCalledWith(200);
-    expect(unwrapRegionalFeedItems(payload)).toEqual([]);
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(payload).toEqual({ ok: false, message: 'REGIONAL_FEED_UNAVAILABLE' });
     expect(payload).not.toHaveProperty('upstreamError');
     expect(fetchMock).toHaveBeenCalledTimes(4);
   });

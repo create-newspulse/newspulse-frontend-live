@@ -858,6 +858,7 @@ describe.each(['en', 'hi', 'gu'] as const)('homepage truthful read states (%s)',
     expect(container.querySelector(`#top-story a[href="${storyHref}"]`)).not.toBeNull();
     expect(container.querySelector('#top-story .select-none')?.textContent).toBe('News Pulse');
     expect(container.querySelector('#top-story [role="alert"]')).toBeNull();
+    expect(jest.mocked(fetchPublicNews).mock.calls.some(([options]) => options.category === 'breaking')).toBe(false);
 
     readFailed = true;
     await act(async () => { window.dispatchEvent(new Event('focus')); });

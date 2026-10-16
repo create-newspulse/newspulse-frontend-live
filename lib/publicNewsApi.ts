@@ -5,6 +5,7 @@ import type { AuthorBylinePayload } from './authorByline';
 import { getOrdinaryCategoryPageItems, getOrdinaryCategoryPagination, ORDINARY_PAGINATION_HEADER, validateOrdinaryPageRequest, type OrdinaryCategoryPagination } from './ordinaryCategoryPagination';
 import { FAITH_CULTURE_NEWS_UNAVAILABLE, FAITH_CULTURE_PAGINATION_HEADER, getFaithCulturePagination, validateFaithCulturePageRequest } from './faithCulturePagination';
 import { getFaithCultureTopic } from './faithCultureTopics';
+import { getSafeRetryAfter } from './retryAfter';
 
 export type ArticleBase = {
   _id: string;
@@ -207,7 +208,7 @@ export async function fetchPublicNews(options: {
       signal: options.signal,
     });
 
-    const skipErrorBody = (options.faithPagination && !res.ok)
+    const skipErrorBody = (pageRequest && !res.ok)
       || (isBrowser && options.homepageRecovery && res.status === 503);
     if (skipErrorBody) void res.body?.cancel().catch(() => {});
     const data = skipErrorBody ? null : pageRequest ? await res.json() : await res.json().catch(() => null);
@@ -229,7 +230,7 @@ export async function fetchPublicNews(options: {
         meta: { limit: options.limit },
         endpoint,
         status: res.status,
-        retryAfter: res.headers?.get('Retry-After'),
+        retryAfter: getSafeRetryAfter(res.headers?.get('Retry-After')),
         error: options.faithPagination ? FAITH_CULTURE_NEWS_UNAVAILABLE : msg ? `API ${res.status} (${msg})` : `API ${res.status}`,
       };
     }
