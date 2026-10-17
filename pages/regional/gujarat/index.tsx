@@ -631,7 +631,7 @@ export const getStaticProps: GetStaticProps = async (ctx) => {
     initialStories = compactRegionalInitialStories(result.stories, locale);
     initialPagination = result.pagination;
   } catch (error) {
-    if (ctx.revalidateReason === 'stale') throw error;
+    if (ctx.revalidateReason === 'stale' || ctx.revalidateReason === 'on-demand') throw error;
   }
   return {
     props: {

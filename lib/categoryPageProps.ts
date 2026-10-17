@@ -65,7 +65,7 @@ export async function getCategoryStaticProps(ctx: GetStaticPropsContext, categor
         .map(article => compactCategoryArticle(article, locale));
     }
   } catch (error) {
-    if (isFaithCultureCategory(category) || ctx.revalidateReason === 'stale') throw error;
+    if (isFaithCultureCategory(category) || ctx.revalidateReason === 'stale' || ctx.revalidateReason === 'on-demand') throw error;
   }
   return {
     props: { messages, locale, initialItems, ...(initialPagination ? { initialPagination } : {}) },

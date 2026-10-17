@@ -1027,8 +1027,9 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
   );
 }
 
-export const getStaticProps: GetStaticProps = async ({ locale }) => {
+export const getStaticProps: GetStaticProps = async ({ locale, revalidateReason }) => {
   const lang = normalizeLang(locale);
+  const isRegeneration = revalidateReason === 'stale' || revalidateReason === 'on-demand';
 
   const messages = await (async () => {
     try {
@@ -1042,6 +1043,7 @@ export const getStaticProps: GetStaticProps = async ({ locale }) => {
   try {
     const apiBase = String(getPublicApiBaseUrl() || '').trim().replace(/\/+$/, '');
     if (!apiBase) {
+      if (isRegeneration) throw new Error('National backend not configured');
       return { props: { lang, data: [], breaking: [], messages }, revalidate: NATIONAL_STATIC_REVALIDATE_SECONDS };
     }
 
@@ -1054,6 +1056,7 @@ export const getStaticProps: GetStaticProps = async ({ locale }) => {
       return result.items;
     }).catch((error) => {
       console.error('SSR national feed error', error);
+      if (isRegeneration) throw error;
       return [];
     });
 
@@ -1096,6 +1099,7 @@ export const getStaticProps: GetStaticProps = async ({ locale }) => {
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error('SSR national error', err);
+    if (isRegeneration) throw err;
     return {
       props: {
         lang,

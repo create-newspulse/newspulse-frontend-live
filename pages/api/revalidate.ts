@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { getCategoryRouteKey } from '../../lib/categoryKeys';
 
 type RevalidateRequest = {
   /** Explicit paths to revalidate, e.g. ["/news/123", "/gu/news/123", "/latest"]. */
@@ -86,7 +87,9 @@ function buildDerivedPaths(body: RevalidateRequest): string[] {
 
   out.push(...deriveArticleSlugPaths(body));
 
-  const categoryKey = String(body.categoryKey || '').trim().replace(/^\/+/, '').replace(/\/+$/, '');
+  const categoryKey = getCategoryRouteKey(
+    String(body.categoryKey || '').trim().replace(/^\/+/, '').replace(/\/+$/, ''),
+  );
   if (categoryKey) {
     for (const pre of prefixes()) {
       out.push(`${pre}/${categoryKey}`);
