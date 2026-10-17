@@ -5,7 +5,7 @@ import { Socket } from 'node:net';
 import handler from '../../../pages/api/public/topics/[...path]';
 import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
 import { EDITORIAL_TOPICS_TIMEOUT_MS } from '../../../lib/publicEditorialTopics';
-import { jsonResponse, storyFixture, storyPageFixture, topicFixture } from '../../fixtures/editorialTopics';
+import { jsonResponse, storyFixture, storyPageFixture, topicFixture, topicStoryCategories } from '../../fixtures/editorialTopics';
 
 jest.mock('../../../lib/publicApiBase', () => ({ getPublicApiBaseUrl: jest.fn(() => 'http://localhost:3010') }));
 const originalFetch = global.fetch;
@@ -61,6 +61,7 @@ describe.each(['en', 'hi', 'gu'] as const)('%s public topic transport', (lang) =
     expect(res.status).toHaveBeenCalledWith(200);
     expect(body).toMatchObject({ ok: true, lang, page, limit: 12, count: upstream.items.length, total: 13 });
     expect(body.items.map((item: { _id: string }) => item._id)).toEqual(upstream.items.map((item) => item._id));
+    expect(body.items.map((item: { category: string }) => item.category)).toEqual(upstream.items.map((item) => item.category));
     expect(fetchMock.mock.calls[0][0]).toBe(`http://localhost:3010/api/public/topics/navratri-2026/articles?lang=${lang}&page=${page}&limit=12`);
   });
 
@@ -71,6 +72,19 @@ describe.each(['en', 'hi', 'gu'] as const)('%s public topic transport', (lang) =
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ items: [], page: 2, hasNextPage: false }));
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  test('returns the separate eligible pin without replacing a 37-member cross-category archive', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      ok: true, lang, topic: topicFixture(lang), pinnedArticle: storyFixture(100, lang, 'tech'),
+    }));
+    fetchMock.mockResolvedValueOnce(jsonResponse(storyPageFixture(lang, 1, 37)));
+    const detail = (await invoke(undefined, { lang })).json.mock.calls[0][0];
+    const articles = (await invoke(['navratri-2026', 'articles'], { lang })).json.mock.calls[0][0];
+    expect(detail.pinnedArticle).toMatchObject({ _id: storyFixture(100, lang)._id, category: 'tech' });
+    expect(articles).toMatchObject({ count: 12, total: 37, totalPages: 4, hasNextPage: true });
+    expect(articles.items.map((story: { category: string }) => story.category)).toEqual(topicStoryCategories);
+    expect(articles.items.some((story: { _id: string }) => story._id === detail.pinnedArticle._id)).toBe(false);
+  });
 });
 
 test('only an authoritative detail 404 is returned as topic absence', async () => {
@@ -79,14 +93,17 @@ test('only an authoritative detail 404 is returned as topic absence', async () =
   expect((await invoke(['navratri-2026', 'articles'])).status).toHaveBeenCalledWith(503);
 });
 
-test.each(['network', '503', 'missing-pin', 'bad-language', 'bad-page'])('%s remains failure rather than empty/null', async (failure) => {
+test.each(['network', '503', 'missing-pin', 'bad-language', 'bad-page', 'bad-category'])('%s remains failure rather than empty/null', async (failure) => {
   if (failure === 'network') fetchMock.mockRejectedValue(new Error('offline'));
   else if (failure === '503') fetchMock.mockResolvedValue(jsonResponse({}, 503));
   else if (failure === 'bad-page') fetchMock.mockResolvedValue(jsonResponse({ ...storyPageFixture(), count: 99 }));
+  else if (failure === 'bad-category') fetchMock.mockResolvedValue(jsonResponse({
+    ...storyPageFixture('en', 1, 1), items: [{ ...storyFixture(1), category: ['tech', 'tech-gadgets'] }],
+  }));
   else fetchMock.mockResolvedValue(jsonResponse({
     ok: true, lang: failure === 'bad-language' ? 'hi' : 'en', topic: topicFixture(),
   }));
-  const res = await invoke(failure === 'bad-page' ? ['navratri-2026', 'articles'] : undefined);
+  const res = await invoke(failure === 'bad-page' || failure === 'bad-category' ? ['navratri-2026', 'articles'] : undefined);
   expect(res.status).toHaveBeenCalledWith(503);
   expect(res.json).toHaveBeenCalledWith({ ok: false, message: 'EDITORIAL_TOPIC_UNAVAILABLE' });
   expect(res.setHeader).toHaveBeenCalledWith('Retry-After', '60');

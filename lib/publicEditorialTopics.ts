@@ -91,14 +91,14 @@ function topicSummary(value: unknown): EditorialTopicSummary {
 
 function topicStory(value: unknown, lang: RouteLocale): EditorialTopicStory {
   const item = record(value);
-  // This projection has already passed backend publication and translation eligibility.
+  // Backend resolves exact topic membership, publication eligibility and locale before pagination.
   if (item.resolvedLang !== lang || item.language !== lang || item.isFallback === true) {
     throw new Error('Editorial topic story returned an unexpected language');
   }
   return {
     _id: text(item._id), slug: text(item.slug), title: text(item.title),
     summary: optionalText(item.summary) || '', language: lang, resolvedLang: lang,
-    category: typeof item.category === 'string' ? item.category : null,
+    category: optionalText(item.category),
     imageUrl: optionalText(item.imageUrl ?? item.coverImageUrl),
     publishedAt: optionalText(item.publishedAt),
     translationKey: optionalText(item.translationKey),

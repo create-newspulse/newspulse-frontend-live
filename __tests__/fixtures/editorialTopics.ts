@@ -12,6 +12,11 @@ export const topicDescriptions = {
   gu: '\u0aa4\u0ab9\u0ac7\u0ab5\u0abe\u0ab0\u0aa8\u0abe \u0ab8\u0aae\u0abe\u0a9a\u0abe\u0ab0',
 };
 
+export const topicStoryCategories = [
+  'regional', 'national', 'international', 'business', 'lifestyle', 'sports',
+  'glamour', 'editorial', 'faith-culture', 'pulse-dialogue', 'tech', 'tech-gadgets',
+] as const;
+
 export function topicFixture(lang: RouteLocale = 'en', overrides: Record<string, unknown> = {}) {
   const slug = typeof overrides.slug === 'string' ? overrides.slug : 'navratri-2026';
   return {
@@ -38,7 +43,7 @@ export function storyPageFixture(lang: RouteLocale = 'en', page = 1, total = 13)
     ok: true, lang, total, count, page, limit: 12, totalPages: Math.ceil(total / 12),
     hasNextPage: page * 12 < total,
     items: Array.from({ length: count }, (_, index) =>
-      storyFixture(total - (page - 1) * 12 - index, lang, ['regional', 'national', 'sports', 'business'][index % 4])),
+      storyFixture(total - (page - 1) * 12 - index, lang, topicStoryCategories[index % topicStoryCategories.length])),
   };
 }
 

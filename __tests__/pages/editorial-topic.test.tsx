@@ -2,7 +2,7 @@ import React from 'react';
 import type { GetServerSidePropsContext } from 'next';
 import { IncomingMessage, ServerResponse } from 'node:http';
 import { Socket } from 'node:net';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import TopicPage, { getServerSideProps, type TopicPageProps } from '../../pages/topic/[slug]';
 import SeoAlternates from '../../components/SeoAlternates';
 import { LanguageProvider, getMessagesForLang } from '../../src/i18n/LanguageProvider';
@@ -11,7 +11,8 @@ import { normalizeRouteLocale, type RouteLocale } from '../../lib/localizedArtic
 import { editorialTopicPath, EDITORIAL_TOPICS_TIMEOUT_MS } from '../../lib/publicEditorialTopics';
 import { getPublicApiBaseUrl } from '../../lib/publicApiBase';
 import { dispatchPublicDataRefresh } from '../../lib/publicDataRefresh';
-import { jsonResponse, storyFixture, storyPageFixture, topicDescriptions, topicFixture, topicNames } from '../fixtures/editorialTopics';
+import { getCategoryQueryKey, getCategoryRouteKey } from '../../lib/categoryKeys';
+import { jsonResponse, storyFixture, storyPageFixture, topicDescriptions, topicFixture, topicNames, topicStoryCategories } from '../fixtures/editorialTopics';
 
 const mockRouter: { locale: RouteLocale; defaultLocale: string; asPath: string; query: Record<string, string | string[]> } = {
   locale: 'en', defaultLocale: 'en', asPath: '/topic/navratri-2026', query: { slug: 'navratri-2026' },
@@ -184,6 +185,119 @@ describe('authoritative editorial topic archives', () => {
     expect(fetchPublicNews).not.toHaveBeenCalled();
   });
 
+  test.each(['en', 'hi', 'gu'] as const)('%s mixed-category cards retain real categories, localized labels and normal canonical article links', async (locale) => {
+    const props = await loadEditorial(context(locale));
+    mount(props);
+    const labelKeys = [
+      'regional', 'national', 'international', 'business', 'lifestyle', 'sports',
+      'glamour', 'editorial', 'faithCulture', 'pulseDialogue', 'scienceTechnology', 'techGadgets',
+    ];
+    const body = storyPageFixture(locale);
+    expect(props.items.map((item) => item.category)).toEqual(topicStoryCategories);
+    expect(props.pinnedArticle?.category).toBe('regional');
+    for (const [index, item] of props.items.entries()) {
+      const heading = screen.getByRole('heading', { name: item.titleText });
+      const card = heading.closest('article')!;
+      expect(within(card).getByText(getMessagesForLang(locale).categories[labelKeys[index]])).not.toBeNull();
+      expect(heading.closest('a')?.getAttribute('href')).toBe(
+        `${locale === 'en' ? '' : `/${locale}`}/news/${body.items[index].slug}`,
+      );
+      expect(heading.closest('a')?.getAttribute('href')).not.toMatch(/^\/en\/|\/topic\//);
+    }
+    const pinned = screen.getByRole('heading', { name: storyFixture(100, locale).title }).closest('article')!;
+    expect(within(pinned).getByText(getMessagesForLang(locale).categories.regional)).not.toBeNull();
+    const science = props.items.find((item) => item.category === 'tech')!;
+    const gadgets = props.items.find((item) => item.category === 'tech-gadgets')!;
+    expect(getCategoryRouteKey(science.category)).toBe('science-technology');
+    expect(getCategoryQueryKey('science-technology')).toBe('tech');
+    expect(getCategoryRouteKey(gadgets.category)).toBe('tech-gadgets');
+    expect(getCategoryQueryKey(gadgets.category)).toBe('tech-gadgets');
+    expect(science.href).not.toBe(gadgets.href);
+  });
+
+  test.each(['en', 'hi', 'gu'] as const)('%s archive with one ordinary member and no pin displays only that member', async (locale) => {
+    fetchMock.mockImplementation(async (input) => String(input).includes('/articles?')
+      ? jsonResponse(storyPageFixture(locale, 1, 1))
+      : jsonResponse({ ok: true, lang: locale, topic: topicFixture(locale), pinnedArticle: null }));
+    const props = await loadEditorial(context(locale));
+    mount(props);
+    expect(props.items).toHaveLength(1);
+    expect(document.querySelectorAll('article')).toHaveLength(1);
+    expect(screen.getByRole('heading', { name: storyFixture(1, locale).title })).not.toBeNull();
+    expect(screen.queryByText(getMessagesForLang(locale).topicPage.noStoriesYet)).toBeNull();
+    expect(screen.queryByRole('navigation', { name: getMessagesForLang(locale).topicPage.pagination })).toBeNull();
+    expect(fetchPublicNews).not.toHaveBeenCalled();
+  });
+
+  test.each(['en', 'hi', 'gu'] as const)('%s next-page navigation reaches all 37 members in backend order with a separate pin', async (locale) => {
+    fetchMock.mockImplementation(async (input) => {
+      const url = new URL(String(input));
+      return url.pathname.endsWith('/articles')
+        ? jsonResponse(storyPageFixture(locale, Number(url.searchParams.get('page')), 37))
+        : topicResponse(input);
+    });
+    const ids: string[] = [];
+    const copy = getMessagesForLang(locale).topicPage;
+    for (let page = 1; page <= 4; page++) {
+      const props = await loadEditorial(context(locale, 'navratri-2026', page === 1 ? {} : { page: String(page) }));
+      const view = mount(props);
+      ids.push(...props.items.map((item) => item.id));
+      expect(props.pagination).toEqual({ page, totalPages: 4, hasNextPage: page < 4 });
+      expect(document.querySelectorAll('article')).toHaveLength((page === 4 ? 1 : 12) + 1);
+      expect(screen.getAllByRole('heading', { name: storyFixture(100, locale).title })).toHaveLength(1);
+      if (page < 4) expect(screen.getByRole('link', { name: copy.next }).getAttribute('href')).toBe(editorialTopicPath('navratri-2026', locale, page + 1));
+      else expect(screen.queryByRole('link', { name: copy.next })).toBeNull();
+      if (page > 1) expect(screen.getByRole('link', { name: copy.previous }).getAttribute('href')).toBe(editorialTopicPath('navratri-2026', locale, page - 1));
+      view.unmount();
+    }
+    expect(ids).toEqual(Array.from({ length: 37 }, (_, index) => storyFixture(37 - index, locale)._id));
+    expect(new Set(ids).size).toBe(37);
+    expect(fetchMock).toHaveBeenCalledTimes(8);
+  });
+
+  test.each(['en', 'hi', 'gu'] as const)('%s presentation deduplicates IDs and logical-story identities without sorting or changing pagination', async (locale) => {
+    const stories = [
+      storyFixture(4, locale), storyFixture(4, locale),
+      { ...storyFixture(3, locale), translationKey: 'logical-translations' },
+      { ...storyFixture(2, locale), translationKey: 'logical-translations' },
+      { ...storyFixture(1, locale), translationKey: null, translationGroupId: 'logical-translations' },
+      storyFixture(5, locale),
+    ];
+    fetchMock.mockImplementation(async (input) => String(input).includes('/articles?')
+      ? jsonResponse({ ...storyPageFixture(locale, 1, stories.length), items: stories })
+      : jsonResponse({ ok: true, lang: locale, topic: topicFixture(locale), pinnedArticle: null }));
+    const props = await loadEditorial(context(locale));
+    mount(props);
+    expect(props.items.map((item) => item.id)).toEqual([4, 3, 5].map((index) => storyFixture(index, locale)._id));
+    expect(document.querySelectorAll('article')).toHaveLength(3);
+    expect(props.pagination).toEqual({ page: 1, totalPages: 1, hasNextPage: false });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  test('a valid pin with zero ordinary members is content, not an empty archive or an invented member', async () => {
+    fetchMock.mockImplementation(async (input) => String(input).includes('/articles?')
+      ? jsonResponse(storyPageFixture('en', 1, 0)) : topicResponse(input));
+    const props = await loadEditorial(context());
+    mount(props);
+    expect(props.items).toEqual([]);
+    expect(document.querySelectorAll('article')).toHaveLength(1);
+    expect(screen.queryByText('No stories yet.')).toBeNull();
+    expect(screen.queryByRole('navigation', { name: 'Pagination' })).toBeNull();
+    expect(fetchPublicNews).not.toHaveBeenCalled();
+  });
+
+  test('a category without an existing dictionary label remains its real category, never Trending', async () => {
+    const story = storyFixture(1, 'en', 'special-desk');
+    fetchMock.mockImplementation(async (input) => String(input).includes('/articles?')
+      ? jsonResponse({ ...storyPageFixture('en', 1, 1), items: [story] })
+      : jsonResponse({ ok: true, lang: 'en', topic: topicFixture(), pinnedArticle: null }));
+    const props = await loadEditorial(context());
+    mount(props);
+    expect(props.items[0].category).toBe('special-desk');
+    expect(screen.getByText('special-desk')).not.toBeNull();
+    expect(screen.queryByText('Trending')).toBeNull();
+  });
+
   test('backend-returned expired active archive remains accessible', async () => {
     fetchMock.mockImplementation(async (input) => String(input).includes('/articles?')
       ? jsonResponse(storyPageFixture()) : jsonResponse({
@@ -297,7 +411,7 @@ describe.each(['en', 'hi', 'gu'] as const)('%s mounted editorial lifecycle', (la
     expect(screen.getByRole('alert')).not.toBeNull();
   });
 
-  test.each(['Draft', 'Scheduled'])('does not invent %s restoration omitted from the authoritative result', async () => {
+  test.each(['Draft', 'Scheduled-before-eligible', 'Unpublished', 'Deleted'])('does not invent %s restoration omitted from the authoritative result', async () => {
     await seeded();
     fetchMock.mockImplementation(async (input) => String(input).includes('/articles?')
       ? jsonResponse(storyPageFixture(lang, 1, 0))
@@ -306,6 +420,76 @@ describe.each(['en', 'hi', 'gu'] as const)('%s mounted editorial lifecycle', (la
     expect(document.querySelectorAll('article')).toHaveLength(0);
     expect(screen.getByText(getMessagesForLang(lang).topicPage.noStoriesYet)).not.toBeNull();
     expect(fetchPublicNews).not.toHaveBeenCalled();
+  });
+
+  test('attachment adds an unrelated mixed-category story and detachment removes it through the existing refresh event', async () => {
+    await seeded();
+    const attached = {
+      ...storyFixture(200, lang, 'tech-gadgets'),
+      title: 'A newly attached story without matching topic keywords',
+      translationKey: 'attached-logical-story',
+    };
+    fetchMock.mockImplementation(async (input) => {
+      if (!String(input).includes('/articles?')) return topicResponse(input);
+      const body = storyPageFixture(lang);
+      body.items[0] = attached;
+      return jsonResponse(body);
+    });
+    await act(async () => { event(); });
+    const heading = screen.getByRole('heading', { name: attached.title });
+    expect(within(heading.closest('article')!).getByText(getMessagesForLang(lang).categories.techGadgets)).not.toBeNull();
+    expect(heading.closest('a')?.getAttribute('href')).toBe(`${lang === 'en' ? '' : `/${lang}`}/news/story-200`);
+    expect(screen.queryByRole('heading', { name: storyFixture(13, lang).title })).toBeNull();
+    fetchMock.mockImplementation(async (input) => topicResponse(input));
+    await act(async () => { event(); });
+    expect(screen.queryByRole('heading', { name: attached.title })).toBeNull();
+    expect(screen.getByRole('heading', { name: storyFixture(13, lang).title })).not.toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchPublicNews).not.toHaveBeenCalled();
+  });
+
+  test('a same-ID category edit refreshes the real label without changing the canonical article URL', async () => {
+    await seeded();
+    fetchMock.mockImplementation(async (input) => {
+      if (!String(input).includes('/articles?')) return topicResponse(input);
+      const body = storyPageFixture(lang);
+      body.items[0] = { ...body.items[0], category: 'tech' };
+      return jsonResponse(body);
+    });
+    await act(async () => { event(); });
+    const story = screen.getByRole('heading', { name: storyFixture(13, lang).title });
+    const card = story.closest('article')!;
+    expect(within(card).getByText(getMessagesForLang(lang).categories.scienceTechnology)).not.toBeNull();
+    expect(within(card).queryByText(getMessagesForLang(lang).categories.regional)).toBeNull();
+    expect(story.closest('a')?.getAttribute('href')).toBe(`${lang === 'en' ? '' : `/${lang}`}/news/story-13`);
+  });
+
+  test('failed refresh of an empty seed is an error, not a new successful empty result', async () => {
+    fetchMock.mockImplementation(async (input) => String(input).includes('/articles?')
+      ? jsonResponse(storyPageFixture(lang, 1, 0))
+      : jsonResponse({ ok: true, lang, topic: topicFixture(lang), pinnedArticle: null }));
+    await seeded();
+    expect(screen.getByText(getMessagesForLang(lang).topicPage.noStoriesYet)).not.toBeNull();
+    fetchMock.mockRejectedValue(new Error('offline'));
+    await act(async () => { event(); });
+    expect(screen.getByRole('alert')).not.toBeNull();
+    expect(screen.queryByText(getMessagesForLang(lang).topicPage.noStoriesYet)).toBeNull();
+    expect(fetchPublicNews).not.toHaveBeenCalled();
+  });
+
+  test('unmounting is not required to deduplicate repeated logical members from a refreshed page', async () => {
+    await seeded();
+    fetchMock.mockImplementation(async (input) => {
+      if (!String(input).includes('/articles?')) return topicResponse(input);
+      const body = storyPageFixture(lang);
+      body.items[1] = { ...body.items[1], translationKey: body.items[0].translationKey };
+      return jsonResponse(body);
+    });
+    await act(async () => { event(); });
+    expect(heading(13)).not.toBeNull();
+    expect(heading(12)).toBeNull();
+    expect(document.querySelectorAll('article')).toHaveLength(12);
+    expect(screen.getByRole('link', { name: getMessagesForLang(lang).topicPage.next }).getAttribute('href')).toBe(editorialTopicPath('navratri-2026', lang, 2));
   });
 
   test.each(['same-id', 'same-group'])('a new authoritative pin replaces the old pin once, retaining %s deduplication', async (collision) => {
@@ -431,12 +615,10 @@ describe.each(['en', 'hi', 'gu'] as const)('%s mounted editorial lifecycle', (la
 });
 
 describe('legacy keyword/tag compatibility', () => {
-  test.each(['en', 'hi', 'gu'] as const)('an unknown %s topic keeps its current keyword page', async (locale) => {
+  test.each(['en', 'hi', 'gu'] as const)('an unknown %s topic cannot invent a keyword archive', async (locale) => {
     fetchMock.mockResolvedValue(jsonResponse({ ok: false }, 404));
-    const props = await load(context(locale, 'old-news-tag'));
-    expect(props.mode).toBe('legacy');
-    mount(props);
-    await waitFor(() => expect(fetchPublicNews).toHaveBeenCalledWith(expect.objectContaining({ q: 'old news tag', language: locale, limit: 30 })));
+    expect(await getServerSideProps(context(locale, 'old-news-tag'))).toEqual({ notFound: true });
+    expect(fetchPublicNews).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -450,11 +632,10 @@ describe('legacy keyword/tag compatibility', () => {
     expect(document.querySelector('link[rel="canonical"]')?.getAttribute('href')).toBe(`${siteUrl}${editorialTopicPath('navratri-2026', locale)}?q=existing-tag`);
   });
 
-  test.each(['future-topic', 'hidden-topic'])('a backend 404 for %s cannot expose an editorial archive', async (slug) => {
+  test.each(['future-topic', 'active-off-topic'])('a backend 404 for %s cannot expose an editorial or keyword archive', async (slug) => {
     fetchMock.mockResolvedValue(jsonResponse({ ok: false, code: 'TOPIC_NOT_FOUND' }, 404));
-    const props = await load(context('en', slug));
-    expect(props.mode).toBe('legacy');
-    expect(props).not.toHaveProperty('pinnedArticle');
+    expect(await getServerSideProps(context('en', slug))).toEqual({ notFound: true });
+    expect(fetchPublicNews).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

@@ -5,9 +5,10 @@ import {
   fetchEditorialTopic,
   fetchEditorialTopics,
   fetchEditorialTopicStories,
+  type EditorialTopicStoryPage,
 } from '../../lib/publicEditorialTopics';
 import { getPublicApiBaseUrl } from '../../lib/publicApiBase';
-import { jsonResponse, storyFixture, storyPageFixture, topicFixture, topicNames } from '../fixtures/editorialTopics';
+import { jsonResponse, storyFixture, storyPageFixture, topicFixture, topicNames, topicStoryCategories } from '../fixtures/editorialTopics';
 
 jest.mock('../../lib/publicApiBase', () => ({ getPublicApiBaseUrl: jest.fn(() => 'http://localhost:3010') }));
 
@@ -23,7 +24,7 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
-describe('Editorial Topics V1 DTOs', () => {
+describe('Trending Topic Story Management V2 public DTOs', () => {
   test.each(['en', 'hi', 'gu'] as const)('requests six %s topics and retains backend labels and order', async (lang) => {
     const second = topicFixture(lang, { slug: 'nobel-prize', label: `  ${topicNames[lang]}  ` });
     fetchMock.mockResolvedValue(jsonResponse({ ok: true, lang, items: [second, topicFixture(lang)] }));
@@ -75,7 +76,7 @@ describe('Editorial Topics V1 DTOs', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('http://localhost:3010/api/public/topics/navratri-2026?lang=hi');
   });
 
-  test('only a detail 404 means the slug may use the legacy route', async () => {
+  test('only a detail 404 means authoritative topic absence', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ ok: false }, 404));
     expect(await fetchEditorialTopic('unknown', 'en')).toBeNull();
     fetchMock.mockResolvedValueOnce(jsonResponse({ ok: false }, 503));
@@ -99,8 +100,58 @@ describe('Editorial Topics V1 DTOs', () => {
     });
   });
 
+  test.each(['en', 'hi', 'gu'] as const)('preserves every %s real category and backend order without interpreting membership metadata', async (lang) => {
+    const body = storyPageFixture(lang, 1, 12);
+    const dates = ['2026-10-12T10:00:00Z', '2026-10-12T10:00:00Z', '2026-10-11T10:00:00Z'];
+    const items = body.items.map((story, index) => ({
+      ...story,
+      title: `Unrelated headline ${index}`,
+      summary: 'No topic keywords',
+      publishedAt: dates[index] || '2026-10-01T10:00:00Z',
+      tags: ['not-used-by-the-browser'],
+      seo: { keywords: ['not-membership'] },
+    }));
+    fetchMock.mockResolvedValue(jsonResponse({ ...body, items }));
+    const result = await fetchEditorialTopicStories('navratri-2026', lang, 1);
+    expect(result.items.map((story) => story.category)).toEqual(topicStoryCategories);
+    expect(result.items.map((story) => story._id)).toEqual(items.map((story) => story._id));
+    expect(result.items.map((story) => story.publishedAt)).toEqual(items.map((story) => story.publishedAt));
+    expect(result.items.every((story) => story.language === lang && story.resolvedLang === lang)).toBe(true);
+    expect(result.items.every((story) => !('tags' in story) && !('seo' in story))).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).not.toMatch(/category=|q=|tags=|keywords=/);
+  });
+
+  test.each(['en', 'hi', 'gu'] as const)('reads all 37 %s ordinary members through four fixed pages, excluding the separate pin from totals', async (lang) => {
+    fetchMock.mockImplementation(async (input) => {
+      const url = new URL(String(input));
+      return jsonResponse(storyPageFixture(lang, Number(url.searchParams.get('page')), 37));
+    });
+    const pages: EditorialTopicStoryPage[] = [];
+    for (let page = 1; page <= 4; page++) pages.push(await fetchEditorialTopicStories('navratri-2026', lang, page));
+    expect(pages.map((page) => page.items.length)).toEqual([12, 12, 12, 1]);
+    expect(pages.map((page) => page.hasNextPage)).toEqual([true, true, true, false]);
+    expect(pages.every((page) => page.total === 37 && page.totalPages === 4 && page.limit === 12)).toBe(true);
+    expect(pages.flatMap((page) => page.items.map((story) => story._id))).toEqual(
+      Array.from({ length: 37 }, (_, index) => storyFixture(37 - index, lang)._id),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  test.each(['en', 'hi', 'gu'] as const)('preserves the backend-selected %s edition of one logical member, without requesting other locales', async (lang) => {
+    const body = storyPageFixture(lang, 1, 1);
+    fetchMock.mockResolvedValue(jsonResponse(body));
+    const result = await fetchEditorialTopicStories('navratri-2026', lang, 1);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({ language: lang, translationKey: 'group-1' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).toContain(`?lang=${lang}&page=1&limit=12`);
+  });
+
   test.each([
     { limit: 30 }, { page: 2 }, { total: undefined }, { hasNextPage: 'yes' }, { count: 2 },
+    { items: [{ ...storyFixture(1), category: { slug: 'tech' } }], count: 1, total: 1, totalPages: 1, hasNextPage: false },
+    { items: [{ ...storyFixture(1), isFallback: true }], count: 1, total: 1, totalPages: 1, hasNextPage: false },
     { items: [storyFixture(1, 'hi')], count: 1, total: 1, totalPages: 1, hasNextPage: false },
   ])('rejects malformed pagination or wrong-language story payload %#', async (override) => {
     fetchMock.mockResolvedValue(jsonResponse({ ...storyPageFixture(), ...override }));
@@ -143,6 +194,18 @@ describe('Editorial Topics V1 DTOs', () => {
   test('a missing pin field is malformed, not an authoritative null pin', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ ok: true, lang: 'en', topic: topicFixture() }));
     await expect(fetchEditorialTopic('navratri-2026', 'en')).rejects.toThrow('Missing editorial topic pin');
+  });
+
+  test.each(['detail', 'stories'])('a %s timeout stays a failed read rather than an empty archive or replacement pin', async (kind) => {
+    jest.useFakeTimers();
+    fetchMock.mockImplementation(() => new Promise(() => {}));
+    const pending = kind === 'detail'
+      ? fetchEditorialTopic('navratri-2026', 'en')
+      : fetchEditorialTopicStories('navratri-2026', 'en', 1);
+    const failure = expect(pending).rejects.toThrow('timed out');
+    await jest.advanceTimersByTimeAsync(EDITORIAL_TOPICS_TIMEOUT_MS);
+    await failure;
+    expect(fetchMock.mock.calls[0][1]?.signal?.aborted).toBe(true);
   });
 
   test.each(['detail', 'stories'])('%s reader propagates owner cancellation to fetch', async (kind) => {

@@ -12,6 +12,7 @@ import { useLanguage } from '../../utils/LanguageContext';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { buildNewsUrl, isNavigableNewsHref } from '../../lib/newsRoutes';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
+import { getCategoryRouteKey } from '../../lib/categoryKeys';
 import { COVER_PLACEHOLDER_SRC, resolveCoverFitMode, resolveCoverImageUrl } from '../../lib/coverImages';
 import { formatEditorialDateTime, resolveStoryDateIso } from '../../lib/storyDateTime';
 import StoryImage from '../../src/components/story/StoryImage';
@@ -30,7 +31,7 @@ import { normalizeRouteLocale, type RouteLocale } from '../../lib/localizedArtic
 import { getMessages } from '../../lib/getMessages';
 import { absolutePublicUrl, NEWS_PULSE_PUBLISHER_NAME, removeUndefined, resolvePublicSiteUrl, safeJsonLd, type SeoAlternate } from '../../lib/seo';
 
-type EditorialStoryCard = CategoryStoryHierarchyItem & Pick<EditorialTopicStory, 'translationKey' | 'translationGroupId'>;
+type EditorialStoryCard = CategoryStoryHierarchyItem & Pick<EditorialTopicStory, 'category' | 'translationKey' | 'translationGroupId'>;
 
 export type TopicPageProps = {
   messages: Record<string, unknown>;
@@ -299,6 +300,13 @@ function EditorialTopicPage(props: EditorialTopicPageProps) {
     jsonLd: { ...props.seo.jsonLd, name: topic.label, description: topic.description[locale] },
   };
   const path = (page: number) => editorialTopicPath(topic.slug, locale, page);
+  const renderStory = (item: EditorialStoryCard) => {
+    const categoryKey = getCategoryRouteKey(item.category).replace(/-([a-z])/g, (_match, letter: string) => letter.toUpperCase());
+    const labelKey = `categories.${categoryKey}`;
+    const translated = categoryKey ? t(labelKey) : '';
+    const label = translated && translated !== labelKey ? translated : item.category || undefined;
+    return <KeyStoryCard key={item.id} item={{ ...item, label }} locale={false} />;
+  };
   return (
     <>
       <Head>
@@ -330,16 +338,16 @@ function EditorialTopicPage(props: EditorialTopicPageProps) {
           {pinnedArticle ? (
             <section className="mt-8 max-w-2xl" aria-labelledby="topic-featured-story">
               <h2 id="topic-featured-story" className="mb-3 text-sm font-bold text-newsPulse-navy">{t('topicPage.featuredStory')}</h2>
-              <KeyStoryCard item={pinnedArticle} locale={false} />
+              {renderStory(pinnedArticle)}
             </section>
           ) : null}
           {items.length ? (
             <section className="mt-8">
               <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                {items.map((item) => <KeyStoryCard key={item.id} item={item} locale={false} />)}
+                {items.map(renderStory)}
               </div>
             </section>
-          ) : !pinnedArticle ? (
+          ) : !pinnedArticle && !readError ? (
             <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6">
               <div className="text-lg font-semibold text-slate-900">{t('topicPage.noStoriesYet')}</div>
             </div>
@@ -379,14 +387,21 @@ function topicStoryCard(story: EditorialTopicStory): EditorialStoryCard {
     href: buildNewsUrl({ id: story._id, slug: story.slug, lang: story.language }),
     imageSrc: image, imageFitMode: resolveCoverFitMode(story, { src: image, altText: story.title }),
     dateIso, dateLabel: formatEditorialDateTime(dateIso),
+    category: story.category,
     translationKey: story.translationKey, translationGroupId: story.translationGroupId,
   });
 }
 
 function withoutPinnedStory(items: EditorialStoryCard[], pin: EditorialStoryCard | null): EditorialStoryCard[] {
-  const pinGroup = pin?.translationGroupId || pin?.translationKey;
-  return items.filter((story) => story.id !== pin?.id
-    && (!pinGroup || (story.translationGroupId !== pinGroup && story.translationKey !== pinGroup)));
+  const ids = new Set(pin ? [pin.id] : []);
+  const groups = new Set([pin?.translationGroupId, pin?.translationKey].filter((key): key is string => Boolean(key)));
+  return items.filter((story) => {
+    const keys = [story.translationGroupId, story.translationKey].filter((key): key is string => Boolean(key));
+    const duplicate = ids.has(story.id) || keys.some((key) => groups.has(key));
+    ids.add(story.id);
+    keys.forEach((key) => groups.add(key));
+    return !duplicate;
+  });
 }
 
 function editorialArchive(detail: EditorialTopicDetail, stories: EditorialTopicStoryPage): EditorialArchive {
@@ -410,7 +425,7 @@ export const getServerSideProps: GetServerSideProps<TopicPageProps> = async (ctx
 
   try {
     const detail = await fetchEditorialTopic(slug, locale);
-    if (!detail) return { props: { ...common, mode: 'legacy' } };
+    if (!detail) return { notFound: true };
     const rawPage = ctx.query.page;
     const page = rawPage === undefined ? 1
       : typeof rawPage === 'string' && /^[1-9]\d*$/.test(rawPage) ? Number(rawPage) : NaN;
