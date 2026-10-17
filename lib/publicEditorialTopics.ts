@@ -111,9 +111,10 @@ async function request(
   lang: RouteLocale,
   query: Record<string, string> = {},
   allowNotFound = false,
+  parentSignal?: AbortSignal,
 ): Promise<Record<string, unknown> | null> {
   const base = getPublicApiBaseUrl().replace(/\/+$/, '');
-  if (!base) throw new Error('Public backend is not configured');
+  if (!base && typeof window === 'undefined') throw new Error('Public backend is not configured');
   const params = new URLSearchParams({ lang, ...query });
   return withPublicReadDeadline(EDITORIAL_TOPICS_TIMEOUT_MS, async (signal) => {
     const response = await fetch(`${base}/api/public/topics${path}?${params}`, {
@@ -124,7 +125,7 @@ async function request(
     const payload = record(await response.json());
     if (payload.ok !== true || payload.lang !== lang) throw new Error('Invalid editorial topics response');
     return payload;
-  });
+  }, parentSignal);
 }
 
 export async function fetchEditorialTopics(lang: RouteLocale): Promise<EditorialTopicSummary[]> {
@@ -135,22 +136,23 @@ export async function fetchEditorialTopics(lang: RouteLocale): Promise<Editorial
   return payload.items.map(topicSummary);
 }
 
-export async function fetchEditorialTopic(slug: string, lang: RouteLocale): Promise<EditorialTopicDetail | null> {
-  const payload = await request(`/${encodeURIComponent(slug)}`, lang, {}, true);
+export async function fetchEditorialTopic(slug: string, lang: RouteLocale, signal?: AbortSignal): Promise<EditorialTopicDetail | null> {
+  const payload = await request(`/${encodeURIComponent(slug)}`, lang, {}, true, signal);
   if (!payload) return null;
   const topic = topicSummary(payload.topic);
   if (topic.slug !== slug) throw new Error('Editorial topic returned an unexpected slug');
+  if (!Object.prototype.hasOwnProperty.call(payload, 'pinnedArticle')) throw new Error('Missing editorial topic pin');
   return {
     lang, topic,
     pinnedArticle: payload.pinnedArticle == null ? null : topicStory(payload.pinnedArticle, lang),
   };
 }
 
-export async function fetchEditorialTopicStories(slug: string, lang: RouteLocale, page: number): Promise<EditorialTopicStoryPage> {
+export async function fetchEditorialTopicStories(slug: string, lang: RouteLocale, page: number, signal?: AbortSignal): Promise<EditorialTopicStoryPage> {
   if (!Number.isSafeInteger(page) || page < 1 || page > 10000) throw new Error('Invalid editorial topic page');
   const payload = await request(`/${encodeURIComponent(slug)}/articles`, lang, {
     page: String(page), limit: String(EDITORIAL_TOPIC_PAGE_SIZE),
-  });
+  }, false, signal);
   if (!payload || !Array.isArray(payload.items) || typeof payload.hasNextPage !== 'boolean'
     || payload.count !== payload.items.length) throw new Error('Invalid editorial topic story page');
   const pagination = getOrdinaryCategoryPagination({

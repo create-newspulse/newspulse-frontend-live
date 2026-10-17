@@ -20,12 +20,17 @@ import {
   editorialTopicPath,
   fetchEditorialTopic,
   fetchEditorialTopicStories,
+  type EditorialTopicDetail,
   type EditorialTopicStory,
+  type EditorialTopicStoryPage,
   type EditorialTopicSummary,
 } from '../../lib/publicEditorialTopics';
+import { subscribePublicDataRefresh } from '../../lib/publicDataRefresh';
 import { normalizeRouteLocale, type RouteLocale } from '../../lib/localizedArticleFields';
 import { getMessages } from '../../lib/getMessages';
 import { absolutePublicUrl, NEWS_PULSE_PUBLISHER_NAME, removeUndefined, resolvePublicSiteUrl, safeJsonLd, type SeoAlternate } from '../../lib/seo';
+
+type EditorialStoryCard = CategoryStoryHierarchyItem & Pick<EditorialTopicStory, 'translationKey' | 'translationGroupId'>;
 
 export type TopicPageProps = {
   messages: Record<string, unknown>;
@@ -36,8 +41,8 @@ export type TopicPageProps = {
   | {
     mode: 'editorial';
     topic: EditorialTopicSummary;
-    pinnedArticle: CategoryStoryHierarchyItem | null;
-    items: CategoryStoryHierarchyItem[];
+    pinnedArticle: EditorialStoryCard | null;
+    items: EditorialStoryCard[];
     pagination: { page: number; totalPages: number; hasNextPage: boolean };
     seo: {
       title: string;
@@ -202,10 +207,9 @@ function LegacyTopicPage() {
   );
 }
 
-export default function TopicPage(props: TopicPageProps) {
+function UnavailableTopicPage() {
   const { t } = useI18n();
-  if (props.mode === 'legacy') return <LegacyTopicPage />;
-  if (props.mode === 'unavailable') return (
+  return (
     <main className="mx-auto max-w-6xl px-4 py-10">
       <Head>
         <title>{`${t('topicPage.title')} | ${t('brand.name')}`}</title>
@@ -215,8 +219,85 @@ export default function TopicPage(props: TopicPageProps) {
       <p className="mt-3 text-newsPulse-slate">{t('errors.fetchFailed')}</p>
     </main>
   );
+}
 
-  const { topic, locale, pinnedArticle, items, pagination, seo } = props;
+type EditorialTopicPageProps = Extract<TopicPageProps, { mode: 'editorial' }>;
+type EditorialArchive = Pick<EditorialTopicPageProps, 'topic' | 'pinnedArticle' | 'items' | 'pagination'>;
+
+function EditorialTopicPage(props: EditorialTopicPageProps) {
+  const { t } = useI18n();
+  const { locale } = props;
+  const initial = useMemo(() => ({
+    topic: props.topic, pinnedArticle: props.pinnedArticle, items: props.items, pagination: props.pagination,
+  }), [props.topic, props.pinnedArticle, props.items, props.pagination]);
+  const [archive, setArchive] = useState<EditorialArchive | null>(initial);
+  const [readError, setReadError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    let pending: AbortController | null = null;
+    setArchive(initial);
+    setReadError(false);
+    const refresh = async () => {
+      pending?.abort();
+      const controller = new AbortController();
+      pending = controller;
+      try {
+        const [detail, stories] = await Promise.allSettled([
+          fetchEditorialTopic(initial.topic.slug, locale, controller.signal),
+          fetchEditorialTopicStories(initial.topic.slug, locale, initial.pagination.page, controller.signal),
+        ]);
+        if (!active || controller.signal.aborted) return;
+        if (detail.status === 'fulfilled' && !detail.value) {
+          setArchive(null);
+          setReadError(false);
+          return;
+        }
+        const freshDetail = detail.status === 'fulfilled' ? detail.value : null;
+        const freshStories = stories.status === 'fulfilled' ? stories.value : null;
+        const pin = freshDetail?.pinnedArticle ? topicStoryCard(freshDetail.pinnedArticle) : null;
+        const cards = freshStories?.items.map(topicStoryCard);
+        const pagination = freshStories
+          ? { page: freshStories.page, totalPages: freshStories.totalPages, hasNextPage: freshStories.hasNextPage }
+          : null;
+        for (const result of [detail, stories]) {
+          if (result.status === 'rejected') console.error('[editorial-topics] Mounted archive unavailable', result.reason);
+        }
+        setArchive((previous) => {
+          if (!previous && (!freshDetail || !freshStories)) return previous;
+          const current = previous ?? initial;
+          const pinnedArticle = freshDetail ? pin : current.pinnedArticle;
+          return {
+            topic: freshDetail?.topic ?? current.topic,
+            pinnedArticle,
+            // Retained cards have already excluded the old pin; a failed page read must not resurrect it.
+            items: withoutPinnedStory(cards ?? current.items, pinnedArticle),
+            pagination: pagination ?? current.pagination,
+          };
+        });
+        setReadError(detail.status === 'rejected' || stories.status === 'rejected');
+      } catch (error) {
+        if (!active || controller.signal.aborted) return;
+        console.error('[editorial-topics] Mounted archive unavailable', error);
+        setReadError(true);
+      }
+    };
+    const unsubscribe = subscribePublicDataRefresh(() => { void refresh(); });
+    return () => {
+      active = false;
+      pending?.abort();
+      unsubscribe();
+    };
+  }, [initial, locale]);
+
+  if (!archive) return <UnavailableTopicPage />;
+  const { topic, pinnedArticle, items, pagination } = archive;
+  const seo = {
+    ...props.seo,
+    title: `${topic.label} | News Pulse`,
+    description: topic.description[locale],
+    jsonLd: { ...props.seo.jsonLd, name: topic.label, description: topic.description[locale] },
+  };
   const path = (page: number) => editorialTopicPath(topic.slug, locale, page);
   return (
     <>
@@ -240,6 +321,12 @@ export default function TopicPage(props: TopicPageProps) {
               <Link href="/" className="text-newsPulse-blue hover:underline">{t('common.home')}</Link>
             </div>
           </header>
+          {readError ? (
+            <div role="alert" className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5 text-slate-800">
+              <p>{t('topicPage.unableToLoadStories')}</p>
+              <p className="mt-1 text-sm">{t('errors.showingPreviousStories')}</p>
+            </div>
+          ) : null}
           {pinnedArticle ? (
             <section className="mt-8 max-w-2xl" aria-labelledby="topic-featured-story">
               <h2 id="topic-featured-story" className="mb-3 text-sm font-bold text-newsPulse-navy">{t('topicPage.featuredStory')}</h2>
@@ -278,7 +365,13 @@ export default function TopicPage(props: TopicPageProps) {
   );
 }
 
-function topicStoryCard(story: EditorialTopicStory): CategoryStoryHierarchyItem {
+export default function TopicPage(props: TopicPageProps) {
+  if (props.mode === 'legacy') return <LegacyTopicPage />;
+  if (props.mode === 'unavailable') return <UnavailableTopicPage />;
+  return <EditorialTopicPage key={`${props.locale}:${props.topic.slug}:${props.pagination.page}`} {...props} />;
+}
+
+function topicStoryCard(story: EditorialTopicStory): EditorialStoryCard {
   const image = resolveCoverImageUrl(story, { lang: story.language }) || COVER_PLACEHOLDER_SRC;
   const dateIso = resolveStoryDateIso(story);
   return removeUndefined({
@@ -286,7 +379,24 @@ function topicStoryCard(story: EditorialTopicStory): CategoryStoryHierarchyItem 
     href: buildNewsUrl({ id: story._id, slug: story.slug, lang: story.language }),
     imageSrc: image, imageFitMode: resolveCoverFitMode(story, { src: image, altText: story.title }),
     dateIso, dateLabel: formatEditorialDateTime(dateIso),
+    translationKey: story.translationKey, translationGroupId: story.translationGroupId,
   });
+}
+
+function withoutPinnedStory(items: EditorialStoryCard[], pin: EditorialStoryCard | null): EditorialStoryCard[] {
+  const pinGroup = pin?.translationGroupId || pin?.translationKey;
+  return items.filter((story) => story.id !== pin?.id
+    && (!pinGroup || (story.translationGroupId !== pinGroup && story.translationKey !== pinGroup)));
+}
+
+function editorialArchive(detail: EditorialTopicDetail, stories: EditorialTopicStoryPage): EditorialArchive {
+  const pinnedArticle = detail.pinnedArticle ? topicStoryCard(detail.pinnedArticle) : null;
+  return {
+    topic: detail.topic,
+    pinnedArticle,
+    items: withoutPinnedStory(stories.items.map(topicStoryCard), pinnedArticle),
+    pagination: { page: stories.page, totalPages: stories.totalPages, hasNextPage: stories.hasNextPage },
+  };
 }
 
 export const getServerSideProps: GetServerSideProps<TopicPageProps> = async (ctx) => {
@@ -308,10 +418,6 @@ export const getServerSideProps: GetServerSideProps<TopicPageProps> = async (ctx
       return { redirect: { destination: editorialTopicPath(detail.topic.slug, locale), permanent: false } };
     }
     const stories = await fetchEditorialTopicStories(detail.topic.slug, locale, page);
-    const pin = detail.pinnedArticle;
-    const pinGroup = pin?.translationGroupId || pin?.translationKey;
-    const items = stories.items.filter((story) => story._id !== pin?._id
-      && (!pinGroup || (story.translationGroupId !== pinGroup && story.translationKey !== pinGroup)));
     const siteUrl = resolvePublicSiteUrl(ctx.req);
     const canonicalUrl = absolutePublicUrl(editorialTopicPath(detail.topic.slug, locale, page), siteUrl);
     const description = detail.topic.description[locale];
@@ -321,9 +427,7 @@ export const getServerSideProps: GetServerSideProps<TopicPageProps> = async (ctx
     alternates.push({ hrefLang: 'x-default', href: alternates[0].href });
     return {
       props: {
-        ...common, mode: 'editorial', topic: detail.topic,
-        pinnedArticle: pin ? topicStoryCard(pin) : null, items: items.map(topicStoryCard),
-        pagination: { page: stories.page, totalPages: stories.totalPages, hasNextPage: stories.hasNextPage },
+        ...common, mode: 'editorial', ...editorialArchive(detail, stories),
         seo: {
           title: `${detail.topic.label} | News Pulse`, description, canonicalUrl, alternates,
           jsonLd: removeUndefined({

@@ -6,6 +6,8 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import NewsPulseCategoryShell from '../../components/NewsPulseCategoryShell';
 import { fetchHomepageSponsoredFeature } from '../../lib/publicSponsoredFeature';
 import { fetchPublicNews } from '../../lib/publicNewsApi';
+import { dispatchPublicDataRefresh } from '../../lib/publicDataRefresh';
+import { jsonResponse } from '../fixtures/editorialTopics';
 
 jest.mock('../../components/ExploreCategories', () => ({
   __esModule: true,
@@ -36,6 +38,7 @@ jest.mock('../../components/home/HomeRightRail', () => ({
       data-lang={lang}
       data-count={Array.isArray(latestItems) ? latestItems.length : -1}
       data-ids={Array.isArray(latestItems) ? latestItems.map(item => item._id || item.id).join(',') : ''}
+      data-titles={Array.isArray(latestItems) ? latestItems.map(item => item.title).join('|') : ''}
       data-read-error={String(latestReadError)}
     />
   ),
@@ -144,6 +147,125 @@ describe('NewsPulseCategoryShell', () => {
         publicArticle('global-regional', 'regional', '2026-09-05T09:00:00.000Z'),
         publicArticle('global-business', 'business', '2026-09-05T08:00:00.000Z'),
       ],
+    });
+  });
+
+  describe.each(['en', 'hi', 'gu'] as const)('%s mounted shared news', (lang) => {
+    const story = (id: string, title = `${lang} ${id}`) => ({
+      ...publicArticle(id, 'national', '2026-10-01T10:00:00Z'), language: lang, title,
+    });
+    const reply = (items: ReturnType<typeof story>[]) => ({ items, meta: {}, endpoint: '/api/public/news' });
+    const event = () => dispatchPublicDataRefresh({ version: 'sidebar-change', previousVersion: null, source: 'test' });
+    const shell = (locale = lang, category = 'business') => (
+      <NewsPulseCategoryShell activeCategory={category} latestItems={[]} lang={locale}>Stories</NewsPulseCategoryShell>
+    );
+    const titles = () => screen.getByTestId('home-right-rail').getAttribute('data-titles');
+
+    beforeEach(() => {
+      jest.spyOn(console, 'warn').mockImplementation(() => {});
+      mockPublicNews({ global: [story('first'), story('second')], spotlight: [story('first')] });
+    });
+    afterEach(() => {
+      jest.restoreAllMocks();
+      jest.useRealTimers();
+    });
+
+    test('version refresh updates same-ID content and preserves authoritative ordering without another interval', async () => {
+      const interval = jest.spyOn(global, 'setInterval');
+      await act(async () => { render(shell()); });
+      expect(firstSpotlightTitle()).toBe(`${lang} first`);
+      fetchPublicNewsMock.mockClear();
+      mockPublicNews({ global: [story('second'), story('first', `${lang} edited`)], spotlight: [story('first', `${lang} edited`)] });
+      await act(async () => { event(); });
+      expect(titles()).toBe(`${lang} second|${lang} edited`);
+      expect(firstSpotlightTitle()).toBe(`${lang} edited`);
+      expect(fetchPublicNewsMock.mock.calls.map(([request]) => request.language)).toEqual([lang, lang]);
+      expect(interval).not.toHaveBeenCalled();
+    });
+
+    test('authoritative replacement removes withdrawn stories, allows published restoration and applies genuine empty', async () => {
+      render(shell());
+      await waitFor(() => expect(firstSpotlightTitle()).toBe(`${lang} first`));
+      mockPublicNews({ global: [story('second')], spotlight: [story('second')] });
+      await act(async () => { event(); });
+      expect(titles()).toBe(`${lang} second`);
+      expect(firstSpotlightTitle()).toBe(`${lang} second`);
+      mockPublicNews({ global: [story('first')], spotlight: [story('first')] });
+      await act(async () => { event(); });
+      expect(titles()).toBe(`${lang} first`);
+      mockPublicNews({ global: [], spotlight: [] });
+      await act(async () => { event(); });
+      expect(titles()).toBe('');
+      expect(screen.queryByTestId('home-spotlight')).toBeNull();
+      expect(screen.getByTestId('home-right-rail').getAttribute('data-read-error')).toBe('false');
+    });
+
+    test.each(['returned', 'rejected', 'malformed', 'timeout'])('%s failure retains both last valid surfaces', async (failure) => {
+      render(shell());
+      await waitFor(() => expect(firstSpotlightTitle()).toBe(`${lang} first`));
+      if (failure === 'returned') fetchPublicNewsMock.mockResolvedValue({ ...reply([]), error: 'API 503' });
+      else if (failure === 'rejected') fetchPublicNewsMock.mockRejectedValue(new Error('offline'));
+      else if (failure === 'malformed') {
+        jest.spyOn(console, 'error').mockImplementation(() => {});
+        jest.spyOn(global, 'fetch').mockResolvedValue(jsonResponse({ items: [{ title: 'Incomplete record' }] }));
+        fetchPublicNewsMock.mockImplementation(jest.requireActual<typeof import('../../lib/publicNewsApi')>('../../lib/publicNewsApi').fetchPublicNews);
+      } else {
+        jest.useFakeTimers();
+        fetchPublicNewsMock.mockImplementation(() => new Promise(() => {}));
+      }
+      await act(async () => {
+        event();
+        if (failure === 'timeout') await jest.advanceTimersByTimeAsync(4000);
+      });
+      expect(titles()).toBe(`${lang} first|${lang} second`);
+      expect(firstSpotlightTitle()).toBe(`${lang} first`);
+      expect(screen.getByTestId('home-right-rail').getAttribute('data-read-error')).toBe('true');
+      expect(console.warn).toHaveBeenCalled();
+      mockPublicNews({ global: [story('recovered')], spotlight: [story('recovered')] });
+      await act(async () => { event(); });
+      expect(titles()).toBe(`${lang} recovered`);
+      expect(screen.getByTestId('home-right-rail').getAttribute('data-read-error')).toBe('false');
+    });
+
+    test.each(['latest', 'spotlight'])('%s failure does not block the other successful sidebar surface', async (failed) => {
+      render(shell());
+      await waitFor(() => expect(firstSpotlightTitle()).toBe(`${lang} first`));
+      fetchPublicNewsMock.mockImplementation(async (request) => {
+        const spotlight = request.extraQuery?.spotlight === '1';
+        if (spotlight === (failed === 'spotlight')) throw new Error('unavailable');
+        return reply([story('updated')]);
+      });
+      await act(async () => { event(); });
+      expect(titles()).toBe(failed === 'latest' ? `${lang} first|${lang} second` : `${lang} updated`);
+      expect(firstSpotlightTitle()).toBe(failed === 'spotlight' ? `${lang} first` : `${lang} updated`);
+    });
+
+    test.each(['locale', 'category', 'superseded', 'unmount'])('%s invalidates pending shared reads even if fetch ignores abort', async (change) => {
+      const view = render(shell());
+      await waitFor(() => expect(firstSpotlightTitle()).toBe(`${lang} first`));
+      const finish: Array<(value: ReturnType<typeof reply>) => void> = [];
+      fetchPublicNewsMock.mockClear().mockImplementation(() => new Promise((resolve) => { finish.push(resolve); }));
+      await act(async () => { event(); });
+      const oldSignals = fetchPublicNewsMock.mock.calls.map(([request]) => request.signal as AbortSignal);
+      mockPublicNews({ global: [story('new-owner')], spotlight: [story('new-owner')] });
+      if (change === 'unmount') view.unmount();
+      else if (change === 'locale') {
+        const locale = lang === 'en' ? 'hi' : lang === 'hi' ? 'gu' : 'en';
+        await act(async () => { view.rerender(shell(locale)); });
+        expect(fetchPublicNewsMock.mock.calls.slice(2).map(([request]) => request.language)).toEqual([locale, locale]);
+      } else if (change === 'category') await act(async () => { view.rerender(shell(lang, 'international')); });
+      else await act(async () => { event(); });
+      expect(oldSignals.every((signal) => signal.aborted)).toBe(true);
+      await act(async () => { finish.forEach((resolve) => resolve(reply([story('late-old')]))); });
+      if (change === 'unmount') {
+        await act(async () => { event(); });
+        expect(fetchPublicNewsMock).toHaveBeenCalledTimes(2);
+        expect(view.container.innerHTML).toBe('');
+      } else {
+        expect(titles()).toBe(`${lang} new-owner`);
+        expect(firstSpotlightTitle()).toBe(`${lang} new-owner`);
+        expect(fetchPublicNewsMock).toHaveBeenCalledTimes(4);
+      }
     });
   });
 

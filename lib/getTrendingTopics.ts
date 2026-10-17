@@ -1,6 +1,8 @@
 import { DEFAULT_TRENDING_TOPICS, type TrendingTopic } from '../src/config/trendingTopics';
 import { getPublicApiBaseUrl } from './publicApiBase';
 import type { RouteLocale } from './localizedArticleFields';
+import { EDITORIAL_TOPICS_TIMEOUT_MS } from './publicEditorialTopics';
+import { withPublicReadDeadline } from './publicReadDeadline';
 
 function trimTrailingSlashes(value: string): string {
   return value.replace(/\/+$/, '');
@@ -93,22 +95,35 @@ export function getTrendingTopicsRequestUrl(lang: RouteLocale = 'en'): string {
   return `${base}/api/public/trending-topics?lang=${lang}`;
 }
 
-export async function getTrendingTopics(lang: RouteLocale = 'en'): Promise<TrendingTopic[]> {
-  // In SSR/Node contexts, return defaults (never fetch from backend in SSR here).
-  if (typeof window === 'undefined') return DEFAULT_TRENDING_TOPICS;
+export type TrendingTopicsRead = {
+  items: TrendingTopic[];
+  authoritative: boolean;
+};
+
+export async function readTrendingTopics(lang: RouteLocale = 'en', signal?: AbortSignal): Promise<TrendingTopicsRead> {
+  if (typeof window === 'undefined') return { items: DEFAULT_TRENDING_TOPICS, authoritative: false };
 
   try {
-    const url = getTrendingTopicsRequestUrl(lang);
-    const res = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`Trending request failed (${res.status})`);
-
-    const json = (await res.json()) as unknown;
-    const topics = normalizeTrendingTopics(json);
-
-    // If API returns empty, keep defaults.
-    return topics.length ? topics : DEFAULT_TRENDING_TOPICS;
+    return await withPublicReadDeadline(EDITORIAL_TOPICS_TIMEOUT_MS, async (readSignal) => {
+      const res = await fetch(getTrendingTopicsRequestUrl(lang), { cache: 'no-store', signal: readSignal });
+      if (!res.ok) throw new Error(`Trending request failed (${res.status})`);
+      const json: unknown = await res.json();
+      if (isRecord(json) && (json.ok === false || json.success === false
+        || ('editorialReadError' in json && typeof json.editorialReadError !== 'boolean'))) {
+        throw new Error('Invalid trending response');
+      }
+      if (normalizeItems(json).some((item) => !normalizeTopic(item))) throw new Error('Invalid trending item');
+      const topics = normalizeTrendingTopics(json);
+      const authoritative = !isRecord(json) || json.editorialReadError !== true;
+      if (!authoritative) console.warn('[trending-topics] Editorial topics unavailable; shortcuts are fallback only');
+      return { items: topics.length ? topics : DEFAULT_TRENDING_TOPICS, authoritative };
+    }, signal);
   } catch (error) {
-    console.warn('[trending-topics] Using default shortcuts', error);
-    return DEFAULT_TRENDING_TOPICS;
+    if (!signal?.aborted) console.warn('[trending-topics] Using default shortcuts', error);
+    return { items: DEFAULT_TRENDING_TOPICS, authoritative: false };
   }
+}
+
+export async function getTrendingTopics(lang: RouteLocale = 'en'): Promise<TrendingTopic[]> {
+  return (await readTrendingTopics(lang)).items;
 }

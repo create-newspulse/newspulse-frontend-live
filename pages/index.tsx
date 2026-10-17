@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { usePublicMode } from "../utils/PublicModeProvider";
 import { usePublicSettings } from "../src/context/PublicSettingsContext";
-import { DEFAULT_TRENDING_TOPICS, type TrendingTopic } from "../src/config/trendingTopics";
-import { getTrendingTopics } from "../lib/getTrendingTopics";
+import type { TrendingTopic } from "../src/config/trendingTopics";
+import { useTrendingTopics } from "../hooks/useTrendingTopics";
 import { fetchPublicNews, projectPublicNewsListArticle, type Article } from "../lib/publicNewsApi";
 import { shouldReplaceArticleWithFreshCandidate } from "../lib/translationGroupSync";
 import { withPublicReadDeadline } from "../lib/publicReadDeadline";
@@ -1786,7 +1786,7 @@ function useTickerSponsor(kind: 'breaking' | 'live', lang: 'en' | 'hi' | 'gu') {
 function TrendingStrip({ theme, onPick }: any) {
   const router = useRouter();
   const { t, lang } = useI18n();
-  const [topics, setTopics] = useState<TrendingTopic[]>(DEFAULT_TRENDING_TOPICS);
+  const topics = useTrendingTopics(lang);
   const [path, setPath] = useState<string>("");
   const tapState = useRef({
     down: false,
@@ -1798,16 +1798,6 @@ function TrendingStrip({ theme, onPick }: any) {
 
   React.useEffect(() => {
     setPath(window.location.pathname);
-    setTopics(DEFAULT_TRENDING_TOPICS);
-
-    let cancelled = false;
-    getTrendingTopics(lang).then((next) => {
-      if (cancelled) return;
-      setTopics(next);
-    });
-    return () => {
-      cancelled = true;
-    };
   }, [lang]);
 
   return (

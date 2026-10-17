@@ -8,7 +8,9 @@ import AdSlot from '../src/components/ads/AdSlot';
 import { usePublicSettings } from '../src/context/PublicSettingsContext';
 import { DEFAULT_NORMALIZED_PUBLIC_SETTINGS } from '../src/lib/publicSettings';
 import { filterPubliclyPublishedArticles } from '../lib/localizedArticleFields';
-import { fetchPublicNews, type Article } from '../lib/publicNewsApi';
+import { fetchPublicNews } from '../lib/publicNewsApi';
+import { subscribePublicDataRefresh } from '../lib/publicDataRefresh';
+import { withPublicReadDeadline } from '../lib/publicReadDeadline';
 import {
 	fetchHomeSpotlightArticles,
 	HOME_FRESH_SOURCE_LIMIT,
@@ -24,6 +26,13 @@ type NewsPulseCategoryShellProps = {
 	topContent?: React.ReactNode;
 	afterColumns?: React.ReactNode;
 	children: React.ReactNode;
+};
+
+type SharedNewsState = {
+	owner: string;
+	latestItems: ReturnType<typeof articleToHomeRightRailFeedItem>[] | null;
+	spotlightItems: ReturnType<typeof articleToHomeRightRailFeedItem>[] | null;
+	latestReadError: boolean;
 };
 
 const CATEGORY_ROUTES: Record<string, string> = {
@@ -72,59 +81,64 @@ export default function NewsPulseCategoryShell({ activeCategory, latestItems, la
 		[latestItems]
 	);
 	const { settings, isModuleEnabled, moduleOrder } = usePublicSettings();
-	const [globalLatestItems, setGlobalLatestItems] = React.useState<any[] | null>(null);
-	const [latestReadError, setLatestReadError] = React.useState(false);
-	const [homeSpotlightItems, setHomeSpotlightItems] = React.useState<any[] | null>(null);
+	const hasCustomRightRail = Boolean(rightRail);
+	const owner = `${lang}:${activeCategory}:${hasCustomRightRail}`;
+	const [sharedNews, setSharedNews] = React.useState<SharedNewsState>({
+		owner, latestItems: null, spotlightItems: null, latestReadError: false,
+	});
 
 	React.useEffect(() => {
-		let cancelled = false;
-		if (!rightRail) {
-			setGlobalLatestItems(null);
-			setLatestReadError(false);
-		}
-		setHomeSpotlightItems(null);
+		let active = true;
+		let pending: AbortController | null = null;
+		const initial: SharedNewsState = { owner, latestItems: null, spotlightItems: null, latestReadError: false };
+		setSharedNews(initial);
 
-		const controller = new AbortController();
 		const loadHomeSharedNews = async () => {
+			pending?.abort();
+			const controller = new AbortController();
+			pending = controller;
 			const [latestResult, spotlightResult] = await Promise.allSettled([
-				fetchPublicNews({ language: lang, limit: HOME_FRESH_SOURCE_LIMIT, signal: controller.signal }),
-				fetchHomeSpotlightArticles({ lang, signal: controller.signal }),
+				withPublicReadDeadline(4000, async (signal) => {
+					const response = await fetchPublicNews({ language: lang, limit: HOME_FRESH_SOURCE_LIMIT, signal });
+					if (response.error) throw new Error(response.error);
+					return filterPubliclyPublishedArticles(response.items)
+						.filter((article) => !isHomeSpotlightSponsoredContent(article, lang))
+						.map((article) => articleToHomeRightRailFeedItem(article, lang));
+				}, controller.signal),
+				withPublicReadDeadline(4000, async (signal) => {
+					const articles = await fetchHomeSpotlightArticles({ lang, signal });
+					return articles.map((article) => articleToHomeRightRailFeedItem(article, lang));
+				}, controller.signal),
 			]);
-			if (cancelled || controller.signal.aborted) return;
-
-			const latestResp = latestResult.status === 'fulfilled' ? latestResult.value : null;
-			const latestArticles = filterPubliclyPublishedArticles(latestResp?.items);
-			const spotlightArticles = spotlightResult.status === 'fulfilled' ? spotlightResult.value : [];
-
-			if (!rightRail) {
-				const readFailed = latestResult.status === 'rejected' || Boolean(latestResp?.error);
-				const editorialLatestItems = readFailed ? [] : latestArticles
-					.filter((article) => !isHomeSpotlightSponsoredContent(article, lang))
-					.map((article) => articleToHomeRightRailFeedItem(article as any, lang));
-				setGlobalLatestItems(editorialLatestItems);
-				setLatestReadError(readFailed);
+			if (!active || controller.signal.aborted) return;
+			if (spotlightResult.status === 'rejected') {
+				console.warn('[category-shell] Spotlight unavailable', spotlightResult.reason);
 			}
-
-			setHomeSpotlightItems(spotlightArticles.map((article: Article) => articleToHomeRightRailFeedItem(article as any, lang)));
+			setSharedNews((previous) => {
+				const current = previous.owner === owner ? previous : initial;
+				return {
+					owner,
+					latestItems: hasCustomRightRail ? current.latestItems
+						: latestResult.status === 'fulfilled' ? latestResult.value : current.latestItems ?? [],
+					spotlightItems: spotlightResult.status === 'fulfilled' ? spotlightResult.value : current.spotlightItems ?? [],
+					latestReadError: !hasCustomRightRail && latestResult.status === 'rejected',
+				};
+			});
 		};
 
-		void loadHomeSharedNews().catch(() => {
-			if (cancelled || controller.signal.aborted) return;
-			if (!rightRail) {
-				setGlobalLatestItems([]);
-				setLatestReadError(true);
-			}
-			setHomeSpotlightItems([]);
-		});
-
+		void loadHomeSharedNews();
+		const unsubscribe = subscribePublicDataRefresh(() => { void loadHomeSharedNews(); });
 		return () => {
-			cancelled = true;
-			controller.abort();
+			active = false;
+			pending?.abort();
+			unsubscribe();
 		};
-	}, [lang, rightRail]);
+	}, [lang, owner, hasCustomRightRail]);
 
+	const globalLatestItems = sharedNews.owner === owner ? sharedNews.latestItems : null;
+	const latestReadError = sharedNews.owner === owner && sharedNews.latestReadError;
 	const rightRailLatestItems = globalLatestItems ?? publicLatestItems;
-	const spotlightItems = Array.isArray(homeSpotlightItems) ? homeSpotlightItems : [];
+	const spotlightItems = sharedNews.owner === owner ? sharedNews.spotlightItems ?? [] : [];
 	const resolvedRightRail = rightRail ?? (
 		<HomeRightRail theme={DEFAULT_HOME_RIGHT_RAIL_THEME} latestItems={rightRailLatestItems} latestReadError={latestReadError} lang={lang} />
 	);

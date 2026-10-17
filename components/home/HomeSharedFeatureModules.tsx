@@ -4,8 +4,8 @@ import React from 'react';
 import { ArrowRight, ChevronLeft, ChevronRight, Flame, Sparkles } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 
-import { DEFAULT_TRENDING_TOPICS, type TrendingTopic } from '../../src/config/trendingTopics';
-import { getTrendingTopics } from '../../lib/getTrendingTopics';
+import type { TrendingTopic } from '../../src/config/trendingTopics';
+import { useTrendingTopics } from '../../hooks/useTrendingTopics';
 import { buildNewsUrl, isNavigableNewsHref } from '../../lib/newsRoutes';
 import { COVER_PLACEHOLDER_SRC, resolveCoverFitMode, resolveCoverImageUrl } from '../../lib/coverImages';
 import { getStoryCategoryLabel } from '../../lib/publicStories';
@@ -218,21 +218,12 @@ function toSpotlightViewModel(story: any, lang: HomeRightRailLang) {
 export function HomeTrendingStrip({ theme = DEFAULT_SHARED_THEME, onPick }: { theme?: SharedTheme; onPick?: (label: string) => void }) {
   const router = useRouter();
   const { t, lang } = useI18n();
-  const [topics, setTopics] = React.useState<TrendingTopic[]>(DEFAULT_TRENDING_TOPICS);
+  const topics = useTrendingTopics(lang);
   const [path, setPath] = React.useState('');
   const tapState = React.useRef({ down: false, startX: 0, startY: 0, moved: false, touchNavigatedAt: 0 });
 
   React.useEffect(() => {
     setPath(window.location.pathname);
-    setTopics(DEFAULT_TRENDING_TOPICS);
-
-    let cancelled = false;
-    getTrendingTopics(lang).then((next) => {
-      if (!cancelled) setTopics(next);
-    });
-    return () => {
-      cancelled = true;
-    };
   }, [lang]);
 
   return (

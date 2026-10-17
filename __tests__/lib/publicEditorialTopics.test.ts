@@ -1,3 +1,4 @@
+/** @jest-environment node */
 import {
   EDITORIAL_TOPICS_TIMEOUT_MS,
   editorialTopicPath,
@@ -17,6 +18,7 @@ beforeEach(() => {
   global.fetch = fetchMock;
 });
 afterEach(() => {
+  Reflect.deleteProperty(globalThis, 'window');
   global.fetch = originalFetch;
   jest.useRealTimers();
 });
@@ -123,5 +125,35 @@ describe('Editorial Topics V1 DTOs', () => {
     jest.mocked(getPublicApiBaseUrl).mockReturnValueOnce('');
     await expect(fetchEditorialTopics('en')).rejects.toThrow('not configured');
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test.each(['en', 'hi', 'gu'] as const)('%s browser detail/page readers use the same-origin transport', async (lang) => {
+    Object.defineProperty(globalThis, 'window', { configurable: true, value: {} });
+    jest.mocked(getPublicApiBaseUrl).mockReturnValueOnce('').mockReturnValueOnce('');
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true, lang, topic: topicFixture(lang), pinnedArticle: null }));
+    fetchMock.mockResolvedValueOnce(jsonResponse(storyPageFixture(lang, 2)));
+    await fetchEditorialTopic('navratri-2026', lang);
+    await fetchEditorialTopicStories('navratri-2026', lang, 2);
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      `/api/public/topics/navratri-2026?lang=${lang}`,
+      `/api/public/topics/navratri-2026/articles?lang=${lang}&page=2&limit=12`,
+    ]);
+  });
+
+  test('a missing pin field is malformed, not an authoritative null pin', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ ok: true, lang: 'en', topic: topicFixture() }));
+    await expect(fetchEditorialTopic('navratri-2026', 'en')).rejects.toThrow('Missing editorial topic pin');
+  });
+
+  test.each(['detail', 'stories'])('%s reader propagates owner cancellation to fetch', async (kind) => {
+    const controller = new AbortController();
+    fetchMock.mockImplementation(() => new Promise(() => {}));
+    const pending = kind === 'detail'
+      ? fetchEditorialTopic('navratri-2026', 'en', controller.signal)
+      : fetchEditorialTopicStories('navratri-2026', 'en', 2, controller.signal);
+    const cancelled = expect(pending).rejects.toThrow('cancelled');
+    controller.abort();
+    await cancelled;
+    expect(fetchMock.mock.calls[0][1]?.signal?.aborted).toBe(true);
   });
 });

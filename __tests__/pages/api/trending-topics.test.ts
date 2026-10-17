@@ -68,7 +68,7 @@ test.each(['reject', '404', '503', 'malformed', 'too-many'])('editorial %s failu
     if (failure === 'too-many') return jsonResponse({ ok: true, lang: 'en', items: Array(7).fill(topicFixture()) });
     return jsonResponse({}, Number(failure));
   });
-  expect((await invoke()).json).toHaveBeenCalledWith({ items: DEFAULT_TRENDING_TOPICS });
+  expect((await invoke()).json).toHaveBeenCalledWith({ items: DEFAULT_TRENDING_TOPICS, editorialReadError: true });
   expect(console.warn).toHaveBeenCalled();
 });
 
@@ -105,7 +105,7 @@ test('parallel reads finish on their deadline and preserve the successful legacy
     ? new Promise(() => {}) : Promise.resolve(jsonResponse(DEFAULT_TRENDING_TOPICS)));
   const pending = invoke();
   await jest.advanceTimersByTimeAsync(EDITORIAL_TOPICS_TIMEOUT_MS);
-  expect((await pending).json).toHaveBeenCalledWith({ items: DEFAULT_TRENDING_TOPICS });
+  expect((await pending).json).toHaveBeenCalledWith({ items: DEFAULT_TRENDING_TOPICS, editorialReadError: true });
   expect(fetchMock.mock.calls[0][1]?.signal?.aborted).toBe(true);
 });
 
@@ -127,7 +127,7 @@ test('two stalled upstreams share a four-second window, not serial deadlines', a
   fetchMock.mockImplementation(() => new Promise(() => {}));
   const pending = invoke();
   await jest.advanceTimersByTimeAsync(EDITORIAL_TOPICS_TIMEOUT_MS);
-  expect((await pending).json).toHaveBeenCalledWith({ items: DEFAULT_TRENDING_TOPICS });
+  expect((await pending).json).toHaveBeenCalledWith({ items: DEFAULT_TRENDING_TOPICS, editorialReadError: true });
   expect(fetchMock).toHaveBeenCalledTimes(2);
   expect(fetchMock.mock.calls.every(([, init]) => init?.signal?.aborted)).toBe(true);
 });
@@ -147,6 +147,6 @@ test('non-GET requests cannot reach either backend endpoint', async () => {
 
 test('no configured backend preserves client defaults without an upstream call', async () => {
   jest.mocked(getPublicApiBaseUrl).mockReturnValueOnce('');
-  expect((await invoke()).json).toHaveBeenCalledWith([]);
+  expect((await invoke()).json).toHaveBeenCalledWith({ items: [], editorialReadError: true });
   expect(fetchMock).not.toHaveBeenCalled();
 });

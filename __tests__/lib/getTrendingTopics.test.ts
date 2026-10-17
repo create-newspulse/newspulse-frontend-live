@@ -1,5 +1,6 @@
 /** @jest-environment node */
-import { getTrendingTopics, mergeTrendingTopics, normalizeTrendingTopics } from '../../lib/getTrendingTopics';
+import { getTrendingTopics, readTrendingTopics, mergeTrendingTopics, normalizeTrendingTopics } from '../../lib/getTrendingTopics';
+import { EDITORIAL_TOPICS_TIMEOUT_MS } from '../../lib/publicEditorialTopics';
 import { DEFAULT_TRENDING_TOPICS, type TrendingTopic } from '../../src/config/trendingTopics';
 import { jsonResponse, topicNames } from '../fixtures/editorialTopics';
 
@@ -15,6 +16,7 @@ afterEach(() => {
   Reflect.deleteProperty(globalThis, 'window');
   global.fetch = originalFetch;
   jest.restoreAllMocks();
+  jest.useRealTimers();
 });
 
 test.each(['en', 'hi', 'gu'] as const)('makes exactly one same-origin %s browser request and no polling', async (lang) => {
@@ -25,7 +27,9 @@ test.each(['en', 'hi', 'gu'] as const)('makes exactly one same-origin %s browser
   fetchMock.mockResolvedValue(jsonResponse({ items: [editorial, ...DEFAULT_TRENDING_TOPICS] }));
   expect(await getTrendingTopics(lang)).toEqual([editorial, ...DEFAULT_TRENDING_TOPICS]);
   expect(fetchMock).toHaveBeenCalledTimes(1);
-  expect(fetchMock).toHaveBeenCalledWith(`/api/public/trending-topics?lang=${lang}`, { cache: 'no-store' });
+  expect(fetchMock).toHaveBeenCalledWith(`/api/public/trending-topics?lang=${lang}`, {
+    cache: 'no-store', signal: expect.any(AbortSignal),
+  });
   expect(interval).not.toHaveBeenCalled();
 });
 
@@ -73,4 +77,34 @@ test('editorial key/href collisions win without removing intentional shared lega
   expect(merged.filter((item) => item.key === 'sports')).toHaveLength(1);
   expect(merged.some((item) => item.key === 'old-alias')).toBe(false);
   expect(merged.filter((item) => item.href === '/business').map((item) => item.key)).toEqual(['gold-rates', 'fuel-prices', 'markets']);
+});
+
+test.each(['en', 'hi', 'gu'] as const)('distinguishes authoritative %s empty from editorial failure with the same shortcuts', async (lang) => {
+  fetchMock.mockResolvedValueOnce(jsonResponse({ items: [] }));
+  expect(await readTrendingTopics(lang)).toEqual({ items: DEFAULT_TRENDING_TOPICS, authoritative: true });
+  fetchMock.mockResolvedValueOnce(jsonResponse({ items: DEFAULT_TRENDING_TOPICS, editorialReadError: true }));
+  expect(await readTrendingTopics(lang)).toEqual({ items: DEFAULT_TRENDING_TOPICS, authoritative: false });
+  expect(console.warn).toHaveBeenCalled();
+});
+
+test.each([
+  { items: [DEFAULT_TRENDING_TOPICS[0], {}] },
+  { items: [], editorialReadError: 'false' },
+  { ok: false, items: [] },
+  { success: false, items: [] },
+])('malformed/error envelope %# is never authoritative empty or partial membership', async (payload) => {
+  fetchMock.mockResolvedValue(jsonResponse(payload));
+  expect((await readTrendingTopics()).authoritative).toBe(false);
+  expect(console.warn).toHaveBeenCalled();
+});
+
+test.each(['cancel', 'timeout'])('%s aborts a stalled browser read without making fallback authoritative', async (reason) => {
+  jest.useFakeTimers();
+  const controller = new AbortController();
+  fetchMock.mockImplementation(() => new Promise(() => {}));
+  const pending = readTrendingTopics('gu', controller.signal);
+  if (reason === 'cancel') controller.abort();
+  else await jest.advanceTimersByTimeAsync(EDITORIAL_TOPICS_TIMEOUT_MS);
+  expect(await pending).toEqual({ items: DEFAULT_TRENDING_TOPICS, authoritative: false });
+  expect(fetchMock.mock.calls[0][1]?.signal?.aborted).toBe(true);
 });

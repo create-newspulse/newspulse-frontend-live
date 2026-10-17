@@ -2,13 +2,15 @@ import React from 'react';
 import type { GetServerSidePropsContext } from 'next';
 import { IncomingMessage, ServerResponse } from 'node:http';
 import { Socket } from 'node:net';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import TopicPage, { getServerSideProps, type TopicPageProps } from '../../pages/topic/[slug]';
 import SeoAlternates from '../../components/SeoAlternates';
 import { LanguageProvider, getMessagesForLang } from '../../src/i18n/LanguageProvider';
 import { fetchPublicNews } from '../../lib/publicNewsApi';
 import { normalizeRouteLocale, type RouteLocale } from '../../lib/localizedArticleFields';
-import { editorialTopicPath } from '../../lib/publicEditorialTopics';
+import { editorialTopicPath, EDITORIAL_TOPICS_TIMEOUT_MS } from '../../lib/publicEditorialTopics';
+import { getPublicApiBaseUrl } from '../../lib/publicApiBase';
+import { dispatchPublicDataRefresh } from '../../lib/publicDataRefresh';
 import { jsonResponse, storyFixture, storyPageFixture, topicDescriptions, topicFixture, topicNames } from '../fixtures/editorialTopics';
 
 const mockRouter: { locale: RouteLocale; defaultLocale: string; asPath: string; query: Record<string, string | string[]> } = {
@@ -23,7 +25,7 @@ jest.mock('next/link', () => ({
 jest.mock('../../src/components/story/StoryImage', () => ({
   __esModule: true, default: ({ src, alt }: { src: string; alt: string }) => <img src={src} alt={alt} />,
 }));
-jest.mock('../../lib/publicApiBase', () => ({ getPublicApiBaseUrl: () => 'http://localhost:3010' }));
+jest.mock('../../lib/publicApiBase', () => ({ getPublicApiBaseUrl: jest.fn(() => 'http://localhost:3010') }));
 jest.mock('../../lib/getMessages', () => ({ getMessages: async () => ({}) }));
 jest.mock('../../lib/publicNewsApi', () => ({ fetchPublicNews: jest.fn() }));
 
@@ -59,31 +61,50 @@ async function loadEditorial(ctx: GetServerSidePropsContext) {
   if (props.mode !== 'editorial') throw new Error('Expected editorial page');
   return props;
 }
-function mount(props: TopicPageProps) {
+function pageTree(props: TopicPageProps) {
   const seo = props.mode === 'editorial' ? props.seo : undefined;
-  return render(
+  return (
     <LanguageProvider initialLang={props.locale}>
       <SeoAlternates canonicalUrl={seo?.canonicalUrl} alternates={seo?.alternates} disabled={props.mode === 'unavailable' && props.seo.disableAlternates} />
       <TopicPage {...props} />
     </LanguageProvider>
   );
 }
+function mount(props: TopicPageProps) {
+  return render(pageTree(props));
+}
+
+function topicResponse(input: Parameters<typeof fetch>[0], suffix = '') {
+  const url = new URL(String(input), 'http://localhost:3000');
+  const lang = normalizeRouteLocale(url.searchParams.get('lang'));
+  if (url.pathname.endsWith('/articles')) {
+    const page = storyPageFixture(lang, Number(url.searchParams.get('page')));
+    page.items = page.items.map((story) => ({ ...story, title: `${story.title}${suffix}`, summary: `${story.summary}${suffix}` }));
+    return jsonResponse(page);
+  }
+  const slug = decodeURIComponent(url.pathname.split('/').pop() || '');
+  return jsonResponse({
+    ok: true, lang,
+    topic: topicFixture(lang, {
+      slug, label: `${topicNames[lang]}${suffix}`,
+      description: { ...topicDescriptions, [lang]: `${topicDescriptions[lang]}${suffix}` },
+    }),
+    pinnedArticle: { ...storyFixture(100, lang), title: `${storyFixture(100, lang).title}${suffix}` },
+  });
+}
 
 beforeEach(() => {
   jest.replaceProperty(process, 'env', { ...process.env, NEXT_PUBLIC_SITE_URL: siteUrl });
   jest.spyOn(console, 'error').mockImplementation(() => {});
+  jest.mocked(getPublicApiBaseUrl).mockReturnValue('http://localhost:3010');
   global.fetch = fetchMock;
-  fetchMock.mockReset().mockImplementation(async (input) => {
-    const url = new URL(String(input));
-    const lang = normalizeRouteLocale(url.searchParams.get('lang'));
-    if (url.pathname.endsWith('/articles')) return jsonResponse(storyPageFixture(lang, Number(url.searchParams.get('page'))));
-    return jsonResponse({ ok: true, lang, topic: topicFixture(lang), pinnedArticle: storyFixture(100, lang) });
-  });
+  fetchMock.mockReset().mockImplementation(async (input) => topicResponse(input));
   jest.mocked(fetchPublicNews).mockReset().mockResolvedValue({ items: [], meta: {}, endpoint: '/api/public/news' });
 });
 afterEach(() => {
   global.fetch = originalFetch;
   jest.restoreAllMocks();
+  jest.useRealTimers();
   document.head.innerHTML = '';
 });
 
@@ -176,6 +197,236 @@ describe('authoritative editorial topic archives', () => {
       redirect: { destination: '/gu/topic/navratri-2026', permanent: false },
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe.each(['en', 'hi', 'gu'] as const)('%s mounted editorial lifecycle', (lang) => {
+  const event = () => dispatchPublicDataRefresh({ version: 'topic-change', previousVersion: null, source: 'test' });
+  const heading = (index: number, suffix = '') => screen.queryByRole('heading', { name: `${storyFixture(index, lang).title}${suffix}` });
+  async function seeded(page = 1) {
+    const props = await loadEditorial(context(lang, 'navratri-2026', page > 1 ? { page: String(page), utm_source: 'test' } : {}));
+    const view = mount(props);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    fetchMock.mockClear();
+    jest.mocked(getPublicApiBaseUrl).mockReturnValue('');
+    return { ...view, props };
+  }
+
+  test('updates metadata, same-ID cards and the pin without replacing SSR or resetting on a parent render', async () => {
+    const view = await seeded();
+    fetchMock.mockImplementation(async (input) => topicResponse(input, ' edited'));
+    await act(async () => { event(); });
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(`${topicNames[lang]} edited`);
+    expect(heading(13, ' edited')).not.toBeNull();
+    expect(heading(100, ' edited')).not.toBeNull();
+    expect(heading(13)).toBeNull();
+    expect(document.querySelector('meta[name="description"]')?.getAttribute('content')).toBe(`${topicDescriptions[lang]} edited`);
+    expect(JSON.parse(document.querySelector('script[type="application/ld+json"]')!.textContent || '{}').name).toBe(`${topicNames[lang]} edited`);
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      `/api/public/topics/navratri-2026?lang=${lang}`,
+      `/api/public/topics/navratri-2026/articles?lang=${lang}&page=1&limit=12`,
+    ]);
+    view.rerender(pageTree({ ...view.props }));
+    expect(heading(13, ' edited')).not.toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchPublicNews).not.toHaveBeenCalled();
+  });
+
+  test('withdrawal/deletion removes cards and pins; published restoration uses only the authoritative page', async () => {
+    await seeded();
+    fetchMock.mockImplementation(async (input) => String(input).includes('/articles?')
+      ? jsonResponse(storyPageFixture(lang, 1, 12))
+      : jsonResponse({ ok: true, lang, topic: topicFixture(lang), pinnedArticle: null }));
+    await act(async () => { event(); });
+    expect(heading(13)).toBeNull();
+    expect(heading(100)).toBeNull();
+    expect(document.querySelector('#topic-featured-story')).toBeNull();
+    expect(document.querySelectorAll('article')).toHaveLength(12);
+    fetchMock.mockImplementation(async (input) => topicResponse(input));
+    await act(async () => { event(); });
+    expect(heading(13)).not.toBeNull();
+    expect(heading(100)).not.toBeNull();
+    expect(document.querySelectorAll('article')).toHaveLength(13);
+  });
+
+  test.each(['removed', 'updated', 'changed'])('authoritative %s pin survives a failed archive-page read without duplicate or invented pins', async (kind) => {
+    await seeded();
+    const pin = kind === 'removed' ? null : {
+      ...storyFixture(kind === 'updated' ? 100 : 13, lang),
+      title: `${storyFixture(kind === 'updated' ? 100 : 13, lang).title} new-pin`,
+      translationKey: kind === 'changed' ? storyFixture(12, lang).translationKey : storyFixture(100, lang).translationKey,
+    };
+    fetchMock.mockImplementation(async (input) => String(input).includes('/articles?')
+      ? jsonResponse({}, 503)
+      : jsonResponse({ ok: true, lang, topic: topicFixture(lang, { label: `${topicNames[lang]} new-metadata` }), pinnedArticle: pin }));
+    await act(async () => { event(); });
+    expect(heading(100)).toBeNull();
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(`${topicNames[lang]} new-metadata`);
+    if (kind === 'removed') {
+      expect(document.querySelector('#topic-featured-story')).toBeNull();
+      expect(document.querySelectorAll('article')).toHaveLength(12);
+    } else {
+      expect(screen.getAllByRole('heading', { name: pin!.title })).toHaveLength(1);
+      expect(document.querySelectorAll('article')).toHaveLength(kind === 'changed' ? 11 : 13);
+    }
+    if (kind === 'changed') {
+      expect(heading(13)).toBeNull();
+      expect(heading(12)).toBeNull();
+      fetchMock.mockImplementation(async (input) => String(input).includes('/articles?')
+        ? jsonResponse({}, 503)
+        : jsonResponse({ ok: true, lang, topic: topicFixture(lang), pinnedArticle: null }));
+      await act(async () => { event(); });
+      expect(heading(13)).toBeNull();
+      expect(heading(13, ' new-pin')).toBeNull();
+      expect(document.querySelectorAll('article')).toHaveLength(10);
+    } else expect(heading(13)).not.toBeNull();
+    expect(screen.getByRole('alert')).not.toBeNull();
+  });
+
+  test.each(['updated', 'empty'])('metadata failure retains the pin but does not block an authoritative %s page', async (kind) => {
+    await seeded();
+    fetchMock.mockImplementation(async (input) => !String(input).includes('/articles?')
+      ? jsonResponse({}, 503)
+      : kind === 'empty' ? jsonResponse(storyPageFixture(lang, 1, 0)) : topicResponse(input, ' edited-page'));
+    await act(async () => { event(); });
+    expect(heading(100)).not.toBeNull();
+    expect(heading(13)).toBeNull();
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(topicNames[lang]);
+    expect(document.querySelectorAll('article')).toHaveLength(kind === 'empty' ? 1 : 13);
+    if (kind === 'updated') expect(heading(13, ' edited-page')).not.toBeNull();
+    expect(screen.getByRole('alert')).not.toBeNull();
+  });
+
+  test.each(['Draft', 'Scheduled'])('does not invent %s restoration omitted from the authoritative result', async () => {
+    await seeded();
+    fetchMock.mockImplementation(async (input) => String(input).includes('/articles?')
+      ? jsonResponse(storyPageFixture(lang, 1, 0))
+      : jsonResponse({ ok: true, lang, topic: topicFixture(lang), pinnedArticle: null }));
+    await act(async () => { event(); });
+    expect(document.querySelectorAll('article')).toHaveLength(0);
+    expect(screen.getByText(getMessagesForLang(lang).topicPage.noStoriesYet)).not.toBeNull();
+    expect(fetchPublicNews).not.toHaveBeenCalled();
+  });
+
+  test.each(['same-id', 'same-group'])('a new authoritative pin replaces the old pin once, retaining %s deduplication', async (collision) => {
+    await seeded();
+    fetchMock.mockImplementation(async (input) => {
+      if (!String(input).includes('/articles?')) return jsonResponse({
+        ok: true, lang, topic: topicFixture(lang), pinnedArticle: storyFixture(101, lang),
+      });
+      const page = storyPageFixture(lang);
+      page.items[0] = collision === 'same-id' ? storyFixture(101, lang)
+        : { ...storyFixture(102, lang), translationKey: storyFixture(101, lang).translationKey };
+      return jsonResponse(page);
+    });
+    await act(async () => { event(); });
+    expect(screen.getAllByRole('heading', { name: storyFixture(101, lang).title })).toHaveLength(1);
+    expect(heading(100)).toBeNull();
+    expect(heading(102)).toBeNull();
+    expect(document.querySelectorAll('article')).toHaveLength(12);
+  });
+
+  test('refreshes exactly page 2 and keeps route/query/page ownership when that page becomes empty', async () => {
+    const view = await seeded(2);
+    const oldQuery = { ...mockRouter.query };
+    const oldPath = mockRouter.asPath;
+    fetchMock.mockImplementation(async (input) => topicResponse(input, ' page-two'));
+    await act(async () => { event(); });
+    expect(heading(1, ' page-two')).not.toBeNull();
+    expect(heading(13, ' page-two')).toBeNull();
+    expect(fetchMock.mock.calls[1][0]).toBe(`/api/public/topics/navratri-2026/articles?lang=${lang}&page=2&limit=12`);
+    fetchMock.mockImplementation(async (input) => String(input).includes('/articles?')
+      ? jsonResponse(storyPageFixture(lang, 2, 0))
+      : jsonResponse({ ok: true, lang, topic: topicFixture(lang), pinnedArticle: null }));
+    await act(async () => { event(); });
+    expect(view.container.querySelectorAll('article')).toHaveLength(0);
+    expect(screen.getByRole('link', { name: getMessagesForLang(lang).topicPage.previous }).getAttribute('href')).toBe(editorialTopicPath('navratri-2026', lang));
+    expect(mockRouter.query).toEqual(oldQuery);
+    expect(mockRouter.asPath).toBe(oldPath);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).includes('/articles?')).map(([url]) => url)).toEqual([
+      `/api/public/topics/navratri-2026/articles?lang=${lang}&page=2&limit=12`,
+      `/api/public/topics/navratri-2026/articles?lang=${lang}&page=2&limit=12`,
+    ]);
+  });
+
+  test.each(['network', '503', 'malformed-detail', 'missing-pin', 'malformed-page', 'timeout-detail', 'timeout-page'])('%s retains failed surfaces while applying other authoritative results', async (failure) => {
+    await seeded();
+    if (failure.startsWith('timeout')) jest.useFakeTimers();
+    fetchMock.mockImplementation(async (input) => {
+      const articles = String(input).includes('/articles?');
+      if (failure === 'network') throw new Error('offline');
+      if (failure === '503') return jsonResponse({}, 503);
+      if ((failure === 'timeout-detail' && !articles) || (failure === 'timeout-page' && articles)) return new Promise(() => {});
+      if ((failure === 'malformed-detail' && !articles) || (failure === 'malformed-page' && articles)) return jsonResponse({ ok: true, lang });
+      if (failure === 'missing-pin' && !articles) return jsonResponse({ ok: true, lang, topic: topicFixture(lang) });
+      return topicResponse(input, ' partial-update');
+    });
+    await act(async () => {
+      event();
+      if (failure.startsWith('timeout')) await jest.advanceTimersByTimeAsync(EDITORIAL_TOPICS_TIMEOUT_MS);
+    });
+    const pageFailed = ['network', '503', 'malformed-page', 'timeout-page'].includes(failure);
+    const detailFailed = ['network', '503', 'malformed-detail', 'missing-pin', 'timeout-detail'].includes(failure);
+    expect(heading(13, pageFailed ? '' : ' partial-update')).not.toBeNull();
+    expect(heading(100, detailFailed ? '' : ' partial-update')).not.toBeNull();
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(`${topicNames[lang]}${detailFailed ? '' : ' partial-update'}`);
+    expect(screen.getByRole('alert').textContent).toContain(getMessagesForLang(lang).errors.showingPreviousStories);
+    expect(console.error).toHaveBeenCalledWith('[editorial-topics] Mounted archive unavailable', expect.any(Error));
+    fetchMock.mockImplementation(async (input) => topicResponse(input, ' recovered'));
+    await act(async () => { event(); });
+    expect(heading(100, ' recovered')).not.toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  test('authoritative topic absence clears stale content without a keyword fallback, and a later event can restore it', async () => {
+    await seeded();
+    fetchMock.mockImplementation(async (input) => jsonResponse({}, String(input).includes('/articles?') ? 503 : 404));
+    await act(async () => { event(); });
+    expect(document.querySelectorAll('article')).toHaveLength(0);
+    expect(document.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe('noindex, nofollow');
+    expect(fetchPublicNews).not.toHaveBeenCalled();
+    fetchMock.mockImplementation(async (input) => topicResponse(input));
+    await act(async () => { event(); });
+    expect(heading(100)).not.toBeNull();
+    expect(document.querySelector('meta[name="robots"]')).toBeNull();
+  });
+
+  test.each(['locale', 'topic', 'page', 'superseded', 'unmount'])('%s rejects late old responses and cancels owned requests', async (change) => {
+    const initial = await loadEditorial(context(lang));
+    const nextLang = change === 'locale' ? (lang === 'en' ? 'hi' : lang === 'hi' ? 'gu' : 'en') : lang;
+    const nextSlug = change === 'topic' ? 'nobel-prize' : 'navratri-2026';
+    const nextPage = change === 'page' ? 2 : 1;
+    const next = await loadEditorial(context(nextLang, nextSlug, { page: String(nextPage) }));
+    context(lang);
+    const view = mount(initial);
+    jest.mocked(getPublicApiBaseUrl).mockReturnValue('');
+    const finish: Array<(response: Response) => void> = [];
+    fetchMock.mockClear().mockImplementation(() => new Promise((resolve) => { finish.push(resolve); }));
+    await act(async () => { event(); });
+    const oldCalls = [...fetchMock.mock.calls];
+    fetchMock.mockImplementation(async (input) => topicResponse(input, ' newest'));
+    if (change === 'unmount') view.unmount();
+    else {
+      if (change !== 'superseded') {
+        context(nextLang, nextSlug, { page: String(nextPage) });
+        view.rerender(pageTree(next));
+      }
+      await act(async () => { event(); });
+    }
+    expect(oldCalls.every(([, init]) => init?.signal?.aborted)).toBe(true);
+    await act(async () => { finish.forEach((resolve, index) => resolve(topicResponse(oldCalls[index][0], ' late-old'))); });
+    if (change === 'unmount') {
+      await act(async () => { event(); });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(view.container.innerHTML).toBe('');
+    } else {
+      expect(screen.getByRole('heading', { name: `${storyFixture(100, nextLang).title} newest` })).not.toBeNull();
+      expect(screen.queryByRole('heading', { name: `${storyFixture(100, lang).title} late-old` })).toBeNull();
+      expect(fetchMock.mock.calls.slice(2).map(([url]) => url)).toEqual([
+        `/api/public/topics/${nextSlug}?lang=${nextLang}`,
+        `/api/public/topics/${nextSlug}/articles?lang=${nextLang}&page=${nextPage}&limit=12`,
+      ]);
+    }
   });
 });
 

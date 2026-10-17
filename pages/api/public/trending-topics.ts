@@ -23,7 +23,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const base = getApiBase();
   if (!base) {
     console.warn('[trending-topics] No backend configured; using default shortcuts');
-    return res.status(200).json([]);
+    return res.status(200).json({ items: [], editorialReadError: true });
   }
 
   const [editorialResult, legacyResult] = await Promise.allSettled([
@@ -48,5 +48,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     })) : [];
   const legacy = legacyResult.status === 'fulfilled' && legacyResult.value.length
     ? legacyResult.value : DEFAULT_TRENDING_TOPICS;
-  return res.status(200).json({ items: mergeTrendingTopics(editorial, legacy) });
+  return res.status(200).json({
+    items: mergeTrendingTopics(editorial, legacy),
+    ...(editorialResult.status === 'rejected' ? { editorialReadError: true } : {}),
+  });
 }

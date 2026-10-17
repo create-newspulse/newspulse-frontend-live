@@ -16,7 +16,7 @@ import { isSafeMode } from '../../utils/safeMode';
 import * as i18n from '../../src/i18n/LanguageProvider';
 import * as storyTitleHook from '../../lib/storyTitleHook';
 import { useHomeLowerAdAlignment } from '../../hooks/useHomeLowerAdAlignment';
-import { getTrendingTopics } from '../../lib/getTrendingTopics';
+import { readTrendingTopics } from '../../lib/getTrendingTopics';
 import { DEFAULT_TRENDING_TOPICS } from '../../src/config/trendingTopics';
 import { topicNames } from '../fixtures/editorialTopics';
 
@@ -37,7 +37,7 @@ jest.mock('../../utils/safeMode', () => ({ isSafeMode: jest.fn(() => false) }));
 jest.mock('../../hooks/usePublicAdSlot', () => ({ usePublicAdSlot: jest.fn(() => ({ enabled: false, ad: null, isLoading: false, hasResolved: true })) }));
 jest.mock('../../lib/publicNewsApi', () => ({ ...jest.requireActual('../../lib/publicNewsApi'), fetchPublicNews: jest.fn(async () => ({ items: [], endpoint: '/api/public/news' })) }));
 jest.mock('../../lib/publicSponsoredFeature', () => ({ ...jest.requireActual('../../lib/publicSponsoredFeature'), fetchHomepageSponsoredFeature: jest.fn(async () => null) }));
-jest.mock('../../lib/getTrendingTopics', () => ({ getTrendingTopics: jest.fn(async () => []) }));
+jest.mock('../../lib/getTrendingTopics', () => ({ readTrendingTopics: jest.fn(async () => ({ items: [], authoritative: true })) }));
 jest.mock('../../lib/fetchWeather', () => ({ fetchCurrentWeather: jest.fn(async () => null) }));
 jest.mock('../../src/lib/publicSettings', () => ({ ...jest.requireActual('../../src/lib/publicSettings'), fetchPublicSettings: jest.fn(), fetchPublishedPublicSettings: jest.fn() }));
 jest.mock('../../lib/getMessages', () => ({ getMessages: jest.fn(async () => ({})) }));
@@ -422,14 +422,14 @@ describe('homepage hybrid Trending Strip', () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
-    jest.mocked(getTrendingTopics).mockReset().mockResolvedValue([]);
+    jest.mocked(readTrendingTopics).mockReset().mockResolvedValue({ items: [], authoritative: true });
   });
 
   test.each(['en', 'hi', 'gu'] as const)('preserves %s backend labels and all nine dictionary shortcuts in one strip', async (lang) => {
     const actual = jest.requireActual<typeof i18n>('../../src/i18n/LanguageProvider');
     jest.spyOn(i18n, 'useI18n').mockImplementation(actual.useI18n);
     const editorial = { key: 'navratri-2026', label: topicNames[lang], href: '/topic/navratri-2026', colorKey: 'sports' as const, source: 'editorial' as const };
-    jest.mocked(getTrendingTopics).mockClear().mockResolvedValue([editorial, ...DEFAULT_TRENDING_TOPICS]);
+    jest.mocked(readTrendingTopics).mockClear().mockResolvedValue({ items: [editorial, ...DEFAULT_TRENDING_TOPICS], authoritative: true });
     let container!: HTMLElement;
     await act(async () => {
       container = render(
@@ -446,8 +446,29 @@ describe('homepage hybrid Trending Strip', () => {
     expect(links[0].textContent).toBe(topicNames[lang]);
     expect(links[1].textContent).toBe(actual.getMessagesForLang(lang).trending.breaking);
     expect(container.querySelectorAll('.trending-shell a[href="/business"]')).toHaveLength(3);
-    expect(jest.mocked(getTrendingTopics)).toHaveBeenCalledTimes(1);
-    expect(jest.mocked(getTrendingTopics)).toHaveBeenCalledWith(lang);
+    expect(jest.mocked(readTrendingTopics)).toHaveBeenCalledTimes(1);
+    expect(jest.mocked(readTrendingTopics)).toHaveBeenCalledWith(lang, expect.any(AbortSignal));
+  });
+
+  test.each(['en', 'hi', 'gu'] as const)('%s mounted homepage strip refreshes labels and retains them on fallback', async (lang) => {
+    const actual = jest.requireActual<typeof i18n>('../../src/i18n/LanguageProvider');
+    jest.spyOn(i18n, 'useI18n').mockImplementation(actual.useI18n);
+    const editorial = { key: 'navratri-2026', label: topicNames[lang], href: '/topic/navratri-2026', colorKey: 'sports' as const, source: 'editorial' as const };
+    jest.mocked(readTrendingTopics).mockClear().mockResolvedValue({ items: [editorial], authoritative: true });
+    let container!: HTMLElement;
+    await act(async () => {
+      container = render(<i18n.LanguageProvider initialLang={lang}><PublicSettingsProvider initialSettings={published()}>
+        <HomePage {...props} />
+      </PublicSettingsProvider></i18n.LanguageProvider>).container;
+    });
+    const labels = () => Array.from(container.querySelectorAll('.trending-shell a')).map((link) => link.textContent);
+    jest.mocked(readTrendingTopics).mockResolvedValue({ items: [{ ...editorial, label: `${topicNames[lang]} edited` }], authoritative: true });
+    await act(async () => { dispatchPublicDataRefresh({ version: 'trending-edit', previousVersion: null, source: 'test' }); });
+    expect(labels()).toEqual([`${topicNames[lang]} edited`]);
+    jest.mocked(readTrendingTopics).mockResolvedValue({ items: DEFAULT_TRENDING_TOPICS, authoritative: false });
+    await act(async () => { dispatchPublicDataRefresh({ version: 'trending-failure', previousVersion: 'trending-edit', source: 'test' }); });
+    expect(labels()).toEqual([`${topicNames[lang]} edited`]);
+    expect(jest.mocked(readTrendingTopics).mock.calls.map(([locale]) => locale)).toEqual([lang, lang, lang]);
   });
 });
 
