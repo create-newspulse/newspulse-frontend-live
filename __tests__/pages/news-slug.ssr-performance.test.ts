@@ -1,5 +1,13 @@
 import { getServerSideProps } from '../../pages/news/[slug]';
 import { getServerSideProps as getLegacyProps } from '../../pages/news/[...parts]';
+import { getServerSideProps as getTopicProps } from '../../pages/topic/[slug]';
+import { getLocalizedArticleFields, STRICT_LOCALE_POLICY } from '../../lib/localizedArticleFields';
+import { buildNewsUrl } from '../../lib/newsRoutes';
+import { navratriStoryFixtures, storyPageFixture, topicFixture } from '../fixtures/editorialTopics';
+
+jest.mock('../../lib/publicApiBase', () => ({
+  getPublicApiBaseUrl: () => 'http://localhost:3010',
+}));
 
 jest.mock('../../hooks/useArticleAnalytics', () => ({
   useArticleAnalytics: jest.fn(),
@@ -54,6 +62,71 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
   afterEach(() => {
     jest.resetAllMocks();
     jest.useRealTimers();
+  });
+
+  describe.each(['en', 'hi', 'gu'] as const)('%s topic-to-article identity contract', (lang) => {
+    test.each([false, true])('opens the same persisted edition without a canonical redirect (cached translation=%s)', async (cached) => {
+      const sourceLang = lang === 'gu' ? 'en' : 'gu';
+      const sources = navratriStoryFixtures(sourceLang);
+      const stories = navratriStoryFixtures(lang).map((story, index) => cached ? {
+        ...story, _id: sources[index]._id, id: sources[index].id, articleId: sources[index].articleId,
+        slug: sources[index].slug, isTranslated: true,
+      } : story);
+      const publicArticles = stories.map((story) => article({
+        ...story, originalLang: cached ? sourceLang : lang,
+        slugs: { [lang]: story.canonicalSlug },
+      }));
+      const calls = mockFetchSequence((target) => {
+        const url = new URL(target);
+        if (url.pathname === '/api/public/topics/navratri-2026') {
+          expect(url.searchParams.get('lang')).toBe(lang);
+          return { ok: true, lang, topic: topicFixture(lang), pinnedArticle: stories[0] };
+        }
+        if (url.pathname === '/api/public/topics/navratri-2026/articles') {
+          expect(url.searchParams.get('lang')).toBe(lang);
+          return { ...storyPageFixture(lang, 1, 2), items: stories.slice(1) };
+        }
+        if (url.pathname === '/api/public/news') return { items: [] };
+        const resolved = publicArticles.find((item) =>
+          url.pathname === `/api/public/news/slug/${encodeURIComponent(item.slug)}`);
+        if (!resolved) throw new Error(`Unexpected fixture lookup: ${target}`);
+        expect(url.origin).toBe('http://localhost:3000');
+        expect(url.searchParams.get('lang')).toBe(lang);
+        expect(url.searchParams.get('language')).toBe(lang);
+        return { article: resolved };
+      });
+      const ctx = createCtx('navratri-2026', lang);
+      ctx.req.headers = { host: 'localhost:3000', 'x-forwarded-proto': 'http' };
+      const topicResult = await getTopicProps(ctx);
+      if (!('props' in topicResult)) throw new Error('Expected topic props');
+      const topic = await topicResult.props;
+      if (topic.mode !== 'editorial') throw new Error('Expected an eligible topic archive');
+      const cards = [topic.pinnedArticle, ...topic.items];
+      expect(cards).toHaveLength(3);
+      for (const [index, card] of cards.entries()) {
+        if (!card?.href) throw new Error('Expected a navigable topic card');
+        const story = stories[index];
+        const localized = getLocalizedArticleFields(publicArticles[index], lang, STRICT_LOCALE_POLICY);
+        expect(localized.isVisible).toBe(true);
+        expect(localized.slug).toBe(story.slug);
+        expect(card.href).toBe(buildNewsUrl({ id: story._id, slug: localized.slug, lang }));
+        const slug = decodeURIComponent(new URL(card.href, 'http://localhost:3000').pathname.split('/').pop() || '');
+        const result = await getServerSideProps({ ...ctx, params: { slug } });
+        if (!('props' in result)) throw new Error('Topic link must resolve without a redirect or 404');
+        const props = await result.props;
+        expect(props).toMatchObject({
+          lang, slug: story.slug, error: null, pending: false,
+          article: {
+            _id: story._id, slug: story.slug, language: lang,
+            title: story.title, category: story.category,
+            translationKey: story.translationKey, translationGroupId: story.translationGroupId,
+          },
+        });
+        expect(props.safeHtml).toContain('Body');
+      }
+      expect(calls.filter((url) => url.includes('/api/public/news/slug/'))).toHaveLength(3);
+      expect(calls).toHaveLength(8);
+    });
   });
 
   test.each(['en', 'hi', 'gu'])('stalled main %s article returns retryable 503, not a false 404', async (locale) => {

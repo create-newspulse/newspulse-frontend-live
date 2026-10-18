@@ -8,7 +8,7 @@ import {
   type EditorialTopicStoryPage,
 } from '../../lib/publicEditorialTopics';
 import { getPublicApiBaseUrl } from '../../lib/publicApiBase';
-import { jsonResponse, storyFixture, storyPageFixture, topicFixture, topicNames, topicStoryCategories } from '../fixtures/editorialTopics';
+import { jsonResponse, navratriStoryFixtures, storyFixture, storyPageFixture, topicFixture, topicNames, topicStoryCategories } from '../fixtures/editorialTopics';
 
 jest.mock('../../lib/publicApiBase', () => ({ getPublicApiBaseUrl: jest.fn(() => 'http://localhost:3010') }));
 
@@ -25,6 +25,48 @@ afterEach(() => {
 });
 
 describe('Trending Topic Story Management V2 public DTOs', () => {
+  test.each(['en', 'hi', 'gu'] as const)('preserves the selected persisted %s identity without choosing aliases, foreign slugs or display titles', async (lang) => {
+    const stories = navratriStoryFixtures(lang);
+    const foreignLang = lang === 'gu' ? 'en' : 'gu';
+    const items = stories.map((story) => ({
+      ...story, headline: 'This headline must not become an article slug',
+      sourceSlug: 'unselected-source-slug', slugs: { [foreignLang]: 'unselected-foreign-alias' },
+      translations: { [foreignLang]: { slug: 'unselected-translation-slug' } },
+    }));
+    fetchMock.mockResolvedValue(jsonResponse({ ...storyPageFixture(lang, 1, items.length), items }));
+    const page = await fetchEditorialTopicStories('navratri-2026', lang, 1);
+    expect(page.items).toMatchObject(stories.map((story) => ({
+      _id: story._id, slug: story.slug, title: story.title,
+      category: story.category, language: lang, resolvedLang: lang,
+      translationKey: story.translationKey, translationGroupId: story.translationGroupId,
+    })));
+    expect(page.items.every((story) => !('slugs' in story) && !('translations' in story) && !('headline' in story))).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).toContain(`?lang=${lang}&page=1&limit=12`);
+  });
+
+  test.each([7, {}, []])('rejects malformed primary article identity %# rather than replacing it with an alias', async (slug) => {
+    fetchMock.mockResolvedValue(jsonResponse({
+      ...storyPageFixture('en', 1, 1), items: [{ ...storyFixture(1), slug }],
+    }));
+    await expect(fetchEditorialTopicStories('navratri-2026', 'en', 1)).rejects.toThrow('Invalid editorial topics text');
+  });
+
+  test.each([undefined, null, '', ' '])('does not synthesize a missing primary slug from title, headline or logical identity %#', async (slug) => {
+    fetchMock.mockResolvedValue(jsonResponse({
+      ...storyPageFixture('en', 1, 1),
+      items: [{ ...storyFixture(1), slug, canonicalSlug: undefined, headline: 'A tempting English headline' }],
+    }));
+    await expect(fetchEditorialTopicStories('navratri-2026', 'en', 1)).rejects.toThrow('Invalid editorial topics text');
+  });
+
+  test.each([{ language: undefined }, { resolvedLang: undefined }])('does not assume English when selected-locale metadata is missing %#', async (override) => {
+    fetchMock.mockResolvedValue(jsonResponse({
+      ...storyPageFixture('en', 1, 1), items: [{ ...storyFixture(1), ...override }],
+    }));
+    await expect(fetchEditorialTopicStories('navratri-2026', 'en', 1)).rejects.toThrow('unexpected language');
+  });
+
   test.each(['en', 'hi', 'gu'] as const)('requests six %s topics and retains backend labels and order', async (lang) => {
     const second = topicFixture(lang, { slug: 'nobel-prize', label: `  ${topicNames[lang]}  ` });
     fetchMock.mockResolvedValue(jsonResponse({ ok: true, lang, items: [second, topicFixture(lang)] }));

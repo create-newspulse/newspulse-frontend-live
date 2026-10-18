@@ -5,7 +5,7 @@ import { Socket } from 'node:net';
 import handler from '../../../pages/api/public/topics/[...path]';
 import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
 import { EDITORIAL_TOPICS_TIMEOUT_MS } from '../../../lib/publicEditorialTopics';
-import { jsonResponse, storyFixture, storyPageFixture, topicFixture, topicStoryCategories } from '../../fixtures/editorialTopics';
+import { jsonResponse, navratriStoryFixtures, storyFixture, storyPageFixture, topicFixture, topicStoryCategories } from '../../fixtures/editorialTopics';
 
 jest.mock('../../../lib/publicApiBase', () => ({ getPublicApiBaseUrl: jest.fn(() => 'http://localhost:3010') }));
 const originalFetch = global.fetch;
@@ -38,6 +38,26 @@ afterEach(() => {
 });
 
 describe.each(['en', 'hi', 'gu'] as const)('%s public topic transport', (lang) => {
+  test('preserves the selected persisted identity through both pin and archive proxy responses', async () => {
+    const stories = navratriStoryFixtures(lang);
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      ok: true, lang, topic: topicFixture(lang), pinnedArticle: stories[0],
+    }));
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      ...storyPageFixture(lang, 1, 2), items: stories.slice(1),
+    }));
+    const detail = (await invoke(undefined, { lang })).json.mock.calls[0][0];
+    const page = (await invoke(['navratri-2026', 'articles'], { lang })).json.mock.calls[0][0];
+    for (const [index, story] of [detail.pinnedArticle, ...page.items].entries()) {
+      expect(story).toMatchObject({
+        _id: stories[index]._id, slug: stories[index].slug,
+        language: lang, resolvedLang: lang, category: stories[index].category,
+        translationKey: stories[index].translationKey, translationGroupId: stories[index].translationGroupId,
+      });
+    }
+    expect(page).toMatchObject({ count: 2, total: 2, page: 1, limit: 12, hasNextPage: false });
+  });
+
   test.each([true, false])('returns the existing validated detail with pin=%s, not private upstream fields', async (pinned) => {
     fetchMock.mockResolvedValue(jsonResponse({
       ok: true, lang, topic: { ...topicFixture(lang), privateNotes: 'not public' },
@@ -91,6 +111,17 @@ test('only an authoritative detail 404 is returned as topic absence', async () =
   fetchMock.mockResolvedValue(jsonResponse({}, 404));
   expect((await invoke()).status).toHaveBeenCalledWith(404);
   expect((await invoke(['navratri-2026', 'articles'])).status).toHaveBeenCalledWith(503);
+});
+
+test.each(['pin', 'stories'])('malformed %s primary identity remains an explicit API failure', async (surface) => {
+  const invalidStory = { ...storyFixture(1), slug: { en: 'not-the-scalar-contract' } };
+  fetchMock.mockResolvedValue(jsonResponse(surface === 'pin'
+    ? { ok: true, lang: 'en', topic: topicFixture(), pinnedArticle: invalidStory }
+    : { ...storyPageFixture('en', 1, 1), items: [invalidStory] }));
+  const res = await invoke(surface === 'pin' ? undefined : ['navratri-2026', 'articles']);
+  expect(res.status).toHaveBeenCalledWith(503);
+  expect(res.json).toHaveBeenCalledWith({ ok: false, message: 'EDITORIAL_TOPIC_UNAVAILABLE' });
+  expect(console.error).toHaveBeenCalled();
 });
 
 test.each(['network', '503', 'missing-pin', 'bad-language', 'bad-page', 'bad-category'])('%s remains failure rather than empty/null', async (failure) => {

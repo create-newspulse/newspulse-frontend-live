@@ -12,7 +12,7 @@ import { editorialTopicPath, EDITORIAL_TOPICS_TIMEOUT_MS } from '../../lib/publi
 import { getPublicApiBaseUrl } from '../../lib/publicApiBase';
 import { dispatchPublicDataRefresh } from '../../lib/publicDataRefresh';
 import { getCategoryQueryKey, getCategoryRouteKey } from '../../lib/categoryKeys';
-import { jsonResponse, storyFixture, storyPageFixture, topicDescriptions, topicFixture, topicNames, topicStoryCategories } from '../fixtures/editorialTopics';
+import { jsonResponse, navratriStoryFixtures, storyFixture, storyPageFixture, topicDescriptions, topicFixture, topicNames, topicStoryCategories } from '../fixtures/editorialTopics';
 
 const mockRouter: { locale: RouteLocale; defaultLocale: string; asPath: string; query: Record<string, string | string[]> } = {
   locale: 'en', defaultLocale: 'en', asPath: '/topic/navratri-2026', query: { slug: 'navratri-2026' },
@@ -110,6 +110,64 @@ afterEach(() => {
 });
 
 describe('authoritative editorial topic archives', () => {
+  test.each(['en', 'hi', 'gu'] as const)('%s cards and pins use the selected canonical edition after logical-story dedupe', async (locale) => {
+    const stories = navratriStoryFixtures(locale);
+    const duplicate = {
+      ...storyFixture(999, locale), translationKey: stories[1].translationKey,
+      canonicalSlug: 'wrong-duplicate-canonical-identity',
+    };
+    fetchMock.mockImplementation(async (input) => String(input).includes('/articles?')
+      ? jsonResponse({ ...storyPageFixture(locale, 1, 4), items: [...stories, duplicate] })
+      : jsonResponse({ ok: true, lang: locale, topic: topicFixture(locale), pinnedArticle: stories[0] }));
+    const props = await loadEditorial(context(locale));
+    mount(props);
+    const cards = [props.pinnedArticle, ...props.items];
+    expect(cards).toHaveLength(3);
+    for (const [index, story] of stories.entries()) {
+      const href = `${locale === 'en' ? '' : `/${locale}`}/news/${encodeURIComponent(story.slug)}`;
+      expect(cards[index]).toMatchObject({
+        id: story._id, href, titleText: story.title, category: story.category,
+        translationKey: story.translationKey, translationGroupId: story.translationGroupId,
+      });
+      expect(screen.getByRole('heading', { name: story.title }).closest('a')?.getAttribute('href')).toBe(href);
+    }
+    expect(document.querySelectorAll('article')).toHaveLength(3);
+    expect(props.pagination).toEqual({ page: 1, totalPages: 1, hasNextPage: false });
+    expect(fetchPublicNews).not.toHaveBeenCalled();
+  });
+
+  test.each([undefined, null, '', '  '])('an absent or blank canonical alias keeps the persisted primary article link %#', async (canonicalSlug) => {
+    const story = { ...navratriStoryFixtures('en')[0], canonicalSlug, headline: 'Never make this a URL' };
+    fetchMock.mockImplementation(async (input) => String(input).includes('/articles?')
+      ? jsonResponse({ ...storyPageFixture('en', 1, 1), items: [story] })
+      : jsonResponse({ ok: true, lang: 'en', topic: topicFixture(), pinnedArticle: null }));
+    const props = await loadEditorial(context());
+    mount(props);
+    expect(props.items[0].href).toBe(`/news/${story.slug}`);
+    expect(screen.getByRole('heading', { name: story.title }).closest('a')?.getAttribute('href')).toBe(`/news/${story.slug}`);
+  });
+
+  test('an omitted English edition or pin is not restored from a previously mounted Gujarati archive', async () => {
+    fetchMock.mockImplementation(async (input) => {
+      const url = new URL(String(input));
+      const lang = normalizeRouteLocale(url.searchParams.get('lang'));
+      const stories = lang === 'gu' ? navratriStoryFixtures(lang) : [];
+      return url.pathname.endsWith('/articles')
+        ? jsonResponse({ ...storyPageFixture(lang, 1, stories.length), items: stories })
+        : jsonResponse({ ok: true, lang, topic: topicFixture(lang), pinnedArticle: stories[0] ?? null });
+    });
+    const view = mount(await loadEditorial(context('gu')));
+    expect(document.querySelectorAll('article')).toHaveLength(3);
+    const english = await loadEditorial(context('en'));
+    view.rerender(pageTree(english));
+    expect(english.items).toEqual([]);
+    expect(english.pinnedArticle).toBeNull();
+    expect(document.querySelectorAll('article')).toHaveLength(0);
+    expect(screen.getByText('No stories yet.')).not.toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchPublicNews).not.toHaveBeenCalled();
+  });
+
   test.each(['en', 'hi', 'gu'] as const)('%s route renders localized metadata, one pin, and cross-category stories', async (locale) => {
     const props = await loadEditorial(context(locale));
     const { container } = mount(props);
@@ -427,6 +485,8 @@ describe.each(['en', 'hi', 'gu'] as const)('%s mounted editorial lifecycle', (la
     const attached = {
       ...storyFixture(200, lang, 'tech-gadgets'),
       title: 'A newly attached story without matching topic keywords',
+      slug: `persisted-attached-primary-${lang}`,
+      canonicalSlug: `persisted-attached-canonical-${lang}`,
       translationKey: 'attached-logical-story',
     };
     fetchMock.mockImplementation(async (input) => {
@@ -438,12 +498,14 @@ describe.each(['en', 'hi', 'gu'] as const)('%s mounted editorial lifecycle', (la
     await act(async () => { event(); });
     const heading = screen.getByRole('heading', { name: attached.title });
     expect(within(heading.closest('article')!).getByText(getMessagesForLang(lang).categories.techGadgets)).not.toBeNull();
-    expect(heading.closest('a')?.getAttribute('href')).toBe(`${lang === 'en' ? '' : `/${lang}`}/news/story-200`);
+    expect(heading.closest('a')?.getAttribute('href')).toBe(`${lang === 'en' ? '' : `/${lang}`}/news/${attached.slug}`);
     expect(screen.queryByRole('heading', { name: storyFixture(13, lang).title })).toBeNull();
     fetchMock.mockImplementation(async (input) => topicResponse(input));
     await act(async () => { event(); });
     expect(screen.queryByRole('heading', { name: attached.title })).toBeNull();
-    expect(screen.getByRole('heading', { name: storyFixture(13, lang).title })).not.toBeNull();
+    expect(screen.getByRole('heading', { name: storyFixture(13, lang).title }).closest('a')?.getAttribute('href')).toBe(
+      `${lang === 'en' ? '' : `/${lang}`}/news/${storyFixture(13, lang).slug}`,
+    );
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(fetchPublicNews).not.toHaveBeenCalled();
   });

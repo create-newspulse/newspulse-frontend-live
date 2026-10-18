@@ -37,6 +37,28 @@ export function storyFixture(index: number, lang: RouteLocale = 'en', category =
   };
 }
 
+export function navratriStoryFixtures(lang: RouteLocale) {
+  const canonicalPrefixes = {
+    en: 'persisted-public-en',
+    hi: '\u0928\u0935\u0930\u093e\u0924\u094d\u0930\u093f-persisted-hi',
+    gu: '\u0aa8\u0ab5\u0ab0\u0abe\u0aa4\u0acd\u0ab0\u0abf-persisted-gu',
+  };
+  return [
+    { title: 'IAS Wives Association / Gandhinagar Navratri', category: 'regional' },
+    { title: 'Garba business / Rs. 400 crore', category: 'business' },
+    { title: 'Faith, Power and Worship', category: 'faith-culture' },
+  ].map(({ title, category }, index) => {
+    const number = 201 + index * 10 + { en: 0, hi: 1, gu: 2 }[lang];
+    return {
+      ...storyFixture(number, lang, category),
+      title: `${title} - ${topicNames[lang]}`,
+      slug: `persisted-news-row-${number}`,
+      canonicalSlug: `${canonicalPrefixes[lang]}-${index}`,
+      translationKey: `navratri-${index}`, translationGroupId: `navratri-${index}`,
+    };
+  });
+}
+
 export function storyPageFixture(lang: RouteLocale = 'en', page = 1, total = 13) {
   const count = Math.min(12, Math.max(0, total - (page - 1) * 12));
   return {
