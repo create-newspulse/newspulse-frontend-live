@@ -1,5 +1,5 @@
 import type { GetServerSideProps } from 'next';
-import { withPublicReadDeadline } from '../../lib/publicReadDeadline';
+import { PublicReadTimeoutError, withPublicReadDeadline } from '../../lib/publicReadDeadline';
 import Head from 'next/head';
 import NextError from 'next/error';
 import Link from 'next/link';
@@ -2636,7 +2636,13 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
         },
       },
     };
-  } catch {
+  } catch (error) {
+    const reason = error instanceof PublicReadTimeoutError ? 'timeout'
+      : error instanceof Error && error.message === 'Invalid article response' ? 'invalid_article_response'
+      : error instanceof Error && error.message === 'Article upstream unavailable' ? 'upstream_http_error'
+      : error instanceof SyntaxError ? 'invalid_json'
+      : 'request_or_render_error';
+    console.error('[news] Article SSR unavailable', { locale: lang, reason });
     ctx.res.statusCode = 503;
     ctx.res.setHeader('Retry-After', '30');
     return {

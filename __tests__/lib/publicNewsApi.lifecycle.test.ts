@@ -27,6 +27,38 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
+test.each(['en', 'hi', 'gu'] as const)('accepts public News boolean availability metadata for a resolved %s article', async (language) => {
+  const record = {
+    ...story, language, slug: 'persisted-public-story',
+    translations: { en: true, hi: false, gu: true },
+  };
+  expect(parsePublicNewsArticle({ article: record })).toEqual(record);
+  expect(parsePublicNewsGroupItems({ items: [record] })).toEqual([record]);
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(record)))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ items: [record] })));
+  expect(await fetchPublicNewsById({ id: record._id, language })).toMatchObject({ article: record });
+  expect(await fetchPublicNewsGroup({ translationGroupId: 'group-1', language })).toMatchObject({ items: [record] });
+});
+
+test('availability flags never count as translated title/body or enable a foreign-locale fallback', () => {
+  const record = {
+    ...story, language: 'gu', slug: 'persisted-gu-story', translations: { en: true, hi: true, gu: true },
+  };
+  const parsed = parsePublicNewsArticle(record);
+  expect(parsed).not.toBeNull();
+  expect(getLocalizedArticleFields(parsed, 'en', STRICT_LOCALE_POLICY).isVisible).toBe(false);
+  expect(getLocalizedArticleFields(parsed, 'hi', STRICT_LOCALE_POLICY).isVisible).toBe(false);
+  expect(getLocalizedArticleFields(parsed, 'gu', STRICT_LOCALE_POLICY).isVisible).toBe(true);
+});
+
+test.each([[0], ['true'], [[]], [{ status: 'FAILED', error: 'private diagnostic' }]])('still rejects malformed or failed translation metadata %#', (en) => {
+  expect(parsePublicNewsArticle({ ...story, translations: { en, hi: true } })).toBeNull();
+});
+
+test.each(['translation', 'i18n', 'localized', 'locales', 'byLang', 'textByLang'])('does not broaden the %s content-container contract to availability flags', (field) => {
+  expect(parsePublicNewsArticle({ ...story, [field]: { en: true } })).toBeNull();
+});
+
 test.each([
   [], { items: [] }, { articles: [] }, { data: [] }, { result: [] },
   { data: { items: [] } }, { data: { articles: [] } },

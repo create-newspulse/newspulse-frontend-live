@@ -80,6 +80,16 @@ describe('LanguageContext route switching', () => {
     });
   });
 
+  test.each([['en', 'English'], ['hi', 'Hindi'], ['gu', 'Gujarati']] as const)('keeps a persisted Gujarati-script slug when selecting %s', (lang, label) => {
+    const slug = encodeURIComponent('\u0aa8\u0ab5\u0ab0\u0abe\u0aa4\u0acd\u0ab0\u0abf-persisted-story');
+    mockRouter.asPath = `/gu/news/${slug}?from=topic#article`;
+    mockRouter.locale = 'gu';
+    render(<Harness />);
+    fireEvent.click(screen.getByText(label));
+    const target = `${lang === 'en' ? '' : `/${lang}`}/news/${slug}?from=topic#article`;
+    expect(replaceMock).toHaveBeenCalledWith(target, target, { locale: lang, shallow: false, scroll: false });
+  });
+
   test.each([
     ['en', 'hi', 'Hindi'], ['en', 'gu', 'Gujarati'], ['hi', 'en', 'English'],
     ['hi', 'gu', 'Gujarati'], ['gu', 'en', 'English'], ['gu', 'hi', 'Hindi'],

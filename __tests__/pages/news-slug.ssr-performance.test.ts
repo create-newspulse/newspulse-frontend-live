@@ -59,9 +59,56 @@ function mockFetchSequence(handler: (url: string) => any) {
 }
 
 describe('pages/news/[slug] getServerSideProps performance contract', () => {
+  beforeEach(() => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
   afterEach(() => {
     jest.resetAllMocks();
+    jest.restoreAllMocks();
     jest.useRealTimers();
+  });
+
+  test.each(['en', 'hi', 'gu'] as const)('renders %s public boolean availability metadata instead of an SSR 503, including a Gujarati-script slug', async (lang) => {
+    const slug = '\u0aa8\u0ab5\u0ab0\u0abe\u0aa4\u0acd\u0ab0\u0abf-persisted-story';
+    const translations = { en: true, hi: true, gu: true };
+    const record = article({ language: lang, slug, translations });
+    const calls = mockFetchSequence((url) => url.includes('/api/public/news/slug/')
+      ? { article: record } : { items: [] });
+    const ctx = createCtx(slug, lang);
+    ctx.res.statusCode = 200;
+    const result = await getServerSideProps(ctx);
+    if (!('props' in result)) throw new Error('Expected a resolved article, not a redirect or 404');
+    expect(await result.props).toMatchObject({
+      lang, slug, error: null, pending: false,
+      article: { _id: record._id, language: lang, slug, translations },
+      safeHtml: '<p>Body</p>',
+    });
+    expect(ctx.res.statusCode).toBe(200);
+    expect(calls[0]).toContain(`/api/public/news/slug/${encodeURIComponent(slug)}?lang=${lang}&language=${lang}`);
+    expect(calls).toHaveLength(2);
+    expect(console.error).not.toHaveBeenCalled();
+  });
+
+  test('a boolean availability flag cannot make an unresolved foreign edition visible', async () => {
+    mockFetchSequence((url) => url.includes('/api/public/news/slug/')
+      ? { article: article({ language: 'gu', translations: { en: true, hi: true, gu: true } }) }
+      : { items: [] });
+    expect(await getServerSideProps(createCtx('gujarat-budget-2026', 'en'))).toEqual({ notFound: true });
+  });
+
+  test.each(['invalid_article_response', 'invalid_json', 'request_or_render_error'])('logs safe SSR failure reason %s without leaking response data', async (reason) => {
+    global.fetch = jest.fn(async () => {
+      if (reason === 'request_or_render_error') throw new Error('private upstream URL/token');
+      return new Response(reason === 'invalid_json' ? 'private invalid JSON body'
+        : JSON.stringify({ article: article({ translations: { en: 'private invalid metadata' } }) }));
+    });
+    const ctx = createCtx('unavailable-story', 'hi');
+    const result = await getServerSideProps(ctx);
+    expect(ctx.res.statusCode).toBe(503);
+    expect(ctx.res.setHeader).toHaveBeenCalledWith('Retry-After', '30');
+    expect(console.error).toHaveBeenCalledWith('[news] Article SSR unavailable', { locale: 'hi', reason });
+    expect(JSON.stringify([result, jest.mocked(console.error).mock.calls])).not.toContain('private');
   });
 
   describe.each(['en', 'hi', 'gu'] as const)('%s topic-to-article identity contract', (lang) => {
@@ -145,6 +192,7 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
     expect(signal?.aborted).toBe(true);
     expect((await pending as any).props.article).toBeNull();
     expect(jest.getTimerCount()).toBe(0);
+    expect(console.error).toHaveBeenCalledWith('[news] Article SSR unavailable', { locale, reason: 'timeout' });
   });
 
   test.each(['headers', 'body'])('stalled related %s leaves the main article usable', async (stage) => {
@@ -258,6 +306,7 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
     expect(ctx.res.statusCode).toBe(503);
     expect(result.notFound).toBeUndefined();
     expect(result.props.error).toBe('Article temporarily unavailable');
+    expect(console.error).toHaveBeenCalledWith('[news] Article SSR unavailable', { locale: 'en', reason: 'upstream_http_error' });
   });
 
   test('never-resolving main headers return before the SSR deadline', async () => {

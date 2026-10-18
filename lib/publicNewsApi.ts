@@ -83,7 +83,7 @@ export type ArticleBase = {
 };
 
 export type Article = ArticleBase & {
-  translations?: Record<string, Partial<ArticleBase> | undefined>;
+  translations?: Record<string, Partial<ArticleBase> | boolean | undefined>;
 };
 
 export function getApiOrigin() {
@@ -323,6 +323,8 @@ function validLifecycleFields(record: Record<string, unknown>, allowFailedTransl
     const container = responseRecord(record[key]);
     if (record[key] != null && !container) return false;
     for (const lang of ['en', 'hi', 'gu', 'in']) {
+      // Public News uses this field for locale availability as well as legacy translated content.
+      if (key === 'translations' && typeof container?.[lang] === 'boolean') continue;
       const variant = responseRecord(container?.[lang]);
       if (container?.[lang] != null && !variant) return false;
       if (variant && (!validTranslationStatus(variant.status, allowFailedTranslation) || !validTranslationStatus(variant.translationStatus, allowFailedTranslation))) return false;
