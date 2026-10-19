@@ -70,12 +70,16 @@ export function getRegionalPagination(payload: unknown, requested: { page?: unkn
   };
 }
 
-export function selectRegionalInitialStories(payload: unknown, locale: string): any[] {
+export function getRegionalLocalePolicy(locale: string) {
   const requestedLocale = normalizeRouteLocale(locale);
-  const policy = {
+  return {
     ...STRICT_LOCALE_POLICY,
     allowReadyTranslations: requestedLocale === 'en' || requestedLocale === 'hi',
   };
+}
+
+export function selectRegionalInitialStories(payload: unknown, locale: string): any[] {
+  const policy = getRegionalLocalePolicy(locale);
   const items = unwrapRegionalFeedItems(dedupeRegionalFeedPayload(payload, locale));
   return filterPubliclyPublishedArticles(items).filter((item) => {
     if (REGIONAL_BLOCKED_IDS.has(String(item?._id || (item as any)?.id || ''))) return false;

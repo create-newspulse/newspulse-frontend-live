@@ -1,7 +1,7 @@
 import { resolveArticleSlug } from './articleSlugs';
 import { resolveCoverImageUrl } from './coverImages';
 import { getLocalizedArticleFields, getLocaleTranslationStatus, normalizeRouteLocale } from './localizedArticleFields';
-import { selectRegionalInitialStories } from './regionalInitialStories';
+import { getRegionalLocalePolicy, selectRegionalInitialStories } from './regionalInitialStories';
 
 const LISTING_FIELDS = [
   '_id', 'id', 'slug', 'title', 'headline', 'shortTitle', 'summary', 'excerpt', 'time', 'titleIsOriginal',
@@ -30,7 +30,7 @@ export function getRegionalReadMinutes(story: Record<string, unknown>): number {
 export function compactRegionalInitialStories(payload: unknown, locale: string): RegionalListingStory[] {
   const requestedLocale = normalizeRouteLocale(locale);
   return selectRegionalInitialStories(payload, locale).map((story: Record<string, unknown>) => {
-    const localized = getLocalizedArticleFields(story, requestedLocale);
+    const localized = getLocalizedArticleFields(story, requestedLocale, getRegionalLocalePolicy(requestedLocale));
     const translationStatus = getLocaleTranslationStatus(story, requestedLocale);
     const result: RegionalListingStory = {
       imageUrl: resolveCoverImageUrl(story),
@@ -38,6 +38,7 @@ export function compactRegionalInitialStories(payload: unknown, locale: string):
       translations: {
         [requestedLocale]: {
           title: localized.title,
+          ...(localized.summary ? { summary: localized.summary } : {}),
           slug: resolveArticleSlug(story, requestedLocale),
           // Strict translated records still need real localized body evidence after hydration.
           ...(translationStatus === 'READY' || (localized.sourceLocale !== requestedLocale && localized.translationFound)

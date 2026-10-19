@@ -400,8 +400,8 @@ export default function GujaratIndexPage({
 
   const regionalLoadMoreLabel = React.useMemo(() => {
     const contextLabel = effectiveCategory === 'All' ? stateName : tTopicChip(effectiveCategory);
-    return `Load More ${contextLabel} Stories`;
-  }, [effectiveCategory, stateName]);
+    return t('categoryPage.loadMoreStories', { category: contextLabel });
+  }, [effectiveCategory, stateName, t]);
 
   const onSelectCategory = (c: (typeof CATEGORIES)[number]) => {
     setSelectedCategory(c);
@@ -526,8 +526,8 @@ export default function GujaratIndexPage({
           <BreakingTicker
             items={regionalTickerItems}
             variant="breaking"
-            label="REGIONAL UPDATES"
-            emptyText="No regional updates right now."
+            label={t('regionalGujaratPage.updates')}
+            emptyText={t('regionalGujaratPage.noUpdates')}
             viewAllHref="/regional/gujarat"
             className="overflow-hidden rounded-xl border-0"
           />

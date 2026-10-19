@@ -1,5 +1,6 @@
 {
   "common": {
+    "minutesRead": "{{count}} मिनट में पढ़ें",
     "language": "भाषा",
     "back": "वापस",
     "beta": "बीटा",
@@ -159,6 +160,87 @@
     "pulseDialogue": "पल्स संवाद",
     "techGadgets": "टेक और गैजेट्स"
   },
+  "categoryDescriptions": {
+    "breaking": "ताज़ा महत्वपूर्ण अपडेट",
+    "regional": "गुजरात के जिले और शहर",
+    "national": "पूरे भारत की खबरें",
+    "international": "दुनिया की प्रमुख खबरें",
+    "business": "बाज़ार और अर्थव्यवस्था",
+    "scienceTechnology": "नवाचार और प्रौद्योगिकी",
+    "techGadgets": "उपकरण और डिजिटल जीवन",
+    "sports": "मैच और नतीजे",
+    "lifestyle": "स्वास्थ्य, शैली और जीवन",
+    "faithCulture": "आस्था, विरासत और संस्कृति",
+    "glamour": "बॉलीवुड और सितारों की खबरें",
+    "webStories": "संक्षिप्त दृश्य कहानियाँ",
+    "viralVideos": "ट्रेंडिंग क्लिप और वायरल पल",
+    "editorial": "विचार, विश्लेषण और दृष्टिकोण",
+    "youthPulse": "छात्र, करियर और युवा रुझान",
+    "inspirationHub": "सकारात्मक कहानियाँ और प्रेरणा",
+    "communityReporter": "जनता की आवाज़ और स्थानीय रिपोर्ट"
+  },
+  "categoryDesks": {
+    "national": {
+      "eyebrow": "राष्ट्रीय डेस्क • भारत",
+      "title": "राष्ट्रीय पल्स – भारत",
+      "description": "भारत भर से ताज़ा राष्ट्रीय समाचार, राजनीति, सरकार और प्रमुख घटनाक्रम।"
+    },
+    "international": {
+      "eyebrow": "अंतरराष्ट्रीय डेस्क • विश्व",
+      "title": "अंतरराष्ट्रीय पल्स – विश्व",
+      "description": "दुनिया भर से ताज़ा समाचार, कूटनीति, भू-राजनीति और प्रमुख घटनाक्रम।"
+    },
+    "business": {
+      "eyebrow": "व्यापार डेस्क",
+      "title": "व्यापार पल्स",
+      "description": "बाज़ार, अर्थव्यवस्था, कंपनियों, स्टार्टअप और व्यापार के ताज़ा अपडेट।"
+    },
+    "scienceTechnology": {
+      "eyebrow": "विज्ञान और प्रौद्योगिकी डेस्क",
+      "title": "विज्ञान और प्रौद्योगिकी पल्स",
+      "description": "विज्ञान, प्रौद्योगिकी, नवाचार, अंतरिक्ष और डिजिटल जीवन के ताज़ा घटनाक्रम।"
+    },
+    "sports": {
+      "eyebrow": "खेल डेस्क",
+      "title": "खेल पल्स",
+      "description": "खेल, मैच, खिलाड़ियों और प्रमुख खेल आयोजनों की ताज़ा खबरें।"
+    },
+    "lifestyle": {
+      "eyebrow": "लाइफ़स्टाइल डेस्क",
+      "title": "लाइफ़स्टाइल पल्स",
+      "description": "स्वास्थ्य, भोजन, यात्रा, संस्कृति और रोज़मर्रा के जीवन की ताज़ा कहानियाँ।"
+    },
+    "glamour": {
+      "eyebrow": "ग्लैमर डेस्क",
+      "title": "ग्लैमर पल्स",
+      "description": "मनोरंजन, सितारों, सिनेमा और लोकप्रिय संस्कृति की ताज़ा खबरें।"
+    },
+    "editorial": {
+      "eyebrow": "संपादकीय डेस्क",
+      "title": "संपादकीय डेस्क",
+      "description": "News Pulse के विचार, विश्लेषण, दृष्टिकोण और विस्तृत टिप्पणियाँ।"
+    },
+    "webStories": {
+      "eyebrow": "दृश्य कहानियाँ",
+      "title": "वेब स्टोरीज़",
+      "description": "News Pulse की संक्षिप्त, दृश्य और रोचक कहानियाँ।"
+    },
+    "faithCulture": {
+      "eyebrow": "धर्म एवं संस्कृति डेस्क",
+      "title": "धर्म एवं संस्कृति पल्स",
+      "description": "News Pulse से आस्था, संस्कृति, विरासत और समुदाय की ताज़ा कहानियाँ।"
+    },
+    "pulseDialogue": {
+      "eyebrow": "पल्स संवाद डेस्क",
+      "title": "पल्स संवाद",
+      "description": "News Pulse के वार्तालाप, साक्षात्कार और सार्वजनिक संवाद।"
+    },
+    "techGadgets": {
+      "eyebrow": "टेक और गैजेट्स डेस्क",
+      "title": "टेक और गैजेट्स पल्स",
+      "description": "News Pulse से तकनीक, गैजेट्स, डिजिटल जीवन और नवाचार की ताज़ा कहानियाँ।"
+    }
+  },
   "faithCulture": {
     "filterLabel": "आस्था और संस्कृति के विषय",
     "noMatches": "इन फ़िल्टर से मेल खाने वाली कोई खबर नहीं मिली।",
@@ -225,6 +307,8 @@
     }
   },
   "home": {
+    "newsDesk": "समाचार डेस्क",
+    "youthDesk": "युवा डेस्क",
     "previewNotice": "पब्लिक साइट सेटिंग्स लोड नहीं हो सकीं। डिफ़ॉल्ट लेआउट दिखाया जा रहा है।",
     "breakingNews": "ब्रेकिंग न्यूज़",
     "liveUpdates": "लाइव अपडेट्स",
@@ -355,7 +439,9 @@
     "iconWorld": "दुनिया",
     "quickLinksTitle": "क्विक लिंक",
     "businessTitle": "बिज़नेस",
-    "aboutUs": "हमारे बारे में",
+    "aboutUs": "News Pulse के बारे में",
+    "communityReporterGuide": "कम्युनिटी रिपोर्टर मार्गदर्शिका",
+    "unavailable": "{{label}} अभी उपलब्ध नहीं है।",
     "editorialPolicy": "संपादकीय नीति",
     "digitalCodeOfEthics": "डिजिटल आचार संहिता",
     "advertisingPolicy": "विज्ञापन नीति",
@@ -375,7 +461,7 @@
     "rssFeeds": "RSS फीड्स",
     "apiAccess": "API एक्सेस",
     "licensing": "लाइसेंसिंग",
-    "copyright": "© 2025–2026 News Pulse Media. All Rights Reserved. | Powered by Innovation"
+    "copyright": "© 2025–2026 News Pulse Media. सर्वाधिकार सुरक्षित। | नवाचार द्वारा संचालित"
   },
   "cookieConsent": {
     "links": {
@@ -427,6 +513,19 @@
     }
   },
   "categoryPage": {
+    "hierarchyDescription": "मुख्य खबर, प्रमुख कहानियाँ और ताज़ा अपडेट",
+    "deskEyebrow": "{{category}} डेस्क",
+    "deskTitle": "{{category}} पल्स",
+    "deskDescription": "News Pulse से {{category}} की ताज़ा खबरें।",
+    "keyStories": "प्रमुख खबरें",
+    "freshStories": "ताज़ा खबरें",
+    "featuredWebStory": "प्रमुख वेब स्टोरी",
+    "featuredEditorial": "प्रमुख संपादकीय",
+    "keyEditorials": "महत्वपूर्ण संपादकीय",
+    "recentEditorials": "नवीनतम संपादकीय",
+    "loadMoreStories": "{{category}} की और खबरें पढ़ें",
+    "loadMoreWebStories": "और वेब स्टोरीज़ देखें",
+    "loadMoreEditorials": "और संपादकीय पढ़ें",
     "unableToLoadTitle": "लेख लोड नहीं हो सके",
     "publicFeedProtected": "पब्लिक फ़ीड एंडपॉइंट सुरक्षित है। बैकएंड में GET /api/public/news को बिना auth के अनुमति दें।",
     "ensureBackendRunning": "बैकएंड चल रहा हो यह सुनिश्चित करें और NEXT_PUBLIC_API_ORIGIN को अपने बैकएंड ओरिजिन पर सेट करें (डिफ़ॉल्ट: http://localhost:5000)।",
@@ -552,6 +651,11 @@
     "liveUpdates": "लाइव अपडेट्स"
   },
   "nationalPage": {
+    "categoryLabel": "राष्ट्रीय समाचार",
+    "keyStories": "प्रमुख राष्ट्रीय खबरें",
+    "latestStories": "ताज़ा राष्ट्रीय खबरें",
+    "loadMoreStories": "और राष्ट्रीय खबरें पढ़ें",
+    "emptyTitle": "कोई खबर नहीं मिली",
     "headTitle": "राष्ट्रीय – News Pulse",
     "headDescription": "राष्ट्रीय सुर्खियाँ और शीर्ष खबरें।",
     "newsFeed": "न्यूज़ फ़ीड",
@@ -598,6 +702,11 @@
     "noStoriesFoundTryBroader": "{{name}} के लिए अभी कोई स्टोरी नहीं मिली। {{category}} समाचार आज़माएँ।"
   },
   "regionalGujaratPage": {
+    "topStory": "गुजरात की मुख्य खबर",
+    "keyStories": "गुजरात की प्रमुख खबरें",
+    "latest": "गुजरात की ताज़ा खबरें",
+    "updates": "क्षेत्रीय अपडेट",
+    "noUpdates": "अभी कोई क्षेत्रीय अपडेट नहीं है।",
     "headTitle": "गुजरात – क्षेत्रीय",
     "headDescription": "गुजरात की स्थानीय खबरें और ज़िला अपडेट्स।",
     "regionalPulse": "रीजनल पल्स",

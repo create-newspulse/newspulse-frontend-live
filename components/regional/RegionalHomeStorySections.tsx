@@ -9,9 +9,11 @@ import { formatEditorialDateTime } from '../../lib/storyDateTime';
 import { getStoryTitleHookColor, splitStoryTitleHook } from '../../lib/storyTitleHook';
 import { getCategoryIdentity } from '../../lib/categoryKeys';
 import StoryImage, { TopStoryImage } from '../../src/components/story/StoryImage';
-import { normalizeRouteLocale } from '../../lib/localizedArticleFields';
+import { getLocalizedArticleFields } from '../../lib/localizedArticleFields';
+import { getRegionalLocalePolicy } from '../../lib/regionalInitialStories';
 import { getRegionalReadMinutes } from '../../lib/regionalListingStories';
 import { useCategoryStoryHierarchy, type CategoryStoryHierarchyItem } from '../category/CategoryStoryHierarchy';
+import { useI18n } from '../../src/i18n/LanguageProvider';
 
 type AnyStory = any;
 
@@ -66,23 +68,21 @@ function isRenderableStory(story: AnyStory, requestedLang: 'en' | 'hi' | 'gu'): 
 
   if (!published) return false;
 
-  const rawLang = String(story?.language || story?.lang || story?.sourceLang || story?.sourceLanguage || '').trim();
-  const storyLocale = rawLang ? normalizeRouteLocale(rawLang) : null;
-  return !storyLocale || storyLocale === requestedLang;
+  const localized = getLocalizedArticleFields(story, requestedLang, getRegionalLocalePolicy(requestedLang));
+  return localized.isVisible && Boolean(localized.title);
 }
 
 function toStoryViewModel(story: AnyStory, requestedLang: 'en' | 'hi' | 'gu', fallbackCategoryLabel: string, getDistrictLabel?: (story: AnyStory) => string) {
   const id = getStoryId(story);
   const href = buildNewsUrl({ id, slug: id, lang: requestedLang });
-  const title = typeof story?.title === 'string' ? story.title.trim() : '';
-  const summary = typeof story?.summary === 'string' ? story.summary.trim() : '';
+  const localized = getLocalizedArticleFields(story, requestedLang, getRegionalLocalePolicy(requestedLang));
+  const title = localized.title;
+  const summary = localized.summary;
   const categoryLabel = getStoryCategoryLabel(story?.category) || story?.category || fallbackCategoryLabel;
   const districtLabel = typeof getDistrictLabel === 'function' ? String(getDistrictLabel(story) || '').trim() : '';
   const dateText = formatEditorialDateTime(getStoryDateIso(story));
   const imageSrc = resolveCoverImageUrl(story) || COVER_PLACEHOLDER_SRC;
   const readMinutes = getRegionalReadMinutes(story);
-  const rawLang = String(story?.language || story?.lang || story?.sourceLang || story?.sourceLanguage || '').trim();
-  const storyLocale = rawLang ? normalizeRouteLocale(rawLang) : null;
 
   return {
     id,
@@ -95,7 +95,7 @@ function toStoryViewModel(story: AnyStory, requestedLang: 'en' | 'hi' | 'gu', fa
     dateText,
     imageSrc,
     readMinutes,
-    isOriginal: Boolean(storyLocale && storyLocale !== requestedLang),
+    isOriginal: localized.isFallback,
   };
 }
 
@@ -256,6 +256,7 @@ export function useRegionalHomeStorySections({
   showDistrictBadges,
   getDistrictLabel,
 }: RegionalHomeStorySectionsProps, separateCompletion = true) {
+  const { t } = useI18n();
   const visibleStories = React.useMemo(() => {
     const seen = new Set<string>();
     return (Array.isArray(stories) ? stories : []).filter((story) => {
@@ -269,6 +270,8 @@ export function useRegionalHomeStorySections({
 
   const hierarchyItems = visibleStories.map((story) => {
     const view = toStoryViewModel(story, requestedLang, fallbackCategoryLabel, showDistrictBadges ? getDistrictLabel : undefined);
+    const categoryLabelKey = `categories.${view.categoryIdentity.replace(/-([a-z])/g, (_match, letter: string) => letter.toUpperCase())}`;
+    const translatedCategory = t(categoryLabelKey);
     const titleParts = splitStoryTitleHook(view.title);
     const titleHookColor = getStoryTitleHookColor(view.categoryIdentity);
     const title = (
@@ -288,11 +291,11 @@ export function useRegionalHomeStorySections({
       summaryText: view.summary,
       imageSrc: view.imageSrc,
       imageFitMode: 'cover',
-      label: view.categoryLabel,
+      label: translatedCategory !== categoryLabelKey ? translatedCategory : view.categoryLabel,
       meta: [view.districtLabel || stateName].filter(Boolean),
       dateIso: getStoryDateIso(story),
       dateLabel: view.dateText,
-      readingTime: `${view.readMinutes} min read`,
+      readingTime: t('common.minutesRead', { count: view.readMinutes }),
       raw: story,
     } satisfies CategoryStoryHierarchyItem;
   });
@@ -300,10 +303,11 @@ export function useRegionalHomeStorySections({
   const hierarchy = useCategoryStoryHierarchy({
     items: hierarchyItems,
     categoryLabel,
-    topLabel: 'Gujarat Top Story',
-    keyLabel: 'Gujarat Key Stories',
-    latestLabel: 'Gujarat Latest',
-    loadMoreLabel: loadMoreLabel || `Load More ${stateName} Stories`,
+    description: t('categoryPage.hierarchyDescription'),
+    topLabel: t('regionalGujaratPage.topStory'),
+    keyLabel: t('regionalGujaratPage.keyStories'),
+    latestLabel: t('regionalGujaratPage.latest'),
+    loadMoreLabel: loadMoreLabel || t('categoryPage.loadMoreStories', { category: stateName }),
     emptyTitle,
     emptyHint,
     loading,

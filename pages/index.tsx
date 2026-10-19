@@ -32,7 +32,7 @@ import {
 } from "../lib/homeSpotlight";
 import { resolveSponsoredContentMeta } from "../lib/sponsoredContent";
 import HomepageSponsoredFeatureCard from "../components/home/HomepageSponsoredFeatureCard";
-import HomeRightRail from "../components/home/HomeRightRail";
+import HomeRightRail, { articleToHomeRightRailFeedItem } from "../components/home/HomeRightRail";
 import HomeTopAdSlot from "../components/home/HomeTopAdSlot";
 import {
   fetchHomepageSponsoredFeature,
@@ -64,7 +64,7 @@ import { usePublicFounderToggles } from "../hooks/usePublicFounderToggles";
 import { DEFAULT_PUBLIC_FOUNDER_TOGGLES, type PublicFounderToggles } from "../lib/publicFounderToggles";
 import { subscribePublicDataRefresh } from "../lib/publicDataRefresh";
 import { hasStoredConsentForCategory } from "../src/consent/cookieConsent";
-import { filterPubliclyPublishedArticles, filterVisibleArticlesForLocale, isPubliclyPublishedArticle, STRICT_LOCALE_POLICY } from "../lib/localizedArticleFields";
+import { filterPubliclyPublishedArticles, filterVisibleArticlesForLocale, getLocalizedArticleFields, isPubliclyPublishedArticle, STRICT_LOCALE_POLICY } from "../lib/localizedArticleFields";
 import { formatPublicArticleLocation } from "../lib/publicLocation";
 import {
   ArrowRight,
@@ -1068,23 +1068,13 @@ function pickTranslatedValue(item: any, lang: 'en' | 'hi' | 'gu', field: string)
 }
 
 function resolveTopStoryTitle(article: any, requestedLang: 'en' | 'hi' | 'gu') {
-  if (requestedLang !== 'en') {
-    const translated = pickTranslatedField(article, requestedLang, 'title');
-    if (translated) return { text: translated, isOriginal: false };
-  }
-  return resolveArticleTitle(article, requestedLang);
+  const localized = getLocalizedArticleFields(article, requestedLang, STRICT_LOCALE_POLICY);
+  return { text: localized.title, isOriginal: localized.isFallback };
 }
 
 function resolveTopStorySummary(article: any, requestedLang: 'en' | 'hi' | 'gu') {
-  const translated = pickTranslatedField(article, requestedLang, 'summary');
-  if (translated && (requestedLang !== 'en' || resolveArticleField(article, 'summary', requestedLang).text === translated)) {
-    return { text: translated, isOriginal: false };
-  }
-
-  // Top Story rule: use summary if present; otherwise generate a dek.
-  const summary = safeTitle(article?.summary);
-  if (summary) return { text: summary, isOriginal: false };
-  return { text: '', isOriginal: false };
+  const localized = getLocalizedArticleFields(article, requestedLang, STRICT_LOCALE_POLICY);
+  return { text: localized.summary, isOriginal: localized.isFallback };
 }
 
 function resolveStoryImageSrc(article: any, requestedLang: 'en' | 'hi' | 'gu') {
@@ -1098,40 +1088,8 @@ function articleToTickerText(a: Article, requestedLang: 'en' | 'hi' | 'gu'): str
 }
 
 function articleToFeedItem(a: Article, requestedLang: 'en' | 'hi' | 'gu') {
-  const storyId = getStoryId(a as any) || undefined;
-  const slug = resolveArticleSlug(a as any, requestedLang) || safeTitle((a as any)?.slug) || undefined;
-  const titleRes = resolveArticleTitle(a as any, requestedLang);
-  const descRes = resolveArticleSummaryOrExcerpt(a as any, requestedLang);
-
-  const title = safeTitle(titleRes.text || (a as any)?.title) || 'Untitled';
-  const desc = safeTitle(descRes.text || (a as any)?.summary || (a as any)?.excerpt) || '';
-
-  const iso = resolveStoryDateIso(a as any);
-  const time = formatEditorialDateTime(iso);
-
-  const source = safeTitle((a as any)?.source?.name || (a as any)?.source) || 'News Pulse';
-  const category = safeTitle((a as any)?.category) || '';
-  const imageSrc = resolveStoryImageSrc(a as any, requestedLang);
-  const coverFitMode = resolveCoverFitMode(a as any, { src: imageSrc, altText: title });
-
-  return {
-    _id: storyId,
-    id: storyId || slug || title,
-    lang: String((a as any)?.lang || (a as any)?.language || (a as any)?.sourceLang || (a as any)?.sourceLanguage || '').trim(),
-    slug,
-    translationGroupId: getStoryTranslationGroupId(a as any) || undefined,
-    status: isPubliclyPublishedArticle(a as any) ? 'published' : 'unpublished',
-    title,
-    desc,
-    titleIsOriginal: titleRes.isOriginal,
-    descIsOriginal: descRes.isOriginal,
-    time: time || '—',
-    iso,
-    source,
-    category,
-    imageSrc,
-    coverFitMode,
-  };
+  const item = articleToHomeRightRailFeedItem(a, requestedLang);
+  return { ...item, time: item.time === '-' ? '—' : item.time };
 }
 
 function collectHomepageStoryIdentifiers(article: any, requestedLang: 'en' | 'hi' | 'gu'): string[] {
@@ -2149,51 +2107,13 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick, founderToggle
     if (key === 'science-technology') return 'categories.scienceTechnology';
     if (key === 'web-stories') return 'categories.webStories';
     if (key === 'viral-videos') return 'categories.viralVideos';
-    if (key === 'youth') return 'categories.youthPulse';
-    if (key === 'inspiration') return 'categories.inspirationHub';
-    if (key === 'community') return 'categories.communityReporter';
+    if (key === 'youth' || key === 'youth-pulse') return 'categories.youthPulse';
+    if (key === 'inspiration' || key === 'inspiration-hub') return 'categories.inspirationHub';
+    if (key === 'community' || key === 'community-reporter') return 'categories.communityReporter';
     if (key === 'faith-culture') return 'categories.faithCulture';
     if (key === 'pulse-dialogue') return 'categories.pulseDialogue';
     if (key === 'tech-gadgets') return 'categories.techGadgets';
     return `categories.${key}`;
-  };
-
-  const categorySubtitleMap: Record<string, { en: string; hi?: string; gu?: string }> = {
-    breaking: { en: 'Latest urgent updates' },
-    regional: { en: 'Gujarat districts and cities' },
-    national: { en: 'India-wide coverage' },
-    international: { en: 'Global top stories' },
-    business: { en: 'Markets and economy' },
-    'science-technology': { en: 'Innovation and tech' },
-    sports: { en: 'Matches and results' },
-    lifestyle: { en: 'Health, style and living' },
-    glamour: { en: 'Bollywood and celebrity buzz' },
-    'web-stories': { en: 'Quick visual stories' },
-    'viral-videos': { en: 'Trending clips and viral moments' },
-    viralVideo: { en: 'Trending clips and viral moments' },
-    viral_videos: { en: 'Trending clips and viral moments' },
-    editorial: { en: 'Opinions, analysis and insight' },
-    youth: { en: 'Students, careers and youth trends' },
-    'youth-pulse': { en: 'Students, careers and youth trends' },
-    youthPulse: { en: 'Students, careers and youth trends' },
-    youth_pulse: { en: 'Students, careers and youth trends' },
-    inspiration: { en: 'Positive stories and motivation' },
-    'inspiration-hub': { en: 'Positive stories and motivation' },
-    inspirationHub: { en: 'Positive stories and motivation' },
-    inspiration_hub: { en: 'Positive stories and motivation' },
-    community: { en: 'Public voices and local reports' },
-    'community-reporter': { en: 'Public voices and local reports' },
-    communityReporter: { en: 'Public voices and local reports' },
-    community_reporter: { en: 'Public voices and local reports' },
-    'faith-culture': { en: 'Faith, heritage and culture' },
-    faithCulture: { en: 'Faith, heritage and culture' },
-    faith_culture: { en: 'Faith, heritage and culture' },
-    'pulse-dialogue': { en: 'Conversations and public voices' },
-    pulseDialogue: { en: 'Conversations and public voices' },
-    pulse_dialogue: { en: 'Conversations and public voices' },
-    'tech-gadgets': { en: 'Devices and digital life' },
-    techGadgets: { en: 'Devices and digital life' },
-    tech_gadgets: { en: 'Devices and digital life' },
   };
 
   const getCategorySubtitle = (key: string) => {
@@ -2205,11 +2125,11 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick, founderToggle
       .replace(/_/g, '-')
       .toLowerCase();
 
-    return (
-      categorySubtitleMap[rawKey]?.en ||
-      categorySubtitleMap[aliasKey]?.en ||
-      ''
-    );
+    if (aliasKey === 'pulse-dialogue') return t('pulseDialogue.exploreSubtitle');
+    const labelKey = labelKeyForCategory(aliasKey === 'viral-video' ? 'viral-videos' : aliasKey);
+    const subtitleKey = labelKey.replace('categories.', 'categoryDescriptions.');
+    const subtitle = t(subtitleKey);
+    return subtitle === subtitleKey ? '' : subtitle;
   };
 
   type ExploreTone = {
@@ -2401,7 +2321,7 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick, founderToggle
             className="inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em]"
             style={{ background: theme.surface, borderColor: theme.border, color: theme.sub }}
           >
-            News Desk
+            {t('home.newsDesk')}
           </span>
         </div>
       </div>
@@ -2498,22 +2418,11 @@ function FeaturedCard({ theme, item, onToast, isLoading = false, hasReadError = 
     const title = safeTitle(titleRes.text) || t('common.untitled');
     const summaryFromApi = safeTitle(summaryRes.text);
 
-    const contentFallback = cleanText(
-      pickTranslatedField(article as any, requestedLang, 'content') ||
-        pickTranslatedField(article as any, requestedLang, 'body') ||
-        pickTranslatedField(article as any, requestedLang, 'html') ||
-        (article as any)?.content ||
-        (article as any)?.body ||
-        (article as any)?.html ||
-        (article as any)?.summary ||
-        (article as any)?.excerpt
-    );
+    const localized = getLocalizedArticleFields(article, requestedLang, STRICT_LOCALE_POLICY);
+    const contentFallback = cleanText(localized.bodyHtml || localized.summary);
 
     const summaryGenerated = makeDekFromContent(contentFallback);
-    const excerptFallback = safeTitle(
-      pickTranslatedField(article as any, requestedLang, 'excerpt') || (article as any)?.excerpt
-    );
-    const summary = summaryFromApi || summaryGenerated || excerptFallback;
+    const summary = summaryFromApi || summaryGenerated;
 
     const iso = resolveStoryDateIso(article as any);
     const time = formatEditorialDateTime(iso);
@@ -3844,7 +3753,7 @@ function AppPromoSection({ theme, onToast }: any) {
   );
 }
 
-function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
+export function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
   const { t } = useI18n();
   const { openPreferences } = useCookieConsent();
 
@@ -3861,11 +3770,11 @@ function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
   ];
 
   const quickLinks = [
-    { label: 'About News Pulse', href: localizePath('/about-us', lang) },
+    { label: t('footer.aboutUs'), href: localizePath('/about-us', lang) },
     { label: t('common.contact'), href: localizePath('/contact', lang) },
     { label: t('footer.careers'), href: localizePath('/careers', lang) },
     { label: t('common.communityReporter'), href: localizePath('/community-reporter', lang) },
-    { label: 'Community Reporter Guide', href: localizePath('/community-reporter/guidelines', lang) },
+    { label: t('footer.communityReporterGuide'), href: localizePath('/community-reporter/guidelines', lang) },
     { label: t('footer.journalistDesk'), href: localizePath('/journalist-desk', lang) },
   ];
 
@@ -3904,7 +3813,7 @@ function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
                 <button
                   key={x.label}
                   type="button"
-                  onClick={() => onToast(`${x.label} is not available right now.`)}
+                  onClick={() => onToast(t('footer.unavailable', { label: x.label }))}
                   className="h-12 w-12 rounded-2xl border flex items-center justify-center transition hover:opacity-[0.98]"
                   style={{ background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.12)", color: "white" }}
                   aria-label={x.label}
@@ -3929,7 +3838,7 @@ function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
                         {item.label}
                       </Link>
                     ) : (
-                      <button key={item.label} type="button" onClick={() => onToast(`${item.label} is not available right now.`) } className="text-left hover:underline">
+                      <button key={item.label} type="button" onClick={() => onToast(t('footer.unavailable', { label: item.label })) } className="text-left hover:underline">
                         {item.label}
                       </button>
                     )
@@ -3948,7 +3857,7 @@ function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
                         {item.label}
                       </Link>
                     ) : (
-                      <button key={item.label} type="button" onClick={item.onClick || (() => onToast(`${item.label} is not available right now.`))} className="text-left hover:underline">
+                      <button key={item.label} type="button" onClick={item.onClick || (() => onToast(t('footer.unavailable', { label: item.label })))} className="text-left hover:underline">
                         {item.label}
                       </button>
                     )
@@ -3969,7 +3878,7 @@ function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
                     {item.label}
                   </Link>
                 ) : (
-                  <button key={item.label} type="button" onClick={() => onToast(`${item.label} is not available right now.`) } className="text-left hover:underline">
+                  <button key={item.label} type="button" onClick={() => onToast(t('footer.unavailable', { label: item.label })) } className="text-left hover:underline">
                     {item.label}
                   </button>
                 )
@@ -4247,15 +4156,15 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
 
     if (Array.isArray(raw) && raw.length) {
       const codes = raw.map(normalize).filter(Boolean) as UiLangCode[];
-      const uniq = Array.from(new Set(codes));
+      const uniq = (['gu', 'hi', 'en'] as const).filter((code) => codes.includes(code));
       if (uniq.length) {
         return uniq.map((c) => ({ code: c, label: UI_LANG_LABEL[c] }));
       }
     }
     return [
-      { code: 'en' as UiLangCode, label: UI_LANG_LABEL.en },
-      { code: 'hi' as UiLangCode, label: UI_LANG_LABEL.hi },
       { code: 'gu' as UiLangCode, label: UI_LANG_LABEL.gu },
+      { code: 'hi' as UiLangCode, label: UI_LANG_LABEL.hi },
+      { code: 'en' as UiLangCode, label: UI_LANG_LABEL.en },
     ];
   }, [effectiveSettings]);
 

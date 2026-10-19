@@ -57,69 +57,6 @@ function categoryKeyToI18nKey(categoryKey: string): string | null {
   return null;
 }
 
-const CATEGORY_DESK_COPY: Record<string, { eyebrow: string; title: string; description: string }> = {
-  national: {
-    eyebrow: 'NATIONAL DESK • INDIA',
-    title: 'National Pulse – India',
-    description: 'Latest national news, politics, government and major developments from across India.',
-  },
-  international: {
-    eyebrow: 'INTERNATIONAL DESK • WORLD',
-    title: 'International Pulse – World',
-    description: 'Latest global news, diplomacy, geopolitics and major developments from around the world.',
-  },
-  business: {
-    eyebrow: 'BUSINESS DESK',
-    title: 'Business Pulse',
-    description: 'Latest updates on markets, economy, companies, startups and business.',
-  },
-  'science-technology': {
-    eyebrow: 'SCIENCE & TECHNOLOGY DESK',
-    title: 'Science & Technology Pulse',
-    description: 'Latest developments in science, technology, innovation, space and digital life.',
-  },
-  sports: {
-    eyebrow: 'SPORTS DESK',
-    title: 'Sports Pulse',
-    description: 'Latest sports news, matches, players and major sporting developments.',
-  },
-  lifestyle: {
-    eyebrow: 'LIFESTYLE DESK',
-    title: 'Lifestyle Pulse',
-    description: 'Latest stories on health, food, travel, wellness, culture and everyday life.',
-  },
-  glamour: {
-    eyebrow: 'GLAMOUR DESK',
-    title: 'Glamour Pulse',
-    description: 'Latest entertainment, celebrity, cinema and popular culture stories.',
-  },
-  editorial: {
-    eyebrow: 'EDITORIAL DESK',
-    title: 'Editorial Desk',
-    description: 'News Pulse opinions, analysis, perspectives and in-depth commentary.',
-  },
-  'web-stories': {
-    eyebrow: 'VISUAL STORIES',
-    title: 'Web Stories',
-    description: 'Quick, visual and immersive stories from News Pulse.',
-  },
-  'faith-culture': {
-    eyebrow: 'FAITH & CULTURE DESK',
-    title: 'Faith & Culture Pulse',
-    description: 'Latest faith, culture, heritage and community stories from News Pulse.',
-  },
-  'pulse-dialogue': {
-    eyebrow: 'PULSE DIALOGUE DESK',
-    title: 'Pulse Dialogue',
-    description: 'Conversations, interviews and public dialogue from News Pulse.',
-  },
-  'tech-gadgets': {
-    eyebrow: 'TECH & GADGETS DESK',
-    title: 'Tech & Gadgets Pulse',
-    description: 'Latest technology, gadgets, digital life and innovation stories from News Pulse.',
-  },
-};
-
 const EDITORIAL_SEARCH_COPY: Record<string, { searchPlaceholder: string }> = {
   en: {
     searchPlaceholder: 'Search Editorials and Special Stories...',
@@ -130,20 +67,6 @@ const EDITORIAL_SEARCH_COPY: Record<string, { searchPlaceholder: string }> = {
   gu: {
     searchPlaceholder: 'સંપાદકીય અને વિશેષ લેખો શોધો...',
   },
-};
-
-const LOAD_MORE_LABELS: Record<string, string> = {
-  international: 'Load More International Stories',
-  business: 'Load More Business Stories',
-  'science-technology': 'Load More Science & Technology Stories',
-  sports: 'Load More Sports Stories',
-  lifestyle: 'Load More Lifestyle Stories',
-  glamour: 'Load More Glamour Stories',
-  editorial: 'Load More Editorials',
-  'web-stories': 'Load More Web Stories',
-  'faith-culture': 'Load More Faith & Culture Stories',
-  'pulse-dialogue': 'Load More Pulse Dialogue Stories',
-  'tech-gadgets': 'Load More Tech & Gadgets Stories',
 };
 
 export { selectCategoryFeedArticles } from '../lib/categoryFeed';
@@ -209,10 +132,16 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
   const isEditorialPage = routeCategoryKey === 'editorial';
   const editorialSearchCopy = EDITORIAL_SEARCH_COPY[language] || EDITORIAL_SEARCH_COPY.en;
   const pageTitle = localizedTitle;
-  const deskCopy = CATEGORY_DESK_COPY[routeCategoryKey] || {
-    eyebrow: `${String(localizedTitle || title).toUpperCase()} DESK`,
-    title: `${localizedTitle || title} Pulse`,
-    description: `Latest ${String(localizedTitle || title).toLowerCase()} stories from News Pulse.`,
+  const deskKey = `categoryDesks.${routeCategoryKey.replace(/-([a-z])/g, (_match, letter: string) => letter.toUpperCase())}`;
+  const deskTitle = t(`${deskKey}.title`);
+  const deskCopy = deskTitle !== `${deskKey}.title` ? {
+    eyebrow: t(`${deskKey}.eyebrow`),
+    title: deskTitle,
+    description: t(`${deskKey}.description`),
+  } : {
+    eyebrow: t('categoryPage.deskEyebrow', { category: String(localizedTitle || title).toUpperCase() }),
+    title: t('categoryPage.deskTitle', { category: localizedTitle || title }),
+    description: t('categoryPage.deskDescription', { category: String(localizedTitle || title).toLowerCase() }),
   };
   const resolvedDeskCopy = routeCategoryKey === 'pulse-dialogue'
     ? { ...deskCopy, description: t('pulseDialogue.landing.description') }
@@ -617,7 +546,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
         {useCategoryShell ? (
           <div className="border-b border-newsPulse-slate/20 px-4 py-4">
             <div className="text-[11px] font-black uppercase tracking-[0.22em] text-newsPulse-blue/80">{pageTitle}</div>
-            <div className="mt-1 text-lg font-extrabold tracking-tight text-newsPulse-navy">{routeCategoryKey === 'pulse-dialogue' ? t('pulseDialogue.landing.latestContributions') : 'Fresh Stories'}</div>
+            <div className="mt-1 text-lg font-extrabold tracking-tight text-newsPulse-navy">{routeCategoryKey === 'pulse-dialogue' ? t('pulseDialogue.landing.latestContributions') : t('categoryPage.freshStories')}</div>
           </div>
         ) : null}
         <ul className={useCategoryShell ? 'grid gap-4 p-3 sm:grid-cols-2' : 'grid gap-5 sm:grid-cols-2 lg:grid-cols-3'}>
@@ -629,11 +558,12 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
 
   const hierarchy = useCategoryStoryHierarchy({
     items: useCategoryShell && !error ? hierarchyItems : [],
-    categoryLabel: routeCategoryKey === 'web-stories' ? 'Web Stories' : pageTitle,
-    topLabel: routeCategoryKey === 'pulse-dialogue' ? t('pulseDialogue.landing.featuredDialogue') : routeCategoryKey === 'web-stories' ? 'Featured Web Story' : isEditorialPage ? 'Featured Editorial' : 'Top Story',
-    keyLabel: isEditorialPage ? 'Key Editorials' : 'Key Stories',
-    latestLabel: routeCategoryKey === 'pulse-dialogue' ? t('pulseDialogue.landing.latestContributions') : isEditorialPage ? 'Recent Editorials' : routeCategoryKey === 'web-stories' ? 'Web Stories' : 'Latest',
-    loadMoreLabel: LOAD_MORE_LABELS[routeCategoryKey] || `Load More ${pageTitle} Stories`,
+    categoryLabel: pageTitle,
+    description: t('categoryPage.hierarchyDescription'),
+    topLabel: routeCategoryKey === 'pulse-dialogue' ? t('pulseDialogue.landing.featuredDialogue') : t(routeCategoryKey === 'web-stories' ? 'categoryPage.featuredWebStory' : isEditorialPage ? 'categoryPage.featuredEditorial' : 'home.topStory'),
+    keyLabel: t(isEditorialPage ? 'categoryPage.keyEditorials' : 'categoryPage.keyStories'),
+    latestLabel: routeCategoryKey === 'pulse-dialogue' ? t('pulseDialogue.landing.latestContributions') : isEditorialPage ? t('categoryPage.recentEditorials') : routeCategoryKey === 'web-stories' ? pageTitle : t('home.latest'),
+    loadMoreLabel: t(routeCategoryKey === 'web-stories' ? 'categoryPage.loadMoreWebStories' : isEditorialPage ? 'categoryPage.loadMoreEditorials' : 'categoryPage.loadMoreStories', { category: pageTitle }),
     emptyTitle,
     loading: !loaded,
     variant: routeCategoryKey === 'web-stories' ? 'web-stories' : isEditorialPage ? 'editorial' : 'news',

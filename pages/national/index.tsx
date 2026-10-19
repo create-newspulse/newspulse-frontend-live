@@ -859,7 +859,7 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
       .replace(/\s+/g, ' ')
       .trim();
     const tags = tagList(story?.tags);
-    const tag = tags[0] || String(story?.topic || story?.section || 'National').trim();
+    const tag = tags[0] || String(story?.topic || story?.section || t('categories.national')).trim();
     const where = storyLocation(story);
 
     return {
@@ -871,7 +871,7 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
       summaryText: localizedSummary || storyExcerpt(story),
       imageSrc: storyImage(story),
       imageFitMode: 'cover',
-      label: tag || 'National',
+      label: tag || t('categories.national'),
       meta: [where].filter(Boolean),
       dateIso: storyDateIso(story),
       readingTime: '',
@@ -881,9 +881,9 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
 
   const nationalTopContent = (
     <CategoryDeskHeader
-      eyebrow="NATIONAL DESK • INDIA"
-      title="National Pulse – India"
-      description="Latest national news, politics, government and major developments from across India."
+      eyebrow={t('categoryDesks.national.eyebrow')}
+      title={t('categoryDesks.national.title')}
+      description={t('categoryDesks.national.description')}
       actionLayoutBreakpoint="lg"
       contentClassName="lg:flex-[1_1_60%] lg:max-w-[65%]"
       actionsClassName="md:max-w-none lg:flex-[1_1_38%] lg:max-w-[42%] lg:self-start"
@@ -955,12 +955,13 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
 
   const nationalHierarchy = useCategoryStoryHierarchy({
     items: nationalHierarchyItems,
-    categoryLabel: 'National News',
+    categoryLabel: t('nationalPage.categoryLabel'),
+    description: t('categoryPage.hierarchyDescription'),
     topLabel: t('nationalPage.topStory'),
-    keyLabel: 'Key National Stories',
-    latestLabel: 'Latest National Stories',
-    loadMoreLabel: 'Load More National Stories',
-    emptyTitle: 'No news found',
+    keyLabel: t('nationalPage.keyStories'),
+    latestLabel: t('nationalPage.latestStories'),
+    loadMoreLabel: t('nationalPage.loadMoreStories'),
+    emptyTitle: t('nationalPage.emptyTitle'),
     loading,
     hasMore,
     loadingMore,

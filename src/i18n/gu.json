@@ -1,5 +1,6 @@
 {
   "common": {
+    "minutesRead": "{{count}} મિનિટમાં વાંચો",
     "language": "ભાષા",
     "back": "પાછા",
     "beta": "બીટા",
@@ -159,6 +160,87 @@
     "pulseDialogue": "પલ્સ સંવાદ",
     "techGadgets": "ટેક અને ગેજેટ્સ"
   },
+  "categoryDescriptions": {
+    "breaking": "તાજા મહત્વપૂર્ણ અપડેટ્સ",
+    "regional": "ગુજરાતના જિલ્લાઓ અને શહેરો",
+    "national": "સમગ્ર ભારતના સમાચાર",
+    "international": "વિશ્વના મુખ્ય સમાચાર",
+    "business": "બજાર અને અર્થતંત્ર",
+    "scienceTechnology": "નવીનતા અને ટેકનોલોજી",
+    "techGadgets": "ઉપકરણો અને ડિજિટલ જીવન",
+    "sports": "મેચ અને પરિણામો",
+    "lifestyle": "સ્વાસ્થ્ય, શૈલી અને જીવન",
+    "faithCulture": "આસ્થા, વારસો અને સંસ્કૃતિ",
+    "glamour": "બોલિવૂડ અને સિતારાઓના સમાચાર",
+    "webStories": "ટૂંકી દૃશ્ય વાર્તાઓ",
+    "viralVideos": "ટ્રેન્ડિંગ ક્લિપ્સ અને વાયરલ પળો",
+    "editorial": "વિચારો, વિશ્લેષણ અને દૃષ્ટિકોણ",
+    "youthPulse": "વિદ્યાર્થીઓ, કારકિર્દી અને યુવા વલણો",
+    "inspirationHub": "સકારાત્મક વાર્તાઓ અને પ્રેરણા",
+    "communityReporter": "લોકોના અવાજ અને સ્થાનિક અહેવાલો"
+  },
+  "categoryDesks": {
+    "national": {
+      "eyebrow": "રાષ્ટ્રીય ડેસ્ક • ભારત",
+      "title": "રાષ્ટ્રીય પલ્સ – ભારત",
+      "description": "સમગ્ર ભારતના તાજા રાષ્ટ્રીય સમાચાર, રાજકારણ, સરકાર અને મહત્વપૂર્ણ ઘટનાક્રમ."
+    },
+    "international": {
+      "eyebrow": "આંતરરાષ્ટ્રીય ડેસ્ક • વિશ્વ",
+      "title": "આંતરરાષ્ટ્રીય પલ્સ – વિશ્વ",
+      "description": "વિશ્વભરના તાજા સમાચાર, મુત્સદ્દીગીરી, ભૂ-રાજકારણ અને મહત્વપૂર્ણ ઘટનાક્રમ."
+    },
+    "business": {
+      "eyebrow": "વ્યાપાર ડેસ્ક",
+      "title": "વ્યાપાર પલ્સ",
+      "description": "બજાર, અર્થતંત્ર, કંપનીઓ, સ્ટાર્ટઅપ અને વ્યાપારના તાજા અપડેટ્સ."
+    },
+    "scienceTechnology": {
+      "eyebrow": "વિજ્ઞાન અને ટેકનોલોજી ડેસ્ક",
+      "title": "વિજ્ઞાન અને ટેકનોલોજી પલ્સ",
+      "description": "વિજ્ઞાન, ટેકનોલોજી, નવીનતા, અવકાશ અને ડિજિટલ જીવનના તાજા ઘટનાક્રમ."
+    },
+    "sports": {
+      "eyebrow": "ખેલકૂદ ડેસ્ક",
+      "title": "ખેલકૂદ પલ્સ",
+      "description": "રમતગમત, મેચ, ખેલાડીઓ અને મહત્વપૂર્ણ રમતોત્સવના તાજા સમાચાર."
+    },
+    "lifestyle": {
+      "eyebrow": "લાઇફસ્ટાઇલ ડેસ્ક",
+      "title": "લાઇફસ્ટાઇલ પલ્સ",
+      "description": "સ્વાસ્થ્ય, ભોજન, પ્રવાસ, સંસ્કૃતિ અને રોજિંદા જીવનની તાજી વાર્તાઓ."
+    },
+    "glamour": {
+      "eyebrow": "ગ્લેમર ડેસ્ક",
+      "title": "ગ્લેમર પલ્સ",
+      "description": "મનોરંજન, સિતારાઓ, સિનેમા અને લોકપ્રિય સંસ્કૃતિના તાજા સમાચાર."
+    },
+    "editorial": {
+      "eyebrow": "સંપાદકીય ડેસ્ક",
+      "title": "સંપાદકીય ડેસ્ક",
+      "description": "News Pulse ના વિચારો, વિશ્લેષણ, દૃષ્ટિકોણ અને વિસ્તૃત ટિપ્પણીઓ."
+    },
+    "webStories": {
+      "eyebrow": "દૃશ્ય વાર્તાઓ",
+      "title": "વેબ સ્ટોરીઝ",
+      "description": "News Pulse ની ટૂંકી, દૃશ્ય અને રસપ્રદ વાર્તાઓ."
+    },
+    "faithCulture": {
+      "eyebrow": "ધર્મ અને સંસ્કૃતિ ડેસ્ક",
+      "title": "ધર્મ અને સંસ્કૃતિ પલ્સ",
+      "description": "News Pulse તરફથી આસ્થા, સંસ્કૃતિ, વારસો અને સમુદાયની તાજી વાર્તાઓ."
+    },
+    "pulseDialogue": {
+      "eyebrow": "પલ્સ સંવાદ ડેસ્ક",
+      "title": "પલ્સ સંવાદ",
+      "description": "News Pulse ની વાતચીત, મુલાકાતો અને જાહેર સંવાદ."
+    },
+    "techGadgets": {
+      "eyebrow": "ટેક અને ગેજેટ્સ ડેસ્ક",
+      "title": "ટેક અને ગેજેટ્સ પલ્સ",
+      "description": "News Pulse તરફથી ટેકનોલોજી, ગેજેટ્સ, ડિજિટલ જીવન અને નવીનતાની તાજી વાર્તાઓ."
+    }
+  },
   "faithCulture": {
     "filterLabel": "આસ્થા અને સંસ્કૃતિના વિષયો",
     "noMatches": "આ ફિલ્ટર સાથે મેળ ખાતી કોઈ વાર્તા મળી નથી.",
@@ -225,6 +307,8 @@
     }
   },
   "home": {
+    "newsDesk": "સમાચાર ડેસ્ક",
+    "youthDesk": "યુવા ડેસ્ક",
     "previewNotice": "પબ્લિક સાઇટ સેટિંગ્સ લોડ થઈ શક્યાં નથી. ડિફોલ્ટ લેઆઉટ બતાવવામાં આવી રહ્યો છે.",
     "breakingNews": "બ્રેકિંગ",
     "liveUpdates": "લાઈવ અપડેટ્સ",
@@ -355,7 +439,9 @@
     "iconWorld": "વિશ્વ",
     "quickLinksTitle": "ઝડપી લિંક્સ",
     "businessTitle": "વ્યવસાય",
-    "aboutUs": "અમારા વિશે",
+    "aboutUs": "News Pulse વિશે",
+    "communityReporterGuide": "કોમ્યુનિટી રિપોર્ટર માર્ગદર્શિકા",
+    "unavailable": "{{label}} હાલમાં ઉપલબ્ધ નથી.",
     "editorialPolicy": "સંપાદકીય નીતિ",
     "digitalCodeOfEthics": "ડિજિટલ નૈતિક આચારસંહિતા",
     "advertisingPolicy": "વિજ્ઞાપન નીતિ",
@@ -375,7 +461,7 @@
     "rssFeeds": "RSS ફીડ્સ",
     "apiAccess": "API એક્સેસ",
     "licensing": "લાઇસેન્સિંગ",
-    "copyright": "© 2025–2026 News Pulse Media. All Rights Reserved. | Powered by Innovation"
+    "copyright": "© 2025–2026 News Pulse Media. સર્વાધિકાર સુરક્ષિત. | નવીનતા દ્વારા સંચાલિત"
   },
   "cookieConsent": {
     "links": {
@@ -427,6 +513,19 @@
     }
   },
   "categoryPage": {
+    "hierarchyDescription": "મુખ્ય સમાચાર, મહત્વપૂર્ણ વાર્તાઓ અને તાજા અપડેટ્સ",
+    "deskEyebrow": "{{category}} ડેસ્ક",
+    "deskTitle": "{{category}} પલ્સ",
+    "deskDescription": "News Pulse તરફથી {{category}} ના તાજા સમાચાર.",
+    "keyStories": "મુખ્ય સમાચાર",
+    "freshStories": "તાજા સમાચાર",
+    "featuredWebStory": "મુખ્ય વેબ સ્ટોરી",
+    "featuredEditorial": "મુખ્ય સંપાદકીય",
+    "keyEditorials": "મહત્વપૂર્ણ સંપાદકીય",
+    "recentEditorials": "તાજેતરના સંપાદકીય",
+    "loadMoreStories": "{{category}} ના વધુ સમાચાર વાંચો",
+    "loadMoreWebStories": "વધુ વેબ સ્ટોરીઝ જુઓ",
+    "loadMoreEditorials": "વધુ સંપાદકીય વાંચો",
     "unableToLoadTitle": "લેખ લોડ થઈ શક્યા નથી",
     "publicFeedProtected": "પબ્લિક ફીડ એન્ડપોઇન્ટ સુરક્ષિત છે. બેકએન્ડમાં GET /api/public/news ને auth વગર મંજૂરી આપો.",
     "ensureBackendRunning": "બેકએન્ડ ચાલી રહ્યું છે તેની ખાતરી કરો અને NEXT_PUBLIC_API_ORIGIN ને તમારા બેકએન્ડ ઓરિજિન પર સેટ કરો (ડિફૉલ્ટ: http://localhost:5000).",
@@ -552,6 +651,11 @@
     "liveUpdates": "લાઇવ અપડેટ્સ"
   },
   "nationalPage": {
+    "categoryLabel": "રાષ્ટ્રીય સમાચાર",
+    "keyStories": "મુખ્ય રાષ્ટ્રીય સમાચાર",
+    "latestStories": "તાજા રાષ્ટ્રીય સમાચાર",
+    "loadMoreStories": "વધુ રાષ્ટ્રીય સમાચાર વાંચો",
+    "emptyTitle": "કોઈ સમાચાર મળ્યા નથી",
     "headTitle": "રાષ્ટ્રીય – News Pulse",
     "headDescription": "રાષ્ટ્રીય હેડલાઇન્સ અને ટોપ સ્ટોરીઝ.",
     "newsFeed": "ન્યૂઝ ફીડ",
@@ -598,6 +702,11 @@
     "noStoriesFoundTryBroader": "{{name}} માટે હમણાં કોઈ સ્ટોરી મળી નથી. વધુ વિસ્તૃત {{category}} સમાચાર જુઓ."
   },
   "regionalGujaratPage": {
+    "topStory": "ગુજરાતના મુખ્ય સમાચાર",
+    "keyStories": "ગુજરાતના મહત્વપૂર્ણ સમાચાર",
+    "latest": "ગુજરાતના તાજા સમાચાર",
+    "updates": "પ્રાદેશિક અપડેટ્સ",
+    "noUpdates": "હમણાં કોઈ પ્રાદેશિક અપડેટ્સ નથી.",
     "headTitle": "ગુજરાત – પ્રાદેશિક",
     "headDescription": "ગુજરાત સ્થાનિક સમાચાર અને જિલ્લા અપડેટ્સ.",
     "regionalPulse": "રીજનલ પલ્સ",

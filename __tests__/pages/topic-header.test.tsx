@@ -113,7 +113,7 @@ test.each(['en', 'hi', 'gu'] as const)('%s topic archive has one shared header a
   expect(header.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(within(header).getByRole('link', { name: 'News Pulse home' }).getAttribute('href')).toBe('/');
   expect(within(header).getByRole('button', { name: 'Menu' })).toBeTruthy();
-  expect(within(header).getByRole('button', { name: 'Language' }).textContent).toContain({ en: 'English', hi: 'Hindi', gu: 'Gujarati' }[lang]);
+  expect(within(header).getByRole('button', { name: getMessagesForLang(lang).common.language }).textContent).toContain({ en: 'English', hi: 'Hindi', gu: 'Gujarati' }[lang]);
   expect(within(header).getByRole('button', { name: 'Style' }).textContent).toContain('Aurora');
   expect(container.querySelectorAll('article')).toHaveLength(1);
   expect(screen.getByRole('heading', { name: storyFixture(1, lang).title }).closest('a')?.getAttribute('href')).toBe(
@@ -132,8 +132,9 @@ test('the existing menu opens with its ordinary navigation links', () => {
 });
 
 test.each([['en', 'English'], ['hi', 'Hindi'], ['gu', 'Gujarati']] as const)('shared language control selects %s without losing the topic page/query', (lang, label) => {
-  mount(lang === 'gu' ? 'en' : 'gu');
-  fireEvent.click(screen.getByRole('button', { name: 'Language' }));
+  const currentLocale = lang === 'gu' ? 'en' : 'gu';
+  mount(currentLocale);
+  fireEvent.click(screen.getByRole('button', { name: getMessagesForLang(currentLocale).common.language }));
   fireEvent.click(screen.getByRole('button', { name: label }));
   const next = `${editorialTopicPath('navratri-2026', lang, 2)}#stories`;
   expect(mockRouter.replace).toHaveBeenCalledWith(next, next, { locale: lang, shallow: false, scroll: false });

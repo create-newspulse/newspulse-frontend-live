@@ -29,7 +29,11 @@ jest.mock('../../src/components/ads/AdSlot', () => ({
   __esModule: true,
   default: jest.fn(() => null),
 }));
-jest.mock('../../components/home/HomeRightRail', () => ({ __esModule: true, default: jest.fn(() => null) }));
+jest.mock('../../components/home/HomeRightRail', () => ({
+  __esModule: true,
+  articleToHomeRightRailFeedItem: jest.requireActual('../../components/home/HomeRightRail').articleToHomeRightRailFeedItem,
+  default: jest.fn(() => null),
+}));
 jest.mock('../../hooks/usePublicFounderToggles', () => ({ usePublicFounderToggles: () => ({ toggles: {} }) }));
 jest.mock('../../hooks/usePublicBroadcastTicker', () => ({ usePublicBroadcastTicker: jest.fn() }));
 jest.mock('../../hooks/usePublicTickerAds', () => ({ usePublicTickerAds: jest.fn() }));
@@ -564,7 +568,7 @@ describe('homepage ad layout boundaries', () => {
     const goldLabel = Array.from(leftGrid.querySelectorAll('div')).find(element => element.textContent === 'home.snapshotGold');
     expect(marketLabel?.nextElementSibling?.textContent).toBe('— unavailable');
     expect(goldLabel?.nextElementSibling?.textContent).toBe('₹ — (api)');
-    expect(document.querySelector('.home-right')?.textContent).toContain('YOUTH DESK');
+    expect(document.querySelector('.home-right')?.textContent).toContain('home.youthDesk');
     expect(document.querySelector('.home-grid')!.compareDocumentPosition(document.querySelector('.post-home-grid-ads')!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(document.querySelector('.post-home-grid-ads')!.compareDocumentPosition(document.querySelector('a[href="/monthly-compliance"]')!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
 

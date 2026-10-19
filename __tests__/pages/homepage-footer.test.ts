@@ -33,8 +33,9 @@ describe('homepage footer information architecture', () => {
   });
 
   it('preserves the requested footer link order and routes', () => {
+    expect(quickLinks).toContain("t('footer.aboutUs')");
     expect(quickLinks).toContain("t('common.communityReporter')");
-    expect(quickLinks).toContain("label: 'Community Reporter Guide'");
+    expect(quickLinks).toContain("t('footer.communityReporterGuide')");
 
     expect(routePosition(quickLinks, '/about-us')).toBeLessThan(routePosition(quickLinks, '/contact'));
     expect(routePosition(quickLinks, '/contact')).toBeLessThan(routePosition(quickLinks, '/careers'));
@@ -51,5 +52,10 @@ describe('homepage footer information architecture', () => {
     expect(routePosition(legalComplianceLinks, '/copyright-policy')).toBeLessThan(routePosition(legalComplianceLinks, '/grievance-redressal'));
     expect(routePosition(legalComplianceLinks, '/grievance-redressal')).toBeLessThan(routePosition(legalComplianceLinks, '/privacy-request'));
     expect(routePosition(legalComplianceLinks, '/privacy-request')).toBeLessThan(routePosition(legalComplianceLinks, '/monthly-compliance'));
+  });
+
+  it('keeps one footer in the existing settings-controlled homepage module', () => {
+    expect((source.match(/<SiteFooter\b/g) || [])).toHaveLength(1);
+    expect(source).toMatch(/key: 'footer',\s*order: effectiveSettings\.modules\.footer\.order,\s*enabled: moduleState\.footer,\s*node: <SiteFooter/);
   });
 });

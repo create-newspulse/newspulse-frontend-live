@@ -30,6 +30,7 @@ export type CategoryStoryHierarchyItem = {
 type Props = {
   items: CategoryStoryHierarchyItem[];
   categoryLabel: string;
+  description?: string;
   topLabel?: string;
   keyLabel?: string;
   latestLabel?: string;
@@ -390,13 +391,13 @@ function SkeletonBlock({ className }: { className: string }) {
   return <div className={classNames('animate-pulse rounded bg-slate-100', className)} />;
 }
 
-function CategoryStoryHierarchySkeleton({ categoryLabel, latestLabel }: { categoryLabel: string; latestLabel: string }) {
+function CategoryStoryHierarchySkeleton({ categoryLabel, description, latestLabel }: { categoryLabel: string; description: string; latestLabel: string }) {
   return (
     <div className="grid gap-4" aria-busy="true" aria-label="Loading category stories" data-testid="category-story-loading">
       <div className="mb-1 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="text-2xl font-black tracking-tight text-newsPulse-navy">{categoryLabel}</div>
-          <div className="text-sm text-newsPulse-slate">Top Story, Key Stories and Latest updates</div>
+          <div className="text-sm text-newsPulse-slate">{description}</div>
         </div>
       </div>
 
@@ -459,6 +460,7 @@ function CategoryStoryHierarchySkeleton({ categoryLabel, latestLabel }: { catego
 export function useCategoryStoryHierarchy({
   items,
   categoryLabel,
+  description = 'Top Story, Key Stories and Latest updates',
   topLabel,
   keyLabel = 'Key Stories',
   latestLabel = 'Latest',
@@ -501,7 +503,7 @@ export function useCategoryStoryHierarchy({
     else onLoadMore?.();
   }, [latestStories.length, loadMoreStep, onLoadMore, variant, visibleLatestCount, webStoryCovers.length]);
 
-  if (loading && !stories.length) return { content: <CategoryStoryHierarchySkeleton categoryLabel={categoryLabel} latestLabel={latestLabel} />, completion: null };
+  if (loading && !stories.length) return { content: <CategoryStoryHierarchySkeleton categoryLabel={categoryLabel} description={description} latestLabel={latestLabel} />, completion: null };
 
   if (!stories.length) {
     const content = (
@@ -535,7 +537,7 @@ export function useCategoryStoryHierarchy({
       <div className="mb-1 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="text-2xl font-black tracking-tight text-newsPulse-navy">{categoryLabel}</div>
-          <div className="text-sm text-newsPulse-slate">Top Story, Key Stories and Latest updates</div>
+          <div className="text-sm text-newsPulse-slate">{description}</div>
         </div>
       </div>
 

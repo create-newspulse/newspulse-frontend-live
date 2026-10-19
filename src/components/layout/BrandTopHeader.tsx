@@ -62,9 +62,9 @@ const HEADER_THEMES: HeaderTheme[] = [
 ];
 
 const HEADER_LANG_OPTIONS: Array<{ code: NewsPulseLanguage; label: string }> = [
-  { code: 'en', label: 'English' },
-  { code: 'hi', label: 'Hindi' },
   { code: 'gu', label: 'Gujarati' },
+  { code: 'hi', label: 'Hindi' },
+  { code: 'en', label: 'English' },
 ];
 
 function getHeaderTheme(themeId: string): HeaderTheme {
@@ -106,9 +106,7 @@ function HeaderLanguagePicker({ theme }: { theme: HeaderTheme }) {
     const raw = (settings as any)?.languageTheme?.languages;
     if (!Array.isArray(raw) || !raw.length) return HEADER_LANG_OPTIONS;
     const available = Array.from(new Set(raw.map(normalizeLangCode).filter(Boolean))) as NewsPulseLanguage[];
-    const mapped = available
-      .map((code) => HEADER_LANG_OPTIONS.find((option) => option.code === code))
-      .filter(Boolean) as Array<{ code: NewsPulseLanguage; label: string }>;
+    const mapped = HEADER_LANG_OPTIONS.filter((option) => available.includes(option.code));
     return mapped.length ? mapped : HEADER_LANG_OPTIONS;
   }, [settings]);
 
@@ -130,8 +128,8 @@ function HeaderLanguagePicker({ theme }: { theme: HeaderTheme }) {
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        aria-label="Language"
-        title="Language"
+        aria-label={t('common.language')}
+        title={t('common.language')}
         className="inline-flex min-h-10 max-w-[44vw] items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-semibold sm:max-w-none"
         style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}
       >

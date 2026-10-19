@@ -2,8 +2,8 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 
 import { getCategoryQueryKey, getCategoryRouteKey } from '../../../lib/categoryKeys';
 import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
-import { filterVisibleArticlesForLocale, getLocalizedArticleFields, normalizeRouteLocale, STRICT_LOCALE_POLICY } from '../../../lib/localizedArticleFields';
-import { pickFreshestArticlesForLocale } from '../../../lib/translationGroupSync';
+import { filterVisibleArticlesForLocale, getLocalizedArticleFields, getPublicArticleStatus, normalizeRouteLocale, STRICT_LOCALE_POLICY } from '../../../lib/localizedArticleFields';
+import { compareArticleFreshness, pickFreshestArticlesForLocale } from '../../../lib/translationGroupSync';
 import { withPublicReadDeadline } from '../../../lib/publicReadDeadline';
 import { getOrdinaryCategoryPagination, ORDINARY_PAGINATION_HEADER, validateOrdinaryPageRequest } from '../../../lib/ordinaryCategoryPagination';
 import { parsePublicNewsList, type PublicNewsListRead } from '../../../lib/publicNewsApi';
@@ -279,7 +279,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
           const widened = await fetchUpstreamJson(buildUpstreamUrl(upstreamBase, widenedParams), req, deadlineAt);
           if (widened.ok) {
-            listItems = [...primaryItems, ...widened.items];
+            const localizedPrimary = new Map(primaryItems
+              .filter((item) => getLocalizedArticleFields(item, requestedLocale, STRICT_LOCALE_POLICY).isVisible)
+              .map((item) => [item._id, item]));
+            listItems = [...primaryItems, ...widened.items.filter((item) => {
+              const primary = localizedPrimary.get(item._id);
+              if (!primary || getPublicArticleStatus(item) !== 'published') return true;
+              if (getLocalizedArticleFields(item, requestedLocale, STRICT_LOCALE_POLICY).isVisible) return true;
+              // A locale-less read can serialize the same version in another language.
+              // Keep that version's requested representation, but retain newer edits/withdrawals.
+              const freshness = compareArticleFreshness(item, primary);
+              return freshness === null || freshness > 0;
+            })];
           } else {
             widenedReadFailed = true;
             if (widened.retryAfter) retryAfter = widened.retryAfter;

@@ -10,7 +10,13 @@ import * as storyTitleHook from '../../lib/storyTitleHook';
 
 jest.mock('../../src/i18n/LanguageProvider', () => ({
   ...jest.requireActual('../../src/i18n/LanguageProvider'),
-  useI18n: () => ({ t: (key: string) => key }),
+  useI18n: () => ({ t: (key: string, vars: Record<string, string | number> = {}) => ({
+    'regionalGujaratPage.topStory': 'Gujarat Top Story',
+    'regionalGujaratPage.keyStories': 'Gujarat Key Stories',
+    'regionalGujaratPage.latest': 'Gujarat Latest',
+    'common.minutesRead': `${vars.count} min read`,
+    'categoryPage.loadMoreStories': `Load More ${vars.category} Stories`,
+  }[key] || key) }),
 }));
 
 jest.mock('next/link', () => ({

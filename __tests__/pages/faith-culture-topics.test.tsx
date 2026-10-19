@@ -94,8 +94,13 @@ async function chooseTopic(topic?: FaithCultureTopic) {
   await act(async () => { fireEvent.click(screen.getByRole('link', { name: label })); });
 }
 
+function loadMoreLabel() {
+  const dict = dictionaries[mockLocale];
+  return dict.categoryPage.loadMoreStories.replace('{{category}}', dict.categories.faithCulture);
+}
+
 async function clickMore() {
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Load More Faith & Culture Stories' })); });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: loadMoreLabel() })); });
 }
 
 async function reveal(count: number) {
@@ -290,7 +295,7 @@ describe('Faith-only public topic filters', () => {
     }
     expect(requestedPages()).toEqual(['1', '2', '3', '4']);
     expectContract(living, locale);
-    expect(screen.queryByRole('button', { name: 'Load More Faith & Culture Stories' })).toBeNull();
+    expect(screen.queryByRole('button', { name: loadMoreLabel() })).toBeNull();
     expect(screen.getByText(/all caught up/i).closest('main')).toBeNull();
   }, 20000);
 
@@ -345,7 +350,7 @@ describe('Faith-only public topic filters', () => {
     await screen.findByText(en.faithCulture.noMatches);
     expect(screen.queryByText(en.categoryPage.noStoriesYet)).toBeNull();
     expect(renderedIds()).toEqual([]);
-    expect(screen.queryByRole('button', { name: 'Load More Faith & Culture Stories' })).toBeNull();
+    expect(screen.queryByRole('button', { name: loadMoreLabel() })).toBeNull();
     cleanup();
     mockQuery = {};
     fetchMock.mockClear();

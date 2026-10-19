@@ -5,10 +5,15 @@ import type { RouteLocale } from '../../lib/localizedArticleFields';
 import { FAITH_CULTURE_PAGINATION_HEADER } from '../../lib/faithCulturePagination';
 import { ORDINARY_PAGINATION_HEADER } from '../../lib/ordinaryCategoryPagination';
 import { faithPage, faithStories, type FaithStory } from '../fixtures/faithCulture';
+import en from '../../src/i18n/en.json';
 
 let mockLocale: RouteLocale = 'en';
 let mockQuery: Record<string, string> = {};
-const mockT = (key: string) => key;
+const mockT = (key: string, vars: Record<string, string | number> = {}) => {
+  if (key === 'categories.faithCulture') return en.categories.faithCulture;
+  if (key === 'categoryPage.loadMoreStories') return en.categoryPage.loadMoreStories.replace('{{category}}', String(vars.category));
+  return key;
+};
 jest.mock('next/router', () => ({
   useRouter: () => ({ locale: mockLocale, isReady: true, query: mockQuery, pathname: '/faith-culture', asPath: '/faith-culture' }),
 }));

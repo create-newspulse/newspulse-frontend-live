@@ -8,6 +8,7 @@ import AdSlot from '../src/components/ads/AdSlot';
 import { usePublicSettings } from '../src/context/PublicSettingsContext';
 import { DEFAULT_NORMALIZED_PUBLIC_SETTINGS } from '../src/lib/publicSettings';
 import { filterPubliclyPublishedArticles } from '../lib/localizedArticleFields';
+import { getRegionalLocalePolicy } from '../lib/regionalInitialStories';
 import { fetchPublicNews } from '../lib/publicNewsApi';
 import { subscribePublicDataRefresh } from '../lib/publicDataRefresh';
 import { withPublicReadDeadline } from '../lib/publicReadDeadline';
@@ -77,8 +78,10 @@ export default function NewsPulseCategoryShell({ activeCategory, latestItems, la
 	const activePath = routeForCategory(activeCategory);
 	const topAdSlot = CATEGORY_TOP_BANNER_CATEGORIES.has(activeCategory) ? 'CATEGORY_TOP_970x90' : 'HOME_728x90';
 	const publicLatestItems = React.useMemo(
-		() => Array.isArray(latestItems) ? filterPubliclyPublishedArticles(latestItems) : latestItems,
-		[latestItems]
+		() => Array.isArray(latestItems) ? filterPubliclyPublishedArticles(latestItems)
+			.map((article) => articleToHomeRightRailFeedItem(article, lang, activeCategory === 'regional' ? getRegionalLocalePolicy(lang) : undefined))
+			.filter((item) => Boolean(item.title)) : latestItems,
+		[activeCategory, lang, latestItems]
 	);
 	const { settings, isModuleEnabled, moduleOrder } = usePublicSettings();
 	const hasCustomRightRail = Boolean(rightRail);
@@ -103,7 +106,8 @@ export default function NewsPulseCategoryShell({ activeCategory, latestItems, la
 					if (response.error) throw new Error(response.error);
 					return filterPubliclyPublishedArticles(response.items)
 						.filter((article) => !isHomeSpotlightSponsoredContent(article, lang))
-						.map((article) => articleToHomeRightRailFeedItem(article, lang));
+						.map((article) => articleToHomeRightRailFeedItem(article, lang))
+						.filter((item) => Boolean(item.title));
 				}, controller.signal),
 				withPublicReadDeadline(4000, async (signal) => {
 					const articles = await fetchHomeSpotlightArticles({ lang, signal });

@@ -27,11 +27,11 @@ export const LanguageSelector: React.FC<{ compact?: boolean }> = ({ compact = fa
       const codes = raw
         .map(normalizeLangCode)
         .filter(Boolean) as Array<'en' | 'hi' | 'gu'>;
-      const uniq = Array.from(new Set(codes));
+      const uniq = (['gu', 'hi', 'en'] as const).filter((code) => codes.includes(code));
       const mapped = uniq.map((c) => LANG_META[c]).filter(Boolean);
       if (mapped.length) return mapped;
     }
-    return [LANG_META.en, LANG_META.hi, LANG_META.gu];
+    return [LANG_META.gu, LANG_META.hi, LANG_META.en];
   }, [settings]);
 
   const change = useCallback(async (lng: string) => {
@@ -46,7 +46,7 @@ export const LanguageSelector: React.FC<{ compact?: boolean }> = ({ compact = fa
   if (compact) {
     return (
       <select
-        aria-label="Language"
+        aria-label={t('common.language')}
         value={currentLocale}
         onChange={(e) => change(e.target.value)}
         className="px-2 py-1 rounded-lg border border-newsPulse-slate/25 bg-newsPulse-white text-sm text-newsPulse-navy dark:bg-dark-accent dark:text-dark-text"

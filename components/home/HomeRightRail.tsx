@@ -3,8 +3,9 @@ import Link from 'next/link';
 import { ChevronRight, GraduationCap, Play } from 'lucide-react';
 
 import { useYouthPulse } from '../../features/youthPulse/useYouthPulse';
-import { resolveArticleSummaryOrExcerpt, resolveArticleTitle } from '../../lib/contentFallback';
-import { isPubliclyPublishedArticle } from '../../lib/localizedArticleFields';
+import { getLocalizedArticleFields, isPubliclyPublishedArticle, STRICT_LOCALE_POLICY, type LocaleFallbackPolicy } from '../../lib/localizedArticleFields';
+import { getCategoryIdentity } from '../../lib/categoryKeys';
+import { getStoryCategoryLabel } from '../../lib/publicStories';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
 import { buildNewsUrl, isNavigableNewsHref } from '../../lib/newsRoutes';
 import type { Article } from '../../lib/publicNewsApi';
@@ -55,8 +56,9 @@ function localizePath(path: string, lang: HomeRightRailLang) {
 }
 
 function normalizeCategoryKey(raw: unknown) {
-  const value = String(raw || '').toLowerCase().trim();
+  const value = getCategoryIdentity(raw);
   if (!value) return 'unknown';
+  if (value === 'tech-gadgets') return 'tech-gadgets';
   if (value.includes('sci') || value.includes('tech') || value.includes('science')) return 'science-tech';
   if (value.includes('international') || value.includes('world')) return 'international';
   if (value.includes('national')) return 'national';
@@ -74,7 +76,7 @@ function categoryBadgeClasses(raw: unknown): string {
   if (key === 'national') return 'bg-orange-50 text-orange-700 border-orange-100';
   if (key === 'international') return 'bg-purple-50 text-purple-700 border-purple-100';
   if (key === 'sports') return 'bg-green-50 text-green-700 border-green-100';
-  if (key === 'science-tech') return 'bg-cyan-50 text-cyan-700 border-cyan-100';
+  if (key === 'science-tech' || key === 'tech-gadgets') return 'bg-cyan-50 text-cyan-700 border-cyan-100';
   if (key === 'lifestyle') return 'bg-pink-50 text-pink-700 border-pink-100';
   if (key === 'glamour') return 'bg-rose-50 text-rose-700 border-rose-100';
   if (key === 'regional') return 'bg-emerald-50 text-emerald-700 border-emerald-100';
@@ -102,31 +104,30 @@ function StoryCardShell({
   );
 }
 
-export function articleToHomeRightRailFeedItem(article: Article, requestedLang: HomeRightRailLang) {
+export function articleToHomeRightRailFeedItem(article: Article, requestedLang: HomeRightRailLang, policy: LocaleFallbackPolicy = STRICT_LOCALE_POLICY) {
   const storyId = getStoryId(article as any) || undefined;
   const slug = resolveArticleSlug(article as any, requestedLang) || safeTitle((article as any)?.slug) || undefined;
-  const titleRes = resolveArticleTitle(article as any, requestedLang);
-  const descRes = resolveArticleSummaryOrExcerpt(article as any, requestedLang);
-  const title = safeTitle(titleRes.text || (article as any)?.title) || 'Untitled';
-  const desc = safeTitle(descRes.text || (article as any)?.summary || (article as any)?.excerpt) || '';
+  const localized = getLocalizedArticleFields(article, requestedLang, policy);
+  const title = localized.title;
+  const desc = localized.summary;
   const iso = resolveStoryDateIso(article as any);
   const time = formatEditorialDateTime(iso);
   const source = safeTitle((article as any)?.source?.name || (article as any)?.source) || 'News Pulse';
-  const category = safeTitle((article as any)?.category) || '';
+  const category = article.category || '';
   const imageSrc = resolveCoverImageUrl(article as any, { lang: requestedLang }) || '';
   const coverFitMode = resolveCoverFitMode(article as any, { src: imageSrc, altText: title });
 
   return {
     _id: storyId,
     id: storyId || slug || title,
-    lang: String((article as any)?.lang || (article as any)?.language || (article as any)?.sourceLang || (article as any)?.sourceLanguage || '').trim(),
+    lang: requestedLang,
     slug,
     translationGroupId: getStoryTranslationGroupId(article as any) || undefined,
     status: isPubliclyPublishedArticle(article as any) ? 'published' : 'unpublished',
     title,
     desc,
-    titleIsOriginal: titleRes.isOriginal,
-    descIsOriginal: descRes.isOriginal,
+    titleIsOriginal: localized.isFallback,
+    descIsOriginal: localized.isFallback,
     time: time || '-',
     iso,
     source,
@@ -149,9 +150,11 @@ export function HomeRightRailLatestNews({ theme = DEFAULT_HOME_RIGHT_RAIL_THEME,
     const pickedIds = new Set<string>();
 
     for (const item of listItems) {
+      const localized = getLocalizedArticleFields(item, safeLang, STRICT_LOCALE_POLICY);
+      if (!localized.isVisible || !localized.title) continue;
       const id = getStoryId(item) || getStorySlug(item);
       if (!id || pickedIds.has(id)) continue;
-      picked.push(item);
+      picked.push({ ...item, title: localized.title });
       pickedIds.add(id);
     }
 
@@ -160,13 +163,13 @@ export function HomeRightRailLatestNews({ theme = DEFAULT_HOME_RIGHT_RAIL_THEME,
       : picked.filter((item) => normalizeCategoryKey(item?.category) === activeFilter);
 
     return filtered.slice(0, 8);
-  }, [activeFilter, listItems]);
+  }, [activeFilter, listItems, safeLang]);
 
   const filterOptions = [
-    { key: 'all', label: 'All' },
-    { key: 'regional', label: 'Regional' },
-    { key: 'national', label: 'National' },
-    { key: 'international', label: 'International' },
+    { key: 'all', label: t('topics.all') },
+    { key: 'regional', label: t('categories.regional') },
+    { key: 'national', label: t('categories.national') },
+    { key: 'international', label: t('categories.international') },
   ] as const;
 
   return (
@@ -185,7 +188,7 @@ export function HomeRightRailLatestNews({ theme = DEFAULT_HOME_RIGHT_RAIL_THEME,
             <div className="flex min-w-0 items-center gap-2">
               <span className="inline-block h-2.5 w-2.5 rounded-full" aria-hidden="true" style={{ background: theme.accent }} />
               <div className="truncate text-sm font-extrabold uppercase tracking-[0.16em]" style={{ color: theme.sub }}>
-                LATEST
+                {t('home.latest')}
               </div>
             </div>
             <div className="mt-1 text-base font-black tracking-tight" style={{ color: theme.text }}>
@@ -250,7 +253,12 @@ export function HomeRightRailLatestNews({ theme = DEFAULT_HOME_RIGHT_RAIL_THEME,
             const rawSlug = getStorySlug(item);
             const href = buildNewsUrl({ id: storyId || rawSlug, slug: rawSlug, lang: safeLang });
             const time = String(item?.time || '').trim();
-            const category = String(item?.category || '').trim();
+            const category = item?.category;
+            const categoryKey = getCategoryIdentity(category).replace(/-([a-z])/g, (_match, letter: string) => letter.toUpperCase());
+            const categoryLabelKey = `categories.${categoryKey}`;
+            const translatedCategory = categoryKey ? t(categoryLabelKey) : '';
+            const categoryLabel = translatedCategory && translatedCategory !== categoryLabelKey
+              ? translatedCategory : getStoryCategoryLabel(category);
             const storyKey = getStoryReactKey(item, href);
             const titleText = String(item?.title || '').trim();
             const titleParts = splitStoryTitleHook(titleText);
@@ -269,9 +277,9 @@ export function HomeRightRailLatestNews({ theme = DEFAULT_HOME_RIGHT_RAIL_THEME,
                     <div className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{time}</div>
                   ) : null}
 
-                  {category ? (
+                  {categoryLabel ? (
                     <span className={`ml-auto shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${categoryBadgeClasses(category)}`}>
-                      {category}
+                      {categoryLabel}
                     </span>
                   ) : null}
                 </div>
@@ -542,7 +550,7 @@ export function HomeRightRailYouthDesk({ theme = DEFAULT_HOME_RIGHT_RAIL_THEME, 
         }}
       >
         <div className="min-w-0">
-          <div className="text-[12px] font-extrabold uppercase tracking-[0.16em]" style={{ color: theme.sub }}>YOUTH DESK</div>
+          <div className="text-[12px] font-extrabold uppercase tracking-[0.16em]" style={{ color: theme.sub }}>{t('home.youthDesk')}</div>
           <div className="mt-1 text-sm font-black tracking-tight" style={{ color: theme.text }}>{t('home.youthPulseTrending')}</div>
         </div>
         <a href={localizedYouthPulseHref} className="shrink-0 whitespace-nowrap text-xs font-semibold" style={{ color: theme.accent2 }}>{t('common.viewAll')} →</a>

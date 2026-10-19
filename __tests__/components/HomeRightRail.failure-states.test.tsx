@@ -33,7 +33,7 @@ describe.each(['en', 'hi', 'gu'] as const)('truthful right rail (%s)', (lang) =>
     date: '2026-10-01T10:00:00Z',
     language: lang,
   }));
-  const latestStory = { id: 'reported-latest', slug: 'reported-latest', title: 'Reported latest story', category: 'national' };
+  const latestStory = { id: 'reported-latest', slug: 'reported-latest', title: 'Reported latest story', category: 'national', lang, status: 'published' };
 
   beforeEach(() => {
     setYouthState();

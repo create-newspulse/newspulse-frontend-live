@@ -29,6 +29,12 @@ jest.mock('../../src/i18n/LanguageProvider', () => ({
       'categoryPage.ensureBackendRunning': 'Ensure backend is running.',
       'errors.fetchFailed': 'Fetch failed',
       'categories.pulseDialogue': 'Pulse Dialogue',
+      'categoryDesks.editorial.eyebrow': jest.requireActual('../../src/i18n/LanguageProvider').getMessagesForLang(mockLanguage).categoryDesks.editorial.eyebrow,
+      'categoryDesks.editorial.title': jest.requireActual('../../src/i18n/LanguageProvider').getMessagesForLang(mockLanguage).categoryDesks.editorial.title,
+      'categoryDesks.editorial.description': jest.requireActual('../../src/i18n/LanguageProvider').getMessagesForLang(mockLanguage).categoryDesks.editorial.description,
+      'categoryDesks.pulseDialogue.eyebrow': 'PULSE DIALOGUE DESK',
+      'categoryDesks.pulseDialogue.title': 'Pulse Dialogue',
+      'categoryDesks.pulseDialogue.description': 'Conversations, interviews and public dialogue from News Pulse.',
       'pulseDialogue.landing.description': 'Signed public contributions from outside voices, clearly labelled and edited by News Pulse.',
       'pulseDialogue.landing.featuredDialogue': 'Featured Dialogue',
       'pulseDialogue.landing.latestContributions': 'Latest Contributions',
@@ -510,8 +516,9 @@ describe('CategoryFeedPage editorial listing', () => {
     mockLanguage = language;
     renderEditorialPage([]);
 
-    expect(screen.getByRole('heading', { name: 'Editorial Desk' })).toBeTruthy();
-    expect(screen.getByText('News Pulse opinions, analysis, perspectives and in-depth commentary.')).toBeTruthy();
+    const desk = jest.requireActual('../../src/i18n/LanguageProvider').getMessagesForLang(language).categoryDesks.editorial;
+    expect(screen.getByRole('heading', { name: desk.title })).toBeTruthy();
+    expect(screen.getByText(desk.description)).toBeTruthy();
     expect(screen.getByPlaceholderText(placeholder)).toBeTruthy();
     expect(await screen.findByText('No stories yet.')).toBeTruthy();
   });

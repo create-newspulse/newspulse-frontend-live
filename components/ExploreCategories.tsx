@@ -245,11 +245,11 @@ export function ExploreCategories({ pathname = "/" }: { pathname?: string }) {
       <div className="border-b border-slate-200/80 bg-gradient-to-br from-blue-50/80 via-violet-50/70 to-white px-4 py-4 sm:px-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-base font-black tracking-tight text-slate-950">Explore Categories</div>
-            <div className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">Tap to filter</div>
+            <div className="text-base font-black tracking-tight text-slate-950">{t('home.exploreCategories')}</div>
+            <div className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">{t('home.tapToFilter')}</div>
           </div>
           <span className="inline-flex items-center rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-600">
-            News Desk
+            {t('home.newsDesk')}
           </span>
         </div>
       </div>
@@ -261,7 +261,8 @@ export function ExploreCategories({ pathname = "/" }: { pathname?: string }) {
           const Icon = (item as any).icon as LucideIcon;
           const labelKey = labelKeyForCategoryHref(item.href);
           const label = labelKey ? t(labelKey) : item.label;
-          const subtitle = item.href === '/pulse-dialogue' ? t('pulseDialogue.exploreSubtitle') : (item as any).subtitle;
+          const subtitle = item.href === '/pulse-dialogue' ? t('pulseDialogue.exploreSubtitle')
+            : labelKey ? t(labelKey.replace('categories.', 'categoryDescriptions.')) : item.subtitle;
 
           return (
             <Link
@@ -292,7 +293,7 @@ export function ExploreCategories({ pathname = "/" }: { pathname?: string }) {
                       tone.text,
                     ].join(" ")}
                   >
-                    {(item as any).badge}
+                    {t('common.new')}
                   </span>
                 ) : null}
                 </span>

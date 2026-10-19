@@ -13,13 +13,15 @@ const routes = [
 let mockLocale: Locale = 'en';
 const mockReplace = jest.fn(async () => true);
 let mockQuery: Record<string, string> = {};
-const mockT = (key: string) => ({
+const mockT = (key: string, vars: Record<string, string | number> = {}) => ({
   'topics.all': 'All', 'topics.politics': 'Politics', 'topics.crime': 'Crime',
   'nationalPage.searchPlaceholder': 'Search National',
   'nationalPage.filterByStateOrUt': 'Filter state',
   'nationalPage.sortStories': 'Sort stories',
   'nationalPage.sortLatest': 'Latest',
   'nationalPage.sortMostRead': 'Most Read',
+  'nationalPage.loadMoreStories': 'Load More National Stories',
+  'categoryPage.loadMoreStories': `Load More ${vars.category} Stories`,
 }[key] || key);
 
 jest.mock('next/router', () => ({

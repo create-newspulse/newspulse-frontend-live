@@ -77,6 +77,32 @@ describe.each(['en', 'hi', 'gu'] as const)('strict translated fields (%s)', (loc
 });
 
 describe('localizedArticleFields', () => {
+  test.each([undefined, '', 'unknown', 'fr'])('strict feeds do not assume English for missing/unsupported locale %s', (language) => {
+    const article = {
+      _id: 'unknown-locale', status: 'published', language,
+      title: 'ગુજરાતી શીર્ષક', content: '<p>ગુજરાતી સામગ્રી</p>',
+      translations: { en: true, hi: false, gu: true },
+    };
+    for (const locale of ['gu', 'hi', 'en']) {
+      const selected = getLocalizedArticleFields(article, locale, STRICT_LOCALE_POLICY);
+      expect(selected.sourceLocale).toBeNull();
+      expect(selected.isVisible).toBe(false);
+      expect(selected.translationFound).toBe(false);
+      expect(selected.title).toBe('');
+    }
+  });
+
+  test.each(['gu', 'hi', 'en'])('unknown source can still expose complete explicit %s content, not availability flags', (locale) => {
+    const article = {
+      _id: 'explicit-locale', status: 'published',
+      title: 'Unidentified source title',
+      translations: { [locale]: { title: 'Requested title', content: '<p>Requested body</p>', status: 'APPROVED' } },
+    };
+    expect(getLocalizedArticleFields(article, locale, STRICT_LOCALE_POLICY)).toMatchObject({
+      isVisible: true, sourceLocale: null, title: 'Requested title', bodyHtml: '<p>Requested body</p>', summary: '',
+    });
+  });
+
   test('keeps published articles visible on Gujarati routes with base fallback', () => {
     const article: any = {
       _id: 'article-1',

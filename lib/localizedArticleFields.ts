@@ -63,9 +63,8 @@ function pickNonEmpty(...candidates: unknown[]): string {
 function extractTextLike(value: unknown): string {
   if (value == null) return '';
   if (typeof value === 'string') return value.trim();
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value).trim();
   if (typeof value === 'object' && !Array.isArray(value)) {
-    return pickNonEmpty(
+    return pickNonEmpty(...[
       (value as any).text,
       (value as any).value,
       (value as any).html,
@@ -74,7 +73,7 @@ function extractTextLike(value: unknown): string {
       (value as any).label,
       (value as any).name,
       (value as any).slug
-    );
+    ].filter((candidate): candidate is string => typeof candidate === 'string'));
   }
   return '';
 }
@@ -142,15 +141,10 @@ export function getLocaleTranslationStatus(article: any, locale: RouteLocale): '
 }
 
 function getSourceLocale(article: any): RouteLocale | null {
-  const v =
-    normalizeRouteLocale(article?.sourceLang || article?.sourceLanguage || article?.language || article?.lang);
-
-  // If the source is absent, we treat it as unknown (null) instead of defaulting to 'en'.
-  // This prevents silent cross-locale leakage when backend forgets to send a language field.
-  const raw = String(article?.sourceLang || article?.sourceLanguage || article?.language || article?.lang || '').trim();
-  if (!raw) return null;
-
-  return v;
+  const raw = String(article?.sourceLang || article?.sourceLanguage || article?.language || article?.lang || '').trim().toLowerCase();
+  const base = raw.split(/[-_]/g)[0];
+  if (!['en', 'english', 'hi', 'hindi', 'in', 'gu', 'gujarati'].includes(base)) return null;
+  return normalizeRouteLocale(raw);
 }
 
 export function getPublicArticleStatus(article: any): LocalizedArticleFields['status'] {
@@ -446,7 +440,7 @@ export function getLocalizedArticleFields(
   const isCrossLocale = Boolean(sourceLocale && sourceLocale !== requestedLocale);
   const shouldFallback = isCrossLocale && !translationFound;
   const translationStatus = getLocaleTranslationStatus(item, requestedLocale);
-  const isSourceLocale = sourceLocale ? sourceLocale === requestedLocale : requestedLocale === 'en';
+  const isSourceLocale = sourceLocale === requestedLocale;
   const hasReadyTranslation =
     policy.allowReadyTranslations === true &&
     translationStatus === 'READY' &&

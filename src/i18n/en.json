@@ -1,5 +1,6 @@
 {
   "common": {
+    "minutesRead": "{{count}} min read",
     "language": "Language",
     "back": "Back",
     "beta": "Beta",
@@ -159,6 +160,87 @@
     "pulseDialogue": "Pulse Dialogue",
     "techGadgets": "Tech & Gadgets"
   },
+  "categoryDescriptions": {
+    "breaking": "Latest urgent updates",
+    "regional": "Gujarat districts and cities",
+    "national": "India-wide coverage",
+    "international": "Global top stories",
+    "business": "Markets and economy",
+    "scienceTechnology": "Innovation and tech",
+    "techGadgets": "Devices and digital life",
+    "sports": "Matches and results",
+    "lifestyle": "Health, style and living",
+    "faithCulture": "Faith, heritage and culture",
+    "glamour": "Bollywood and celebrity buzz",
+    "webStories": "Quick visual stories",
+    "viralVideos": "Trending clips and viral moments",
+    "editorial": "Opinions, analysis and insight",
+    "youthPulse": "Students, careers and youth trends",
+    "inspirationHub": "Positive stories and motivation",
+    "communityReporter": "Public voices and local reports"
+  },
+  "categoryDesks": {
+    "national": {
+      "eyebrow": "NATIONAL DESK • INDIA",
+      "title": "National Pulse – India",
+      "description": "Latest national news, politics, government and major developments from across India."
+    },
+    "international": {
+      "eyebrow": "INTERNATIONAL DESK • WORLD",
+      "title": "International Pulse – World",
+      "description": "Latest global news, diplomacy, geopolitics and major developments from around the world."
+    },
+    "business": {
+      "eyebrow": "BUSINESS DESK",
+      "title": "Business Pulse",
+      "description": "Latest updates on markets, economy, companies, startups and business."
+    },
+    "scienceTechnology": {
+      "eyebrow": "SCIENCE & TECHNOLOGY DESK",
+      "title": "Science & Technology Pulse",
+      "description": "Latest developments in science, technology, innovation, space and digital life."
+    },
+    "sports": {
+      "eyebrow": "SPORTS DESK",
+      "title": "Sports Pulse",
+      "description": "Latest sports news, matches, players and major sporting developments."
+    },
+    "lifestyle": {
+      "eyebrow": "LIFESTYLE DESK",
+      "title": "Lifestyle Pulse",
+      "description": "Latest stories on health, food, travel, wellness, culture and everyday life."
+    },
+    "glamour": {
+      "eyebrow": "GLAMOUR DESK",
+      "title": "Glamour Pulse",
+      "description": "Latest entertainment, celebrity, cinema and popular culture stories."
+    },
+    "editorial": {
+      "eyebrow": "EDITORIAL DESK",
+      "title": "Editorial Desk",
+      "description": "News Pulse opinions, analysis, perspectives and in-depth commentary."
+    },
+    "webStories": {
+      "eyebrow": "VISUAL STORIES",
+      "title": "Web Stories",
+      "description": "Quick, visual and immersive stories from News Pulse."
+    },
+    "faithCulture": {
+      "eyebrow": "FAITH & CULTURE DESK",
+      "title": "Faith & Culture Pulse",
+      "description": "Latest faith, culture, heritage and community stories from News Pulse."
+    },
+    "pulseDialogue": {
+      "eyebrow": "PULSE DIALOGUE DESK",
+      "title": "Pulse Dialogue",
+      "description": "Conversations, interviews and public dialogue from News Pulse."
+    },
+    "techGadgets": {
+      "eyebrow": "TECH & GADGETS DESK",
+      "title": "Tech & Gadgets Pulse",
+      "description": "Latest technology, gadgets, digital life and innovation stories from News Pulse."
+    }
+  },
   "faithCulture": {
     "filterLabel": "Faith & Culture topics",
     "noMatches": "No stories match these filters.",
@@ -225,6 +307,8 @@
     }
   },
   "home": {
+    "newsDesk": "News Desk",
+    "youthDesk": "YOUTH DESK",
     "previewNotice": "Public site settings could not be loaded. Showing default layout.",
     "breakingNews": "BREAKING NEWS",
     "liveUpdates": "LIVE UPDATES",
@@ -355,7 +439,9 @@
     "iconWorld": "World",
     "quickLinksTitle": "Quick Links",
     "businessTitle": "Business",
-    "aboutUs": "About Us",
+    "aboutUs": "About News Pulse",
+    "communityReporterGuide": "Community Reporter Guide",
+    "unavailable": "{{label}} is not available right now.",
     "editorialPolicy": "Editorial Policy",
     "digitalCodeOfEthics": "Digital Code of Ethics",
     "advertisingPolicy": "Advertising Policy",
@@ -427,6 +513,19 @@
     }
   },
   "categoryPage": {
+    "hierarchyDescription": "Top Story, Key Stories and Latest updates",
+    "deskEyebrow": "{{category}} DESK",
+    "deskTitle": "{{category}} Pulse",
+    "deskDescription": "Latest {{category}} stories from News Pulse.",
+    "keyStories": "Key Stories",
+    "freshStories": "Fresh Stories",
+    "featuredWebStory": "Featured Web Story",
+    "featuredEditorial": "Featured Editorial",
+    "keyEditorials": "Key Editorials",
+    "recentEditorials": "Recent Editorials",
+    "loadMoreStories": "Load More {{category}} Stories",
+    "loadMoreWebStories": "Load More Web Stories",
+    "loadMoreEditorials": "Load More Editorials",
     "unableToLoadTitle": "Unable to load articles",
     "publicFeedProtected": "Public feed endpoint is protected. Backend must allow GET /api/public/news without auth.",
     "ensureBackendRunning": "Ensure the backend is running and set NEXT_PUBLIC_API_ORIGIN to your backend origin (fallbacks to http://localhost:5000).",
@@ -559,6 +658,11 @@
     "liveUpdates": "Live updates"
   },
   "nationalPage": {
+    "categoryLabel": "National News",
+    "keyStories": "Key National Stories",
+    "latestStories": "Latest National Stories",
+    "loadMoreStories": "Load More National Stories",
+    "emptyTitle": "No news found",
     "headTitle": "National – News Pulse",
     "headDescription": "Latest national headlines and top stories.",
     "newsFeed": "News Feed",
@@ -605,6 +709,11 @@
     "noStoriesFoundTryBroader": "No stories found for {{name}} yet. Try broader {{category}} news."
   },
   "regionalGujaratPage": {
+    "topStory": "Gujarat Top Story",
+    "keyStories": "Gujarat Key Stories",
+    "latest": "Gujarat Latest",
+    "updates": "REGIONAL UPDATES",
+    "noUpdates": "No regional updates right now.",
     "headTitle": "Gujarat – Regional",
     "headDescription": "Gujarat local news feed and district updates.",
     "regionalPulse": "Regional Pulse",

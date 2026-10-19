@@ -3,6 +3,8 @@ import newsByIdHandler from '../../../pages/api/public/news/[id]/index';
 import newsBySlugHandler from '../../../pages/api/public/news/slug/[slug]';
 import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
 import { ORDINARY_PAGINATION_HEADER } from '../../../lib/ordinaryCategoryPagination';
+import { compareArticleFreshness } from '../../../lib/translationGroupSync';
+import { getLocalizedArticleFields, STRICT_LOCALE_POLICY } from '../../../lib/localizedArticleFields';
 
 jest.mock('../../../lib/publicApiBase', () => ({
   getPublicApiBaseUrl: jest.fn(() => 'https://backend.test'),
@@ -113,6 +115,133 @@ describe('public News failure and empty contracts', () => {
     await newsHandler(createReq({ query, headers, url: `/api/public/news?${new URLSearchParams(query)}` }) as any, res as any);
     return res;
   }
+
+  test.each(['gu', 'hi', 'en'])('%s keeps the requested representation when widening returns the same ID/version in another language', async (locale) => {
+    const primary = pulseStory(locale, {
+      _id: 'cached-story',
+      category: 'national',
+      lang: locale,
+      title: `${locale} requested headline`,
+      summary: `${locale} requested summary`,
+      content: `<p>${locale} requested body</p>`,
+      slug: 'persisted-canonical-slug',
+      updatedAt: '2025-01-02T00:00:00.000Z',
+      translations: { en: false, hi: false, gu: false },
+    });
+    const otherLocale = locale === 'gu' ? 'hi' : 'gu';
+    const widened = { ...primary, language: otherLocale, lang: otherLocale, title: `${otherLocale} unscoped headline` };
+    const next = pulseStory(locale, { _id: 'next-story', translationGroupId: 'next-group' });
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ items: [primary, next] }))
+      .mockResolvedValueOnce(jsonResponse({ items: [widened, next] }));
+
+    const res = await request({ lang: locale, language: locale, limit: '40' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.items.map((item: { _id: string }) => item._id)).toEqual(['cached-story', 'next-story']);
+    expect(res.body.items[0]).toMatchObject({
+      _id: primary._id, language: locale, lang: locale, title: primary.title,
+      summary: `${locale} requested summary`, content: `<p>${locale} requested body</p>`, slug: primary.slug,
+      translations: { en: false, hi: false, gu: false },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const primaryUrl = new URL(String(fetchMock.mock.calls[0][0]));
+    const widenedUrl = new URL(String(fetchMock.mock.calls[1][0]));
+    expect(primaryUrl.searchParams.get('lang')).toBe(locale);
+    expect(primaryUrl.searchParams.get('language')).toBe(locale);
+    expect(widenedUrl.searchParams.has('lang')).toBe(false);
+    expect(widenedUrl.searchParams.has('language')).toBe(false);
+    expect(widenedUrl.searchParams.get('limit')).toBe('120');
+  });
+
+  test.each([{ status: 'draft' }, { deletedAt: '2025-01-02' }])('widening still applies same-version lifecycle withdrawal: %j', async (withdrawal) => {
+    const primary = pulseStory('hi', { updatedAt: '2025-01-02' });
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ items: [primary] }))
+      .mockResolvedValueOnce(jsonResponse({ items: [{ ...primary, ...withdrawal }] }));
+    const res = await request({ lang: 'hi', language: 'hi', limit: '40', strictLocale: '1' });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.items).toEqual([]);
+  });
+
+  test.each(['2025-01-02', '2025-01-03'])('widening still applies a same-locale content edit at %s', async (updatedAt) => {
+    const primary = pulseStory('en', { updatedAt: '2025-01-02' });
+    const newer = { ...primary, updatedAt, title: 'Updated English headline' };
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ items: [primary] }))
+      .mockResolvedValueOnce(jsonResponse({ items: [newer] }));
+    const res = await request({ lang: 'en', language: 'en', limit: '40' });
+    expect(res.body.items[0].title).toBe(newer.title);
+  });
+
+  describe.each(['gu', 'hi', 'en'] as const)('%s widening freshness guard boundaries', (locale) => {
+    const foreignLocale = locale === 'gu' ? 'hi' : 'gu';
+
+    test.each([
+      { name: 'older timestamp', fields: { updatedAt: '2025-01-01' }, comparison: -1 },
+      { name: 'newer timestamp', fields: { updatedAt: '2025-01-03' }, comparison: 1 },
+      { name: 'unknown freshness', fields: { syncVersion: undefined, updatedAt: undefined, publishedAt: undefined }, comparison: null },
+      { name: 'lower sync version despite a newer timestamp', fields: { syncVersion: '1', updatedAt: '2025-01-03' }, comparison: -1 },
+      { name: 'higher sync version despite an older timestamp', fields: { syncVersion: '3', updatedAt: '2025-01-01' }, comparison: 1 },
+    ])('preserves freshness semantics for a foreign-locale duplicate with $name', async ({ fields, comparison }) => {
+      const primary = pulseStory(locale, {
+        category: 'national', lang: locale, title: `${locale} primary headline`,
+        syncVersion: '2', updatedAt: '2025-01-02',
+      });
+      const widened = { ...primary, language: foreignLocale, lang: foreignLocale, title: 'Foreign headline', ...fields };
+      const freshness = compareArticleFreshness(widened, primary);
+      expect(freshness === null ? null : Math.sign(freshness)).toBe(comparison);
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse({ items: [primary] }))
+        .mockResolvedValueOnce(jsonResponse({ items: [widened] }));
+
+      const res = await request({ lang: locale, language: locale, strictLocale: '1', limit: '40' });
+
+      expect(res.statusCode).toBe(200);
+      if (comparison === -1) {
+        expect(res.body.items).toHaveLength(1);
+        expect(res.body.items[0]).toMatchObject({ _id: primary._id, language: locale, title: primary.title });
+      } else {
+        expect(res.body.items).toEqual([]);
+      }
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    test.each([{ status: 'draft' }, { deletedAt: '2025-01-02' }])('does not hide a same-version foreign-locale withdrawal: %j', async (withdrawal) => {
+      const primary = pulseStory(locale, { updatedAt: '2025-01-02' });
+      const widened = { ...primary, language: foreignLocale, ...withdrawal };
+      expect(compareArticleFreshness(widened, primary)).toBe(0);
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse({ items: [primary] }))
+        .mockResolvedValueOnce(jsonResponse({ items: [widened] }));
+
+      const res = await request({ lang: locale, language: locale, strictLocale: '1', limit: '40' });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.items).toEqual([]);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    test('accepts an eligible same-version translated edit from the widened read', async () => {
+      const primary = pulseStory(locale, { updatedAt: '2025-01-02' });
+      const translatedTitle = `${locale} edited translation`;
+      const widened = {
+        ...primary, language: foreignLocale, title: 'Foreign source headline',
+        translationStatus: { [locale]: 'APPROVED' },
+        translations: { [locale]: { title: translatedTitle, content: `<p>${locale} edited body</p>` } },
+      };
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse({ items: [primary] }))
+        .mockResolvedValueOnce(jsonResponse({ items: [widened] }));
+
+      const res = await request({ lang: locale, language: locale, strictLocale: '1', limit: '40' });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.items).toHaveLength(1);
+      expect(getLocalizedArticleFields(res.body.items[0], locale, STRICT_LOCALE_POLICY).title).toBe(translatedTitle);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+  });
 
   test.each<Record<string, string>>([
     {},
