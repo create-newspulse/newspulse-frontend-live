@@ -8,6 +8,9 @@ export const HOME_SPOTLIGHT_SECTION_KEYS = ['national', 'regional', 'internation
 export const HOME_SPOTLIGHT_PRIMARY_SECTION_KEYS = ['regional', 'national', 'international', 'science-technology', 'sports', 'business', 'youth'] as const;
 export const HOME_SPOTLIGHT_FALLBACK_SECTION_KEYS = ['glamour'] as const;
 export const HOME_SPOTLIGHT_RENDER_FILTER_KEYS = ['regional', 'national', 'international', 'business', 'science-technology', 'sports', 'lifestyle', 'glamour'] as const;
+export const HOME_RENDERED_EDITORIAL_SECTION_KEYS = HOME_SPOTLIGHT_SECTION_KEYS.filter(
+  (sectionKey) => !HOME_SPOTLIGHT_RENDER_FILTER_KEYS.some((hiddenKey) => hiddenKey === sectionKey)
+);
 export const HOME_SPOTLIGHT_MAX_ITEMS = 8;
 export const HOME_SPOTLIGHT_MAX_PER_CATEGORY = 2;
 export const HOME_SPOTLIGHT_MAX_GLAMOUR_ITEMS = 1;
@@ -222,7 +225,7 @@ export async function fetchHomeSpotlightSectionArticles(options: {
   signal: AbortSignal;
 }): Promise<Partial<Record<HomeSpotlightSectionKey, PromiseSettledResult<Article[]>>>> {
   const sectionResults = await Promise.allSettled(
-    HOME_SPOTLIGHT_SECTION_KEYS.map(async (sectionKey) => {
+    HOME_RENDERED_EDITORIAL_SECTION_KEYS.map(async (sectionKey) => {
       const response = await fetchPublicNews({
         category: sectionKey,
         language: options.lang,
@@ -240,5 +243,5 @@ export async function fetchHomeSpotlightSectionArticles(options: {
     })
   );
 
-  return Object.fromEntries(HOME_SPOTLIGHT_SECTION_KEYS.map((sectionKey, index) => [sectionKey, sectionResults[index]]));
+  return Object.fromEntries(HOME_RENDERED_EDITORIAL_SECTION_KEYS.map((sectionKey, index) => [sectionKey, sectionResults[index]]));
 }

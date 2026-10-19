@@ -829,6 +829,20 @@ describe.each(['en', 'hi', 'gu'] as const)('homepage truthful read states (%s)',
     expect(region?.textContent).not.toMatch(/News Pulse Front Page|Live now|Updated|Homepage|News Pulse/);
   }
 
+  test('initial and scheduled refreshes fetch only displayed News surfaces, without hidden category fan-out', async () => {
+    renderHomepage({ initialFreshStories: [] });
+    await act(async () => {});
+    const requests = () => jest.mocked(fetchPublicNews).mock.calls.map(([options]) => {
+      expect(options.language).toBe(lang);
+      if (options.homepageRecovery) return 'homepage';
+      if (options.extraQuery?.spotlight === '1') return 'spotlight';
+      return options.category;
+    });
+    expect(requests().sort()).toEqual(['homepage', 'spotlight', 'web-stories']);
+    await act(async () => { await jest.advanceTimersByTimeAsync(30_000); });
+    expect(requests().sort()).toEqual(['homepage', 'homepage', 'spotlight', 'spotlight', 'web-stories', 'web-stories']);
+  });
+
   test.each(['returned', 'rejected'] as const)('cold %s failure is unavailable, not a fabricated article', async (failure) => {
     jest.mocked(fetchPublicNews).mockImplementation(async (options) => {
       if (!options.homepageRecovery) return emptyResponse;

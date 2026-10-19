@@ -28,7 +28,7 @@ import {
   fetchHomeSpotlightSectionArticles,
   HOME_FRESH_SOURCE_LIMIT,
   HOME_SPOTLIGHT_RENDER_FILTER_KEYS,
-  HOME_SPOTLIGHT_SECTION_KEYS,
+  HOME_RENDERED_EDITORIAL_SECTION_KEYS,
 } from "../lib/homeSpotlight";
 import { resolveSponsoredContentMeta } from "../lib/sponsoredContent";
 import HomepageSponsoredFeatureCard from "../components/home/HomepageSponsoredFeatureCard";
@@ -4072,7 +4072,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
         const previous = current.lang === apiLang ? current : { sections: {}, spotlight: [] };
         const sections = { ...previous.sections };
         const sectionErrors: Record<string, boolean> = {};
-        for (const key of HOME_SPOTLIGHT_SECTION_KEYS) {
+        for (const key of HOME_RENDERED_EDITORIAL_SECTION_KEYS) {
           const result = sectionResult.status === 'fulfilled' ? sectionResult.value[key] : undefined;
           if (result?.status === 'fulfilled') sections[key] = result.value;
           else sectionErrors[key] = true;

@@ -116,6 +116,95 @@ describe('public News failure and empty contracts', () => {
     return res;
   }
 
+  describe.each(['en', 'hi', 'gu'])('%s legacy News request deadlines', (locale) => {
+    test.each(['headers', 'body'])('a stalled primary %s read returns a bounded failure, not an empty feed', async (stage) => {
+      jest.useFakeTimers();
+      let release = () => {};
+      let signal: AbortSignal | null | undefined;
+      fetchMock.mockResolvedValue(jsonResponse({ items: [] }));
+      fetchMock.mockImplementationOnce(async (_url: string, init: RequestInit) => {
+        signal = init.signal;
+        if (stage === 'headers') {
+          return new Promise((resolve) => { release = () => resolve(jsonResponse({ items: [] })); });
+        }
+        return {
+          ok: true, status: 200, headers: { get: () => '45' },
+          text: () => new Promise<string>((resolve) => { release = () => resolve('{"items":[]}'); }),
+        };
+      });
+      let settled = false;
+      const pending = request({ lang: locale, language: locale, spotlight: '1', strictLocale: '1', limit: '8' })
+        .then((response) => { settled = true; return response; });
+      try {
+        await jest.advanceTimersByTimeAsync(HOMEPAGE_RECOVERY_PROXY_TIMEOUT_MS - 1);
+        expect(settled).toBe(false);
+        await jest.advanceTimersByTimeAsync(1);
+        expect(settled).toBe(true);
+        const response = await pending;
+        expect(response.statusCode).toBe(503);
+        expect(response.body).toEqual({ error: 'PUBLIC_NEWS_UNAVAILABLE' });
+        expect(response.headers['Cache-Control']).toBe('no-store');
+        expect(response.headers['Retry-After']).toBe(stage === 'body' ? '45' : undefined);
+        expect(signal?.aborted).toBe(true);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(jest.getTimerCount()).toBe(0);
+      } finally {
+        release();
+        await pending;
+        jest.useRealTimers();
+      }
+    });
+
+    test.each(['visible', 'empty', 'withdrawn'])('a stalled widened body shares the primary deadline for a %s primary', async (primary) => {
+      jest.useFakeTimers();
+      const story = pulseStory(locale, { category: 'national', status: primary === 'withdrawn' ? 'draft' : 'published' });
+      let release = () => {};
+      let widenedSignal: AbortSignal | null | undefined;
+      fetchMock.mockImplementationOnce(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 2_000));
+        return jsonResponse({ items: primary === 'empty' ? [] : [story] });
+      }).mockImplementationOnce(async (_url: string, init: RequestInit) => {
+        widenedSignal = init.signal;
+        return {
+          ok: true, status: 200, headers: { get: () => '60' },
+          text: () => new Promise<string>((resolve) => { release = () => resolve('{"items":[]}'); }),
+        };
+      });
+      let settled = false;
+      const pending = request({ category: 'national', lang: locale, language: locale, strictLocale: '1', limit: '18' })
+        .then((response) => { settled = true; return response; });
+      try {
+        await jest.advanceTimersByTimeAsync(HOMEPAGE_RECOVERY_PROXY_TIMEOUT_MS - 1);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(settled).toBe(false);
+        await jest.advanceTimersByTimeAsync(1);
+        expect(settled).toBe(true);
+        const response = await pending;
+        expect(response.statusCode).toBe(primary === 'visible' ? 200 : 503);
+        expect(response.body).toEqual(primary === 'visible' ? { items: [story] } : { error: 'PUBLIC_NEWS_UNAVAILABLE' });
+        expect(response.headers['Retry-After']).toBe(primary === 'visible' ? undefined : '60');
+        expect(widenedSignal?.aborted).toBe(true);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(jest.getTimerCount()).toBe(0);
+      } finally {
+        release();
+        await pending;
+        jest.useRealTimers();
+      }
+    });
+  });
+
+  test.each([400, 401, 403, 404, 408, 429, 500, 502, 504])('upstream HTTP %s is a single unavailable read with safe Retry-After, not an automatic retry', async (status) => {
+    const text = jest.fn(async () => 'private upstream details');
+    fetchMock.mockResolvedValue({ ok: false, status, headers: { get: () => '45' }, text });
+    const response = await request({ lang: 'en', language: 'en', spotlight: '1', strictLocale: '1', limit: '8' });
+    expect(response.statusCode).toBe(503);
+    expect(response.body).toEqual({ error: 'PUBLIC_NEWS_UNAVAILABLE' });
+    expect(response.headers['Retry-After']).toBe('45');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(text).not.toHaveBeenCalled();
+  });
+
   test.each(['gu', 'hi', 'en'])('%s keeps the requested representation when widening returns the same ID/version in another language', async (locale) => {
     const primary = pulseStory(locale, {
       _id: 'cached-story',

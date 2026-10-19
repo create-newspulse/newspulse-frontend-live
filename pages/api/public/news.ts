@@ -13,6 +13,7 @@ import { getSafeRetryAfter } from '../../../lib/retryAfter';
 
 export const HOMEPAGE_RECOVERY_PROXY_TIMEOUT_MS = 3500;
 export const ORDINARY_CATEGORY_PROXY_TIMEOUT_MS = 3500;
+export const PUBLIC_NEWS_PROXY_TIMEOUT_MS = 3500;
 
 function asSingleQueryValue(value: string | string[] | undefined): string {
   return String(Array.isArray(value) ? value[0] : value || '').trim();
@@ -168,7 +169,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     && !rawCategory && requestedLimit === 40 && hasRequestedLocale
     && !req.query.q && !req.query.spotlight && !req.query.strictLocale && !req.query.page;
   const deadlineAt = homepageRecovery ? Date.now() + HOMEPAGE_RECOVERY_PROXY_TIMEOUT_MS
-    : paginatedRequest ? Date.now() + ORDINARY_CATEGORY_PROXY_TIMEOUT_MS : undefined;
+    : paginatedRequest ? Date.now() + ORDINARY_CATEGORY_PROXY_TIMEOUT_MS
+    : Date.now() + PUBLIC_NEWS_PROXY_TIMEOUT_MS;
   const unavailableCode = faithPagination ? FAITH_CULTURE_NEWS_UNAVAILABLE
     : ordinaryPagination ? 'CATEGORY_NEWS_UNAVAILABLE'
     : homepageRecovery ? 'HOMEPAGE_NEWS_UNAVAILABLE' : 'PUBLIC_NEWS_UNAVAILABLE';
