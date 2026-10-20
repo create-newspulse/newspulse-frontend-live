@@ -451,4 +451,57 @@ describe('Faith-only public topic filters', () => {
     expect(requestedPages()).toEqual(['1', '2', '1', '2']);
     expectContract(living);
   });
+
+  test.each((['en', 'hi', 'gu'] as const).flatMap(locale =>
+    ([undefined, food] as const).map(topic => ({ locale, topic }))
+  ))('$locale/$topic exhausted Faith feed surfaces refresh failures without a false completion state', async ({ locale, topic }) => {
+    jest.useFakeTimers();
+    mockLocale = locale;
+    mockQuery = topic ? { topic } : {};
+    const stories = topic ? topicStories(topic, locale, 3) : faithStories(locale, 3);
+    serve({ [topic || 'all']: stories });
+    openPage(seed(stories, locale));
+    await screen.findByText(stories[0].title);
+    expect(screen.getByText(/all caught up/i)).toBeTruthy();
+
+    const failures: Array<() => Promise<Response>> = [
+      async () => new Response('private upstream diagnostics', { status: 503 }),
+      async () => new Response('{invalid JSON'),
+      async () => new Response(JSON.stringify({ ...faithPage(stories, 1), hasMore: undefined })),
+      async () => { throw new Error('Synthetic unavailable upstream'); },
+    ];
+    for (const failure of failures) {
+      const previousReads = fetchMock.mock.calls.length;
+      fetchMock.mockImplementationOnce(failure);
+      await act(async () => { await jest.advanceTimersByTimeAsync(60000); });
+      expect(fetchMock).toHaveBeenCalledTimes(previousReads + 1);
+      expect(renderedIds()).toEqual(stories.map(story => story._id));
+      expect(screen.getByText(dictionaries[locale].errors.fetchFailed)).toBeTruthy();
+      expect(screen.queryByText(/all caught up/i)).toBeNull();
+      expect(screen.queryByText(/private upstream diagnostics/)).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    }
+
+    let finish!: (response: Response) => void;
+    fetchMock.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    await act(async () => { await jest.advanceTimersByTimeAsync(60000); });
+    try {
+      expect(screen.getByText(dictionaries[locale].errors.fetchFailed)).toBeTruthy();
+      expect(screen.queryByText(/all caught up/i)).toBeNull();
+      expect(renderedIds()).toEqual(stories.map(story => story._id));
+    } finally {
+      await act(async () => { finish(new Response(JSON.stringify(faithPage(stories, 1)))); });
+    }
+    expect(screen.queryByText(dictionaries[locale].errors.fetchFailed)).toBeNull();
+    expect(screen.getByText(/all caught up/i)).toBeTruthy();
+    expect(renderedIds()).toEqual(stories.map(story => story._id));
+
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(faithPage([], 1))));
+    await act(async () => { await jest.advanceTimersByTimeAsync(60000); });
+    expect(renderedIds()).toEqual([]);
+    expect(screen.getByText(topic ? dictionaries[locale].faithCulture.noMatches : dictionaries[locale].categoryPage.noStoriesYet)).toBeTruthy();
+    expect(screen.queryByText(dictionaries[locale].errors.fetchFailed)).toBeNull();
+    expect(requestedPages().every(page => page === '1')).toBe(true);
+    expectContract(topic, locale);
+  });
 });

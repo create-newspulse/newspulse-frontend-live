@@ -182,7 +182,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
     if (pageToLoad === 1) {
       setLoaded(hasDisplayItemsRef.current);
       setError(null);
-      setLoadMoreError(null);
+      if (!background) setLoadMoreError(null);
     } else if (!background) {
       setLoadingMore(true);
       setLoadMoreError(null);

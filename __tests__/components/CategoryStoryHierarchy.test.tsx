@@ -185,6 +185,28 @@ describe('CategoryStoryHierarchy', () => {
     expect(onLoadMore).toHaveBeenCalledTimes(1);
   });
 
+  test.each([CategoryStoryHierarchy, SplitHierarchy])('shows exhausted-feed failures without a false completion or next-page retry (%p)', (Hierarchy) => {
+    const onLoadMore = jest.fn();
+    const props = {
+      items: Array.from({ length: 6 }, (_, index) => story(index + 1)),
+      categoryLabel: 'National News',
+      loadMoreLabel: 'Load More National Stories',
+      emptyTitle: 'No stories found',
+      hasMore: false,
+      onLoadMore,
+    };
+    const { rerender } = render(<Hierarchy {...props} loadMoreError="API 503" />);
+    expect(screen.getByRole('heading', { name: 'Story 1' })).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toBe('API 503');
+    expect(screen.queryByText("You're all caught up.")).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    expect(onLoadMore).not.toHaveBeenCalled();
+
+    rerender(<Hierarchy {...props} />);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByText("You're all caught up.")).toBeTruthy();
+  });
+
   test('keeps completion outside the feed only after both local stories and backend pages are exhausted', () => {
     const onLoadMore = jest.fn();
     const props = {

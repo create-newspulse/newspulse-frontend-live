@@ -361,19 +361,21 @@ function LoadMoreBoundary({
     return () => observer.disconnect();
   }, [autoLoadMore, canLoadMore, loadingMore, loadMoreError, onLoadMore]);
 
-  if (loadMoreError && canLoadMore) {
+  if (loadMoreError) {
     return (
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-        <div className="font-semibold">Unable to load more stories.</div>
-        <div className="mt-1">{loadMoreError}</div>
-        <button
-          type="button"
-          onClick={onLoadMore}
-          disabled={loadingMore}
-          className="mt-3 rounded-xl border border-amber-300 bg-white px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {loadingMore ? 'Loading...' : 'Retry'}
-        </button>
+      <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        {canLoadMore ? <div className="font-semibold">Unable to load more stories.</div> : null}
+        <div className={canLoadMore ? 'mt-1' : undefined}>{loadMoreError}</div>
+        {canLoadMore ? (
+          <button
+            type="button"
+            onClick={onLoadMore}
+            disabled={loadingMore}
+            className="mt-3 rounded-xl border border-amber-300 bg-white px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loadingMore ? 'Loading...' : 'Retry'}
+          </button>
+        ) : null}
       </div>
     );
   }
@@ -518,7 +520,7 @@ export function useCategoryStoryHierarchy({
     return { content, completion: null };
   }
 
-  const completion = separateCompletion && !canLoadMore && endOfFeedLabel ? <FeedCompletion label={endOfFeedLabel} /> : null;
+  const completion = separateCompletion && !canLoadMore && !loadMoreError && endOfFeedLabel ? <FeedCompletion label={endOfFeedLabel} /> : null;
 
   if (variant === 'web-stories') {
     const coverCount = Math.max(0, visibleLatestCount);
