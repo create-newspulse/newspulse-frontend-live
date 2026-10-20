@@ -4,6 +4,7 @@ import { buildNewsUrl } from './newsRoutes';
 type SupportedLang = 'en' | 'hi' | 'gu';
 
 export type SponsoredContentMeta = {
+  isCampaignEligible: boolean;
   isActive: boolean;
   isFeatureActive: boolean;
   isArticle: boolean;
@@ -72,9 +73,9 @@ function isTruthyFlag(value: unknown): boolean {
 }
 
 function isFalseyFlag(value: unknown): boolean {
-  if (value === false) return true;
+  if (value === false || value === 0) return true;
   const normalized = normalizeText(value);
-  return ['0', 'false', 'no', 'inactive', 'disabled', 'draft', 'expired', 'ended', 'off', 'paused', 'archived'].includes(normalized);
+  return ['0', 'false', 'no', 'inactive', 'disabled', 'draft', 'scheduled', 'expired', 'ended', 'off', 'paused', 'archived'].includes(normalized);
 }
 
 function parseDateValue(value: unknown): number | null {
@@ -399,9 +400,19 @@ export function resolveSponsoredContentMeta(article: any, lang: SupportedLang): 
   const endAt = parseDateValue(readFirstValue(containers, ['sponsoredEndAt', 'campaignEndAt', 'endAt', 'endsAt', 'endDate', 'expiresAt']));
   const now = Date.now();
   const dateIsActive = (!startAt || startAt <= now) && (!endAt || endAt >= now);
+  const campaignContainers = collectContainers(article,
+    ARTICLE_SPONSORED_NESTED_KEYS.filter((key) => key !== 'cta' && key !== 'callToAction'));
+  const isCampaignEligible = dateIsActive
+    && !containers.some((container) => [
+      'sponsoredFeatureActive', 'featureActive', 'sponsoredStatus', 'sponsoredFeatureStatus',
+      'sponsoredArticleStatus', 'campaignStatus',
+    ].some((key) => isFalseyFlag(container[key])))
+    && ![...campaignContainers, ...linkedFeatureContainers].some((container) => [
+      'active', 'enabled', 'isActive', 'published', 'isPublished', 'status', 'featureStatus',
+    ].some((key) => isFalseyFlag(container[key])));
 
   const hasActiveStatus = isTruthyFlag(readFirstValue(containers, ['sponsoredStatus', 'sponsoredFeatureStatus', 'sponsoredArticleStatus', 'campaignStatus']));
-  const isActive = !explicitlyInactive && dateIsActive && (explicitSponsored || explicitSponsoredFeature || explicitSponsoredArticle || Boolean(sponsorName) || Boolean(sponsorDisclosureRaw) || hasActiveStatus);
+  const isActive = !explicitlyInactive && isCampaignEligible && (explicitSponsored || explicitSponsoredFeature || explicitSponsoredArticle || Boolean(sponsorName) || Boolean(sponsorDisclosureRaw) || hasActiveStatus);
 
   const linkedArticleSlug = cleanText(
     readFirstValue(containers, ['linkedArticleSlug', 'sponsoredArticleSlug', 'targetArticleSlug', 'destinationArticleSlug', 'articleSlug'])
@@ -498,7 +509,7 @@ export function resolveSponsoredContentMeta(article: any, lang: SupportedLang): 
       ? currentArticleDestination
       : (directDestination.href ? directDestination : currentArticleDestination));
   const isFeatureActive = isActive && (explicitSponsoredFeature || Boolean(linkedDestination.href) || Boolean(directDestination.href && !explicitSponsoredArticle));
-  const isArticle = isActive && (explicitSponsoredArticle || explicitSponsored || isFeatureActive);
+  const isArticle = isSponsoredContent(article) || (isActive && (explicitSponsoredArticle || explicitSponsored || isFeatureActive));
 
   const sponsorDisclosure = sponsorDisclosureRaw || (
     sponsorName
@@ -512,9 +523,11 @@ export function resolveSponsoredContentMeta(article: any, lang: SupportedLang): 
       : ''
   );
 
-  const sponsorDestination = articleSponsorDestination.href
-    ? articleSponsorDestination
-    : (hasRealLinkedFeatureRelation && linkedFeatureDestination.href ? linkedFeatureDestination : { href: '', isExternal: false });
+  const sponsorDestination = !isActive
+    ? { href: '', isExternal: false }
+    : (articleSponsorDestination.href
+      ? articleSponsorDestination
+      : (hasRealLinkedFeatureRelation && linkedFeatureDestination.href ? linkedFeatureDestination : { href: '', isExternal: false }));
   const sponsorCtaLabel = sponsorDestination.href
     ? (() => {
         const directLabel = articleSponsorDestination.href
@@ -526,6 +539,7 @@ export function resolveSponsoredContentMeta(article: any, lang: SupportedLang): 
     : '';
 
   return {
+    isCampaignEligible,
     isActive,
     isFeatureActive,
     isArticle,

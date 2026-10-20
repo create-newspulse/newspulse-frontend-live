@@ -108,6 +108,69 @@ test.each(['en', 'hi', 'gu'] as const)('%s published sponsored article remains a
   await expectWithdrawn();
 });
 
+describe.each(['en', 'hi', 'gu'] as const)('%s persistent sponsored disclosure', (lang) => {
+  test.each([
+    { campaignStatus: 'paused' },
+    { campaignStatus: 'expired' },
+    { sponsoredEndAt: '2000-01-01T00:00:00.000Z' },
+    { campaignStatus: 'scheduled', sponsoredStartAt: '2999-01-01T00:00:00.000Z' },
+  ])('keeps the published article, attribution and disclosure without a promotional CTA for state %#', async (state) => {
+    const story = article({
+      language: lang, isSponsoredArticle: true, sponsorName: 'Fixture Sponsor',
+      sponsorDisclosure: 'Paid fixture disclosure.', sponsorCtaText: 'Visit fixture sponsor',
+      sponsorDestinationUrl: 'https://sponsor.test/information', ...state,
+    });
+    render(<NewsSlugDetailPage {...props(story, lang)} />);
+    expect(screen.getByRole('heading', { name: 'Original title' })).toBeTruthy();
+    expect(screen.getByText('Original body')).toBeTruthy();
+    expect(screen.getByText('Sponsored')).toBeTruthy();
+    expect(screen.getByText('Presented with Fixture Sponsor')).toBeTruthy();
+    expect(screen.getByText('Sponsor disclosure')).toBeTruthy();
+    expect(screen.getByText('Paid fixture disclosure.')).toBeTruthy();
+    expect(screen.queryByRole('link', { name: /Visit fixture sponsor/ })).toBeNull();
+    expect(document.querySelector('meta[property="og:url"]')?.getAttribute('content'))
+      .toBe(`https://www.newspulse.co.in${lang === 'en' ? '' : `/${lang}`}/news/original-slug`);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fetchMock.mockResolvedValueOnce(json({
+      items: [{ ...story, status: 'unpublished', updatedAt: '2026-01-02T00:00:00.000Z' }],
+    }));
+    await refresh();
+    await expectWithdrawn();
+    expect(screen.queryByText('Paid fixture disclosure.')).toBeNull();
+    expect(screen.queryByText('Sponsored')).toBeNull();
+  });
+
+  test.each(['paused', 'expired'])('keeps disclosure through a %s refresh and restores only the promotional CTA on reactivation', async (campaignStatus) => {
+    const story = article({
+      language: lang, isSponsoredArticle: true, campaignStatus: 'active',
+      sponsorName: 'Fixture Sponsor', sponsorDisclosure: 'Paid fixture disclosure.',
+      sponsorCtaText: 'Visit fixture sponsor', sponsorDestinationUrl: 'https://sponsor.test/information',
+    });
+    render(<NewsSlugDetailPage {...props(story, lang)} />);
+    expect(screen.getByRole('link', { name: /Visit fixture sponsor/ })).toBeTruthy();
+
+    fetchMock.mockResolvedValueOnce(json({
+      items: [{ ...story, campaignStatus, updatedAt: '2026-01-02T00:00:00.000Z' }],
+    }));
+    await refresh();
+    await waitFor(() => expect(screen.queryByRole('link', { name: /Visit fixture sponsor/ })).toBeNull());
+    expect(screen.getByText('Sponsored')).toBeTruthy();
+    expect(screen.getByText('Presented with Fixture Sponsor')).toBeTruthy();
+    expect(screen.getByText('Paid fixture disclosure.')).toBeTruthy();
+    expect(screen.getByText('Original body')).toBeTruthy();
+
+    fetchMock.mockResolvedValueOnce(json({
+      items: [{ ...story, updatedAt: '2026-01-03T00:00:00.000Z' }],
+    }));
+    await refresh();
+    await waitFor(() => expect(screen.getByRole('link', { name: /Visit fixture sponsor/ })
+      .getAttribute('href')).toBe('https://sponsor.test/information'));
+    expect(screen.getByText('Paid fixture disclosure.')).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
 test('does not add mount-time reads or article polling', async () => {
   jest.useFakeTimers();
   render(<NewsSlugDetailPage {...props(article())} />);

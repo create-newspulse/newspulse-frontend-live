@@ -1,4 +1,75 @@
-import { resolveSponsoredContentMeta } from '../../lib/sponsoredContent';
+import { isSponsoredContent, resolveSponsoredContentMeta } from '../../lib/sponsoredContent';
+
+describe.each(['en', 'hi', 'gu'] as const)('%s campaign safety', (lang) => {
+  const story = {
+    _id: 'paid-id', slug: `paid-${lang}`, language: lang, status: 'published',
+    isSponsoredArticle: true, sponsorName: 'Fixture Sponsor', sponsorDisclosure: 'Paid fixture disclosure.',
+    sponsorDestinationUrl: 'https://sponsor.test/information', sponsorCtaText: 'Visit fixture sponsor',
+  };
+  const inactiveCases = [
+    { campaignStatus: 'paused' },
+    { campaignStatus: 'expired' },
+    { campaignStatus: 'scheduled' },
+    { sponsoredEndAt: '2026-10-19T12:00:00.000Z' },
+    { sponsoredStartAt: '2026-10-21T12:00:00.000Z' },
+    { sponsoredFeatureActive: false },
+    { sponsoredFeatureActive: 0 },
+    { sponsoredStatus: 'active', campaignStatus: 'paused' },
+    {
+      sponsorFeatureLinkedId: 'feature-id',
+      linkedSponsoredFeature: {
+        id: 'feature-id', linkedArticleId: 'paid-id', status: 'paused',
+        ctaText: 'Visit linked sponsor', destinationUrl: 'https://sponsor.test/linked',
+      },
+    },
+    { sponsoredContent: { status: 'paused' } },
+    { sponsorship: { enabled: false } },
+  ];
+
+  beforeEach(() => { jest.useFakeTimers(); jest.setSystemTime(new Date('2026-10-20T12:00:00.000Z')); });
+  afterEach(() => { jest.useRealTimers(); });
+
+  test.each(inactiveCases)('retains paid identity and disclosure but no promotion for inactive metadata %#', (state) => {
+    const record = { ...story, ...state };
+    const meta = resolveSponsoredContentMeta(record, lang);
+    expect(isSponsoredContent(record)).toBe(true);
+    expect(meta.isArticle).toBe(true);
+    expect(meta.sponsorName).toBe(story.sponsorName);
+    expect(meta.sponsorDisclosure).toBe(story.sponsorDisclosure);
+    expect(meta.isActive).toBe(false);
+    expect(meta.isFeatureActive).toBe(false);
+    expect(meta.sponsorDestinationHref).toBe('');
+    expect(meta.sponsorCtaLabel).toBe('');
+  });
+
+  test('keeps the active article sponsor CTA unchanged', () => {
+    const meta = resolveSponsoredContentMeta({ ...story, campaignStatus: 'active' }, lang);
+    expect(meta.isArticle).toBe(true);
+    expect(meta.isActive).toBe(true);
+    expect(meta.sponsorDestinationHref).toBe(story.sponsorDestinationUrl);
+    expect(meta.sponsorCtaLabel).toBe(story.sponsorCtaText);
+  });
+
+  test('retains the existing default disclosure after expiry without inventing a sponsor name', () => {
+    const meta = resolveSponsoredContentMeta({
+      _id: 'paid-id', slug: `paid-${lang}`, isSponsoredArticle: true, campaignStatus: 'expired',
+    }, lang);
+    expect(meta.isArticle).toBe(true);
+    expect(meta.sponsorName).toBe('');
+    expect(meta.sponsorDisclosure).toBe('This story is presented as sponsored content.');
+  });
+
+  test('does not classify ordinary text as durable paid identity', () => {
+    const record = {
+      _id: 'ordinary', slug: 'ordinary', status: 'published', language: lang,
+      tags: ['sponsored'], campaignStatus: 'expired',
+    };
+    const meta = resolveSponsoredContentMeta(record, lang);
+    expect(isSponsoredContent(record)).toBe(false);
+    expect(meta.isArticle).toBe(false);
+    expect(meta.sponsorDisclosure).toBe('');
+  });
+});
 
 describe('sponsoredContent', () => {
   test('uses article-level sponsor destination url for the disclosure CTA instead of an image url', () => {

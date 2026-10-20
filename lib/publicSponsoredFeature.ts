@@ -213,7 +213,7 @@ function resolveDirectDestination(candidate: any): { href: string; isExternal: b
 }
 
 function isActiveFeatureCandidate(payload: any, candidate: any, metaIsFeatureActive: boolean): boolean {
-  const falseyValues = ['0', 'false', 'no', 'inactive', 'disabled', 'draft', 'expired', 'off', 'archived', 'paused'];
+  const falseyValues = ['0', 'false', 'no', 'inactive', 'disabled', 'draft', 'scheduled', 'expired', 'ended', 'off', 'archived', 'paused'];
   const truthyValues = ['1', 'true', 'yes', 'active', 'enabled', 'live', 'running', 'on'];
 
   const activeCandidates = [
@@ -226,13 +226,6 @@ function isActiveFeatureCandidate(payload: any, candidate: any, metaIsFeatureAct
     payload?.enabled,
   ];
 
-  for (const value of activeCandidates) {
-    if (value === false) return false;
-    const normalized = normalizeText(value);
-    if (falseyValues.includes(normalized)) return false;
-    if (truthyValues.includes(normalized)) return true;
-  }
-
   const statusCandidates = [
     candidate?.status,
     candidate?.featureStatus,
@@ -241,13 +234,13 @@ function isActiveFeatureCandidate(payload: any, candidate: any, metaIsFeatureAct
     payload?.status,
   ];
 
-  for (const value of statusCandidates) {
+  const activityValues = [...activeCandidates, ...statusCandidates];
+  for (const value of activityValues) {
     const normalized = normalizeText(value);
     if (falseyValues.includes(normalized)) return false;
-    if (truthyValues.includes(normalized)) return true;
   }
 
-  return metaIsFeatureActive;
+  return activityValues.some((value) => truthyValues.includes(normalizeText(value))) || metaIsFeatureActive;
 }
 
 export function normalizeHomepageSponsoredFeature(
@@ -312,7 +305,7 @@ export function normalizeHomepageSponsoredFeature(
 
   const isActive = isActiveFeatureCandidate(payload, candidate, sponsoredMeta.isFeatureActive);
 
-  if (!isActive) return null;
+  if (!isActive || !sponsoredMeta.isCampaignEligible) return null;
   if (!sponsorName || !headline || !shortSummary || !ctaLabel || !imageSrc || !href) return null;
 
   return {

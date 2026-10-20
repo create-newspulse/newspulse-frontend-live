@@ -3,6 +3,71 @@ import {
   normalizeHomepageSponsoredFeatureProps,
 } from '../../lib/publicSponsoredFeature';
 
+describe.each(['en', 'hi', 'gu'] as const)('%s campaign safety', (lang) => {
+  const now = '2026-10-20T12:00:00.000Z';
+  const candidate = {
+    active: true, sponsorName: 'Fixture Sponsor', headline: 'Sponsored fixture',
+    shortSummary: 'Fixture campaign summary', ctaLabel: 'Visit fixture sponsor',
+    imageSrc: '/images/placeholder-16x9.svg', destinationUrl: 'https://sponsor.test/information',
+  };
+  const inactiveCases: Array<{ name: string; feature: Record<string, unknown>; envelope?: Record<string, unknown> }> = [
+    { name: 'paused status', feature: { status: 'paused' } },
+    { name: 'expired status', feature: { status: 'expired' } },
+    { name: 'ended status', feature: { status: 'ended' } },
+    { name: 'scheduled status without invented dates', feature: { status: 'scheduled' } },
+    { name: 'future scheduled campaign', feature: { status: 'scheduled', startsAt: '2026-10-21T12:00:00.000Z' } },
+    { name: 'future start despite active status', feature: { status: 'active', startAt: '2026-10-21T12:00:00.000Z' } },
+    { name: 'elapsed end despite active status', feature: { status: 'active', endAt: '2026-10-19T12:00:00.000Z' } },
+    { name: 'disabled feature flag', feature: { featureActive: false } },
+    { name: 'disabled enabled flag', feature: { enabled: false } },
+    { name: 'disabled isActive flag', feature: { isActive: false } },
+    { name: 'nested paused campaign', feature: { campaign: { status: 'paused' } } },
+    { name: 'nested sponsored-content state', feature: { sponsoredContent: { status: 'paused' } } },
+    { name: 'nested sponsorship flag', feature: { sponsorship: { enabled: false } } },
+    { name: 'conflicting status aliases', feature: { status: 'active', featureStatus: 'paused' } },
+    { name: 'conflicting sponsored status aliases', feature: { sponsoredStatus: 'active', campaignStatus: 'expired' } },
+    { name: 'disabled response envelope', feature: {}, envelope: { active: false } },
+    { name: 'paused response envelope', feature: {}, envelope: { status: 'paused' } },
+  ];
+
+  beforeEach(() => { jest.useFakeTimers(); jest.setSystemTime(new Date(now)); });
+  afterEach(() => { jest.useRealTimers(); });
+
+  test.each(inactiveCases)('$name overrides active:true for Feature and Combo placements', ({ feature, envelope }) => {
+    for (const relation of [{}, { linkedSponsoredArticleId: 'paid-id', linkedArticleSlug: `paid-${lang}` }]) {
+      expect(normalizeHomepageSponsoredFeature({
+        ...envelope, feature: { ...candidate, ...relation, ...feature },
+      }, lang)).toBeNull();
+    }
+  });
+
+  test('active Feature and Combo keep their destinations within the existing date window', () => {
+    const feature = { ...candidate, status: 'active', startAt: '2026-10-19T12:00:00.000Z', endAt: '2026-10-21T12:00:00.000Z' };
+    expect(normalizeHomepageSponsoredFeature({ feature }, lang)?.href).toBe(candidate.destinationUrl);
+    expect(normalizeHomepageSponsoredFeature({
+      feature: { ...feature, linkedSponsoredArticleId: 'paid-id', linkedArticleSlug: `paid-${lang}` },
+    }, lang)?.href).toBe(`${lang === 'en' ? '' : `/${lang}`}/news/paid-${lang}`);
+  });
+
+  test('preserves inclusive start and end boundaries', () => {
+    expect(normalizeHomepageSponsoredFeature({
+      feature: { ...candidate, startAt: now, endAt: now },
+    }, lang)).not.toBeNull();
+  });
+
+  test('does not mistake an article-kind flag for Feature campaign eligibility', () => {
+    expect(normalizeHomepageSponsoredFeature({
+      feature: { ...candidate, isSponsoredArticle: false },
+    }, lang)).not.toBeNull();
+  });
+
+  test('keeps the existing missing-activity fallback without inventing campaign dates', () => {
+    expect(normalizeHomepageSponsoredFeature({
+      feature: { ...candidate, active: undefined },
+    }, lang)).not.toBeNull();
+  });
+});
+
 describe('publicSponsoredFeature', () => {
   test('prefers a linked sponsored article route over a direct destination url', () => {
     const feature = normalizeHomepageSponsoredFeature(
