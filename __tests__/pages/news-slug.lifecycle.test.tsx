@@ -116,6 +116,58 @@ test('does not add mount-time reads or article polling', async () => {
   expect(screen.getByRole('heading', { name: 'Original title' })).toBeTruthy();
 });
 
+describe('pending translation read recovery', () => {
+  test.each(['headers', 'body'])('bounds stalled %s and exposes the existing retry without fabricating an article', async (stage) => {
+    jest.useFakeTimers();
+    let signal: AbortSignal | null | undefined;
+    fetchMock.mockImplementation((_url, init) => {
+      signal = init?.signal;
+      if (stage === 'headers') return new Promise<Response>(() => {});
+      const response = json({});
+      jest.spyOn(response, 'json').mockImplementation(() => new Promise<never>(() => {}));
+      return Promise.resolve(response);
+    });
+    const initialProps = props(article());
+    const view = render(<NewsSlugDetailPage {...initialProps} />);
+    view.rerender(<NewsSlugDetailPage {...initialProps} lang="hi" locale="hi" article={null} safeHtml="" pending />);
+    await act(async () => { await jest.advanceTimersByTimeAsync(1500); });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await act(async () => { await jest.advanceTimersByTimeAsync(3999); });
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    await act(async () => { await jest.advanceTimersByTimeAsync(1); });
+    expect(signal?.aborted).toBe(true);
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+    expect(screen.queryByText('Original title')).toBeNull();
+    expect(screen.queryByText('Original body')).toBeNull();
+    await act(async () => { await jest.advanceTimersByTimeAsync(60_000); });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  test('still accepts an eligible published translation without another read', async () => {
+    jest.useFakeTimers();
+    fetchMock.mockResolvedValueOnce(json({ article: article() }));
+    render(<NewsSlugDetailPage {...props(article())} article={null} safeHtml="" pending />);
+    await act(async () => { await jest.advanceTimersByTimeAsync(1500); });
+    expect(screen.getByRole('heading', { name: 'Original title' })).toBeTruthy();
+    expect(screen.getByText('Original body')).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  test('keeps the existing ten-attempt recovery limit', async () => {
+    jest.useFakeTimers();
+    fetchMock.mockImplementation(async () => json({ status: 'pending', sourceLang: 'en' }));
+    render(<NewsSlugDetailPage {...props(article())} article={null} safeHtml="" pending />);
+    await act(async () => { await jest.advanceTimersByTimeAsync(16_500); });
+    expect(fetchMock).toHaveBeenCalledTimes(10);
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+    await act(async () => { await jest.advanceTimersByTimeAsync(60_000); });
+    expect(fetchMock).toHaveBeenCalledTimes(10);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+});
+
 test.each([
   { status: 'unpublished' }, { status: 'draft' }, { status: 'scheduled' },
   { status: 'archived' }, { isDeleted: true }, { deleted: true },

@@ -7,7 +7,7 @@ import { usePublicSettings } from "../src/context/PublicSettingsContext";
 import type { TrendingTopic } from "../src/config/trendingTopics";
 import { useTrendingTopics } from "../hooks/useTrendingTopics";
 import { fetchPublicNews, projectPublicNewsListArticle, type Article } from "../lib/publicNewsApi";
-import { shouldReplaceArticleWithFreshCandidate } from "../lib/translationGroupSync";
+import { compareArticleFreshness, shouldReplaceArticleWithFreshCandidate } from "../lib/translationGroupSync";
 import { withPublicReadDeadline } from "../lib/publicReadDeadline";
 import { toTickerTexts } from "../lib/publicBroadcast";
 import { usePublicBroadcastTicker } from "../hooks/usePublicBroadcastTicker";
@@ -782,10 +782,16 @@ export function useHomepageLatestStories({
       retryStateRef.current.delete(apiLang);
       setState((current) => {
         const previous = current.lang === apiLang ? current : seedRef.current;
+        const previousById = new Map((previous.rawStories ?? []).map((article) => [article._id, article]));
+        if (previous.topStory) previousById.set(previous.topStory._id, previous.topStory);
+        const rawStories = selectHomepageEditorialArticles((latest.rawStories ?? []).map((article) => {
+          const existing = previousById.get(article._id);
+          return existing && (compareArticleFreshness(article, existing) ?? 0) < 0 ? existing : article;
+        }), apiLang);
         const next = {
-          topStory: latest.topStory,
-          rawStories: latest.rawStories || [],
-          freshStories: latest.freshStories || [],
+          topStory: rawStories[0] || null,
+          rawStories,
+          freshStories: rawStories.map((article) => articleToFeedItem(article, apiLang)),
         };
         const shouldApply = shouldCommitHomepageLatestStoriesRefresh({
           current: previous,
@@ -795,7 +801,7 @@ export function useHomepageLatestStories({
         });
         return {
           ...(shouldApply ? { lang: apiLang, ...next } : previous),
-          status: latest.topStory ? 'content' : 'empty',
+          status: next.topStory ? 'content' : 'empty',
         };
       });
     }).catch(() => {

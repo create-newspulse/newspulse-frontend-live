@@ -550,6 +550,47 @@ describe('homepage Top Story freshness', () => {
       { updatedAt: '2026-09-02T12:00:00.000Z' },
     ];
 
+    test('keeps a newer SSR lead when the hydration response contains an older edit', async () => {
+      const current = article({ language: apiLang, title: 'Current SSR headline', updatedAt: '2026-09-02T12:00:00.000Z' });
+      const older = { ...current, title: 'Stale headline', updatedAt: '2026-09-01T12:00:00.000Z' };
+      (fetchPublicNews as jest.Mock).mockReset().mockResolvedValueOnce({ items: [older], endpoint: '/api/public/news' });
+      const { result, unmount } = renderHook(() => useHomepageLatestStories({
+        apiLang, hydrated: true, initialTopStory: current, initialFreshStories: null,
+      }));
+      await act(async () => {});
+      expect(result.current.topStory).toEqual(current);
+      expect(result.current.latestRawStories).toEqual([current]);
+      expect(fetchPublicNews).toHaveBeenCalledTimes(1);
+      unmount();
+    });
+
+    test.each(['edit', 'publication', 'withdrawal'])('keeps each story fresh during a mixed %s refresh', async (change) => {
+      const current = article({ language: apiLang, title: 'Current headline', updatedAt: '2026-09-02T12:00:00.000Z' });
+      const older = { ...current, title: 'Stale headline', updatedAt: '2026-09-01T12:00:00.000Z' };
+      const second = article({ _id: 'second', language: apiLang, title: 'Second headline', publishedAt: '2026-08-01T00:00:00.000Z' });
+      const added = article({ _id: 'new', language: apiLang, title: 'New publication', publishedAt: '2026-09-03T00:00:00.000Z' });
+      const incoming = change === 'publication' ? [added, older, second]
+        : change === 'withdrawal' ? [older]
+        : [older, { ...second, title: 'Edited second headline', updatedAt: '2026-09-03T12:00:00.000Z' }];
+      (fetchPublicNews as jest.Mock).mockReset()
+        .mockResolvedValueOnce({ items: [current, second], endpoint: '/api/public/news' })
+        .mockResolvedValueOnce({ items: incoming, endpoint: '/api/public/news' });
+      const { result, unmount } = renderHook(() => useHomepageLatestStories({
+        apiLang, hydrated: true, initialTopStory: null, initialFreshStories: null,
+      }));
+      await act(async () => {});
+      await act(async () => { result.current.refreshHomepageLatestStories('background'); });
+      expect(result.current.latestRawStories?.find((item) => item._id === current._id)).toEqual(current);
+      expect(result.current.latestFromBackend?.find((item) => item._id === current._id)?.title).toBe(current.title);
+      expect(result.current.latestRawStories?.map((item) => item._id)).toEqual(
+        change === 'publication' ? ['new', current._id, 'second'] : change === 'withdrawal' ? [current._id] : [current._id, 'second']
+      );
+      expect(result.current.topStory?._id).toBe(change === 'publication' ? 'new' : current._id);
+      if (change === 'edit') expect(result.current.latestRawStories?.[1].title).toBe('Edited second headline');
+      expect(fetchPublicNews).toHaveBeenCalledTimes(2);
+      unmount();
+    });
+
     test.each(edits)('applies material edit %j without changing publication time or order', async (patch) => {
       const current = article({ language: apiLang, content: '<p>Original body</p>' });
       const second = article({ _id: 'second', language: apiLang, publishedAt: '2026-08-01T00:00:00Z' });

@@ -1060,14 +1060,15 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
     const endpoint = `/api/public/news/${encodeURIComponent(slugToUse)}?${params.toString()}`;
 
     try {
-      const res = await fetch(endpoint, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-        cache: 'no-store',
-        signal: controller.signal,
-      });
-
-      const json = await res.json().catch(() => null);
+      const json = await withPublicReadDeadline(4000, async (signal) => {
+        const res = await fetch(endpoint, {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          cache: 'no-store',
+          signal,
+        });
+        return res.json().catch(() => null);
+      }, controller.signal);
       if (controller.signal.aborted) return;
 
       if (isPendingTranslationPayload(json)) {
@@ -1113,16 +1114,6 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
   }, [beginArticleRead, clearPendingTimer, lang, router.query, schedulePendingRetry, slug]);
 
   React.useEffect(() => {
-    // When SSR says we're pending translation, start the polling loop.
-    if (resolvedArticle?._id) return;
-    if (!pendingTranslate) return;
-    if (pendingExhausted) return;
-    if (pendingTimerRef.current) return;
-    schedulePendingRetry(pollOnce);
-    return () => clearPendingTimer();
-  }, [clearPendingTimer, pendingExhausted, pendingTranslate, pollOnce, resolvedArticle, schedulePendingRetry]);
-
-  React.useEffect(() => {
     // If navigation changes to a different slug or language, reset pending state.
     articleReadRef.current?.abort();
     resolvedArticleRef.current = article;
@@ -1141,6 +1132,16 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
       clearPendingTimer();
     };
   }, [article, clearPendingTimer, error, lang, pending, safeHtml, slug]);
+
+  React.useEffect(() => {
+    // Route reset must finish before scheduling the first pending-translation read.
+    if (resolvedArticle?._id) return;
+    if (!pendingTranslate) return;
+    if (pendingExhausted) return;
+    if (pendingTimerRef.current) return;
+    schedulePendingRetry(pollOnce);
+    return () => clearPendingTimer();
+  }, [clearPendingTimer, pendingExhausted, pendingTranslate, pollOnce, resolvedArticle, schedulePendingRetry]);
 
   React.useEffect(() => {
     // SSR already delivered the freshest article for this locale, so only re-sync

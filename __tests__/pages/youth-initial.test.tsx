@@ -1,6 +1,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { getServerSideProps } from '../../pages/youth-pulse';
 import { useYouthPulse } from '../../features/youthPulse/useYouthPulse';
+import { getYouthTrendingByLanguage } from '../../features/youthPulse/api';
 import { getServerSideProps as getCategoryProps } from '../../pages/youth-pulse/[category]';
 let mockLocale = 'en';
 jest.mock('../../utils/LanguageContext', () => ({ useLanguage: () => ({ language: mockLocale }) }));
@@ -13,6 +14,55 @@ function story(locale: string, title = 'Youth initial story') {
 }
 describe('Youth initial loading', () => {
   afterEach(() => { cleanup(); jest.useRealTimers(); });
+  describe('Youth response validation', () => {
+    test.each([
+      {}, { items: {} }, { ok: false, items: [] }, { success: false, articles: [] },
+      { error: 'Fixture upstream failure', items: [] }, { items: [null] },
+    ])('rejects malformed or failed successful response %# rather than returning empty news', async (payload) => {
+      global.fetch = jest.fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>()
+        .mockResolvedValueOnce(new Response(JSON.stringify(payload)));
+      await expect(getYouthTrendingByLanguage(12, 'en')).rejects.toThrow('Youth feed unavailable');
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    test.each(['items', 'articles', 'news', 'data'])('preserves the %s envelope, Youth-only metadata and genuine empty results', async (key) => {
+      const visible = { ...story('en'), track: 'campus-buzz', editorialLabel: 'Campus Report' };
+      global.fetch = jest.fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>()
+        .mockResolvedValueOnce(new Response(JSON.stringify({ [key]: [
+          visible, { ...story('en', 'Private'), isPublic: false },
+          { ...story('en', 'Under review'), approvalStatus: 'draft' },
+          { ...story('en', 'Paid'), isSponsoredArticle: true },
+        ] })))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ [key]: [] })));
+      expect(await getYouthTrendingByLanguage(12, 'en')).toEqual([
+        expect.objectContaining({ title: visible.title, category: 'campus-buzz', editorialLabel: 'Campus Report', href: '/news/youth-story' }),
+      ]);
+      expect(await getYouthTrendingByLanguage(12, 'en')).toEqual([]);
+    });
+
+    test.each(['en', 'hi', 'gu'])('%s malformed refresh retains the seed, while valid empty and restore reads remain authoritative', async (locale) => {
+      mockLocale = locale;
+      jest.useFakeTimers();
+      const initialFeed = {
+        language: locale, limit: 12,
+        stories: [{ id: 'initial', title: 'Initial story', summary: '', category: 'youth-pulse', image: '', date: '' }],
+      };
+      global.fetch = jest.fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>()
+        .mockResolvedValueOnce(new Response(JSON.stringify({ success: false, items: [] })))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ items: [] })))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ items: [story(locale, 'Restored youth story')] })));
+      const hook = renderHook(() => useYouthPulse(12, initialFeed));
+      await act(async () => { await jest.advanceTimersByTimeAsync(60_000); });
+      expect(hook.result.current.trending).toEqual(initialFeed.stories);
+      await act(async () => { await jest.advanceTimersByTimeAsync(60_000); });
+      expect(hook.result.current.trending).toEqual([]);
+      expect(hook.result.current.error).toBeNull();
+      await act(async () => { await jest.advanceTimersByTimeAsync(60_000); });
+      expect(hook.result.current.trending.map((item) => item.title)).toEqual(['Restored youth story']);
+      expect(global.fetch).toHaveBeenCalledTimes(3);
+    });
+  });
+
   test.each(['en', 'hi', 'gu'])('%s SSR seed is locale-correct and avoids a hydration duplicate', async (locale) => {
     mockLocale = locale;
     global.fetch = jest.fn(async (url) => ({ ok: true, json: async () => String(url).includes('feature-toggles') ? { youthPulseSubmissionsClosed: true } : { items: [story(locale), story(locale === 'en' ? 'gu' : 'en', 'Wrong locale'), { ...story(locale, 'Draft'), status: 'draft' }] } })) as any;

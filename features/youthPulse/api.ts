@@ -1,6 +1,6 @@
 import { youthCategories, youthStories } from "../../utils/youthData";
 import type { YouthCategory, YouthStory } from "./types";
-import { getApiOrigin } from '../../lib/publicNewsApi';
+import { getApiOrigin, parsePublicNewsList } from '../../lib/publicNewsApi';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
 import { buildNewsUrl } from '../../lib/newsRoutes';
 import { withPublicReadDeadline } from '../../lib/publicReadDeadline';
@@ -229,8 +229,10 @@ async function fetchYouthPulseArticles(limit: number, language?: string, opts: F
     if (!res.ok) throw new Error('Youth feed unavailable');
     const data = await res.json();
     const list: unknown =
-      (data && (data.items || data.articles || data.news || data.data)) ?? (Array.isArray(data) ? data : []);
-    return Array.isArray(list) ? (list as any[]) : [];
+      (data && (data.items || data.articles || data.news || data.data)) ?? (Array.isArray(data) ? data : undefined);
+    if (!Array.isArray(list) || !parsePublicNewsList(data)) throw new Error('Youth feed unavailable');
+    // Keep Youth track and moderation fields outside the shared News projection.
+    return list;
     }, opts.signal);
   } catch (e: any) {
     if (opts.throwOnError || (e && e.name === 'AbortError')) throw e;
