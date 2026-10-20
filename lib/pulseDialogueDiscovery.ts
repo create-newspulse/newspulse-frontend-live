@@ -7,6 +7,7 @@ import { buildNewsUrl } from './newsRoutes';
 import { resolveCoverImageUrl, resolveCoverFitMode } from './coverImages';
 import { getStoryId } from './storyIdentity';
 import { formatEditorialDateTime, resolveStoryDateIso } from './storyDateTime';
+import { isSponsoredContent } from './sponsoredContent';
 import type { CategoryStoryHierarchyItem } from '../components/category/CategoryStoryHierarchy';
 
 export const PULSE_FORMAT_GROUPS = {
@@ -83,6 +84,7 @@ export function pulseStoryKeys(article: PulseCard): string[] {
 export function uniquePulseStories(items: PulseCard[], excluded: PulseCard[] = []): PulseCard[] {
   const seen = new Set(excluded.flatMap(pulseStoryKeys));
   return items.filter((item) => {
+    if (isSponsoredContent(item)) return false;
     const keys = pulseStoryKeys(item);
     const duplicate = keys.some((key) => seen.has(key));
     keys.forEach((key) => seen.add(key));

@@ -170,6 +170,23 @@ describe('NewsPulseCategoryShell', () => {
       jest.useRealTimers();
     });
 
+    test('seed and shared editorial positions exclude paid identity but retain ordinary sponsorship-related tags', async () => {
+      const paid = { ...story('paid'), isSponsoredArticle: true, campaignStatus: 'expired' };
+      const ordinary = { ...story('ordinary'), tags: ['sponsored'] };
+      const older = story('older');
+      mockPublicNews({ global: [paid, ordinary, older], spotlight: [paid, ordinary, older] });
+      render(
+        <NewsPulseCategoryShell activeCategory="business" latestItems={[paid, ordinary, older]} lang={lang}>
+          Stories
+        </NewsPulseCategoryShell>
+      );
+      expect(titles()).toBe(`${lang} ordinary|${lang} older`);
+      await waitFor(() => expect(firstSpotlightTitle()).toBe(`${lang} ordinary`));
+      expect(spotlightCount()).toBe(2);
+      expect(titles()).toBe(`${lang} ordinary|${lang} older`);
+      expect(fetchPublicNewsMock).toHaveBeenCalledTimes(2);
+    });
+
     test('version refresh updates same-ID content and preserves authoritative ordering without another interval', async () => {
       const interval = jest.spyOn(global, 'setInterval');
       await act(async () => { render(shell()); });

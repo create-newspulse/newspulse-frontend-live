@@ -5,6 +5,7 @@ import { resolveArticleSlug } from '../../lib/articleSlugs';
 import { buildNewsUrl } from '../../lib/newsRoutes';
 import { withPublicReadDeadline } from '../../lib/publicReadDeadline';
 import { filterPubliclyPublishedArticles, getLocalizedArticleFields, STRICT_LOCALE_POLICY } from '../../lib/localizedArticleFields';
+import { isSponsoredContent } from '../../lib/sponsoredContent';
 
 type FetchOpts = {
   signal?: AbortSignal;
@@ -283,7 +284,7 @@ export async function getYouthTrending(limit = 12): Promise<YouthStory[]> {
 
 function localizedYouthItems(input: any[], language?: string): any[] {
   const locale = language === 'hi' || language === 'gu' ? language : 'en';
-  const items = filterPubliclyPublishedArticles(sanitizePublicYouthItems(input));
+  const items = filterPubliclyPublishedArticles(sanitizePublicYouthItems(input)).filter((article) => !isSponsoredContent(article));
   const publicationTime = (story: any) => {
     for (const value of [story.publishedAt, story.publishAt, story.createdAt]) {
       const parsed = Date.parse(String(value || ''));

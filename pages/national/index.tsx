@@ -25,6 +25,7 @@ import { getPublicApiBaseUrl } from '../../lib/publicApiBase';
 import CategoryDeskHeader from '../../src/components/category/CategoryDeskHeader';
 import { useCategoryStoryHierarchy, type CategoryStoryHierarchyItem } from '../../components/category/CategoryStoryHierarchy';
 import { formatPublicArticleLocation } from '../../lib/publicLocation';
+import { isSponsoredContent } from '../../lib/sponsoredContent';
 
 type AnyStory = any;
 
@@ -371,7 +372,7 @@ function matchRegion(story: AnyStory, regionName: string) {
 
 function filterNationalStories(stories: AnyStory[], topic: TopicChip, regionName: string | undefined, search: string): AnyStory[] {
   const q = normalize(search);
-  let list = stories;
+  let list = stories.filter((story) => !isSponsoredContent(story));
   if (topic !== 'All') list = list.filter((story) => matchesTopic(story, topic));
   if (regionName) list = list.filter((story) => matchRegion(story, regionName));
   if (q) {

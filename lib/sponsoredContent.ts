@@ -307,6 +307,48 @@ function extractSponsorCta(containers: Array<Record<string, unknown>>): { label:
   };
 }
 
+// Paid identity is independent of campaign visibility and ordinary editorial text.
+export function isSponsoredContent(article: unknown): boolean {
+  if (!article || typeof article !== 'object' || Array.isArray(article)) return false;
+  const containers = collectContainers(article, ARTICLE_SPONSORED_NESTED_KEYS);
+  const flags = [
+    'isSponsored', 'sponsored', 'isSponsoredContent', 'isSponsoredArticle', 'sponsoredArticle',
+    'isSponsoredFeature', 'sponsoredFeature', 'isPartnerContent', 'isBrandedContent', 'isPartnerArticle', 'partnerArticle',
+  ];
+  const types = new Set([
+    'sponsored', 'sponsored content', 'sponsored article', 'sponsored story', 'sponsored feature', 'sponsored combo',
+    'partner content', 'partner article', 'branded content', 'branded article', 'promoted',
+  ]);
+  const relationKeys = ['sponsorFeatureLinkedId', 'linkedSponsoredFeatureId', 'sponsoredFeatureId'];
+  if (containers.some((container) =>
+    flags.some((key) => isTruthyFlag(container[key]))
+    || ['type', 'storyType', 'articleType', 'contentType', 'featureType', 'format']
+      .some((key) => types.has(normalizeText(container[key]).replace(/-/g, ' ')))
+    || relationKeys.some((key) => typeof container[key] === 'string' && Boolean(container[key].trim()))
+  )) return true;
+
+  const features = collectContainers(article, [
+    'linkedSponsoredFeature', 'homepageSponsoredFeature', 'sponsoredFeature', 'sponsoredCampaign',
+  ]).filter((container) => !containers.includes(container));
+  if (!features.length) return false;
+
+  const source = containers[0];
+  const ids = new Set([source._id, source.id, source.sourceNewsId].filter(
+    (value): value is string => typeof value === 'string' && Boolean(value.trim())
+  ).map((value) => value.trim()));
+  const slugs = new Set((['en', 'hi', 'gu'] as const).map((lang) => resolveArticleSlug(article, lang)).filter(Boolean));
+  return features.some((feature) => {
+    const id = readFirstValue([feature], [
+      'linkedArticleId', 'linkedSponsoredArticleId', 'sponsoredArticleId', 'targetArticleId', 'destinationArticleId',
+    ]);
+    const slug = readFirstValue([feature], [
+      'linkedArticleSlug', 'linkedSponsoredArticleSlug', 'sponsoredArticleSlug', 'targetArticleSlug', 'destinationArticleSlug',
+    ]);
+    return (typeof id === 'string' && ids.has(id.trim()))
+      || (typeof slug === 'string' && slugs.has(slug.trim()));
+  });
+}
+
 export function resolveSponsoredContentMeta(article: any, lang: SupportedLang): SponsoredContentMeta {
   const articleContainers = collectContainers(article, ARTICLE_SPONSORED_NESTED_KEYS);
   const linkedFeatureContainers = collectContainers(article, LINKED_FEATURE_NESTED_KEYS).filter(

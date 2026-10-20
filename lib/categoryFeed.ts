@@ -6,6 +6,7 @@ import { getOrdinaryCategoryPagination, validateOrdinaryPageRequest, type Ordina
 import { withPublicReadDeadline } from './publicReadDeadline';
 import { pickFreshestArticlesForLocale } from './translationGroupSync';
 import { getFaithCulturePagination, isFaithCultureCategory, validateFaithCulturePageRequest } from './faithCulturePagination';
+import { isSponsoredContent } from './sponsoredContent';
 
 export const CATEGORY_FEED_BATCH_SIZE = 30;
 export const CATEGORY_FEED_TIMEOUT_MS = 4000;
@@ -68,7 +69,7 @@ function articleMatchesCategory(article: Article, categoryKey: string): boolean 
 }
 
 export function selectCategoryFeedArticles(articles: Article[] | null | undefined, categoryKey: string, language?: string): Article[] {
-  const publicArticles = filterPubliclyPublishedArticles(articles);
+  const publicArticles = filterPubliclyPublishedArticles(articles).filter((article) => !isSponsoredContent(article));
   const categoryArticles = publicArticles.filter((article) => articleMatchesCategory(article, categoryKey));
   const localeArticles = language ? categoryArticles.filter((article) => {
     const localized = getLocalizedArticleFields(article, language, STRICT_LOCALE_POLICY);
@@ -147,7 +148,8 @@ export async function fetchCategoryFeedPage(options: Parameters<typeof fetchPubl
       if (response.error) throw new Error(response.error);
       const pagination = response.meta.pagination
         ?? (faithPagination ? getFaithCulturePagination : getOrdinaryCategoryPagination)(response.meta, { page, limit: requested.limit }, response.items.length);
-      const items = selectItems ? selectItems(response.items) : response.items;
+      const editorialItems = response.items.filter((article) => !isSponsoredContent(article));
+      const items = selectItems ? selectItems(editorialItems) : editorialItems;
       if (faithPagination || items.length || !pagination.hasMore) return { items, pagination };
       // Filtering an entire backend page does not exhaust the category.
       page = pagination.page + 1;

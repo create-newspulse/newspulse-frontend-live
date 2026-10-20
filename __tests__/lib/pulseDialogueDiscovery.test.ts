@@ -32,6 +32,16 @@ test('excludes the current story across translation documents and deduplicates c
   const current = { _id: 'en', translationKey: 'story', slug: 'english' };
   expect(uniquePulseStories([{ _id: 'gu', translationGroupId: 'story', slug: 'gujarati' }, { _id: 'next', translationKey: 'next' }, { _id: 'next-hi', translationKey: 'next' }], [current])).toEqual([{ _id: 'next', translationKey: 'next' }]);
 });
+test.each(['en', 'hi', 'gu'] as const)('%s featured editorial cards exclude sponsorship without changing curation or the public response', async (lang) => {
+  const paid = { _id: 'paid', slug: 'paid', language: lang, isSponsoredArticle: true, campaignStatus: 'paused' };
+  const first = { _id: 'first', slug: 'first', language: lang, tags: ['sponsored'] };
+  const second = { _id: 'second', slug: 'second', language: lang };
+  const payload = { ok: true as const, lang, featuredDialogue: [paid, first, second], featuredVoices: [], formatGroups: { columns: [], essays: [], culture: [], conversations: [] } };
+  mockFetch.mockResolvedValue({ ok: true, json: async () => payload });
+  const response = await readPulse<typeof payload>('discovery', lang);
+  expect(response.featuredDialogue).toEqual([paid, first, second]);
+  expect(uniquePulseStories(response.featuredDialogue)).toEqual([first, second]);
+});
 test.each(['column', 'guest_column', 'essay', 'literary_essay', 'culture_ideas', 'conversation', 'interview', 'viewpoint', 'expert_perspective', 'open_letter'])('keeps stored article format %s supported without rewriting it', (format) => {
   const filters = pulseFilters({ format });
   expect(filters.format).toBe(format);

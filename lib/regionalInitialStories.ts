@@ -3,6 +3,7 @@ import { dedupeRegionalFeedPayload, unwrapRegionalFeedItems } from './unwrapRegi
 import { filterPubliclyPublishedArticles, getLocalizedArticleFields, normalizeRouteLocale, STRICT_LOCALE_POLICY } from './localizedArticleFields';
 import { withPublicReadDeadline } from './publicReadDeadline';
 import { parsePublicNewsList } from './publicNewsApi';
+import { isSponsoredContent } from './sponsoredContent';
 
 export const REGIONAL_BLOCKED_IDS = new Set([
   '69a9d5f74c3cb9a18ef5a179', '69a9ca4a4c3cb9a18ef5a16f',
@@ -82,6 +83,7 @@ export function selectRegionalInitialStories(payload: unknown, locale: string): 
   const policy = getRegionalLocalePolicy(locale);
   const items = unwrapRegionalFeedItems(dedupeRegionalFeedPayload(payload, locale));
   return filterPubliclyPublishedArticles(items).filter((item) => {
+    if (isSponsoredContent(item)) return false;
     if (REGIONAL_BLOCKED_IDS.has(String(item?._id || (item as any)?.id || ''))) return false;
     const localized = getLocalizedArticleFields(item, locale, policy);
     return localized.isVisible && Boolean(localized.title);

@@ -90,6 +90,29 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
     expect(console.error).not.toHaveBeenCalled();
   });
 
+  test.each(['en', 'hi', 'gu'] as const)('%s recommendations exclude paid ranking candidates without hiding the sponsored article itself', async (lang) => {
+    const current = article({ language: lang, isSponsoredArticle: true });
+    const ordinary = article({ _id: 'ordinary', slug: 'ordinary', language: lang, tags: ['sponsored'], reads: 2 });
+    const older = article({ _id: 'older', slug: 'older', language: lang, reads: 1 });
+    const paid = article({
+      _id: 'paid', slug: 'paid', language: lang, isSponsoredArticle: true,
+      campaignStatus: 'expired', reads: 99999,
+    });
+    const calls = mockFetchSequence((url) => url.includes('/api/public/news/slug/')
+      ? { article: current } : { items: [paid, ordinary, current, older] });
+    const ctx = createCtx(current.slug, lang);
+    ctx.res.statusCode = 200;
+    const result = await getServerSideProps(ctx);
+    if (!('props' in result)) throw new Error('Expected the published sponsored article');
+    expect(await result.props).toMatchObject({
+      article: { _id: current._id }, error: null, pending: false,
+      relatedStories: [{ _id: 'ordinary' }, { _id: 'older' }],
+      topStories: [{ _id: 'ordinary' }, { _id: 'older' }],
+    });
+    expect(ctx.res.statusCode).toBe(200);
+    expect(calls).toHaveLength(2);
+  });
+
   test('a boolean availability flag cannot make an unresolved foreign edition visible', async () => {
     mockFetchSequence((url) => url.includes('/api/public/news/slug/')
       ? { article: article({ language: 'gu', translations: { en: true, hi: true, gu: true } }) }

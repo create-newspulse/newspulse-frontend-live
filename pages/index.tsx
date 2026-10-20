@@ -30,7 +30,7 @@ import {
   HOME_SPOTLIGHT_RENDER_FILTER_KEYS,
   HOME_RENDERED_EDITORIAL_SECTION_KEYS,
 } from "../lib/homeSpotlight";
-import { resolveSponsoredContentMeta } from "../lib/sponsoredContent";
+import { isSponsoredContent, resolveSponsoredContentMeta } from "../lib/sponsoredContent";
 import HomepageSponsoredFeatureCard from "../components/home/HomepageSponsoredFeatureCard";
 import HomeRightRail, { articleToHomeRightRailFeedItem } from "../components/home/HomeRightRail";
 import HomeTopAdSlot from "../components/home/HomeTopAdSlot";
@@ -594,7 +594,7 @@ function getHomepagePublicationTimeValue(article: any): number {
 
 export function selectHomepageEditorialArticles(items: Article[] | null | undefined, requestedLang: UiLangCode): Article[] {
   return filterVisibleArticlesForLocale(items ?? [], requestedLang, STRICT_LOCALE_POLICY)
-    .filter((article) => !isHomepageSponsoredContent(article, requestedLang))
+    .filter((article) => !isSponsoredContent(article))
     .slice()
     .sort((left, right) => {
       const leftTime = getHomepagePublicationTimeValue(left);
@@ -1099,12 +1099,6 @@ function collectHomepageStoryIdentifiers(article: any, requestedLang: 'en' | 'hi
     String((article as any)?.slug || '').trim().toLowerCase(),
     String((article as any)?.title || '').trim().toLowerCase(),
   ].filter(Boolean);
-}
-
-function isHomepageSponsoredContent(article: any, requestedLang: 'en' | 'hi' | 'gu'): boolean {
-  if (!article || typeof article !== 'object') return false;
-  const sponsoredMeta = resolveSponsoredContentMeta(article, requestedLang);
-  return sponsoredMeta.isFeatureActive === true || sponsoredMeta.isArticle === true;
 }
 
 function labelKeyForCategory(key: string): string {

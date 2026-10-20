@@ -3,11 +3,19 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import GujaratPage from '../../pages/regional/gujarat';
 import { compactRegionalInitialStories } from '../../lib/regionalListingStories';
 import { getStateName, toLanguageKey } from '../../utils/localizedNames';
+import en from '../../src/i18n/en.json';
 
 let mockLocale: 'en' | 'hi' | 'gu' = 'en';
 jest.mock('next/router', () => ({ useRouter: () => ({ asPath: '/regional/gujarat', locale: mockLocale, query: {}, push: jest.fn(async () => true) }) }));
 jest.mock('../../utils/LanguageContext', () => ({ useLanguage: () => ({ language: mockLocale }) }));
-jest.mock('../../src/i18n/LanguageProvider', () => ({ normalizeLang: (locale: string) => locale || 'en', useI18n: () => ({ t: (key: string) => key }) }));
+jest.mock('../../src/i18n/LanguageProvider', () => ({
+  normalizeLang: (locale: string) => locale || 'en',
+  useI18n: () => ({
+    t: (key: string, vars: Record<string, string | number> = {}) => key === 'categoryPage.loadMoreStories'
+      ? en.categoryPage.loadMoreStories.replace('{{category}}', String(vars.category))
+      : key,
+  }),
+}));
 jest.mock('../../components/NewsPulseCategoryShell', () => ({ __esModule: true, default: ({ children, topContent, afterColumns }: { children: React.ReactNode; topContent?: React.ReactNode; afterColumns?: React.ReactNode }) => <>{topContent}<div data-testid="category-columns"><main>{children}</main></div><section data-testid="category-after-columns">{afterColumns}</section></> }));
 jest.mock('next/link', () => ({
   __esModule: true,

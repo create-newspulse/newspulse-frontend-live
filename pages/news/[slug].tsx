@@ -20,7 +20,7 @@ import { useI18n } from '../../src/i18n/LanguageProvider';
 import { tHeading, toLanguageKey } from '../../utils/localizedNames';
 import { buildNewsUrl, isNavigableNewsHref } from '../../lib/newsRoutes';
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
-import { resolveSponsoredContentMeta } from '../../lib/sponsoredContent';
+import { isSponsoredContent, resolveSponsoredContentMeta } from '../../lib/sponsoredContent';
 import { debugStoryCard, getStoryId, getStoryReactKey } from '../../lib/storyIdentity';
 import { formatEditorialDateTime } from '../../lib/storyDateTime';
 import { getStoryTitleHookColor, splitStoryTitleHook } from '../../lib/storyTitleHook';
@@ -2604,7 +2604,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
 
       const filtered = items.filter((x) => {
         const id = String((x as any)?._id || '').trim();
-        if (!id) return false;
+        if (!id || isSponsoredContent(x)) return false;
         return id !== currentId && id !== primaryArticleId;
       });
 

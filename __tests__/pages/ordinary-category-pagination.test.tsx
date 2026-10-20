@@ -111,6 +111,21 @@ describe('ordinary category page loading', () => {
     jest.restoreAllMocks();
   });
 
+  test.each(['en', 'hi', 'gu'] as const)('%s National seed excludes sponsored articles before Top Story and Most Read ranking', async (locale) => {
+    mockLocale = locale;
+    const items = dataset('national', locale, 3).map((item, index) => ({
+      ...item, isSponsoredArticle: index === 0, tags: index === 1 ? ['sponsored'] : [],
+    }));
+    serve(items, 'national', 20);
+    render(pageElement('national', items, locale, 20));
+    await act(async () => {});
+    expect(renderedIds()).toEqual([items[1]._id, items[2]._id]);
+    expect(screen.queryByText(items[0].title)).toBeNull();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Sort stories' }), { target: { value: 'most-read' } });
+    expect(renderedIds()).toEqual([items[2]._id, items[1]._id]);
+    expect(screen.queryByText(items[0].title)).toBeNull();
+  });
+
   function serve(items: Stories, category: string, limit: number) {
     fetchMock.mockImplementation(async (input, init) => {
       const url = new URL(String(input), 'https://frontend.test');

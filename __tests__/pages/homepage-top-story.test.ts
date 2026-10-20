@@ -182,6 +182,18 @@ describe('homepage Top Story freshness', () => {
     expect(source).toContain('<BookOpen className="h-3.5 w-3.5" /> {vm.readMinutes} {t(\'common.minutesShort\')}');
   });
 
+  test.each(['en', 'hi', 'gu'] as const)('%s Top Story excludes paid identity after campaign expiry without mistaking editorial tags for sponsorship', (language) => {
+    const ordinary = article({
+      _id: 'ordinary', slug: 'ordinary', language, tags: ['sponsored'], publishedAt: '2026-09-09T09:00:00Z',
+    });
+    const older = article({ _id: 'older', slug: 'older', language });
+    const sponsored = article({
+      _id: 'paid', slug: 'paid', language, isSponsoredArticle: true,
+      sponsoredEndAt: '2026-09-01T00:00:00Z', publishedAt: '2026-09-09T10:00:00Z',
+    });
+    expect(selectHomepageEditorialArticles([sponsored, older, ordinary], language)).toEqual([ordinary, older]);
+  });
+
   test('homepage Top Story keeps the existing TopStoryImage presentation path', () => {
     expect(source).toContain('import StoryImage, { TopStoryImage }');
     expect(source).toContain('<TopStoryImage');

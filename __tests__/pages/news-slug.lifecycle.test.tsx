@@ -90,6 +90,24 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
+test.each(['en', 'hi', 'gu'] as const)('%s published sponsored article remains accessible and still withdraws on unpublish', async (lang) => {
+  const story = article({
+    language: lang, isSponsoredArticle: true, sponsorName: 'Fixture Sponsor',
+    sponsorDisclosure: 'Paid fixture disclosure.', sponsorCtaText: 'Visit fixture sponsor',
+    sponsorDestinationUrl: 'https://sponsor.test/information',
+  });
+  render(<NewsSlugDetailPage {...props(story, lang)} />);
+  expect(screen.getByRole('heading', { name: 'Original title' })).toBeTruthy();
+  expect(screen.getByText('Original body')).toBeTruthy();
+  expect(screen.getByText('Paid fixture disclosure.')).toBeTruthy();
+  const cta = screen.getByRole('link', { name: /Visit fixture sponsor/ });
+  expect(cta.getAttribute('href')).toBe('https://sponsor.test/information');
+  expect(cta.getAttribute('rel')).toBe('sponsored noopener noreferrer');
+  fetchMock.mockResolvedValueOnce(json({ items: [{ ...story, status: 'unpublished' }] }));
+  await refresh();
+  await expectWithdrawn();
+});
+
 test('does not add mount-time reads or article polling', async () => {
   jest.useFakeTimers();
   render(<NewsSlugDetailPage {...props(article())} />);

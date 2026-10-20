@@ -79,6 +79,7 @@ export default function NewsPulseCategoryShell({ activeCategory, latestItems, la
 	const topAdSlot = CATEGORY_TOP_BANNER_CATEGORIES.has(activeCategory) ? 'CATEGORY_TOP_970x90' : 'HOME_728x90';
 	const publicLatestItems = React.useMemo(
 		() => Array.isArray(latestItems) ? filterPubliclyPublishedArticles(latestItems)
+			.filter((article) => !isHomeSpotlightSponsoredContent(article, lang))
 			.map((article) => articleToHomeRightRailFeedItem(article, lang, activeCategory === 'regional' ? getRegionalLocalePolicy(lang) : undefined))
 			.filter((item) => Boolean(item.title)) : latestItems,
 		[activeCategory, lang, latestItems]

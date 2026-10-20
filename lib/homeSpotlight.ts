@@ -1,7 +1,7 @@
 import { resolveArticleSlug } from './articleSlugs';
 import { filterPubliclyPublishedArticles, isPubliclyPublishedArticle } from './localizedArticleFields';
 import { fetchPublicNews, type Article } from './publicNewsApi';
-import { resolveSponsoredContentMeta } from './sponsoredContent';
+import { isSponsoredContent } from './sponsoredContent';
 import { getStoryDateTimeValue } from './storyDateTime';
 
 export const HOME_SPOTLIGHT_SECTION_KEYS = ['national', 'regional', 'international', 'business', 'science-technology', 'sports', 'lifestyle', 'glamour', 'web-stories'] as const;
@@ -58,10 +58,8 @@ export function collectHomeSpotlightIdentifiers(article: any, lang: HomeSpotligh
   ].filter(Boolean);
 }
 
-export function isHomeSpotlightSponsoredContent(article: any, lang: HomeSpotlightLang): boolean {
-  if (!article || typeof article !== 'object') return false;
-  const sponsoredMeta = resolveSponsoredContentMeta(article, lang);
-  return sponsoredMeta.isFeatureActive === true || sponsoredMeta.isArticle === true;
+export function isHomeSpotlightSponsoredContent(article: any, _lang: HomeSpotlightLang): boolean {
+  return isSponsoredContent(article);
 }
 
 export function buildHomepageSponsoredFeatureIdentitySet(feature: any): Set<string> {
@@ -69,7 +67,6 @@ export function buildHomepageSponsoredFeatureIdentitySet(feature: any): Set<stri
     [
       String(feature?.linkedArticleId || '').trim().toLowerCase(),
       String(feature?.linkedArticleSlug || '').trim().toLowerCase(),
-      String(feature?.headline || '').trim().toLowerCase(),
     ].filter(Boolean)
   );
 }
@@ -217,7 +214,7 @@ export async function fetchHomeSpotlightArticles(options: {
   });
 
   if (response.error) throw new Error(response.error);
-  return response.items.slice(0, HOME_SPOTLIGHT_MAX_ITEMS);
+  return response.items.filter((article) => !isSponsoredContent(article)).slice(0, HOME_SPOTLIGHT_MAX_ITEMS);
 }
 
 export async function fetchHomeSpotlightSectionArticles(options: {
