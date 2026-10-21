@@ -48,6 +48,17 @@ describe('i18n dictionaries', () => {
     expect([...guKeys]).toEqual([...enKeys]);
   });
 
+  it('keeps Sponsored Content runtime and server messages identical in GU/HI/EN', () => {
+    const runtime = { gu, hi, en };
+    const messages = { gu: messagesGu, hi: messagesHi, en: messagesEn };
+    for (const locale of ['gu', 'hi', 'en'] as const) {
+      expect(messages[locale].sponsoredContent).toEqual(runtime[locale].sponsoredContent);
+      expect(Object.values(runtime[locale].sponsoredContent).every((text) => text.trim().length > 0)).toBe(true);
+    }
+    expect(gu.sponsoredContent.title).not.toBe(en.sponsoredContent.title);
+    expect(hi.sponsoredContent.title).not.toBe(en.sponsoredContent.title);
+  });
+
   it('keeps approved Pulse Dialogue landing descriptions in runtime and SSR dictionaries', () => {
     const runtime = { en, hi, gu } as const;
     const messages = { en: messagesEn, hi: messagesHi, gu: messagesGu } as const;

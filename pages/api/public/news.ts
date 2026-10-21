@@ -10,6 +10,7 @@ import { parsePublicNewsList, type PublicNewsListRead } from '../../../lib/publi
 import { FAITH_CULTURE_NEWS_UNAVAILABLE, FAITH_CULTURE_PAGINATION_HEADER, getFaithCulturePagination, validateFaithCulturePageRequest } from '../../../lib/faithCulturePagination';
 import { getFaithCultureTopic } from '../../../lib/faithCultureTopics';
 import { getSafeRetryAfter } from '../../../lib/retryAfter';
+import { fetchSponsoredNewsPage, SponsoredNewsReadError, SPONSORED_NEWS_UNAVAILABLE, validateSponsoredNewsRequest } from '../../../lib/publicSponsoredNews';
 
 export const HOMEPAGE_RECOVERY_PROXY_TIMEOUT_MS = 3500;
 export const ORDINARY_CATEGORY_PROXY_TIMEOUT_MS = 3500;
@@ -119,6 +120,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
     return res.status(405).json({ ok: false, message: 'METHOD_NOT_ALLOWED' });
+  }
+
+  if (req.query.sponsoredOnly !== undefined) {
+    res.setHeader('Cache-Control', 'no-store, max-age=0');
+    let request: ReturnType<typeof validateSponsoredNewsRequest>;
+    try {
+      request = validateSponsoredNewsRequest(req.query);
+      if (req.headers[ORDINARY_PAGINATION_HEADER.toLowerCase()]
+        || req.headers[FAITH_CULTURE_PAGINATION_HEADER.toLowerCase()]
+        || req.headers['x-newspulse-homepage-recovery']) {
+        throw new Error('Conflicting sponsored pagination contracts');
+      }
+    } catch (error) {
+      logDevNewsProxy('invalid_sponsored_request', { error: error instanceof Error ? error.message : String(error) });
+      return res.status(400).json({ error: 'INVALID_SPONSORED_NEWS_REQUEST' });
+    }
+    try {
+      const page = await withPublicReadDeadline(PUBLIC_NEWS_PROXY_TIMEOUT_MS, (signal) =>
+        fetchSponsoredNewsPage(request.lang, request.page, signal));
+      return res.status(200).json(page);
+    } catch (error) {
+      logDevNewsProxy('sponsored_news_unavailable', { error: error instanceof Error ? error.message : String(error) });
+      if (error instanceof SponsoredNewsReadError && error.retryAfter) {
+        res.setHeader('Retry-After', error.retryAfter);
+      }
+      return res.status(503).json({
+        error: error instanceof SponsoredNewsReadError ? error.code : SPONSORED_NEWS_UNAVAILABLE,
+      });
+    }
   }
 
   const base = getApiBase();

@@ -1,4 +1,22 @@
 {
+  "sponsoredContent": {
+    "title": "Sponsored Content",
+    "description": "Published sponsored articles across News Pulse editorial categories. Paid content is clearly labelled and remains separate from editorial rankings.",
+    "label": "Sponsored",
+    "sponsoredBy": "Sponsored by {{sponsor}}",
+    "count": "Published sponsored articles: {{count}}",
+    "pagination": "Sponsored content pages",
+    "previous": "Previous page",
+    "next": "Next page",
+    "pageOf": "Page {{page}} of {{totalPages}}",
+    "page": "Page {{page}}",
+    "empty": "No published sponsored articles are available.",
+    "emptyPage": "No sponsored articles are available on this page.",
+    "error": "Sponsored content is temporarily unavailable. Please try again.",
+    "retry": "Retry",
+    "loading": "Loading sponsored articles...",
+    "previousContent": "Showing previously verified sponsored articles."
+  },
   "common": {
     "minutesRead": "{{count}} min read",
     "language": "Language",

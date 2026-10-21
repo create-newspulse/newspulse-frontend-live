@@ -62,6 +62,7 @@ const CATEGORY_ROUTE_SEGMENTS = new Set([
   'inspiration-hub',
   'community-reporter',
   'topic',
+  'sponsored-content',
 ]);
 
 function stripLocalePrefix(pathname: string): string {

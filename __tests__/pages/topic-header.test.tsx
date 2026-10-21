@@ -7,6 +7,9 @@ import { editorialTopicPath } from '../../lib/publicEditorialTopics';
 import type { RouteLocale } from '../../lib/localizedArticleFields';
 import { getMessagesForLang } from '../../src/i18n/LanguageProvider';
 import { storyFixture, topicFixture } from '../fixtures/editorialTopics';
+import SponsoredContentPage from '../../pages/sponsored-content';
+import { sponsoredContentPath } from '../../lib/publicSponsoredNews';
+import { sponsoredNewsFixture } from '../fixtures/sponsoredNews';
 
 const mockRouter = {
   isReady: true, locale: 'en', defaultLocale: 'en', pathname: '/topic/[slug]',
@@ -129,6 +132,26 @@ test('the existing menu opens with its ordinary navigation links', () => {
   expect(shortcuts).not.toBeNull();
   expect(shortcuts?.querySelector('a[href="/"]')).not.toBeNull();
   expect(container.querySelectorAll('[data-news-pulse-top-header="true"]')).toHaveLength(1);
+});
+
+test.each(['gu', 'hi', 'en'] as const)('%s sponsored archive reuses one public header without a new menu entry', (locale) => {
+  mockRouter.locale = locale;
+  mockRouter.asPath = sponsoredContentPath(locale, 2);
+  const { container } = render(<MyApp Component={SponsoredContentPage} pageProps={{
+    locale, requestedPage: 2, initialPage: sponsoredNewsFixture(locale, 2), messages: {},
+    seo: { canonicalUrl: `https://www.newspulse.co.in${sponsoredContentPath(locale, 2)}`, alternates: [] },
+  }} />);
+  expect(container.querySelectorAll('[data-news-pulse-top-header="true"]')).toHaveLength(1);
+  expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(getMessagesForLang(locale).sponsoredContent.title);
+  fireEvent.click(screen.getByRole('button', { name: getMessagesForLang(locale).common.language }));
+  const languages = screen.getAllByRole('button').filter((button) => ['Gujarati', 'Hindi', 'English'].includes(button.textContent || ''));
+  expect(languages.map((button) => button.textContent)).toEqual(['Gujarati', 'Hindi', 'English']);
+  fireEvent.click(screen.getByRole('button', { name: locale === 'gu' ? 'Hindi' : 'Gujarati' }));
+  const nextLang = locale === 'gu' ? 'hi' : 'gu';
+  const nextPath = sponsoredContentPath(nextLang, 2);
+  expect(mockRouter.replace).toHaveBeenCalledWith(nextPath, nextPath, { locale: nextLang, shallow: false, scroll: false });
+  fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+  expect(container.querySelector('[data-shared-drawer-shortcuts="true"] a[href*="sponsored-content"]')).toBeNull();
 });
 
 test.each([['en', 'English'], ['hi', 'Hindi'], ['gu', 'Gujarati']] as const)('shared language control selects %s without losing the topic page/query', (lang, label) => {
