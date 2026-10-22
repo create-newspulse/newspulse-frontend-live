@@ -76,6 +76,7 @@ function SponsoredArchive({ locale, requestedPage, initialPage, seo }: Sponsored
   const title = t('sponsoredContent.title');
   const description = t('sponsoredContent.description');
   const visiblePage = matchingLocale ? data : null;
+  const isSingleArticle = visiblePage?.items.length === 1;
   const busy = loading || !matchingLocale;
   const controlClass = 'inline-flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-newsPulse-blue focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-newsPulse-blue dark:border-slate-700 dark:text-sky-300';
 
@@ -118,7 +119,7 @@ function SponsoredArchive({ locale, requestedPage, initialPage, seo }: Sponsored
           {visiblePage ? (
             <section className="mt-8" aria-label={title} aria-busy={loading}>
               <p className="mb-4 text-sm text-slate-600 dark:text-slate-300">{t('sponsoredContent.count', { count: visiblePage.total })}</p>
-              <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              <ul className={`grid gap-6 ${isSingleArticle ? 'mx-auto max-w-5xl' : 'sm:grid-cols-2'} ${visiblePage.items.length > 2 ? 'lg:grid-cols-3' : ''}`}>
                 {visiblePage.items.map((article) => {
                   const fields = getLocalizedArticleFields(article, locale, STRICT_LOCALE_POLICY);
                   const category = getCategoryIdentity(article.category);
@@ -130,20 +131,26 @@ function SponsoredArchive({ locale, requestedPage, initialPage, seo }: Sponsored
                   const date = formatEditorialDateTime(article.publishedAt);
                   return (
                     <li key={article._id} className="min-w-0">
-                      <article className="h-full rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
-                        {image ? <StoryImage storyId={article._id} src={image} alt={fields.title} variant="card" fitMode={resolveCoverFitMode(article, { src: image, altText: fields.title })} /> : null}
-                        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-bold">
-                          <span className="rounded-full bg-amber-50 px-2.5 py-1 text-amber-800 dark:bg-amber-950 dark:text-amber-200">{t('sponsoredContent.label')}</span>
-                          <span className="text-newsPulse-blue dark:text-sky-300">{categoryLabel}</span>
+                      <article className={`flex h-full min-w-0 flex-col gap-5 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 dark:border-slate-700 dark:bg-slate-900 ${isSingleArticle && image ? 'md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:items-center md:gap-8' : ''}`}>
+                        {image ? <StoryImage storyId={article._id} src={image} alt={fields.title} variant="card" fitMode={isSingleArticle ? 'contain' : resolveCoverFitMode(article, { src: image, altText: fields.title })} className="min-w-0" /> : null}
+                        <div className="flex min-w-0 flex-1 flex-col break-words">
+                          <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+                            <span className="max-w-full rounded-full bg-amber-50 px-2.5 py-1 text-amber-800 dark:bg-amber-950 dark:text-amber-200">{t('sponsoredContent.label')}</span>
+                            <span className="max-w-full text-newsPulse-blue dark:text-sky-300">{categoryLabel}</span>
+                          </div>
+                          <h2 className={`mt-3 break-words font-bold leading-relaxed ${isSingleArticle ? 'text-xl sm:text-2xl' : 'text-xl'}`}>
+                            <Link href={buildNewsUrl({ id: article._id, slug: article.slug, lang: locale })} locale={false} prefetch={false} className="block min-h-[44px] py-1 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-newsPulse-blue">
+                              {fields.title}
+                            </Link>
+                          </h2>
+                          {fields.summary ? <p className="mt-2 break-words text-sm leading-6 text-slate-600 dark:text-slate-300">{fields.summary}</p> : null}
+                          {sponsor.sponsorName || date ? (
+                            <div className="mt-auto space-y-2 pt-4">
+                              {sponsor.sponsorName ? <p className="break-words text-sm font-semibold text-amber-800 dark:text-amber-200">{t('sponsoredContent.sponsoredBy', { sponsor: sponsor.sponsorName })}</p> : null}
+                              {date ? <time dateTime={article.publishedAt} className="block text-xs text-slate-500 dark:text-slate-400">{date}</time> : null}
+                            </div>
+                          ) : null}
                         </div>
-                        <h2 className="mt-3 break-words text-xl font-bold leading-snug">
-                          <Link href={buildNewsUrl({ id: article._id, slug: article.slug, lang: locale })} locale={false} prefetch={false} className="hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-newsPulse-blue">
-                            {fields.title}
-                          </Link>
-                        </h2>
-                        {fields.summary ? <p className="mt-2 line-clamp-3 break-words text-sm leading-6 text-slate-600 dark:text-slate-300">{fields.summary}</p> : null}
-                        {sponsor.sponsorName ? <p className="mt-3 break-words text-sm font-semibold text-amber-800 dark:text-amber-200">{t('sponsoredContent.sponsoredBy', { sponsor: sponsor.sponsorName })}</p> : null}
-                        {date ? <time dateTime={article.publishedAt} className="mt-3 block text-xs text-slate-500 dark:text-slate-400">{date}</time> : null}
                       </article>
                     </li>
                   );
@@ -152,7 +159,7 @@ function SponsoredArchive({ locale, requestedPage, initialPage, seo }: Sponsored
               {!visiblePage.items.length && !readError && !loading ? (
                 <p className="rounded-2xl border border-slate-200 p-6 dark:border-slate-700">{t(visiblePage.total ? 'sponsoredContent.emptyPage' : 'sponsoredContent.empty')}</p>
               ) : null}
-              <nav aria-label={t('sponsoredContent.pagination')} className="mt-7 flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 pt-5 text-sm font-semibold dark:border-slate-700">
+              {visiblePage.totalPages > 1 ? <nav aria-label={t('sponsoredContent.pagination')} className="mt-7 flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 pt-5 text-sm font-semibold dark:border-slate-700">
                 {visiblePage.page > 1 ? (
                   <Link href={sponsoredContentPath(locale, Math.max(1, Math.min(visiblePage.page - 1, visiblePage.totalPages)))} locale={false} prefetch={false} rel="prev" className={controlClass} aria-label={t('sponsoredContent.previous')}>
                     <ArrowLeft size={18} aria-hidden="true" />{t('sponsoredContent.previous')}
@@ -166,7 +173,7 @@ function SponsoredArchive({ locale, requestedPage, initialPage, seo }: Sponsored
                     {t('sponsoredContent.next')}<ArrowRight size={18} aria-hidden="true" />
                   </Link>
                 ) : <button type="button" disabled className={`${controlClass} opacity-50`}>{t('sponsoredContent.next')}<ArrowRight size={18} aria-hidden="true" /></button>}
-              </nav>
+              </nav> : null}
             </section>
           ) : null}
         </div>

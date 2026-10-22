@@ -16,8 +16,11 @@ jest.mock('next/link', () => ({
   __esModule: true,
   default: ({ locale, prefetch, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { locale?: false; prefetch?: boolean }) => <a {...props}>{children}</a>,
 }));
-jest.mock('../../src/components/story/StoryImage', () => ({
-  __esModule: true, default: ({ alt, src }: { alt: string; src: string }) => <img alt={alt} src={src} />,
+jest.mock('next/image', () => ({
+  __esModule: true,
+  default: ({ alt, src, className, style, onLoad, onError }: React.ImgHTMLAttributes<HTMLImageElement>) => (
+    <img alt={alt} src={src} className={className} style={style} onLoad={onLoad} onError={onError} />
+  ),
 }));
 jest.mock('../../lib/publicSponsoredNews', () => ({
   ...jest.requireActual('../../lib/publicSponsoredNews'),
@@ -100,26 +103,111 @@ test('optional summary, sponsor and image are omitted without invented content o
   expect(screen.queryByText('Buy now')).toBeNull();
   expect(container.querySelector('a[href^="https://sponsor.test"]')).toBeNull();
   expect(screen.getByRole('link', { name: 'Sponsored article 1' }).getAttribute('href')).toBe('/news/persisted-story-1');
+  expect(container.querySelector('article')?.classList.contains('md:grid')).toBe(false);
 });
 
-test.each([1, 2, 3])('page %s preserves backend counts and accessible Previous/Next boundaries', (page) => {
-  const { container } = render(pageView(propsFor('en', page)));
-  const nav = screen.getByRole('navigation', { name: 'Sponsored content pages' });
-  expect(screen.getByText('Published sponsored articles: 25')).toBeTruthy();
-  expect(within(nav).getByText(`Page ${page} of 3`).getAttribute('aria-current')).toBe('page');
+describe.each(['gu', 'hi', 'en'] as const)('%s archive presentation', (lang) => {
+  test.each([1, 2, 3, 12])('%s articles use a balanced layout and retain complete published content', (total) => {
+    const initial = sponsoredNewsFixture(lang, 1, total);
+    const first = initial.items[0];
+    first.title = `${first.title} `.repeat(12).trim();
+    first.summary = `${first.summary} `.repeat(20).trim();
+    first.sponsorName = 'LongSponsorNameWithoutSpaces'.repeat(8);
+    const original = JSON.stringify(initial);
+    render(pageView(propsFor(lang, 1, initial)));
+    const list = screen.getByRole('list');
+    const cards = screen.getAllByRole('article');
+    expect(cards).toHaveLength(total);
+    expect(list.classList.contains('max-w-5xl')).toBe(total === 1);
+    expect(list.classList.contains('sm:grid-cols-2')).toBe(total > 1);
+    expect(list.classList.contains('lg:grid-cols-3')).toBe(total > 2);
+    expect(cards[0].classList.contains('md:grid')).toBe(total === 1);
+    const card = within(cards[0]);
+    const link = card.getByRole('link', { name: first.title });
+    expect(link.textContent).toBe(first.title);
+    expect(link.getAttribute('href')).toBe(`${lang === 'en' ? '' : `/${lang}`}/news/persisted-story-1`);
+    expect(link.classList.contains('min-h-[44px]')).toBe(true);
+    expect(link.className).toContain('focus-visible:outline');
+    link.focus();
+    expect(document.activeElement).toBe(link);
+    expect(card.getByText(first.summary).className).not.toContain('line-clamp');
+    const copy = getMessagesForLang(lang).sponsoredContent;
+    expect(card.getByText(copy.sponsoredBy.replace('{{sponsor}}', first.sponsorName))).toBeTruthy();
+    expect(card.getByText(copy.label)).toBeTruthy();
+    expect(card.getByText(getMessagesForLang(lang).categories.business)).toBeTruthy();
+    expect(cards[0].querySelector('time')?.getAttribute('datetime')).toBe(first.publishedAt);
+    expect(screen.queryByRole('navigation', { name: copy.pagination })).toBeNull();
+    expect(screen.queryByText(copy.pageOf.replace('{{page}}', '1').replace('{{totalPages}}', '1'))).toBeNull();
+    expect(cards.map(item => within(item).getByRole('link').getAttribute('href'))).toEqual(
+      initial.items.map(item => `${lang === 'en' ? '' : `/${lang}`}/news/${item.slug}`),
+    );
+    expect(JSON.stringify(initial)).toBe(original);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+test('the single-card image preserves its source and uses contain-fit instead of cropping', () => {
+  const initial = sponsoredNewsFixture('en', 1, 1);
+  initial.items[0] = sponsoredArticleFixture(1, 'en', { imageUrl: '/product-photo.png', coverFitMode: 'cover' });
+  render(pageView(propsFor('en', 1, initial)));
+  const image = screen.getByRole('img');
+  expect(image.getAttribute('src')).toBe('/product-photo.png');
+  expect(image.parentElement?.getAttribute('data-fit-mode')).toBe('contain');
+  expect(image.className).toContain('object-contain');
+});
+
+test.each(['contain', 'cover'])('multiple cards retain the existing %s image-fit selection', (fitMode) => {
+  const initial = sponsoredNewsFixture('en', 1, 2);
+  initial.items[0] = sponsoredArticleFixture(1, 'en', { imageUrl: '/product-photo.png', coverFitMode: fitMode });
+  render(pageView(propsFor('en', 1, initial)));
+  expect(screen.getAllByRole('img')[0].parentElement?.getAttribute('data-fit-mode')).toBe(fitMode);
+});
+
+test.each([1, 3])('%s cards retain image fallback without removing the article or its disclosure', (total) => {
+  const initial = sponsoredNewsFixture('en', 1, total);
+  initial.items[0] = sponsoredArticleFixture(1, 'en', { imageUrl: '/missing-product-photo.png' });
+  render(pageView(propsFor('en', 1, initial)));
+  const first = within(screen.getAllByRole('article')[0]);
+  fireEvent.error(first.getByRole('img'));
+  expect(first.getByRole('img').getAttribute('src')).toBe('/fallback.svg');
+  fireEvent.error(first.getByRole('img'));
+  expect(first.queryByRole('img')).toBeNull();
+  expect(first.getByRole('link', { name: initial.items[0].title })).toBeTruthy();
+  expect(first.getByText(getMessagesForLang('en').sponsoredContent.label)).toBeTruthy();
+  expect(screen.getAllByRole('article')).toHaveLength(total);
+});
+
+test.each(['expired', 'paused', 'inactive'])('%s campaigns retain sponsorship attribution and category metadata', (campaignStatus) => {
+  const initial = sponsoredNewsFixture('en', 1, 1);
+  initial.items[0] = sponsoredArticleFixture(1, 'en', { campaignStatus });
+  render(pageView(propsFor('en', 1, initial)));
+  const card = within(screen.getByRole('article'));
+  expect(card.getByText(getMessagesForLang('en').sponsoredContent.label)).toBeTruthy();
+  expect(card.getByText('Sponsored by Example Sponsor 1')).toBeTruthy();
+  expect(card.getByText(getMessagesForLang('en').categories.business)).toBeTruthy();
+});
+
+test.each((['gu', 'hi', 'en'] as const).flatMap(lang => [1, 2, 3].map(page => ({ lang, page }))))(
+  '$lang page $page preserves backend counts and accessible Previous/Next boundaries', ({ lang, page }) => {
+  const { container } = render(pageView(propsFor(lang, page)));
+  const copy = getMessagesForLang(lang).sponsoredContent;
+  const nav = screen.getByRole('navigation', { name: copy.pagination });
+  expect(screen.getByText(copy.count.replace('{{count}}', '25'))).toBeTruthy();
+  expect(within(nav).getByText(copy.pageOf.replace('{{page}}', String(page)).replace('{{totalPages}}', '3')).getAttribute('aria-current')).toBe('page');
   expect(container.querySelectorAll('article')).toHaveLength(page === 3 ? 1 : 12);
-  if (page === 1) expect(within(nav).getByRole('button', { name: 'Previous page' }).hasAttribute('disabled')).toBe(true);
+  expect(container.querySelector('article')?.classList.contains('md:grid')).toBe(page === 3);
+  if (page === 1) expect(within(nav).getByRole('button', { name: copy.previous }).hasAttribute('disabled')).toBe(true);
   else {
-    const previous = within(nav).getByRole('link', { name: 'Previous page' });
-    expect(previous.getAttribute('href')).toBe(sponsoredContentPath('en', page - 1));
+    const previous = within(nav).getByRole('link', { name: copy.previous });
+    expect(previous.getAttribute('href')).toBe(sponsoredContentPath(lang, page - 1));
     expect(previous.getAttribute('rel')).toBe('prev');
     previous.focus();
     expect(document.activeElement).toBe(previous);
   }
-  if (page === 3) expect(within(nav).getByRole('button', { name: 'Next page' }).hasAttribute('disabled')).toBe(true);
+  if (page === 3) expect(within(nav).getByRole('button', { name: copy.next }).hasAttribute('disabled')).toBe(true);
   else {
-    const next = within(nav).getByRole('link', { name: 'Next page' });
-    expect(next.getAttribute('href')).toBe(sponsoredContentPath('en', page + 1));
+    const next = within(nav).getByRole('link', { name: copy.next });
+    expect(next.getAttribute('href')).toBe(sponsoredContentPath(lang, page + 1));
     expect(next.getAttribute('rel')).toBe('next');
     next.focus();
     expect(document.activeElement).toBe(next);
@@ -131,7 +219,21 @@ test.each(['gu', 'hi', 'en'] as const)('%s valid empty state is distinct from an
   const copy = getMessagesForLang(lang).sponsoredContent;
   expect(screen.getByText(copy.empty)).toBeTruthy();
   expect(screen.queryByRole('alert')).toBeNull();
-  expect(screen.getAllByRole('button').every((button) => button.hasAttribute('disabled'))).toBe(true);
+  expect(screen.queryByRole('navigation', { name: copy.pagination })).toBeNull();
+  expect(screen.queryByRole('button', { name: copy.previous })).toBeNull();
+  expect(screen.queryByRole('button', { name: copy.next })).toBeNull();
+});
+
+test('refreshes recompute the layout and pagination without altering backend counts', async () => {
+  render(pageView());
+  for (const total of [1, 2, 25, 0]) {
+    fetchMock.mockResolvedValue(sponsoredNewsFixture('en', 1, total));
+    await act(async () => { refresh(String(total)); });
+    expect(screen.queryAllByRole('article')).toHaveLength(Math.min(total, 12));
+    expect(screen.getByText(`Published sponsored articles: ${total}`)).toBeTruthy();
+    expect(screen.getByRole('list').classList.contains('max-w-5xl')).toBe(total === 1);
+    expect(Boolean(screen.queryByRole('navigation', { name: 'Sponsored content pages' }))).toBe(total > 12);
+  }
 });
 
 test('a failed refresh retains verified content and counts with a warning, not an empty state', async () => {
