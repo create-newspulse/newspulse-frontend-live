@@ -5,7 +5,8 @@ import StoryImage from '../src/components/story/StoryImage';
 import { fetchPublicNews, type Article } from '../lib/publicNewsApi';
 import { resolveCoverFitMode, resolveCoverImageUrl } from '../lib/coverImages';
 import { buildNewsUrl } from '../lib/newsRoutes';
-import { getLocalizedArticleFields } from '../lib/localizedArticleFields';
+import { filterVisibleArticlesForLocale, getLocalizedArticleFields, STRICT_LOCALE_POLICY } from '../lib/localizedArticleFields';
+import { isSponsoredContent } from '../lib/sponsoredContent';
 import { debugStoryCard, getStoryId, getStoryReactKey } from '../lib/storyIdentity';
 import { formatEditorialDateTime, resolveStoryDateIso } from '../lib/storyDateTime';
 import { getStoryTitleHookColor, splitStoryTitleHook } from '../lib/storyTitleHook';
@@ -68,6 +69,10 @@ function categoryBadgeClasses(raw: unknown): string {
 export default function LatestPage() {
   const { t } = useI18n();
   const { language } = useLanguage();
+  const localePolicy = React.useMemo(() => ({
+    ...STRICT_LOCALE_POLICY,
+    allowReadyTranslations: language === 'en' || language === 'hi',
+  }), [language]);
 
   const [items, setItems] = React.useState<Article[] | null>(null);
   const [error, setError] = React.useState<string>('');
@@ -85,15 +90,18 @@ export default function LatestPage() {
         setItems([]);
         return;
       }
-      setItems(Array.isArray(resp.items) ? resp.items : []);
-    })().catch((e: any) => {
+      // Keep complete READY candidates, then enforce Latest's own eligibility.
+      // This bounded window must not inherit the general API's archive totals.
+      setItems(filterVisibleArticlesForLocale(resp.items, language, localePolicy)
+        .filter((article) => !isSponsoredContent(article)));
+    })().catch((e: unknown) => {
       if (controller.signal.aborted) return;
-      setError(String(e?.message || t('errors.fetchFailed') || 'Fetch failed'));
+      setError(e instanceof Error && e.message ? e.message : t('errors.fetchFailed'));
       setItems([]);
     });
 
     return () => controller.abort();
-  }, [language, t]);
+  }, [language, localePolicy, t]);
 
   return (
     <>
@@ -173,15 +181,17 @@ export default function LatestPage() {
                   <ul className="grid gap-3">
                     {items.map((a) => {
                       const id = getStoryId(a);
-                      const localized = getLocalizedArticleFields(a as any, language);
+                      const localized = getLocalizedArticleFields(a, language, localePolicy);
                       if (!localized.isVisible) return null;
 
                       const href = buildNewsUrl({ id, slug: localized.slug || id, lang: language });
 
                       const title = String(localized.title || '').trim() || String(t('common.untitled') || 'Untitled');
                       const when = formatEditorialDateTime(resolveStoryDateIso(a as any));
-                      const category = String(localized.categoryLabel || (a as any)?.category || '').trim();
                       const categoryIdentity = getCategoryIdentity(a.category);
+                      const labelKey = `categories.${categoryIdentity.replace(/-([a-z])/g, (_match, letter: string) => letter.toUpperCase())}`;
+                      const translatedLabel = t(labelKey);
+                      const category = translatedLabel !== labelKey ? translatedLabel : localized.categoryLabel;
                       const coverSrc = resolveCoverImageUrl(a as any);
                       const fitMode = resolveCoverFitMode(a as any, { src: coverSrc, altText: title });
                       const titleParts = splitStoryTitleHook(title);
@@ -199,7 +209,7 @@ export default function LatestPage() {
 
                             <div className="flex items-stretch gap-3 sm:gap-4">
                               <div className="order-1 min-w-0 flex-1">
-                                <div className="flex items-center gap-2 min-w-0">
+                                <div className="flex flex-wrap items-center gap-2 min-w-0">
                                   {when ? (
                                     <span className="inline-flex shrink-0 items-center rounded-full border border-slate-200/70 bg-white/80 px-2 py-1 text-[11px] font-semibold text-slate-700">
                                       {when}
@@ -212,7 +222,7 @@ export default function LatestPage() {
 
                                   {category ? (
                                     <span
-                                      className={`ml-auto inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${categoryBadgeClasses(
+                                      className={`ml-auto inline-flex max-w-full shrink-0 items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${categoryBadgeClasses(
                                         categoryIdentity
                                       )}`}
                                     >
