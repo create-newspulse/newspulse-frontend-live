@@ -16,6 +16,7 @@ function routePosition(block: string, route: string) {
 }
 
 describe('homepage footer information architecture', () => {
+  const businessLinks = extractArray('businessLinks');
   const quickLinks = extractArray('quickLinks');
   const legalComplianceLinks = extractArray('legalComplianceLinks');
 
@@ -57,5 +58,15 @@ describe('homepage footer information architecture', () => {
   it('keeps one footer in the existing settings-controlled homepage module', () => {
     expect((source.match(/<SiteFooter\b/g) || [])).toHaveLength(1);
     expect(source).toMatch(/key: 'footer',\s*order: effectiveSettings\.modules\.footer\.order,\s*enabled: moduleState\.footer,\s*node: <SiteFooter/);
+  });
+
+  it('places Sponsored Content in the existing News Pulse quick links without removing or reordering existing links', () => {
+    expect(quickLinks).toContain("t('sponsoredContent.title')");
+    expect(routePosition(quickLinks, '/journalist-desk')).toBeLessThan(routePosition(quickLinks, '/sponsored-content'));
+    expect([...businessLinks.matchAll(/localizePath\('([^']+)', lang\)/g)].map((match) => match[1]))
+      .toEqual(['/advertise-with-us', '/advertising-policy', '/contact', '/contact']);
+    expect(businessLinks).not.toContain('/sponsored-content');
+    expect(legalComplianceLinks).not.toContain('/sponsored-content');
+    expect((source.match(/localizePath\('\/sponsored-content', lang\)/g) || [])).toHaveLength(1);
   });
 });

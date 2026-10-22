@@ -267,9 +267,9 @@ describe.each(locales)('%s public language contract', (locale) => {
 
 describe('existing homepage footer', () => {
   const expectedCopy = {
-    en: { about: 'About News Pulse', guide: 'Community Reporter Guide', unavailable: '{{label}} is not available right now.' },
-    hi: { about: 'News Pulse के बारे में', guide: 'कम्युनिटी रिपोर्टर मार्गदर्शिका', unavailable: '{{label}} अभी उपलब्ध नहीं है।' },
-    gu: { about: 'News Pulse વિશે', guide: 'કોમ્યુનિટી રિપોર્ટર માર્ગદર્શિકા', unavailable: '{{label}} હાલમાં ઉપલબ્ધ નથી.' },
+    en: { about: 'About News Pulse', guide: 'Community Reporter Guide', sponsored: 'Sponsored Content', unavailable: '{{label}} is not available right now.' },
+    hi: { about: 'News Pulse के बारे में', guide: 'कम्युनिटी रिपोर्टर मार्गदर्शिका', sponsored: 'प्रायोजित सामग्री', unavailable: '{{label}} अभी उपलब्ध नहीं है।' },
+    gu: { about: 'News Pulse વિશે', guide: 'કોમ્યુનિટી રિપોર્ટર માર્ગદર્શિકા', sponsored: 'પ્રાયોજિત સામગ્રી', unavailable: '{{label}} હાલમાં ઉપલબ્ધ નથી.' },
   };
 
   function footer(locale: RouteLocale, onToast = jest.fn()) {
@@ -290,6 +290,7 @@ describe('existing homepage footer', () => {
       [messages.common.communityReporter, '/community-reporter'],
       [expectedCopy[locale].guide, '/community-reporter/guidelines'],
       [messages.footer.journalistDesk, '/journalist-desk'],
+      [expectedCopy[locale].sponsored, '/sponsored-content'],
       [messages.footer.editorialPolicy, '/editorial-policy'],
       [messages.footer.digitalCodeOfEthics, '/digital-code-of-ethics'],
       [messages.footer.privacyPolicy, '/privacy-policy'],
@@ -307,6 +308,14 @@ describe('existing homepage footer', () => {
     const prefix = locale === 'en' ? '' : `/${locale}`;
     expect(screen.getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')]))
       .toEqual(expectedLinks.map(([label, path]) => [label, `${prefix}${path}`]));
+    const sponsoredLink = screen.getByRole('link', { name: expectedCopy[locale].sponsored });
+    expect(sponsoredLink.parentElement).toBe(screen.getByRole('link', { name: messages.footer.journalistDesk }).parentElement);
+    expect(sponsoredLink.parentElement?.previousElementSibling?.textContent?.trim()).toBe('News Pulse');
+    expect(sponsoredLink.className).toBe('text-left hover:underline');
+    expect(sponsoredLink.getAttribute('target')).toBeNull();
+    expect(sponsoredLink.tabIndex).toBe(0);
+    sponsoredLink.focus();
+    expect(document.activeElement).toBe(sponsoredLink);
     for (const text of [
       messages.footer.description, messages.footer.legalComplianceTitle, messages.footer.businessTitle,
       messages.footer.copyright, messages.common.availableIn3Languages, messages.common.mobileAndWeb,
@@ -346,11 +355,13 @@ describe('existing homepage footer', () => {
       const messages = getMessagesForLang(locale);
       const prefix = locale === 'en' ? '' : `/${locale}`;
       expect(container.firstElementChild).toBe(root);
-      expect(screen.getAllByRole('link')).toHaveLength(19);
+      expect(screen.getAllByRole('link')).toHaveLength(20);
       expect(screen.getByRole('link', { name: expectedCopy[locale].about }).getAttribute('href')).toBe(`${prefix}/about-us`);
       expect(screen.getByRole('link', { name: expectedCopy[locale].guide }).getAttribute('href')).toBe(`${prefix}/community-reporter/guidelines`);
+      expect(screen.getByRole('link', { name: expectedCopy[locale].sponsored }).getAttribute('href')).toBe(`${prefix}/sponsored-content`);
       expect(screen.queryByRole('link', { name: expectedCopy[previousLocale].about })).toBeNull();
       expect(screen.queryByRole('link', { name: expectedCopy[previousLocale].guide })).toBeNull();
+      expect(screen.queryByRole('link', { name: expectedCopy[previousLocale].sponsored })).toBeNull();
       expect(screen.getByText(messages.footer.description)).toBeTruthy();
       expect(screen.getByText(messages.footer.copyright)).toBeTruthy();
       expect(screen.queryByText(getMessagesForLang(previousLocale).footer.description)).toBeNull();

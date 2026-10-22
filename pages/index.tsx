@@ -3776,6 +3776,7 @@ export function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
     { label: t('common.communityReporter'), href: localizePath('/community-reporter', lang) },
     { label: t('footer.communityReporterGuide'), href: localizePath('/community-reporter/guidelines', lang) },
     { label: t('footer.journalistDesk'), href: localizePath('/journalist-desk', lang) },
+    { label: t('sponsoredContent.title'), href: localizePath('/sponsored-content', lang) },
   ];
 
   const legalComplianceLinks = [

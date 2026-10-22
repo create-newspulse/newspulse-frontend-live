@@ -325,6 +325,16 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
       description={resolvedDeskCopy.description}
     >
       {editorialSearch}
+      {routeCategoryKey === 'business' ? (
+        <Link
+          href="/sponsored-content"
+          locale={router.locale}
+          prefetch={false}
+          className="inline-flex max-w-full items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-newsPulse-blue/40 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-200 dark:hover:bg-gray-900/60"
+        >
+          {t('sponsoredContent.title')}
+        </Link>
+      ) : null}
       {faithPagination ? (
         <nav aria-label={t('faithCulture.filterLabel')} className="min-w-0 flex items-center gap-2 overflow-x-auto pb-1 md:flex-wrap">
           {[undefined, ...FAITH_CULTURE_TOPICS].map((topic) => {
