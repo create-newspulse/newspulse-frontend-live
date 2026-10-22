@@ -146,21 +146,50 @@ describe.each(['gu', 'hi', 'en'] as const)('%s archive presentation', (lang) => 
   });
 });
 
-test('the single-card image preserves its source and uses contain-fit instead of cropping', () => {
-  const initial = sponsoredNewsFixture('en', 1, 1);
-  initial.items[0] = sponsoredArticleFixture(1, 'en', { imageUrl: '/product-photo.png', coverFitMode: 'cover' });
-  render(pageView(propsFor('en', 1, initial)));
+test.each(['gu', 'hi', 'en'] as const)('%s single-card image uses unframed natural sizing without changing its source or loader', (lang) => {
+  const initial = sponsoredNewsFixture(lang, 1, 1);
+  initial.items[0] = sponsoredArticleFixture(1, lang, { imageUrl: '/product-photo.png', coverFitMode: 'cover' });
+  render(pageView(propsFor(lang, 1, initial)));
   const image = screen.getByRole('img');
+  const frame = image.parentElement;
   expect(image.getAttribute('src')).toBe('/product-photo.png');
-  expect(image.parentElement?.getAttribute('data-fit-mode')).toBe('contain');
+  expect(frame?.getAttribute('data-fit-mode')).toBe('contain');
   expect(image.className).toContain('object-contain');
+  for (const utility of [
+    '[&:has(>img)]:!aspect-auto', '[&:has(>img)]:!bg-transparent',
+    '[&:has(>img)>img]:!static', '[&:has(>img)>img]:!h-auto',
+    '[&:has(>img)>img]:!p-0', '[&:has(>img)>img]:!transform-none',
+    '[&:has(>img)>img]:aspect-[auto_16/10]',
+  ]) expect(frame?.classList.contains(utility)).toBe(true);
+  expect(frame?.style.aspectRatio).toBe('16 / 10');
+  Object.defineProperties(image, {
+    naturalWidth: { configurable: true, value: 600 },
+    naturalHeight: { configurable: true, value: 400 },
+  });
+  fireEvent.load(image);
+  expect(image.getAttribute('src')).toBe('/product-photo.png');
+  expect(frame?.getAttribute('data-fit-mode')).toBe('contain');
+  expect(fetchMock).not.toHaveBeenCalled();
 });
 
 test.each(['contain', 'cover'])('multiple cards retain the existing %s image-fit selection', (fitMode) => {
   const initial = sponsoredNewsFixture('en', 1, 2);
   initial.items[0] = sponsoredArticleFixture(1, 'en', { imageUrl: '/product-photo.png', coverFitMode: fitMode });
   render(pageView(propsFor('en', 1, initial)));
-  expect(screen.getAllByRole('img')[0].parentElement?.getAttribute('data-fit-mode')).toBe(fitMode);
+  const frame = screen.getAllByRole('img')[0].parentElement;
+  expect(frame?.getAttribute('data-fit-mode')).toBe(fitMode);
+  expect(frame?.className).not.toContain(':has(');
+  expect(frame?.style.aspectRatio).toBe('16 / 10');
+});
+
+test('image framing follows the returned card count when the archive refreshes', async () => {
+  render(pageView(propsFor('en', 1, sponsoredNewsFixture('en', 1, 1))));
+  for (const total of [3, 1]) {
+    fetchMock.mockResolvedValue(sponsoredNewsFixture('en', 1, total));
+    await act(async () => { refresh(String(total)); });
+    expect(screen.getAllByRole('img')[0].parentElement?.classList.contains('[&:has(>img)]:!aspect-auto')).toBe(total === 1);
+    expect(screen.getAllByRole('article')).toHaveLength(total);
+  }
 });
 
 test.each([1, 3])('%s cards retain image fallback without removing the article or its disclosure', (total) => {
@@ -172,6 +201,9 @@ test.each([1, 3])('%s cards retain image fallback without removing the article o
   expect(first.getByRole('img').getAttribute('src')).toBe('/fallback.svg');
   fireEvent.error(first.getByRole('img'));
   expect(first.queryByRole('img')).toBeNull();
+  const frame = screen.getAllByRole('article')[0].querySelector<HTMLElement>('[data-variant="card"]');
+  expect(frame?.style.aspectRatio).toBe('16 / 10');
+  expect(frame?.textContent).toContain('News Pulse');
   expect(first.getByRole('link', { name: initial.items[0].title })).toBeTruthy();
   expect(first.getByText(getMessagesForLang('en').sponsoredContent.label)).toBeTruthy();
   expect(screen.getAllByRole('article')).toHaveLength(total);

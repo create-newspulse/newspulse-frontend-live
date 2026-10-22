@@ -132,7 +132,18 @@ function SponsoredArchive({ locale, requestedPage, initialPage, seo }: Sponsored
                   return (
                     <li key={article._id} className="min-w-0">
                       <article className={`flex h-full min-w-0 flex-col gap-5 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 dark:border-slate-700 dark:bg-slate-900 ${isSingleArticle && image ? 'md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:items-center md:gap-8' : ''}`}>
-                        {image ? <StoryImage storyId={article._id} src={image} alt={fields.title} variant="card" fitMode={isSingleArticle ? 'contain' : resolveCoverFitMode(article, { src: image, altText: fields.title })} className="min-w-0" /> : null}
+                        {image ? (
+                          <StoryImage
+                            storyId={article._id}
+                            src={image}
+                            alt={fields.title}
+                            variant="card"
+                            fitMode={isSingleArticle ? 'contain' : resolveCoverFitMode(article, { src: image, altText: fields.title })}
+                            className={isSingleArticle
+                              ? 'min-w-0 [&:has(>img)]:!aspect-auto [&:has(>img)]:!bg-transparent [&:has(>img)>img]:!static [&:has(>img)>img]:!h-auto [&:has(>img)>img]:!p-0 [&:has(>img)>img]:!transform-none [&:has(>img)>img]:aspect-[auto_16/10]'
+                              : 'min-w-0'}
+                          />
+                        ) : null}
                         <div className="flex min-w-0 flex-1 flex-col break-words">
                           <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
                             <span className="max-w-full rounded-full bg-amber-50 px-2.5 py-1 text-amber-800 dark:bg-amber-950 dark:text-amber-200">{t('sponsoredContent.label')}</span>
