@@ -4544,7 +4544,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
     : [];
   const showLeftRail = leftRailBlocks.length > 0;
   const rightRailNode = (
-    <HomeRightRail theme={theme} latestItems={latestFromBackend} latestReadError={storyStatus === 'error'} lang={apiLang} />
+    <HomeRightRail theme={theme} latestItems={latestFromBackend} latestReadError={storyStatus === 'error'} lang={apiLang} showHousePlaceholdersWithoutConsent />
   );
 
   const hasSnapshotsBlock = sidebarBlocks.some((b) => b.key === 'snapshots');

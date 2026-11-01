@@ -593,6 +593,7 @@ export default function HomeRightRail({
   latestItems,
   latestReadError = false,
   includeTallAd = true,
+  showHousePlaceholdersWithoutConsent = false,
   sticky = true,
 }: {
   theme?: HomeRightRailTheme;
@@ -600,15 +601,16 @@ export default function HomeRightRail({
   latestItems: any[] | null;
   latestReadError?: boolean;
   includeTallAd?: boolean;
+  showHousePlaceholdersWithoutConsent?: boolean;
   sticky?: boolean;
 }) {
   return (
     <div className={`${sticky ? 'sticky top-4 ' : ''}grid w-full min-w-0 gap-4`}>
-      <AdSlot slot="HOME_RIGHT_300x250" variant="right300" />
+      <AdSlot slot="HOME_RIGHT_300x250" variant="right300" showHousePlaceholderWithoutConsent={showHousePlaceholdersWithoutConsent} />
 
       <HomeRightRailLatestNews theme={theme} items={latestItems} hasReadError={latestReadError} lang={lang} />
 
-      {includeTallAd ? <AdSlot slot="HOME_RIGHT_300x600" variant="right300x600" /> : null}
+      {includeTallAd ? <AdSlot slot="HOME_RIGHT_300x600" variant="right300x600" showHousePlaceholderWithoutConsent={showHousePlaceholdersWithoutConsent} /> : null}
 
       <HomeRightRailViralVideosBlock theme={theme} lang={lang} />
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { subscribePublicDataRefresh } from '../lib/publicDataRefresh';
 import { useOptionalCookieConsent } from '../src/consent/CookieConsentProvider';
@@ -53,6 +53,7 @@ export type UsePublicAdSlotResult = {
   ad: PublicAd | null;
   isLoading: boolean;
   hasResolved: boolean;
+  blockedReason?: 'consent' | 'disabled';
 };
 
 type CachedAdSlotEntry = {
@@ -63,7 +64,7 @@ type CachedAdSlotEntry = {
 
 const AD_SLOT_CACHE_TTL_MS = 15_000;
 const adSlotCache = new Map<string, CachedAdSlotEntry>();
-const inFlightByKey = new Map<string, Promise<CachedAdSlotEntry>>();
+const inFlightByKey = new Map<string, Promise<CachedAdSlotEntry | null>>();
 
 function normalizeBase(raw: string): string {
   return String(raw || '')
@@ -117,7 +118,8 @@ function normalizeAd(ad: any, allowWithoutImage: boolean): PublicAd | null {
   return imageUrl ? { ...(ad as PublicAd), imageUrl } : ({ ...(ad as PublicAd) } as PublicAd);
 }
 
-async function fetchPublicAdSlot(slot: string, lang: string, ttlMs: number, force = false): Promise<CachedAdSlotEntry> {
+async function fetchPublicAdSlot(slot: string, lang: string, ttlMs: number, canRequest: () => boolean, force = false): Promise<CachedAdSlotEntry | null> {
+  if (!canRequest()) return null;
   const cacheKey = buildCacheKey(slot, lang);
   if (!force) {
     const fresh = getFreshCacheEntry(cacheKey, ttlMs);
@@ -156,6 +158,7 @@ async function fetchPublicAdSlot(slot: string, lang: string, ttlMs: number, forc
       adSlotCache.set(cacheKey, entry);
       return entry;
     } catch {
+      if (!canRequest()) return null;
       const fallback = adSlotCache.get(cacheKey) || null;
       if (fallback) return fallback;
 
@@ -210,19 +213,22 @@ export function usePublicAdSlot({
 }: UsePublicAdSlotOptions): UsePublicAdSlotResult {
   const consentContext = useOptionalCookieConsent();
   const hasAdvertisingConsent = consentContext ? consentContext.categories.advertising : hasStoredConsentForCategory('advertising');
+  const consentRef = useRef(hasAdvertisingConsent);
+  consentRef.current = hasAdvertisingConsent;
   const normalizedSlot = String(slot || '').trim();
   const normalizedLang = normalizeLanguage(language);
   void refreshIntervalMs;
+  // Known Admin-off metadata outlives the creative cache; consent is not an inventory setting.
+  const knownCache = normalizedSlot ? adSlotCache.get(buildCacheKey(normalizedSlot, normalizedLang)) : undefined;
   const initialCache = normalizedSlot ? getFreshCacheEntry(buildCacheKey(normalizedSlot, normalizedLang), AD_SLOT_CACHE_TTL_MS) : null;
   const initialAd = initialCache ? normalizeAd(initialCache.ad, allowWithoutImage) : null;
-  const [enabled, setEnabled] = useState(initialCache ? initialCache.enabled : true);
+  const [enabled, setEnabled] = useState(knownCache ? knownCache.enabled : true);
   const [ad, setAd] = useState<PublicAd | null>(initialCache && initialCache.enabled ? initialAd : null);
   const [isLoading, setIsLoading] = useState(normalizedSlot ? !initialCache : false);
   const [hasResolved, setHasResolved] = useState(normalizedSlot ? Boolean(initialCache) : true);
 
   useEffect(() => {
     if (!hasAdvertisingConsent) {
-      setEnabled(false);
       setAd(null);
       setIsLoading(false);
       setHasResolved(true);
@@ -238,9 +244,14 @@ export function usePublicAdSlot({
     }
 
     let cancelled = false;
+    const canRequest = () => consentRef.current && !cancelled;
 
-    const applyEntry = (entry: CachedAdSlotEntry) => {
-      if (cancelled) return;
+    const applyEntry = (entry: CachedAdSlotEntry | null) => {
+      if (!canRequest()) return;
+      if (!entry) {
+        void fetchPublicAdSlot(normalizedSlot, normalizedLang, AD_SLOT_CACHE_TTL_MS, canRequest).then(applyEntry);
+        return;
+      }
       const nextAd = normalizeAd(entry.ad, allowWithoutImage);
       setEnabled(entry.enabled);
       setAd(entry.enabled ? nextAd : null);
@@ -254,11 +265,11 @@ export function usePublicAdSlot({
     } else {
       setIsLoading(true);
       setHasResolved(false);
-      void fetchPublicAdSlot(normalizedSlot, normalizedLang, AD_SLOT_CACHE_TTL_MS).then(applyEntry);
+      void fetchPublicAdSlot(normalizedSlot, normalizedLang, AD_SLOT_CACHE_TTL_MS, canRequest).then(applyEntry);
     }
 
     const refreshOnce = (force = false) => {
-      void fetchPublicAdSlot(normalizedSlot, normalizedLang, AD_SLOT_CACHE_TTL_MS, force).then(applyEntry);
+      void fetchPublicAdSlot(normalizedSlot, normalizedLang, AD_SLOT_CACHE_TTL_MS, canRequest, force).then(applyEntry);
     };
 
     const unsubscribe = subscribePublicDataRefresh(() => {
@@ -271,5 +282,16 @@ export function usePublicAdSlot({
     };
   }, [normalizedSlot, normalizedLang, allowWithoutImage, hasAdvertisingConsent]);
 
-  return { enabled, ad, isLoading, hasResolved };
+  if (!hasAdvertisingConsent) {
+    return {
+      enabled: false,
+      ad: null,
+      isLoading: false,
+      hasResolved: true,
+      blockedReason: knownCache?.enabled === false ? 'disabled' : 'consent',
+    };
+  }
+
+  const slotEnabled = enabled && knownCache?.enabled !== false;
+  return { enabled: slotEnabled, ad: slotEnabled ? ad : null, isLoading, hasResolved, blockedReason: slotEnabled ? undefined : 'disabled' };
 }

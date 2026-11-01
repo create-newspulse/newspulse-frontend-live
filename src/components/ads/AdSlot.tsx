@@ -88,6 +88,7 @@ export type AdSlotProps = {
   className?: string;
   renderMode?: 'default' | 'articleDisplay';
   hideWhenEmpty?: boolean;
+  showHousePlaceholderWithoutConsent?: boolean;
 };
 
 function defaultVariantForSlot(normalizedSlot: string): Variant {
@@ -616,6 +617,7 @@ export function ResolvedAdSlot({
   className = '',
   renderMode = 'default',
   hideWhenEmpty = false,
+  showHousePlaceholderWithoutConsent = false,
   state,
   onImageError,
 }: ResolvedAdSlotProps) {
@@ -629,14 +631,17 @@ export function ResolvedAdSlot({
 
   const strictConfig = getStrictSlotConfig(normalizedSlot);
   const homepageUnitConfig = getHomepageUnitConfig(normalizedSlot);
-  const { enabled, ad, isLoading, hasResolved } = state;
+  const { enabled, isLoading, hasResolved } = state;
+  const consentBlocked = state.blockedReason === 'consent';
+  const consentPlaceholder = consentBlocked && showHousePlaceholderWithoutConsent;
+  const ad = consentBlocked ? null : state.ad;
 
   const [imgError, setImgError] = React.useState(false);
   React.useEffect(() => {
     setImgError(false);
   }, [ad?.imageUrl]);
 
-  if (!shouldRenderDisplaySlot || !enabled) return null;
+  if (!shouldRenderDisplaySlot || state.blockedReason === 'disabled' || (!enabled && !consentPlaceholder) || (consentBlocked && !consentPlaceholder)) return null;
 
   const imageUrl = (ad?.imageUrl || '').trim();
   const isArticleVariant = effectiveVariant === 'articleInline' || effectiveVariant === 'articleEnd';

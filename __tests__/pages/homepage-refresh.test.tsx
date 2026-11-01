@@ -518,6 +518,11 @@ describe('homepage ad layout boundaries', () => {
     settings.tickers.breaking.order = 2;
     settings.tickers.live.order = 3;
     const html = renderToString(<PublicSettingsProvider initialSettings={settings}><HomePage {...props} /></PublicSettingsProvider>);
+    expect(jest.mocked(HomeRightRail).mock.calls.at(-1)?.[0].showHousePlaceholdersWithoutConsent).toBe(true);
+    const consentHouseSlots = jest.mocked(AdSlot).mock.calls
+      .filter(([props]) => props.showHousePlaceholderWithoutConsent)
+      .map(([props]) => props.slot);
+    expect(consentHouseSlots).toEqual(['HOME_RIGHT_300x250', 'HOME_RIGHT_300x600']);
     const document = new DOMParser().parseFromString(html, 'text/html');
     const leftGrid = document.querySelector('.home-left > .grid')!;
     const renderedSlots = Array.from(document.querySelectorAll('[data-ad-slot]')).map(element => element.getAttribute('data-ad-slot'));
