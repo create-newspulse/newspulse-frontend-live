@@ -18,7 +18,7 @@ jest.mock('../../lib/firebaseMessaging', () => ({
   registerBrowserForFcm: jest.fn(),
 }));
 
-const rightSlots = ['HOME_RIGHT_300x250', 'HOME_RIGHT_300x600'] as const;
+const railSlots = ['HOME_LEFT_300x600', 'HOME_LEFT_300x250', 'HOME_RIGHT_300x250', 'HOME_RIGHT_300x600'] as const;
 const paidAd: PublicAd = {
   id: 'consent-test-creative',
   title: 'Paid test creative',
@@ -48,7 +48,7 @@ function TestApp({ lang = 'en', children }: { lang?: Lang; children?: React.Reac
     <LanguageProvider initialLang={lang}>
       <CookieConsentProvider>
         <div data-testid="house-slots">
-          {children ?? rightSlots.map(slot => <AdSlot key={slot} slot={slot} showHousePlaceholderWithoutConsent />)}
+          {children ?? railSlots.map(slot => <AdSlot key={slot} slot={slot} showHousePlaceholderWithoutConsent />)}
         </div>
         <ConsentControls />
       </CookieConsentProvider>
@@ -69,7 +69,7 @@ function refreshAds() {
 }
 
 function expectHouseSlots(element: ParentNode) {
-  for (const slot of rightSlots) {
+  for (const slot of railSlots) {
     expect(element.querySelector(`a[href="/advertise?slot=${slot}"]`)).not.toBeNull();
   }
   expect(element.querySelector('img')).toBeNull();
@@ -106,7 +106,7 @@ afterAll(() => {
   }
 });
 
-describe.each(['en', 'hi', 'gu'] as const)('right house placeholders (%s)', lang => {
+describe.each(['en', 'hi', 'gu'] as const)('homepage rail house placeholders (%s)', lang => {
   test.each(['unset', 'denied', 'granted'] as const)('%s consent preserves legacy house markup through SSR and hydration', async decision => {
     if (decision === 'denied') writeConsentCookie(createConsentRecord('rejected', {}));
     if (decision === 'granted') writeConsentCookie(createConsentRecord('custom', { advertising: true }));
@@ -115,7 +115,7 @@ describe.each(['en', 'hi', 'gu'] as const)('right house placeholders (%s)', lang
     const legacy = renderToString(
       <LanguageProvider initialLang={lang}>
         <div data-testid="house-slots">
-          {rightSlots.map(slot => <ResolvedAdSlot key={slot} slot={slot} state={emptyState} />)}
+          {railSlots.map(slot => <ResolvedAdSlot key={slot} slot={slot} state={emptyState} />)}
         </div>
       </LanguageProvider>
     );
@@ -148,7 +148,7 @@ describe.each(['en', 'hi', 'gu'] as const)('right house placeholders (%s)', lang
       expectHouseSlots(slots);
       expect(recoverableErrors).not.toHaveBeenCalled();
       expect(removedLinks).toEqual([]);
-      expect(fetchSpy).toHaveBeenCalledTimes(decision === 'granted' ? 2 : 0);
+      expect(fetchSpy).toHaveBeenCalledTimes(decision === 'granted' ? railSlots.length : 0);
       for (const [input] of fetchSpy.mock.calls) {
         expect(new URL(String(input), 'http://localhost').searchParams.get('lang')).toBe(lang);
       }
@@ -170,14 +170,14 @@ describe.each(['en', 'hi', 'gu'] as const)('right house placeholders (%s)', lang
     expect(fetchSpy).not.toHaveBeenCalled();
 
     grantAdvertising();
-    await waitFor(() => expect(screen.getByTestId('house-slots').querySelectorAll('img')).toHaveLength(2));
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(screen.getByTestId('house-slots').querySelectorAll('img')).toHaveLength(railSlots.length));
+    expect(fetchSpy).toHaveBeenCalledTimes(railSlots.length);
     expect(screen.getByTestId('house-slots').querySelector('img')?.getAttribute('src')).toBe(paidAd.imageUrl);
 
     denyAdvertising();
     expectHouseSlots(screen.getByTestId('house-slots'));
     await act(async () => refreshAds());
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy).toHaveBeenCalledTimes(railSlots.length);
     unmount();
 
     const html = renderToString(<TestApp lang={lang} />);
@@ -185,13 +185,13 @@ describe.each(['en', 'hi', 'gu'] as const)('right house placeholders (%s)', lang
     expect(html).not.toContain(paidAd.targetUrl);
     const remounted = render(<TestApp lang={lang} />);
     expectHouseSlots(screen.getByTestId('house-slots'));
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy).toHaveBeenCalledTimes(railSlots.length);
     remounted.unmount();
   });
 });
 
-test('other placements and non-opted-in category right rails remain consent-hidden', () => {
-  const otherSlots = [...rightSlots, 'HOME_LEFT_300x250', 'HOME_LEFT_300x600', 'HOME_728x90', 'HOME_BILLBOARD_970x250', 'FOOTER_BANNER_728x90', 'ARTICLE_INLINE'];
+test('non-opted-in placements remain consent-hidden', () => {
+  const otherSlots = [...railSlots, 'TOP_HOME_BILLBOARD_970x250', 'HOME_728x90', 'HOME_BILLBOARD_970x250', 'FOOTER_BANNER_728x90', 'ARTICLE_INLINE'];
   render(<TestApp>{otherSlots.map(slot => <AdSlot key={slot} slot={slot} />)}</TestApp>);
   expect(screen.getByTestId('house-slots').childElementCount).toBe(0);
   expect(fetchSpy).not.toHaveBeenCalled();
@@ -200,7 +200,7 @@ test('other placements and non-opted-in category right rails remain consent-hidd
 test('a consent-blocked resolved slot cannot display a supplied paid creative', () => {
   render(
     <TestApp>
-      {rightSlots.map(slot => (
+      {railSlots.map(slot => (
         <ResolvedAdSlot key={slot} slot={slot} state={{ ...emptyState, ad: paidAd, blockedReason: 'consent' }} showHousePlaceholderWithoutConsent />
       ))}
     </TestApp>
@@ -214,21 +214,21 @@ test('late paid responses after withdrawal never render, and Strict Mode dedupli
   fetchSpy.mockImplementation(() => new Promise<Response>(resolve => pending.push(resolve)));
   render(<React.StrictMode><TestApp /></React.StrictMode>);
   grantAdvertising();
-  expect(fetchSpy).toHaveBeenCalledTimes(2);
+  expect(fetchSpy).toHaveBeenCalledTimes(railSlots.length);
   denyAdvertising();
   await act(async () => {
     pending.forEach(resolve => resolve(new Response(JSON.stringify({ enabled: true, ad: paidAd }))));
   });
   expectHouseSlots(screen.getByTestId('house-slots'));
   await act(async () => refreshAds());
-  expect(fetchSpy).toHaveBeenCalledTimes(2);
+  expect(fetchSpy).toHaveBeenCalledTimes(railSlots.length);
 });
 
 test('withdrawal prevents a new proxy fallback request after a previously permitted backend read fails', async () => {
   process.env.NEXT_PUBLIC_BACKEND_URL = 'http://127.0.0.1:9';
   let rejectRead!: (reason: Error) => void;
   fetchSpy.mockImplementation(() => new Promise<Response>((_resolve, reject) => { rejectRead = reject; }));
-  render(<TestApp><AdSlot slot={rightSlots[0]} showHousePlaceholderWithoutConsent /></TestApp>);
+  render(<TestApp><AdSlot slot={railSlots[0]} showHousePlaceholderWithoutConsent /></TestApp>);
   grantAdvertising();
   expect(fetchSpy).toHaveBeenCalledTimes(1);
   denyAdvertising();
@@ -241,7 +241,7 @@ test('withdrawal prevents a new proxy fallback request after a previously permit
 test('a new permitted subscriber recovers from a withdrawn shared request', async () => {
   let rejectRead!: (reason: Error) => void;
   fetchSpy.mockImplementationOnce(() => new Promise<Response>((_resolve, reject) => { rejectRead = reject; }));
-  const app = <TestApp><AdSlot slot={rightSlots[0]} showHousePlaceholderWithoutConsent /></TestApp>;
+  const app = <TestApp><AdSlot slot={railSlots[0]} showHousePlaceholderWithoutConsent /></TestApp>;
   const first = render(app);
   grantAdvertising();
   denyAdvertising();
@@ -259,16 +259,17 @@ test.each(['en', 'hi', 'gu'] as const)('known Admin-off remains hidden without c
   writeConsentCookie(createConsentRecord('custom', { advertising: true }));
   render(<TestApp lang={lang} />);
   await waitFor(() => expect(screen.getByTestId('house-slots').childElementCount).toBe(0));
-  expect(fetchSpy).toHaveBeenCalledTimes(2);
+  expect(fetchSpy).toHaveBeenCalledTimes(railSlots.length);
   try {
     clock += 20_000;
     denyAdvertising();
     expect(screen.getByTestId('house-slots').childElementCount).toBe(0);
     await act(async () => refreshAds());
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy).toHaveBeenCalledTimes(railSlots.length);
     const html = renderToString(<TestApp lang={lang} />);
-    expect(html).not.toContain(`/advertise?slot=${rightSlots[0]}`);
-    expect(html).not.toContain(`/advertise?slot=${rightSlots[1]}`);
+    for (const slot of railSlots) {
+      expect(html).not.toContain(`/advertise?slot=${slot}`);
+    }
   } finally {
     inventory = { enabled: true, ad: null };
     grantAdvertising();

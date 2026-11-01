@@ -522,7 +522,7 @@ describe('homepage ad layout boundaries', () => {
     const consentHouseSlots = jest.mocked(AdSlot).mock.calls
       .filter(([props]) => props.showHousePlaceholderWithoutConsent)
       .map(([props]) => props.slot);
-    expect(consentHouseSlots).toEqual(['HOME_RIGHT_300x250', 'HOME_RIGHT_300x600']);
+    expect(consentHouseSlots).toEqual(['HOME_LEFT_300x600', 'HOME_LEFT_300x250', 'HOME_RIGHT_300x250', 'HOME_RIGHT_300x600']);
     const document = new DOMParser().parseFromString(html, 'text/html');
     const leftGrid = document.querySelector('.home-left > .grid')!;
     const renderedSlots = Array.from(document.querySelectorAll('[data-ad-slot]')).map(element => element.getAttribute('data-ad-slot'));
@@ -629,6 +629,38 @@ describe('homepage ad layout boundaries', () => {
       expect(leftGrid.children).toHaveLength(2);
       expect(leftGrid.textContent).not.toMatch(/advertisement|advertise here/i);
     }
+  });
+
+  test('consent-blocked left placeholders preserve normal house markup and Live TV/Daily Briefing order', () => {
+    const settings = published();
+    settings.modules.liveTvCard.enabled = true;
+    settings.liveTv.enabled = true;
+    settings.modules.snapshots.enabled = true;
+    const renderDocument = () => new DOMParser().parseFromString(
+      renderToString(<PublicSettingsProvider initialSettings={settings}><HomePage {...props} /></PublicSettingsProvider>),
+      'text/html'
+    );
+    jest.mocked(usePublicAdSlot).mockImplementation(({ slot }) => ({
+      enabled: /HOME_(LEFT|RIGHT)_/.test(slot), ad: null, isLoading: false, hasResolved: true,
+    }));
+    const normal = renderDocument();
+    jest.mocked(usePublicAdSlot).mockReturnValue({
+      enabled: false, ad: null, isLoading: false, hasResolved: true, blockedReason: 'consent',
+    });
+    const blocked = renderDocument();
+
+    expect(blocked.querySelector('.home-left')?.outerHTML).toBe(normal.querySelector('.home-left')?.outerHTML);
+    expect(blocked.querySelector('.home-grid')?.className).toBe(normal.querySelector('.home-grid')?.className);
+    const children = blocked.querySelector('.home-left > .grid')!.children;
+    expect(children).toHaveLength(5);
+    expect(children[0].textContent).toContain('home.exploreCategories');
+    expect(children[1].className).toBe('home-upper-ad');
+    expect(children[1].textContent).toContain('300\u00d7600');
+    expect(children[2].textContent).toContain('Broadcast module');
+    expect(children[3].textContent).toContain('Daily briefing');
+    expect(children[4].className).toBe('home-lower-ad');
+    expect(children[4].textContent).toContain('300\u00d7250');
+    expect(blocked.querySelector('.home-upper-ad img, .home-lower-ad img')).toBeNull();
   });
 });
 

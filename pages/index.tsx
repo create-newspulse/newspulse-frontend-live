@@ -4528,10 +4528,10 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
     ? 'home-grid home-grid--three'
     : 'home-grid home-grid--two';
   const heroLeftRailAdNode = (
-    <AdSlot slot="HOME_LEFT_300x600" variant="right300x600" className="home-upper-ad" />
+    <AdSlot slot="HOME_LEFT_300x600" variant="right300x600" className="home-upper-ad" showHousePlaceholderWithoutConsent />
   );
   const leftRailAdNode = (
-    <AdSlot slot="HOME_LEFT_300x250" variant="right300" className="home-lower-ad" />
+    <AdSlot slot="HOME_LEFT_300x250" variant="right300" className="home-lower-ad" showHousePlaceholderWithoutConsent />
   );
   const leftRailTallAdBlock = { key: 'heroLeftRailAd', node: heroLeftRailAdNode };
   const leftRailSmallAdBlock = { key: 'leftRailAd', node: leftRailAdNode };
