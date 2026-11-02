@@ -17,6 +17,7 @@ import { usePublicTickerAds } from "../hooks/usePublicTickerAds";
 import { isSafeMode } from "../utils/safeMode";
 import { resolveArticleField, resolveArticleSummaryOrExcerpt, resolveArticleTitle } from "../lib/contentFallback";
 import OriginalTag from "../components/OriginalTag";
+import SocialProfileLinks from "../components/SocialProfileLinks";
 import { DEFAULT_NORMALIZED_PUBLIC_SETTINGS, type PublicLiveTvSettings } from "../src/lib/publicSettings";
 import AdSlot from "../src/components/ads/AdSlot";
 import { useBookmarks } from "../hooks/useBookmarks";
@@ -3804,26 +3805,10 @@ export function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
               {(typeof footerTextOverride === 'string' && footerTextOverride.trim()) ? footerTextOverride.trim() : t('footer.description')}
             </div>
 
-            <div className="mt-6 flex items-center gap-3">
-              {[
-                { label: t('footer.iconCommunity'), icon: Users },
-                { label: t('common.videos'), icon: Video },
-                { label: t('common.live'), icon: Radio },
-                { label: t('footer.iconWorld'), icon: Globe },
-              ].map((x) => (
-                <button
-                  key={x.label}
-                  type="button"
-                  onClick={() => onToast(t('footer.unavailable', { label: x.label }))}
-                  className="h-12 w-12 rounded-2xl border flex items-center justify-center transition hover:opacity-[0.98]"
-                  style={{ background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.12)", color: "white" }}
-                  aria-label={x.label}
-                  title={x.label}
-                >
-                  <x.icon className="h-5 w-5" />
-                </button>
-              ))}
-            </div>
+            <SocialProfileLinks
+              variant="footer"
+              linkStyle={{ background: "rgba(255,255,255,0.08)", borderColor: "rgba(255,255,255,0.12)", color: "white" }}
+            />
           </div>
 
           <div className="md:col-span-4">
@@ -4544,7 +4529,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
     : [];
   const showLeftRail = leftRailBlocks.length > 0;
   const rightRailNode = (
-    <HomeRightRail theme={theme} latestItems={latestFromBackend} latestReadError={storyStatus === 'error'} lang={apiLang} showHousePlaceholdersWithoutConsent />
+    <HomeRightRail theme={theme} latestItems={latestFromBackend} latestReadError={storyStatus === 'error'} lang={apiLang} showHousePlaceholdersWithoutConsent showFollowNewsPulse />
   );
 
   const hasSnapshotsBlock = sidebarBlocks.some((b) => b.key === 'snapshots');

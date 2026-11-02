@@ -9,6 +9,8 @@ import { createConsentRecord, deleteConsentCookie, writeConsentCookie } from '..
 import { LanguageProvider, type Lang } from '../../src/i18n/LanguageProvider';
 import { dispatchPublicDataRefresh } from '../../lib/publicDataRefresh';
 import { type PublicAd } from '../../hooks/usePublicAdSlot';
+import SocialProfileLinks from '../../components/SocialProfileLinks';
+import { SOCIAL_PROFILES } from '../../src/config/socialProfiles';
 
 jest.mock('next/script', () => ({ __esModule: true, default: () => null }));
 jest.mock('../../lib/firebaseClient', () => ({ getFirebaseClientConfig: jest.fn() }));
@@ -107,6 +109,31 @@ afterAll(() => {
 });
 
 describe.each(['en', 'hi', 'gu'] as const)('homepage rail house placeholders (%s)', lang => {
+  test('social links are identical before consent, after granting, and after withdrawal', async () => {
+    const { container } = render(
+      <TestApp lang={lang}>
+        <SocialProfileLinks variant="card" />
+        <SocialProfileLinks variant="footer" />
+      </TestApp>,
+    );
+    const socialSections = () => Array.from(container.querySelectorAll('[data-testid="house-slots"] section'));
+    const initialHtml = socialSections().map(section => section.innerHTML);
+    const assertSocialLinks = () => {
+      expect(socialSections()).toHaveLength(2);
+      for (const section of socialSections()) {
+        expect(Array.from(section.querySelectorAll('a')).map(link => link.getAttribute('href'))).toEqual(SOCIAL_PROFILES.map(profile => profile.url));
+        expect(section.querySelector('script, iframe, img, video')).toBeNull();
+      }
+      expect(socialSections().map(section => section.innerHTML)).toEqual(initialHtml);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    };
+    assertSocialLinks();
+    await act(async () => { grantAdvertising(); });
+    assertSocialLinks();
+    await act(async () => { denyAdvertising(); });
+    assertSocialLinks();
+  });
+
   test.each(['unset', 'denied', 'granted'] as const)('%s consent preserves legacy house markup through SSR and hydration', async decision => {
     if (decision === 'denied') writeConsentCookie(createConsentRecord('rejected', {}));
     if (decision === 'granted') writeConsentCookie(createConsentRecord('custom', { advertising: true }));

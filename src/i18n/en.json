@@ -451,6 +451,10 @@
       }
     }
   },
+  "social": {
+    "followTitle": "Follow News Pulse",
+    "followOn": "Follow News Pulse on {{platform}} (opens in a new tab)"
+  },
   "footer": {
     "description": "Your trusted source for breaking news, in-depth analysis, and stories that matter. Delivering truth with integrity since our inception.",
     "iconCommunity": "Community",

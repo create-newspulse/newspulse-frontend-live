@@ -1,12 +1,18 @@
 import React from 'react';
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 
 import HomeRightRail, { HomeRightRailLatestNews, HomeRightRailYouthDesk } from '../../components/home/HomeRightRail';
 import { useYouthPulse, type UseYouthPulseReturn } from '../../features/youthPulse/useYouthPulse';
 import { getMessagesForLang, LanguageProvider } from '../../src/i18n/LanguageProvider';
+import { SOCIAL_PROFILES } from '../../src/config/socialProfiles';
 
 jest.mock('../../features/youthPulse/useYouthPulse', () => ({ useYouthPulse: jest.fn() }));
-jest.mock('../../src/components/ads/AdSlot', () => ({ __esModule: true, default: () => null }));
+jest.mock('../../src/components/ads/AdSlot', () => ({
+  __esModule: true,
+  default: ({ slot, showHousePlaceholderWithoutConsent }: { slot: string; showHousePlaceholderWithoutConsent?: boolean }) => (
+    <div data-testid={slot} data-house-placeholder={showHousePlaceholderWithoutConsent} />
+  ),
+}));
 
 function setYouthState(overrides: Partial<UseYouthPulseReturn> = {}) {
   jest.mocked(useYouthPulse).mockReturnValue({
@@ -105,5 +111,60 @@ describe.each(['en', 'hi', 'gu'] as const)('truthful right rail (%s)', (lang) =>
     await act(async () => {});
     expect(screen.getByRole('alert').textContent).toBe(messages.categoryPage.unableToLoadTitle);
     expect(screen.queryByText(messages.categoryPage.noStoriesYet)).toBeNull();
+  });
+
+  test.each(['stories', 'loading', 'empty', 'failed'] as const)('Follow follows Video and preserves the %s Youth Desk state and ad slots', async state => {
+    const stories = youthStories(2);
+    setYouthState({
+      trending: state === 'stories' ? stories : [],
+      loading: state === 'loading',
+      error: state === 'failed' ? 'API 503' : null,
+    });
+    jest.mocked(global.fetch).mockResolvedValue(new Response(JSON.stringify({
+      ok: true,
+      settings: { frontendEnabled: true },
+      items: [{
+        _id: 'featured-video',
+        title: 'Existing featured video',
+        videoUrl: 'https://media.example.test/featured.mp4',
+        thumbnailUrl: '/logo.png',
+        status: 'published',
+        showOnHomepage: true,
+      }],
+    }), { status: 200 }));
+    render(<HomeRightRail latestItems={[latestStory]} lang={lang} showFollowNewsPulse showHousePlaceholdersWithoutConsent />, { wrapper });
+    const video = await screen.findByRole('region', { name: messages.categories.viralVideos });
+    const follow = screen.getByRole('region', { name: messages.social.followTitle });
+    expect(within(follow).getAllByRole('link').map(link => link.getAttribute('href'))).toEqual(SOCIAL_PROFILES.map(profile => profile.url));
+    expect(screen.getByTestId('HOME_RIGHT_300x250').getAttribute('data-house-placeholder')).toBe('true');
+    expect(screen.getByTestId('HOME_RIGHT_300x600').getAttribute('data-house-placeholder')).toBe('true');
+    expect(screen.getByTestId('HOME_RIGHT_300x600').nextElementSibling).toBe(video);
+    expect(screen.getByRole('link', { name: /Reported latest story/ }).getAttribute('href')).toBe(`${prefix}/news/reported-latest`);
+    if (state === 'stories' || state === 'loading') {
+      const youth = screen.getByText(messages.home.youthDesk).closest('.overflow-hidden');
+      expect(video.nextElementSibling).toBe(youth);
+      expect(youth?.nextElementSibling).toBe(follow);
+      if (state === 'stories') {
+        expect(screen.getByRole('link', { name: stories[0].title }).getAttribute('href')).toBe(`${prefix}/youth-pulse`);
+      } else {
+        expect(youth?.querySelector('.animate-pulse')).not.toBeNull();
+      }
+    } else {
+      expect(screen.queryByText(messages.home.youthDesk)).toBeNull();
+      expect(video.nextElementSibling).toBe(follow);
+    }
+    expect(follow.nextElementSibling).toBeNull();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(String(jest.mocked(global.fetch).mock.calls[0][0])).toBe(`/api/public/viral-videos?lang=${lang}&limit=6&homepage=1`);
+  });
+
+  test('Follow remains visible when Video and Youth are absent, without changing category-rail defaults', async () => {
+    const { rerender } = render(<HomeRightRail latestItems={[]} lang={lang} />, { wrapper });
+    await act(async () => {});
+    expect(screen.queryByRole('region', { name: messages.social.followTitle })).toBeNull();
+    rerender(<HomeRightRail latestItems={[]} lang={lang} showFollowNewsPulse />);
+    expect(screen.getByRole('region', { name: messages.social.followTitle })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: messages.categories.viralVideos })).toBeNull();
+    expect(screen.queryByText(messages.home.youthDesk)).toBeNull();
   });
 });

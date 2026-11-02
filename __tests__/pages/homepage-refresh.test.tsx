@@ -519,6 +519,7 @@ describe('homepage ad layout boundaries', () => {
     settings.tickers.live.order = 3;
     const html = renderToString(<PublicSettingsProvider initialSettings={settings}><HomePage {...props} /></PublicSettingsProvider>);
     expect(jest.mocked(HomeRightRail).mock.calls.at(-1)?.[0].showHousePlaceholdersWithoutConsent).toBe(true);
+    expect(jest.mocked(HomeRightRail).mock.calls.at(-1)?.[0].showFollowNewsPulse).toBe(true);
     const consentHouseSlots = jest.mocked(AdSlot).mock.calls
       .filter(([props]) => props.showHousePlaceholderWithoutConsent)
       .map(([props]) => props.slot);

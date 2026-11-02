@@ -15,6 +15,7 @@ import { formatEditorialDateTime, resolveStoryDateIso } from '../../lib/storyDat
 import { getStoryTitleHookColor, splitStoryTitleHook } from '../../lib/storyTitleHook';
 import { getPublicViralVideoPosterUrl, normalizePublicViralVideosPayload, resolvePublicViralVideoMediaUrl, type PublicViralVideo } from '../../lib/publicViralVideos';
 import OriginalTag from '../OriginalTag';
+import SocialProfileLinks from '../SocialProfileLinks';
 import NewsPulseVideoPlayer, { getViralVideoUiLabels } from '../viral-videos/NewsPulseVideoPlayer';
 import AdSlot from '../../src/components/ads/AdSlot';
 import { useI18n } from '../../src/i18n/LanguageProvider';
@@ -594,6 +595,7 @@ export default function HomeRightRail({
   latestReadError = false,
   includeTallAd = true,
   showHousePlaceholdersWithoutConsent = false,
+  showFollowNewsPulse = false,
   sticky = true,
 }: {
   theme?: HomeRightRailTheme;
@@ -602,6 +604,7 @@ export default function HomeRightRail({
   latestReadError?: boolean;
   includeTallAd?: boolean;
   showHousePlaceholdersWithoutConsent?: boolean;
+  showFollowNewsPulse?: boolean;
   sticky?: boolean;
 }) {
   return (
@@ -615,6 +618,14 @@ export default function HomeRightRail({
       <HomeRightRailViralVideosBlock theme={theme} lang={lang} />
 
       <HomeRightRailYouthDesk theme={theme} lang={lang} />
+
+      {showFollowNewsPulse ? (
+        <SocialProfileLinks
+          variant="card"
+          style={{ background: theme.surface2, borderColor: theme.border, color: theme.text }}
+          linkStyle={{ background: theme.surface, borderColor: theme.border, color: theme.text }}
+        />
+      ) : null}
     </div>
   );
 }

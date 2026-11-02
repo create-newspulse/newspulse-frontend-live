@@ -14,6 +14,7 @@ import { fetchPublicNews, parsePublicNewsArticle, type Article } from '../../lib
 import { getLocalizedArticleFields, STRICT_LOCALE_POLICY, type RouteLocale } from '../../lib/localizedArticleFields';
 import { compactRegionalInitialStories } from '../../lib/regionalListingStories';
 import { getMessagesForLang, LanguageProvider } from '../../src/i18n/LanguageProvider';
+import { SOCIAL_PROFILES } from '../../src/config/socialProfiles';
 
 const locales = ['gu', 'hi', 'en'] as const;
 const copy = {
@@ -267,9 +268,9 @@ describe.each(locales)('%s public language contract', (locale) => {
 
 describe('existing homepage footer', () => {
   const expectedCopy = {
-    en: { about: 'About News Pulse', guide: 'Community Reporter Guide', sponsored: 'Sponsored Content', unavailable: '{{label}} is not available right now.' },
-    hi: { about: 'News Pulse के बारे में', guide: 'कम्युनिटी रिपोर्टर मार्गदर्शिका', sponsored: 'प्रायोजित सामग्री', unavailable: '{{label}} अभी उपलब्ध नहीं है।' },
-    gu: { about: 'News Pulse વિશે', guide: 'કોમ્યુનિટી રિપોર્ટર માર્ગદર્શિકા', sponsored: 'પ્રાયોજિત સામગ્રી', unavailable: '{{label}} હાલમાં ઉપલબ્ધ નથી.' },
+    en: { about: 'About News Pulse', guide: 'Community Reporter Guide', sponsored: 'Sponsored Content' },
+    hi: { about: 'News Pulse के बारे में', guide: 'कम्युनिटी रिपोर्टर मार्गदर्शिका', sponsored: 'प्रायोजित सामग्री' },
+    gu: { about: 'News Pulse વિશે', guide: 'કોમ્યુનિટી રિપોર્ટર માર્ગદર્શિકા', sponsored: 'પ્રાયોજિત સામગ્રી' },
   };
 
   function footer(locale: RouteLocale, onToast = jest.fn()) {
@@ -306,8 +307,10 @@ describe('existing homepage footer', () => {
       [messages.footer.licensing, '/contact'],
     ];
     const prefix = locale === 'en' ? '' : `/${locale}`;
-    expect(screen.getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')]))
+    expect(screen.getAllByRole('link').filter(link => link.getAttribute('target') !== '_blank').map((link) => [link.textContent, link.getAttribute('href')]))
       .toEqual(expectedLinks.map(([label, path]) => [label, `${prefix}${path}`]));
+    expect(within(screen.getByRole('region', { name: messages.social.followTitle })).getAllByRole('link').map(link => link.getAttribute('href')))
+      .toEqual(SOCIAL_PROFILES.map(profile => profile.url));
     const sponsoredLink = screen.getByRole('link', { name: expectedCopy[locale].sponsored });
     expect(sponsoredLink.parentElement).toBe(screen.getByRole('link', { name: messages.footer.journalistDesk }).parentElement);
     expect(sponsoredLink.parentElement?.previousElementSibling?.textContent?.trim()).toBe('News Pulse');
@@ -330,19 +333,22 @@ describe('existing homepage footer', () => {
     }
   });
 
-  test.each(locales)('%s footer keeps accessible icon labels, localized feedback and the existing consent action', (locale) => {
+  test.each(locales)('%s footer shares accessible official profile links and keeps the existing consent action', (locale) => {
     const messages = getMessagesForLang(locale);
     const onToast = jest.fn();
     render(footer(locale, onToast));
-    for (const label of [messages.footer.iconCommunity, messages.common.videos, messages.common.live, messages.footer.iconWorld]) {
-      const button = screen.getByRole('button', { name: label });
-      expect(button.getAttribute('title')).toBe(label);
-      fireEvent.click(button);
-      expect(onToast).toHaveBeenLastCalledWith(expectedCopy[locale].unavailable.replace('{{label}}', label));
+    for (const profile of SOCIAL_PROFILES) {
+      const label = messages.social.followOn.replace('{{platform}}', profile.label);
+      const link = screen.getByRole('link', { name: label });
+      expect(link.getAttribute('title')).toBe(label);
+      expect(link.getAttribute('href')).toBe(profile.url);
+      expect(link.getAttribute('target')).toBe('_blank');
+      expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+      expect(fireEvent.click(link)).toBe(true);
     }
     fireEvent.click(screen.getByRole('button', { name: messages.footer.cookieSettings }));
     expect(mockOpenPreferences).toHaveBeenCalledTimes(1);
-    expect(onToast).toHaveBeenCalledTimes(4);
+    expect(onToast).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -355,7 +361,11 @@ describe('existing homepage footer', () => {
       const messages = getMessagesForLang(locale);
       const prefix = locale === 'en' ? '' : `/${locale}`;
       expect(container.firstElementChild).toBe(root);
-      expect(screen.getAllByRole('link')).toHaveLength(20);
+      expect(screen.getAllByRole('link')).toHaveLength(20 + SOCIAL_PROFILES.length);
+      for (const profile of SOCIAL_PROFILES) {
+        const label = messages.social.followOn.replace('{{platform}}', profile.label);
+        expect(screen.getByRole('link', { name: label }).getAttribute('href')).toBe(profile.url);
+      }
       expect(screen.getByRole('link', { name: expectedCopy[locale].about }).getAttribute('href')).toBe(`${prefix}/about-us`);
       expect(screen.getByRole('link', { name: expectedCopy[locale].guide }).getAttribute('href')).toBe(`${prefix}/community-reporter/guidelines`);
       expect(screen.getByRole('link', { name: expectedCopy[locale].sponsored }).getAttribute('href')).toBe(`${prefix}/sponsored-content`);
