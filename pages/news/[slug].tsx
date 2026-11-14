@@ -2464,7 +2464,10 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
       `${origin}/api/public/news/${encodeURIComponent(rawSlug)}?${params.toString()}`,
     ];
 
-    const { data, article } = await withPublicReadDeadline(4000, async (signal) => {
+    // Share the existing 4s detail + 1.5s related allowance, prioritizing the article.
+    const readTimeoutMs = 5500;
+    const readDeadlineAt = performance.now() + readTimeoutMs;
+    const { data, article } = await withPublicReadDeadline(readTimeoutMs, async (signal) => {
       let data: any = null;
       let article: Article | null = null;
       for (const endpoint of endpoints) {
@@ -2533,7 +2536,8 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
 
     // Secondary lists are not needed to render the article, so they run alongside
     // the translation-group lookup instead of after it.
-    const relatedPromise = withPublicReadDeadline(1500, async (signal) => {
+    const relatedTimeoutMs = Math.min(1500, Math.max(0, readDeadlineAt - performance.now()));
+    const relatedPromise = withPublicReadDeadline(relatedTimeoutMs, async (signal) => {
       try {
         const categoryKey = resolveCategoryQueryKey(article);
         const limit = 24;

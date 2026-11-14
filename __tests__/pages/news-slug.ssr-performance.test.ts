@@ -205,6 +205,83 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
     });
   });
 
+  describe.each(['slug', 'id-fallback'] as const)('%s proxy timing', (source) => {
+    describe.each([3999, 5350])('%ims detail response', (detailMs) => {
+      test.each(['en', 'hi', 'gu'] as const)('preserves %s article data within the existing combined read budget', async (lang) => {
+        jest.useFakeTimers();
+        const slug = lang === 'gu' ? '\u0ab5\u0abe\u0ab0\u0acd\u0aa4\u0abe-existing'
+          : lang === 'hi' ? '\u0938\u092e\u093e\u091a\u093e\u0930-existing' : 'existing-story';
+        const record = Object.freeze(article({
+          language: lang,
+          slug,
+          imageUrl: 'https://example.test/original-photo.jpg',
+          imageCaption: 'Original photo caption',
+        }));
+        const response = new Response();
+        jest.spyOn(response, 'json').mockResolvedValue({ article: record });
+        const slugPath = `/api/public/news/slug/${encodeURIComponent(slug)}`;
+        const idPath = `/api/public/news/${encodeURIComponent(slug)}`;
+        let relatedSignal: AbortSignal | null | undefined;
+        const fetchMock = jest.fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>((input, init) => {
+          const url = new URL(String(input));
+          if (url.pathname === slugPath) {
+            return new Promise<Response>((resolve) => {
+              setTimeout(() => resolve(source === 'slug' ? response : new Response(null, { status: 404 })),
+                source === 'slug' ? detailMs : 250);
+            });
+          }
+          if (source === 'id-fallback' && url.pathname === idPath) {
+            return new Promise<Response>((resolve) => setTimeout(() => resolve(response), detailMs - 250));
+          }
+          if (url.pathname === '/api/public/news') {
+            relatedSignal = init?.signal;
+            return new Promise<Response>(() => {});
+          }
+          throw new Error(`Unexpected article request: ${url.pathname}`);
+        });
+        global.fetch = fetchMock;
+        const ctx = createCtx(slug, lang);
+        ctx.req.headers.cookie = 'session=test-session';
+        ctx.req.headers.authorization = 'Bearer test-token';
+        ctx.res.statusCode = 200;
+        const startedAt = Date.now();
+        let completed = false;
+        const pending = getServerSideProps(ctx).then((result) => { completed = true; return result; });
+
+        await jest.advanceTimersByTimeAsync(detailMs);
+        expect(completed).toBe(false);
+        const relatedMs = Math.min(1500, 5500 - detailMs);
+        await jest.advanceTimersByTimeAsync(relatedMs - 1);
+        expect(completed).toBe(false);
+        await jest.advanceTimersByTimeAsync(1);
+        expect(completed).toBe(true);
+        const result = await pending;
+        if (!('props' in result)) throw new Error('Expected the original published article');
+        const props = await result.props;
+        expect(props.article).toEqual(record);
+        expect(props).toMatchObject({ lang, slug, error: null, pending: false, safeHtml: '<p>Body</p>', topStories: [], relatedStories: [] });
+        expect(ctx.res.statusCode).toBe(200);
+        expect(ctx.res.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        expect(fetchMock.mock.calls.map(([input]) => new URL(String(input)).pathname))
+          .toEqual(source === 'slug' ? [slugPath, '/api/public/news'] : [slugPath, idPath, '/api/public/news']);
+        for (const [input, init] of fetchMock.mock.calls) {
+          const url = new URL(String(input));
+          expect(url.searchParams.get('lang')).toBe(lang);
+          expect(url.searchParams.get('language')).toBe(lang);
+          expect(init).toMatchObject({
+            method: 'GET', cache: 'no-store',
+            headers: { cookie: 'session=test-session', authorization: 'Bearer test-token' },
+          });
+        }
+        expect(relatedSignal?.aborted).toBe(true);
+        expect(Date.now() - startedAt).toBe(detailMs + relatedMs);
+        expect(Date.now() - startedAt).toBeLessThanOrEqual(5500);
+        expect(jest.getTimerCount()).toBe(0);
+        expect(console.error).not.toHaveBeenCalled();
+      });
+    });
+  });
+
   test.each(['en', 'hi', 'gu'])('stalled main %s article returns retryable 503, not a false 404', async (locale) => {
     jest.useFakeTimers();
     let signal: AbortSignal | undefined;
@@ -215,9 +292,12 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
     const ctx = createCtx('slow-story', locale);
     let completed = false;
     const pending = getServerSideProps(ctx).then((result) => { completed = true; return result; });
-    await jest.advanceTimersByTimeAsync(4000);
+    await jest.advanceTimersByTimeAsync(5499);
+    expect(completed).toBe(false);
+    await jest.advanceTimersByTimeAsync(1);
     expect(completed).toBe(true);
     expect(ctx.res.statusCode).toBe(503);
+    expect(ctx.res.setHeader).toHaveBeenCalledWith('Retry-After', '30');
     expect(signal?.aborted).toBe(true);
     expect((await pending as any).props.article).toBeNull();
     expect(jest.getTimerCount()).toBe(0);
@@ -344,7 +424,9 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
     const ctx = createCtx('slow-headers');
     let completed = false;
     const pending = getServerSideProps(ctx).then((result) => { completed = true; return result; });
-    await jest.advanceTimersByTimeAsync(4000);
+    await jest.advanceTimersByTimeAsync(5499);
+    expect(completed).toBe(false);
+    await jest.advanceTimersByTimeAsync(1);
     expect(completed).toBe(true);
     expect((await pending as any).props.article).toBeNull();
     expect(ctx.res.statusCode).toBe(503);
