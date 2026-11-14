@@ -126,7 +126,7 @@ describe('ordinary category page loading', () => {
     expect(screen.queryByText(items[0].title)).toBeNull();
   });
 
-  function serve(items: Stories, category: string, limit: number) {
+  function serve(items: Stories, category: string, limit: number, timing?: { phase: 'headers' | 'body'; delayMs: number }) {
     fetchMock.mockImplementation(async (input, init) => {
       const url = new URL(String(input), 'https://frontend.test');
       if (url.pathname.startsWith('/api/ticker/')) return new Response(JSON.stringify({ items: [{ _id: 'live', title: 'Live' }] }));
@@ -137,9 +137,96 @@ describe('ordinary category page loading', () => {
       expect(url.searchParams.get('limit')).toBe(String(limit));
       expect(url.searchParams.get('strictLocale')).toBe(category === 'national' ? null : '1');
       expect(new Headers(init?.headers).get(ORDINARY_PAGINATION_HEADER)).toBe('1');
-      return pageResponse(items, Number(url.searchParams.get('page')), limit);
+      const response = pageResponse(items, Number(url.searchParams.get('page')), limit);
+      if (timing?.phase === 'headers') await new Promise(resolve => setTimeout(resolve, timing.delayMs));
+      if (timing?.phase === 'body') {
+        const readBody = response.json.bind(response);
+        jest.spyOn(response, 'json').mockImplementation(async () => {
+          await new Promise(resolve => setTimeout(resolve, timing.delayMs));
+          return readBody();
+        });
+      }
+      return response;
     });
   }
+
+  test.each((['national', 'business'] as const).flatMap(category =>
+    (['en', 'hi', 'gu'] as const).flatMap(locale =>
+      (['headers', 'body'] as const).map(phase => ({ category, locale, phase }))
+    )
+  ))('$category/$locale accepts a healthy 4670ms proxy $phase read without cancelling it', async ({ category, locale, phase }) => {
+    jest.useFakeTimers();
+    mockLocale = locale;
+    const limit = category === 'national' ? 20 : 30;
+    const items = dataset(category, locale, 1);
+    serve(items, category, limit, { phase, delayMs: 4670 });
+    const view = render(category === 'national'
+      ? <NationalPage lang={locale} data={[]} />
+      : <CategoryFeedPage title={category} categoryKey={category} useCategoryShell initialItems={[]} initialLocale={locale} />);
+    await act(async () => { await jest.advanceTimersByTimeAsync(4670); });
+    expect(newsCalls()).toHaveLength(1);
+    expect(newsCalls()[0][1]?.signal?.aborted).toBe(false);
+    expect(renderedIds()).toEqual([items[0]._id]);
+    expect(screen.getByText(items[0].title)).toBeTruthy();
+    expect(screen.queryByText(/Public read timed out|API 503/)).toBeNull();
+    expect(new URL(String(newsCalls()[0][0]), 'https://frontend.test').searchParams.get('page')).toBe('1');
+    expect(screen.queryByRole('button', { name: /^Load More .+ Stories$/ })).toBeNull();
+    view.unmount();
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  test.each((['national', 'business'] as const).flatMap(category =>
+    (['headers', 'body'] as const).map(phase => ({ category, phase }))
+  ))('$category still cancels stalled proxy $phase at exactly six seconds', async ({ category, phase }) => {
+    jest.useFakeTimers();
+    mockLocale = 'gu';
+    const limit = category === 'national' ? 20 : 30;
+    serve([], category, limit);
+    const read = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input, init) => {
+      if (new URL(String(input), 'https://frontend.test').pathname !== '/api/public/news') return read(input, init);
+      if (phase === 'headers') return new Promise<Response>(() => {});
+      const response = await read(input, init);
+      jest.spyOn(response, 'json').mockImplementation(() => new Promise(() => {}));
+      return response;
+    });
+    const view = render(category === 'national'
+      ? <NationalPage lang="gu" data={[]} />
+      : <CategoryFeedPage title={category} categoryKey={category} useCategoryShell initialItems={[]} initialLocale="gu" />);
+    await act(async () => { await jest.advanceTimersByTimeAsync(5999); });
+    expect(newsCalls()[0][1]?.signal?.aborted).toBe(false);
+    expect(screen.queryByText('Public read timed out')).toBeNull();
+    await act(async () => { await jest.advanceTimersByTimeAsync(1); });
+    expect(newsCalls()).toHaveLength(1);
+    expect(newsCalls()[0][1]?.signal?.aborted).toBe(true);
+    expect(screen.getByText('Public read timed out')).toBeTruthy();
+    view.unmount();
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  test.each((['national', 'business'] as const).flatMap(category =>
+    (['en', 'hi', 'gu'] as const).map(locale => ({ category, locale }))
+  ))('$category/$locale preserves stories and reports a delayed real HTTP 503 instead of a browser timeout', async ({ category, locale }) => {
+    jest.useFakeTimers();
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    mockLocale = locale;
+    const limit = category === 'national' ? 20 : 30;
+    const items = dataset(category, locale, 1);
+    serve(items, category, limit);
+    const view = render(pageElement(category, items, locale, limit));
+    await act(async () => {});
+    fetchMock.mockImplementationOnce(() => new Promise(resolve => {
+      setTimeout(() => resolve(new Response('private upstream diagnostics', { status: 503 })), 4670);
+    }));
+    await act(async () => { await jest.advanceTimersByTimeAsync((category === 'national' ? 45000 : 60000) + 4670); });
+    expect(newsCalls()).toHaveLength(1);
+    expect(newsCalls()[0][1]?.signal?.aborted).toBe(false);
+    expect(renderedIds()).toEqual([items[0]._id]);
+    expect(screen.getByText(/API 503/)).toBeTruthy();
+    expect(screen.queryByText(/Public read timed out|private upstream diagnostics/)).toBeNull();
+    view.unmount();
+    expect(jest.getTimerCount()).toBe(0);
+  });
 
   describe.each(['national', 'international', 'glamour'])('%s archive title styling', (category) => {
     test.each(['en', 'hi', 'gu'] as const)('%s keeps top, key and latest titles plain navy', async (locale) => {

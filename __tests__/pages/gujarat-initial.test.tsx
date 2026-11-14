@@ -2,7 +2,7 @@ import React from 'react';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import GujaratPage, { getStaticProps } from '../../pages/regional/gujarat';
 import RssGujaratPage, { getStaticProps as getRssProps } from '../../pages/gujarat';
-import { selectRegionalInitialStories } from '../../lib/regionalInitialStories';
+import { REGIONAL_FEED_BROWSER_TIMEOUT_MS, selectRegionalInitialStories } from '../../lib/regionalInitialStories';
 let mockLocale = 'en';
 jest.mock('next/router', () => ({ useRouter: () => ({ asPath: '/regional/gujarat', locale: mockLocale, query: {}, push: jest.fn() }) }));
 jest.mock('../../utils/LanguageContext', () => ({ useLanguage: () => ({ language: mockLocale }) }));
@@ -93,10 +93,11 @@ describe('Gujarat initial loading', () => {
     jest.useFakeTimers();
     global.fetch = jest.fn(() => new Promise(() => {})) as any;
     render(<GujaratPage initialStories={[story('en')]} initialLocale="en" />);
-    await act(async () => { await jest.advanceTimersByTimeAsync(64_000); });
+    await act(async () => { await jest.advanceTimersByTimeAsync(60_000 + REGIONAL_FEED_BROWSER_TIMEOUT_MS); });
     expect(screen.getByText('Initial regional story')).toBeTruthy();
     expect(screen.queryByText('Loading stories')).toBeNull();
     expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(jest.mocked(global.fetch).mock.calls[0][1]?.signal?.aborted).toBe(true);
   });
 
   test('empty client loading ends after timeout and a later refresh recovers', async () => {
@@ -105,9 +106,9 @@ describe('Gujarat initial loading', () => {
     global.fetch = jest.fn().mockImplementationOnce(() => new Promise(() => {})).mockResolvedValueOnce({ ok: true, json: async () => ({ items: [story('en', 'Recovered story')] }) });
     render(<GujaratPage />);
     expect(screen.getByText('Loading stories')).toBeTruthy();
-    await act(async () => { await jest.advanceTimersByTimeAsync(4000); });
+    await act(async () => { await jest.advanceTimersByTimeAsync(REGIONAL_FEED_BROWSER_TIMEOUT_MS); });
     expect(screen.queryByText('Loading stories')).toBeNull();
-    await act(async () => { await jest.advanceTimersByTimeAsync(56_000); });
+    await act(async () => { await jest.advanceTimersByTimeAsync(60_000 - REGIONAL_FEED_BROWSER_TIMEOUT_MS); });
     expect(screen.getByText('Recovered story')).toBeTruthy();
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });

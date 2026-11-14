@@ -4,7 +4,7 @@ import { useRouter } from 'next/router';
 import React, { useMemo, useState } from 'react';
 import { getCategoryQueryKey, getCategoryRouteKey } from '../lib/categoryKeys';
 import type { Article } from '../lib/publicNewsApi';
-import { CATEGORY_FEED_BATCH_SIZE, CATEGORY_FEED_REFRESH_MS, fetchCategoryFeed, fetchCategoryFeedPage, mergeCategoryFeedPages, selectCategoryFeedArticles, type CategoryFeedPageResult } from '../lib/categoryFeed';
+import { CATEGORY_FEED_BATCH_SIZE, CATEGORY_FEED_BROWSER_TIMEOUT_MS, CATEGORY_FEED_REFRESH_MS, fetchCategoryFeed, fetchCategoryFeedPage, mergeCategoryFeedPages, selectCategoryFeedArticles, type CategoryFeedPageResult } from '../lib/categoryFeed';
 import { getOrdinaryCategoryBatchSize, isOrdinaryPaginatedCategory, type OrdinaryCategoryPagination } from '../lib/ordinaryCategoryPagination';
 import { FAITH_CULTURE_PAGE_SIZE, isFaithCultureCategory } from '../lib/faithCulturePagination';
 import { FAITH_CULTURE_TOPICS, getFaithCultureTopic } from '../lib/faithCultureTopics';
@@ -199,6 +199,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
           result = await fetchCategoryFeedPage({
             category: queryCategoryKey, language, page: nextPage, limit: batchSize,
             extraQuery: fetchQuery, signal, selectItems: selectPageItems,
+            timeoutMs: CATEGORY_FEED_BROWSER_TIMEOUT_MS,
             isCurrent: () => activeFeedRequestRef.current === requestKey,
           });
           if (signal?.aborted || activeFeedRequestRef.current !== requestKey) return;

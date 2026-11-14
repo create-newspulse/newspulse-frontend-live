@@ -10,6 +10,7 @@ import { isSponsoredContent } from './sponsoredContent';
 
 export const CATEGORY_FEED_BATCH_SIZE = 30;
 export const CATEGORY_FEED_TIMEOUT_MS = 4000;
+export const CATEGORY_FEED_BROWSER_TIMEOUT_MS = 6000;
 export const CATEGORY_FEED_REFRESH_MS = 60_000;
 
 function getArticleStableKey(article: Article): string {

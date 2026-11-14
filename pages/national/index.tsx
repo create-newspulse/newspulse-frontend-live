@@ -12,7 +12,7 @@ import { useLanguage } from '../../utils/LanguageContext';
 import { getRegionName, toLanguageKey } from '../../utils/localizedNames';
 
 import { fetchPublicNews } from '../../lib/publicNewsApi';
-import { fetchCategoryFeedPage, mergeCategoryFeedPages, type CategoryFeedPageResult } from '../../lib/categoryFeed';
+import { CATEGORY_FEED_BROWSER_TIMEOUT_MS, fetchCategoryFeedPage, mergeCategoryFeedPages, type CategoryFeedPageResult } from '../../lib/categoryFeed';
 import { getOrdinaryCategoryBatchSize, type OrdinaryCategoryPagination } from '../../lib/ordinaryCategoryPagination';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { buildNewsUrl } from '../../lib/newsRoutes';
@@ -663,6 +663,7 @@ export default function NationalFeedPage(props: { lang: 'en' | 'hi' | 'gu'; data
         do {
           result = await fetchCategoryFeedPage({
             category: 'national', language: effectiveLang, page: nextPage, limit: NATIONAL_FEED_BATCH_SIZE, signal,
+            timeoutMs: CATEGORY_FEED_BROWSER_TIMEOUT_MS,
             selectItems: (articles) => filterNationalStories(articles, selectedTopic, selectedRegionName, searchQuery),
             isCurrent: () => activeFeedRequestRef.current === requestKey,
           });

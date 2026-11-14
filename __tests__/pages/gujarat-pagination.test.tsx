@@ -92,6 +92,104 @@ describe('Regional fixed-page client loading', () => {
     global.fetch = originalFetch;
   });
 
+  test.each((['en', 'hi', 'gu'] as const).flatMap(locale =>
+    ([4670, 10500] as const).flatMap(delayMs =>
+      (['headers', 'body'] as const).map(phase => ({ locale, delayMs, phase }))
+    )
+  ))('$locale accepts a healthy $delayMs ms Regional proxy $phase read without cancelling it', async ({ locale, delayMs, phase }) => {
+    jest.useFakeTimers();
+    mockLocale = locale;
+    const items = dataset(locale, 1);
+    fetchMock.mockImplementationOnce(async () => {
+      const response = pageResponse(items, 1);
+      if (phase === 'headers') await new Promise(resolve => setTimeout(resolve, delayMs));
+      else {
+        const readBody = response.json.bind(response);
+        jest.spyOn(response, 'json').mockImplementation(async () => {
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          return readBody();
+        });
+      }
+      return response;
+    });
+    const view = render(<GujaratPage initialStories={[]} initialLocale={locale} />);
+    await act(async () => { await jest.advanceTimersByTimeAsync(delayMs); });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [input, init] = fetchMock.mock.calls[0];
+    const url = new URL(String(input), 'https://frontend.test');
+    expect(url.pathname).toBe('/api/public/regional');
+    expect(Object.fromEntries(url.searchParams)).toEqual({ state: 'gujarat', lang: locale, limit: '30', page: '1' });
+    expect(init?.signal?.aborted).toBe(false);
+    expect(init?.cache).toBe('no-store');
+    expect(renderedIds()).toEqual([items[0]._id]);
+    expect(screen.getByText(items[0].title)).toBeTruthy();
+    expect(screen.queryByText('Public read timed out')).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Load More .+ Stories$/ })).toBeNull();
+    view.unmount();
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  test.each(['en', 'hi', 'gu'] as const)('%s preserves stories and reports a delayed Regional HTTP 503 instead of a browser timeout', async (locale) => {
+    jest.useFakeTimers();
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    mockLocale = locale;
+    const items = dataset(locale, 1);
+    fetchMock.mockImplementationOnce(() => new Promise(resolve => {
+      setTimeout(() => resolve(new Response('private upstream diagnostics', { status: 503 })), 10500);
+    }));
+    const view = render(<GujaratPage {...initialProps(items, locale)} />);
+    await act(async () => { await jest.advanceTimersByTimeAsync(60000 + 10500); });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][1]?.signal?.aborted).toBe(false);
+    expect(renderedIds()).toEqual([items[0]._id]);
+    expect(screen.getByText('Regional feed unavailable (503)')).toBeTruthy();
+    expect(screen.queryByText(/Public read timed out|private upstream diagnostics/)).toBeNull();
+    view.unmount();
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  test.each(['headers', 'body'] as const)('Regional still cancels stalled proxy %s at exactly twelve seconds', async (phase) => {
+    jest.useFakeTimers();
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    fetchMock.mockImplementationOnce(() => {
+      if (phase === 'headers') return new Promise<Response>(() => {});
+      const response = pageResponse([], 1);
+      jest.spyOn(response, 'json').mockImplementation(() => new Promise(() => {}));
+      return Promise.resolve(response);
+    });
+    const view = render(<GujaratPage />);
+    await act(async () => { await jest.advanceTimersByTimeAsync(11999); });
+    expect(fetchMock.mock.calls[0][1]?.signal?.aborted).toBe(false);
+    expect(screen.queryByText('Public read timed out')).toBeNull();
+    await act(async () => { await jest.advanceTimersByTimeAsync(1); });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][1]?.signal?.aborted).toBe(true);
+    expect(screen.getByText('Public read timed out')).toBeTruthy();
+    view.unmount();
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  test('Regional locale changes still cancel immediately, without waiting for the larger deadline', async () => {
+    jest.useFakeTimers();
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    let finish!: (response: Response) => void;
+    fetchMock.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const view = render(<GujaratPage initialStories={[]} initialLocale="en" />);
+    await act(async () => { await jest.advanceTimersByTimeAsync(1000); });
+    const oldSignal = fetchMock.mock.calls[0][1]?.signal;
+    const hindi = dataset('hi', 1);
+    mockLocale = 'hi';
+    fetchMock.mockResolvedValueOnce(pageResponse(hindi, 1));
+    await act(async () => { view.rerender(<GujaratPage initialStories={[]} initialLocale="hi" />); });
+    expect(oldSignal?.aborted).toBe(true);
+    await act(async () => { finish(pageResponse(dataset('en', 1), 1)); });
+    expect(renderedIds()).toEqual([hindi[0]._id]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    view.unmount();
+    jest.runAllTicks();
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
   test.each(['en', 'hi', 'gu'] as const)('%s displays the current ten-story batch and correct caught-up state without hydration fetches', (locale) => {
     mockLocale = locale;
     const items = dataset(locale, 10);

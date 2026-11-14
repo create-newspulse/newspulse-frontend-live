@@ -5,6 +5,8 @@ import { withPublicReadDeadline } from './publicReadDeadline';
 import { parsePublicNewsList } from './publicNewsApi';
 import { isSponsoredContent } from './sponsoredContent';
 
+export const REGIONAL_FEED_BROWSER_TIMEOUT_MS = 12000;
+
 export const REGIONAL_BLOCKED_IDS = new Set([
   '69a9d5f74c3cb9a18ef5a179', '69a9ca4a4c3cb9a18ef5a16f',
   '69c0c4707c7cb68a34add518', '69c029fb7c7cb68a34add2ee',
@@ -136,14 +138,14 @@ async function readRegionalPayload(params: URLSearchParams, options: RegionalRea
 }
 
 export async function fetchRegionalInitialStories(params: URLSearchParams, options: RegionalReadOptions = {}): Promise<any[]> {
-  return withPublicReadDeadline(4000, async (signal) => {
+  return withPublicReadDeadline(options.server ? 4000 : REGIONAL_FEED_BROWSER_TIMEOUT_MS, async (signal) => {
     const { payload } = await readRegionalPayload(params, options, signal);
     return selectRegionalInitialStories(payload, params.get('lang') || 'en');
   }, options.signal);
 }
 
 export async function fetchRegionalStoryPage(params: URLSearchParams, options: RegionalReadOptions = {}): Promise<RegionalStoryPage> {
-  return withPublicReadDeadline(4000, async (signal) => {
+  return withPublicReadDeadline(options.server ? 4000 : REGIONAL_FEED_BROWSER_TIMEOUT_MS, async (signal) => {
     const request = new URLSearchParams(params);
     if (!request.has('page')) request.set('page', '1');
     if (!request.has('limit')) request.set('limit', '30');
