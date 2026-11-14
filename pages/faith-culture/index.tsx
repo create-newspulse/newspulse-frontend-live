@@ -8,7 +8,7 @@ import { getFaithCultureTopic } from '../../lib/faithCultureTopics';
 
 export const getStaticProps: GetStaticProps<CategoryPageProps> = (ctx) => getCategoryStaticProps(ctx, 'faith-culture');
 
-export default function FaithCulturePage({ initialItems, initialPagination, locale }: CategoryPageProps) {
+export default function FaithCulturePage({ initialItems, initialPagination, initialLoadFailed, locale }: CategoryPageProps) {
   const router = useRouter();
   const topic = getFaithCultureTopic(router.query.topic);
   const extraQuery = useMemo(() => topic ? { topic } : undefined, [topic]);
@@ -24,6 +24,7 @@ export default function FaithCulturePage({ initialItems, initialPagination, loca
       initialItems={topic ? undefined : initialItems}
       initialPagination={topic ? undefined : initialPagination}
       initialLocale={locale}
+      initialLoadFailed={topic ? undefined : initialLoadFailed}
     />
   );
 }

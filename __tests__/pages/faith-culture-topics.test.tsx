@@ -1,4 +1,5 @@
 import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import type { LinkProps } from 'next/link';
 import { format } from 'url';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -25,6 +26,10 @@ const food: FaithCultureTopic = 'food-agricultural-heritage';
 
 jest.mock('next/router', () => ({
   useRouter: () => ({ locale: mockLocale, isReady: mockIsReady, query: mockQuery, pathname: '/faith-culture', asPath: '/faith-culture' }),
+}));
+jest.mock('next/head', () => ({
+  __esModule: true,
+  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 jest.mock('../../lib/publicApiBase', () => ({ getPublicApiBaseUrl: () => '' }));
 jest.mock('../../utils/LanguageContext', () => ({ useLanguage: () => ({ language: mockLocale }) }));
@@ -153,6 +158,73 @@ describe('Faith-only public topic filters', () => {
       expect(new Headers(init?.headers).has(ORDINARY_PAGINATION_HEADER)).toBe(false);
     }
   }
+
+  test.each((['en', 'hi', 'gu'] as const).flatMap(locale =>
+    [0, 31].map(total => ({ locale, total }))
+  ))('$locale build recovery with $total stories keeps failures distinct from an empty archive', async ({ locale, total }) => {
+    jest.useFakeTimers();
+    mockLocale = locale;
+    const dict = dictionaries[locale];
+    const props = { messages: {}, locale, initialItems: [], initialLoadFailed: true };
+    const server = document.createElement('div');
+    server.innerHTML = renderToStaticMarkup(<LanguageProvider initialLang={locale}><FaithCulturePage {...props} /></LanguageProvider>);
+    expect(server.textContent).toContain(dict.categoryPage.unableToLoadTitle);
+    expect(server.textContent).toContain(dict.errors.fetchFailed);
+    expect(server.textContent).not.toContain(dict.categoryPage.noStoriesYet);
+    expect(server.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe('noindex,follow');
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const stories = faithStories(locale, total);
+    serve({ all: stories });
+    fetchMock.mockResolvedValueOnce(new Response('private database diagnostics', { status: 503 }));
+    await act(async () => { openPage(props); });
+    expect(screen.getByText(dict.errors.fetchFailed)).toBeTruthy();
+    expect(screen.queryByText(dict.categoryPage.noStoriesYet)).toBeNull();
+    expect(screen.queryByText(/all caught up|private database diagnostics/i)).toBeNull();
+    expect(requestedPages()).toEqual(['1']);
+
+    let finish!: (response: Response) => void;
+    fetchMock.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    await act(async () => { await jest.advanceTimersByTimeAsync(60000); });
+    try {
+      expect(screen.getByText(dict.errors.fetchFailed)).toBeTruthy();
+      expect(screen.queryByText(dict.categoryPage.noStoriesYet)).toBeNull();
+      expect(document.querySelector('meta[name="robots"]')?.getAttribute('content')).toBe('noindex,follow');
+    } finally {
+      await act(async () => { finish(new Response(JSON.stringify(faithPage(stories, 1)))); });
+    }
+    expect(screen.queryByText(dict.errors.fetchFailed)).toBeNull();
+    expect(document.querySelector('meta[name="robots"]')).toBeNull();
+    if (total) {
+      await reveal(total);
+      expect(renderedIds()).toEqual(stories.map(story => story._id));
+      expect(screen.getByRole('heading', { level: 2 }).textContent).toBe(stories[0].title);
+      expect(requestedPages()).toEqual(['1', '1', '2']);
+    } else {
+      expect(screen.getByText(dict.categoryPage.noStoriesYet)).toBeTruthy();
+      expect(requestedPages()).toEqual(['1', '1']);
+    }
+    expectContract(undefined, locale);
+  });
+
+  test.each(['en', 'hi', 'gu'] as const)('%s failed All build seed does not replace a selected topic', async (locale) => {
+    mockLocale = locale;
+    mockQuery = { topic: living };
+    const props = { messages: {}, locale, initialItems: [], initialLoadFailed: true };
+    const stories = topicStories(living, locale, 1);
+    let finish!: (response: Response) => void;
+    fetchMock.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    openPage(props);
+    try {
+      expect(screen.queryByText(dictionaries[locale].errors.fetchFailed)).toBeNull();
+      expect(document.querySelector('meta[name="robots"]')).toBeNull();
+    } finally {
+      await act(async () => { finish(new Response(JSON.stringify(faithPage(stories, 1)))); });
+    }
+    expect(screen.getByText(stories[0].title)).toBeTruthy();
+    expect(requestedPages()).toEqual(['1']);
+    expectContract(living, locale);
+  });
 
   test.each(['en', 'hi', 'gu'] as const)('%s shows All and exactly seven localized, stable-code topic links', (locale) => {
     mockLocale = locale;

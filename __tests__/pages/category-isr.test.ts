@@ -156,11 +156,19 @@ describe.each(surfaces)('$name regeneration', (surface) => {
       });
     });
 
-    test('the existing initial-build fallback policy is unchanged, including strict Faith failures', async () => {
+    test('initial-build fallback preserves other surfaces and marks Faith unavailability explicitly', async () => {
+      jest.spyOn(console, 'warn').mockImplementation(() => {});
       fetchMock.mockRejectedValue(new Error('Backend offline'));
-      const pending = surface.load({ locale, revalidateReason: 'build' });
-      if (surface.category === 'faith-culture') await expect(pending).rejects.toThrow();
-      else expect(await pending).toMatchObject({ props: { [surface.itemsKey]: [] }, revalidate: 60 });
+      const result = await surface.load({ locale, revalidateReason: 'build' });
+      expect(result).toMatchObject({ props: { [surface.itemsKey]: [], [surface.localeKey]: locale }, revalidate: 60 });
+      if (!('props' in result)) throw new Error('Expected static props');
+      const props = await result.props;
+      if (surface.category === 'faith-culture') {
+        expect(props).toHaveProperty('initialLoadFailed', true);
+        expect(props).not.toHaveProperty('initialPagination');
+      } else {
+        expect(props).not.toHaveProperty('initialLoadFailed');
+      }
     });
   });
 });

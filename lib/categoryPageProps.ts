@@ -2,8 +2,9 @@ import type { GetStaticPropsContext, GetStaticPropsResult } from 'next';
 import { CATEGORY_FEED_BATCH_SIZE, CATEGORY_FEED_REFRESH_MS, fetchCategoryFeed, fetchCategoryFeedPage, selectCategoryFeedArticles } from './categoryFeed';
 import { getArticleReadingTime } from './editorialDisplay';
 import type { Article } from './publicNewsApi';
+import { PublicReadTimeoutError } from './publicReadDeadline';
 import { getOrdinaryCategoryBatchSize, isOrdinaryPaginatedCategory, type OrdinaryCategoryPagination } from './ordinaryCategoryPagination';
-import { FAITH_CULTURE_PAGE_SIZE, isFaithCultureCategory } from './faithCulturePagination';
+import { FAITH_CULTURE_NEWS_UNAVAILABLE, FAITH_CULTURE_PAGE_SIZE, isFaithCultureCategory } from './faithCulturePagination';
 import { getLocalizedArticleFields, STRICT_LOCALE_POLICY, type RouteLocale } from './localizedArticleFields';
 
 export type CategoryPageProps = {
@@ -11,6 +12,7 @@ export type CategoryPageProps = {
   locale: string;
   initialItems: Article[];
   initialPagination?: OrdinaryCategoryPagination;
+  initialLoadFailed?: boolean;
 };
 
 function withoutArticleBody(article: Record<string, any>, localizedBody?: string): Record<string, any> {
@@ -42,6 +44,7 @@ export async function getCategoryStaticProps(ctx: GetStaticPropsContext, categor
   const messages = await getMessages(locale);
   let initialItems: Article[] = [];
   let initialPagination: OrdinaryCategoryPagination | undefined;
+  let initialLoadFailed = false;
   try {
     if (isFaithCultureCategory(category) || isOrdinaryPaginatedCategory(category)) {
       const response = await fetchCategoryFeedPage({
@@ -65,10 +68,23 @@ export async function getCategoryStaticProps(ctx: GetStaticPropsContext, categor
         .map(article => compactCategoryArticle(article, locale));
     }
   } catch (error) {
-    if (isFaithCultureCategory(category) || ctx.revalidateReason === 'stale' || ctx.revalidateReason === 'on-demand') throw error;
+    if (ctx.revalidateReason === 'stale' || ctx.revalidateReason === 'on-demand') throw error;
+    if (isFaithCultureCategory(category)) {
+      const expectedReadFailure = error instanceof PublicReadTimeoutError
+        || (error instanceof Error && error.message === FAITH_CULTURE_NEWS_UNAVAILABLE);
+      if (ctx.revalidateReason !== 'build' || !expectedReadFailure) throw error;
+      initialLoadFailed = true;
+      console.warn('[faith-culture] Initial build feed unavailable', {
+        locale, reason: error instanceof PublicReadTimeoutError ? 'timeout' : FAITH_CULTURE_NEWS_UNAVAILABLE,
+      });
+    }
   }
   return {
-    props: { messages, locale, initialItems, ...(initialPagination ? { initialPagination } : {}) },
+    props: {
+      messages, locale, initialItems,
+      ...(initialPagination ? { initialPagination } : {}),
+      ...(initialLoadFailed ? { initialLoadFailed } : {}),
+    },
     revalidate: CATEGORY_FEED_REFRESH_MS / 1000,
   };
 }

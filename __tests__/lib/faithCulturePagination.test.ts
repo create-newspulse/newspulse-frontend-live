@@ -1,6 +1,7 @@
 /** @jest-environment node */
-import { fetchCategoryFeedPage, mergeCategoryFeedPages, selectCategoryFeedArticles } from '../../lib/categoryFeed';
+import { CATEGORY_FEED_TIMEOUT_MS, fetchCategoryFeedPage, mergeCategoryFeedPages, selectCategoryFeedArticles } from '../../lib/categoryFeed';
 import { getCategoryStaticProps } from '../../lib/categoryPageProps';
+import * as editorialDisplay from '../../lib/editorialDisplay';
 import { FAITH_CULTURE_NEWS_UNAVAILABLE, FAITH_CULTURE_PAGINATION_HEADER, getFaithCulturePagination, validateFaithCulturePageRequest } from '../../lib/faithCulturePagination';
 import { ORDINARY_PAGINATION_HEADER, validateOrdinaryPageRequest } from '../../lib/ordinaryCategoryPagination';
 import { FAITH_CULTURE_TOPICS, getFaithCultureTopic } from '../../lib/faithCultureTopics';
@@ -17,9 +18,11 @@ describe('Faith strict page client and ISR', () => {
     fetchMock.mockReset();
     global.fetch = fetchMock;
     jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
   });
   afterEach(() => {
     global.fetch = originalFetch;
+    jest.useRealTimers();
     jest.restoreAllMocks();
   });
 
@@ -33,6 +36,7 @@ describe('Faith strict page client and ISR', () => {
     expect(props.initialItems.map(item => item._id)).toEqual(all.slice(0, 30).map(item => item._id));
     expect(props.initialItems.every(item => item.content === undefined)).toBe(true);
     expect(props.initialPagination).toEqual({ page: 1, limit: 30, total: 100, totalPages: 4, hasMore: true });
+    expect(props).not.toHaveProperty('initialLoadFailed');
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [input, init] = fetchMock.mock.calls[0];
     const url = new URL(String(input));
@@ -44,11 +48,82 @@ describe('Faith strict page client and ISR', () => {
     expect(new Headers(init?.headers).has(ORDINARY_PAGINATION_HEADER)).toBe(false);
   });
 
-  test.each(['build', 'stale', 'on-demand'] as const)('503 rejects %s ISR instead of generating empty successful props', async (revalidateReason) => {
+  test.each((['en', 'hi', 'gu'] as const).flatMap(locale =>
+    (['http', 'json', 'pagination', 'network'] as const).map(failure => ({ locale, failure }))
+  ))('$locale build read failures ($failure) remain explicitly unavailable without fabricated pagination', async ({ locale, failure }) => {
+    if (failure === 'http') fetchMock.mockResolvedValue(new Response('private database diagnostics', { status: 503 }));
+    else if (failure === 'json') fetchMock.mockResolvedValue(new Response('{invalid JSON'));
+    else if (failure === 'pagination') fetchMock.mockResolvedValue(new Response(JSON.stringify({ ...faithPage([], 1), hasMore: undefined })));
+    else fetchMock.mockRejectedValue(new Error('private network diagnostics'));
+
+    const result = await getCategoryStaticProps({ locale, revalidateReason: 'build' }, 'faith-culture');
+    expect(result).toEqual({
+      props: { messages: { locale }, locale, initialItems: [], initialLoadFailed: true },
+      revalidate: 60,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const url = new URL(String(fetchMock.mock.calls[0][0]));
+    expect(url.pathname).toBe('/api/public/news');
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      category: 'faith-culture', lang: locale, language: locale, page: '1', limit: '30', strictLocale: '1',
+    });
+    expect(console.warn).toHaveBeenCalledWith('[faith-culture] Initial build feed unavailable', {
+      locale, reason: FAITH_CULTURE_NEWS_UNAVAILABLE,
+    });
+  });
+
+  test.each((['en', 'hi', 'gu'] as const).flatMap(locale =>
+    (['headers', 'body'] as const).map(phase => ({ locale, phase }))
+  ))('$locale build deadline still bounds stalled $phase', async ({ locale, phase }) => {
+    jest.useFakeTimers();
+    if (phase === 'headers') fetchMock.mockImplementation(() => new Promise<Response>(() => {}));
+    else {
+      const response = new Response();
+      jest.spyOn(response, 'json').mockImplementation(() => new Promise(() => {}));
+      fetchMock.mockResolvedValue(response);
+    }
+    const pending = Promise.allSettled([getCategoryStaticProps({ locale, revalidateReason: 'build' }, 'faith-culture')]);
+    await jest.advanceTimersByTimeAsync(CATEGORY_FEED_TIMEOUT_MS);
+    expect(await pending).toEqual([{
+      status: 'fulfilled',
+      value: { props: { messages: { locale }, locale, initialItems: [], initialLoadFailed: true }, revalidate: 60 },
+    }]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][1]?.signal?.aborted).toBe(true);
+    expect(jest.getTimerCount()).toBe(0);
+    expect(console.warn).toHaveBeenCalledWith('[faith-culture] Initial build feed unavailable', { locale, reason: 'timeout' });
+  });
+
+  test.each((['en', 'hi', 'gu'] as const).flatMap(locale =>
+    (['stale', 'on-demand', undefined] as const).map(revalidateReason => ({ locale, revalidateReason }))
+  ))('$locale 503 rejects $revalidateReason regeneration instead of replacing verified content', async ({ locale, revalidateReason }) => {
     fetchMock.mockResolvedValue(new Response('private database diagnostics', { status: 503 }));
-    await expect(getCategoryStaticProps({ locale: 'en', revalidateReason }, 'faith-culture'))
+    await expect(getCategoryStaticProps({ locale, revalidateReason }, 'faith-culture'))
       .rejects.toThrow(FAITH_CULTURE_NEWS_UNAVAILABLE);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(console.warn).not.toHaveBeenCalled();
+  });
+
+  test.each(['en', 'hi', 'gu'] as const)('%s authoritative empty build retains its validated pagination without a failure marker', async (locale) => {
+    const { items, ...pagination } = faithPage([], 1);
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ items, ...pagination })));
+    const result = await getCategoryStaticProps({ locale, revalidateReason: 'build' }, 'faith-culture');
+    if (!('props' in result)) throw new Error('Expected static props');
+    const props = await result.props;
+    expect(props.initialItems).toEqual([]);
+    expect(props.initialPagination).toEqual(pagination);
+    expect(props).not.toHaveProperty('initialLoadFailed');
+    expect(console.warn).not.toHaveBeenCalled();
+  });
+
+  test('unexpected compaction errors still fail the build', async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(faithPage(faithStories('en', 1), 1))));
+    jest.spyOn(editorialDisplay, 'getArticleReadingTime').mockImplementationOnce(() => {
+      throw new Error('Unexpected compaction failure');
+    });
+    await expect(getCategoryStaticProps({ locale: 'en', revalidateReason: 'build' }, 'faith-culture'))
+      .rejects.toThrow('Unexpected compaction failure');
+    expect(console.warn).not.toHaveBeenCalled();
   });
 
   test.each((['en', 'hi', 'gu'] as const).flatMap(locale =>

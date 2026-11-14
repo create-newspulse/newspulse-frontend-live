@@ -30,6 +30,7 @@ export type CategoryFeedPageProps = {
   initialItems?: Article[];
   initialPagination?: OrdinaryCategoryPagination;
   initialLocale?: string;
+  initialLoadFailed?: boolean;
 };
 
 function categoryKeyToI18nKey(categoryKey: string): string | null {
@@ -81,7 +82,7 @@ function hasMoreCategoryResults(resp: Awaited<ReturnType<typeof fetchCategoryFee
   return (Array.isArray(resp.items) ? resp.items.length : 0) >= requestedLimit;
 }
 
-export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCategoryShell = false, initialItems, initialPagination, initialLocale }: CategoryFeedPageProps) {
+export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCategoryShell = false, initialItems, initialPagination, initialLocale, initialLoadFailed = false }: CategoryFeedPageProps) {
   const router = useRouter();
   const { language } = useLanguage();
   const { t } = useI18n();
@@ -98,7 +99,8 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
   );
   const [items, setItems] = useState<Article[]>(() => initialCategoryItems);
   const [loaded, setLoaded] = useState(() => initialCategoryItems.length > 0 || Boolean(seedPagination));
-  const [error, setError] = useState<string | null>(null);
+  const [requestError, setError] = useState<string | null>(null);
+  const error = requestError || (initialLoadFailed && seedMatchesLocale && !loaded ? t('errors.fetchFailed') : null);
   const [page, setPage] = useState(seedPagination?.page ?? 1);
   const [hasMore, setHasMore] = useState(() => seedPagination?.hasMore ?? initialCategoryItems.length >= batchSize);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -624,6 +626,7 @@ export default function CategoryFeedPage({ title, categoryKey, extraQuery, useCa
     <>
       <Head>
         <title>{`${pageTitle} | ${t('brand.name')}`}</title>
+        {initialLoadFailed && error ? <meta name="robots" content="noindex,follow" /> : null}
       </Head>
 
       {useCategoryShell ? (
