@@ -83,6 +83,78 @@ describe('canonical category revalidation', () => {
   });
 });
 
+describe('backend explicit-path revalidation', () => {
+  const articleId = '507f1f77bcf86cd799439011';
+  const backendPayload = {
+    reason: 'article_update',
+    articleId,
+    translationGroupId: '507f1f77bcf86cd799439012',
+    tags: ['articles', 'article-detail', 'homepage', 'public-news'],
+  };
+  const backendPaths = [
+    '/', '/hi', '/gu', ...localized('/latest'), ...localized('/search'),
+    '/news/story-en', '/hi/news/story-hi', '/gu/news/story-gu',
+  ];
+  const backendAuth = { query: {}, headers: { 'x-revalidate-secret': secret } };
+  const categoryPaths = ['/business', '/science-technology', '/tech-gadgets', '/regional/gujarat'];
+
+  test.each(categoryPaths)('%s explicit paths preserve EN/HI/GU without category or state helpers', async (categoryPath) => {
+    const paths = [...backendPaths, ...localized(categoryPath)];
+    const expected = [...paths, ...localized(`/news/${articleId}`)];
+    const res = await invoke({ ...backendPayload, paths }, backendAuth);
+
+    expect(res.revalidate.mock.calls.map(([path]) => path)).toEqual(expected);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({ ok: true, revalidated: expected, failed: [] });
+  });
+
+  test('repeated explicit paths and derived article/homepage/Latest paths regenerate only once in first-seen order', async () => {
+    const expected = [
+      ...backendPaths, ...categoryPaths.flatMap(localized), ...localized(`/news/${articleId}`),
+    ];
+    const res = await invoke({
+      ...backendPayload,
+      paths: [
+        ...expected, ...expected,
+        ' /business?source=previous#copy ', '/hi/science-technology#copy',
+        '/gu/tech-gadgets?source=copy', '/hi/regional/gujarat?source=previous#copy',
+        `/news/${articleId}?source=duplicate`, '/latest#copy', '/?source=copy',
+      ],
+    }, backendAuth);
+
+    expect(res.revalidate.mock.calls.map(([path]) => path)).toEqual(expected);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({ ok: true, revalidated: expected, failed: [] });
+  });
+
+  test('explicit category and Gujarat failures remain partial and do not stop later paths or retry duplicates', async () => {
+    const paths = [...backendPaths, ...categoryPaths.flatMap(localized)];
+    const expected = [...paths, ...localized(`/news/${articleId}`)];
+    const failed = [
+      { path: '/hi/science-technology', error: 'Science regeneration unavailable' },
+      { path: '/gu/regional/gujarat', error: 'Regional regeneration unavailable' },
+    ];
+    const res = await invoke({
+      ...backendPayload,
+      paths: [...paths, ...failed.map(({ path }) => path)],
+    }, {
+      ...backendAuth,
+      revalidate: async (path) => {
+        const failure = failed.find((item) => item.path === path);
+        if (failure) throw new Error(failure.error);
+      },
+    });
+
+    expect(res.revalidate.mock.calls.map(([path]) => path)).toEqual(expected);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      ok: false,
+      revalidated: expected.filter((path) => !failed.some((item) => item.path === path)),
+      failed,
+    });
+  });
+});
+
 describe('existing revalidation contracts', () => {
   test('homepage and Latest still revalidate without category or article helpers', async () => {
     const res = await invoke();
