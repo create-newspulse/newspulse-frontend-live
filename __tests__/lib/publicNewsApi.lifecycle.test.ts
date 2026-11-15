@@ -96,6 +96,21 @@ test.each([{}, null, { article: null }, { ok: false, article: story }])('malform
   expect(result.status).toBeUndefined();
 });
 
+test('the exact legacy exists:false detail response remains authoritative absence', async () => {
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ exists: false })));
+  expect(await fetchPublicNewsById({ id: story._id })).toMatchObject({ article: null, status: 404 });
+});
+
+test.each([
+  { exists: false, article: story }, { exists: false, ok: false }, { exists: false, error: 'private error' },
+])('a contradictory legacy absence %j remains a failed read', async (payload) => {
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(payload)));
+  const result = await fetchPublicNewsById({ id: story._id });
+  expect(result.article).toBeNull();
+  expect(result.error).toBeTruthy();
+  expect(result.status).toBeUndefined();
+});
+
 test.each([404, 410, 429, 500, 503])('keeps HTTP %s separate from invalid success and never exposes private error bodies', async (status) => {
   const response = new Response('private upstream diagnostics', { status });
   const readBody = jest.spyOn(response, 'json');
@@ -245,6 +260,14 @@ test.each([
   },
   { imageUrl: { url: 'https://images.test/legacy.jpg', alt: 'Public image' } },
   { isSponsored: true, sponsorName: 'Public partner', metadata: { ctaButton: { label: 'Learn more', href: 'https://sponsor.test/story' } } },
+  {
+    isSponsoredArticle: true, sponsorName: 'Public partner', sponsorDestinationUrl: 'https://sponsor.test/story',
+    sponsorFeatureLinkedId: 'feature-1', linkedSponsoredFeature: { id: 'feature-1', isActive: false },
+  },
+  {
+    isSponsoredArticle: true, sponsorName: 'Public partner', sponsorDestinationUrl: 'https://sponsor.test/story',
+    sponsorFeatureLinkedId: 'feature-1', linkedSponsoredFeature: { id: 'feature-1', isActive: true },
+  },
   {
     category: 'pulse-dialogue',
     pulseDialogue: {

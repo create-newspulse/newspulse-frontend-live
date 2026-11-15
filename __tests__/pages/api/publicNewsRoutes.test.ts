@@ -971,7 +971,9 @@ describe('public news route localization', () => {
       url: '/api/public/news/slug/pulse-hi?lang=hi&language=hi',
       query: { slug: 'pulse-hi', lang: 'hi', language: 'hi' },
     }) as any, res as any);
-    expect(res.body).toEqual({ article: null });
+    expect(res.statusCode).toBe(_label === 'draft payload' ? 404 : 503);
+    expect(res.body).toEqual(_label === 'draft payload'
+      ? { ok: false, message: 'NOT_FOUND' } : { error: 'PUBLIC_NEWS_UNAVAILABLE' });
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
@@ -997,7 +999,8 @@ describe('public news route localization', () => {
       await jest.advanceTimersByTimeAsync(1);
       await pending;
       expect(signal.aborted).toBe(true);
-      expect(res.body).toEqual({ article: null });
+      expect(res.statusCode).toBe(503);
+      expect(res.body).toEqual({ error: 'PUBLIC_NEWS_UNAVAILABLE' });
       expect(jest.getTimerCount()).toBe(0);
     } finally {
       jest.useRealTimers();

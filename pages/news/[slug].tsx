@@ -13,7 +13,7 @@ import CategoryHeader from '../../src/components/category/CategoryHeader';
 import { getCategoryIdentity, getCategoryQueryKey, getCategoryRouteKey } from '../../lib/categoryKeys';
 import { filterPubliclyPublishedArticles, getLocalizedArticleFields, STRICT_LOCALE_POLICY, type RouteLocale } from '../../lib/localizedArticleFields';
 import { formatArticleBodyHtml, parseControlledFacebookBlock, parseControlledGalleryBlock, parseControlledInlineImageBlock, parseControlledInstagramBlock, parseControlledXBlock, parseControlledYouTubeBlock, splitArticleBodyBlocks, stripDuplicateOpeningParagraph, type ControlledArticleFacebookEmbed, type ControlledArticleGallery, type ControlledArticleInlineImage, type ControlledArticleInstagramEmbed, type ControlledArticleXEmbed, type ControlledArticleYouTubeEmbed } from '../../lib/articleBody';
-import { fetchPublicNewsById, fetchPublicNewsGroup, parsePublicNewsArticle, unwrapArticle, type Article } from '../../lib/publicNewsApi';
+import { fetchPublicNewsById, fetchPublicNewsGroup, isLegacyMissingArticle, parsePublicNewsArticle, unwrapArticle, type Article } from '../../lib/publicNewsApi';
 import { subscribePublicDataRefresh } from '../../lib/publicDataRefresh';
 import { compareArticleFreshness, findFreshestArticleById, pickFreshestArticleForLocale, shouldReplaceArticleWithFreshCandidate } from '../../lib/translationGroupSync';
 import { useI18n } from '../../src/i18n/LanguageProvider';
@@ -2476,6 +2476,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
         if (res.ok === false) throw new Error('Article upstream unavailable');
         const next = await res.json();
         signal.throwIfAborted();
+        if (isLegacyMissingArticle(next)) { data = null; continue; }
         if (isPendingTranslationPayload(next)) {
           data = next;
           break;

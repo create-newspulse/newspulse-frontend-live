@@ -50,7 +50,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     qs.set('language', attemptLang);
     const endpoint = `${origin}/api/public/news/${encodeURIComponent(idCandidate)}?${qs.toString()}`;
     const res = await fetch(endpoint, { method: 'GET', headers: { Accept: 'application/json' }, cache: 'no-store', signal });
-    if (res.status === 404) return null;
+    if (res.status === 404 || res.status === 410) return null;
     if (!res.ok) throw new Error('Article upstream unavailable');
     const data = await res.json().catch(() => null);
     signal.throwIfAborted();
@@ -63,7 +63,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     qs.set('language', attemptLang);
     const endpoint = `${origin}/api/public/news/slug/${encodeURIComponent(slugCandidate)}?${qs.toString()}`;
     const res = await fetch(endpoint, { method: 'GET', headers: { Accept: 'application/json' }, cache: 'no-store', signal });
-    if (res.status === 404) return null;
+    if (res.status === 404 || res.status === 410) return null;
     if (!res.ok) throw new Error('Article upstream unavailable');
     const data = await res.json().catch(() => null);
     signal.throwIfAborted();

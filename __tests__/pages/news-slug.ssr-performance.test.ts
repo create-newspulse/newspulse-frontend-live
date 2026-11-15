@@ -126,6 +126,14 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
     expect(await getServerSideProps(createCtx('gujarat-budget-2026', 'en'))).toEqual({ notFound: true });
   });
 
+  test.each(['en', 'hi', 'gu'])('legacy %s URLs treat 410 as absence, not an outage', async (lang) => {
+    global.fetch = jest.fn(async () => new Response(null, { status: 410 }));
+    const ctx = createCtx('retired-slug', lang);
+    ctx.params = { parts: ['507f1f77bcf86cd799439011', 'retired-slug'] };
+    expect(await getLegacyProps(ctx)).toEqual({ notFound: true });
+    expect(ctx.res.statusCode).not.toBe(503);
+  });
+
   test.each(['invalid_article_response', 'invalid_json', 'request_or_render_error'])('logs safe SSR failure reason %s without leaking response data', async (reason) => {
     global.fetch = jest.fn(async () => {
       if (reason === 'request_or_render_error') throw new Error('private upstream URL/token');

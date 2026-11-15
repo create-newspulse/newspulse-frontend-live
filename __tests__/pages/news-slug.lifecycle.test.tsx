@@ -265,6 +265,20 @@ test.each(['network', 'HTTP', 'JSON', 'invalid shape', 'failed envelope'])('%s g
   expect(document.body.textContent).not.toContain('private upstream');
 });
 
+describe.each(['en', 'hi', 'gu'] as const)('%s unavailable group refresh', (lang) => {
+  test.each([403, 404, 409, 410, 503])('HTTP %s retains the current article and canonical URL', async (status) => {
+    fetchMock.mockResolvedValueOnce(json({ error: 'PUBLIC_NEWS_UNAVAILABLE' }, status));
+    render(<NewsSlugDetailPage {...props(article({ language: lang }), lang)} />);
+    await refresh();
+    await waitFor(() => expect(screen.getByRole('status')).toBeTruthy());
+    expect(screen.getByRole('heading', { name: 'Original title' })).toBeTruthy();
+    expect(screen.getByText('Original body')).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: '404' })).toBeNull();
+    expect(document.querySelector('meta[property="og:url"]')?.getAttribute('content'))
+      .toBe(`https://www.newspulse.co.in${lang === 'en' ? '' : `/${lang}`}/news/original-slug`);
+  });
+});
+
 test.each(['en', 'hi', 'gu'] as const)('standalone %s article refreshes by its existing ID even after a slug edit', async (lang) => {
   const initial = article({ translationGroupId: undefined, language: lang });
   const updated = { ...initial, title: 'Updated title', slug: 'updated-slug', content: '<p>Updated body</p>', updatedAt: '2026-01-02T00:00:00.000Z' };
@@ -278,6 +292,33 @@ test.each(['en', 'hi', 'gu'] as const)('standalone %s article refreshes by its e
   expect(document.querySelector('meta[property="og:url"]')?.getAttribute('content')).toBe(`https://www.newspulse.co.in${prefix}/news/updated-slug`);
 });
 
+describe.each(['group', 'standalone'])('%s published Save Update refresh', route => {
+  test.each(['en', 'hi', 'gu'] as const)('shows corrected %s content at the original URL and publication date', async lang => {
+    const publishedAt = '2019-01-15T10:00:00.000Z';
+    const initial = article({
+      language: lang, publishedAt, translationGroupId: route === 'group' ? 'group-1' : undefined,
+    });
+    const updated = {
+      ...initial, title: 'Corrected headline', content: '<p>Corrected published body</p>',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+    };
+    fetchMock.mockResolvedValueOnce(json(route === 'group' ? { items: [updated] } : { article: updated }));
+    render(<NewsSlugDetailPage {...props(initial, lang)} />);
+    await refresh();
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Corrected headline' })).toBeTruthy());
+    expect(screen.getByText('Corrected published body')).toBeTruthy();
+    expect(screen.queryByText('Original body')).toBeNull();
+    expect(screen.queryByRole('heading', { name: '404' })).toBeNull();
+    const path = route === 'group' ? 'group/group-1' : 'article-1';
+    expect(String(fetchMock.mock.calls[0][0])).toBe(`/api/public/news/${path}?lang=${lang}&language=${lang}`);
+    expect(document.querySelector('meta[property="og:url"]')?.getAttribute('content'))
+      .toBe(`https://www.newspulse.co.in${lang === 'en' ? '' : `/${lang}`}/news/original-slug`);
+    const structuredData = JSON.parse(document.querySelector('script[type="application/ld+json"]')?.textContent || '{}');
+    expect(structuredData.datePublished).toBe(publishedAt);
+    expect(structuredData.headline).toBe('Corrected headline');
+  });
+});
+
 test.each([404, 410])('standalone HTTP %s withdraws content but permits a later published restore', async (status) => {
   const initial = article({ translationGroupId: undefined });
   fetchMock.mockResolvedValueOnce(json({ message: 'NOT_FOUND' }, status))
@@ -288,6 +329,13 @@ test.each([404, 410])('standalone HTTP %s withdraws content but permits a later 
   await refresh();
   await waitFor(() => expect(screen.getByRole('heading', { name: 'Original title' })).toBeTruthy());
   expect(fetchMock).toHaveBeenCalledTimes(2);
+});
+
+test.each(['en', 'hi', 'gu'] as const)('standalone %s legacy exists:false withdraws the article', async (lang) => {
+  fetchMock.mockResolvedValueOnce(json({ exists: false }));
+  render(<NewsSlugDetailPage {...props(article({ translationGroupId: undefined, language: lang }), lang)} />);
+  await refresh();
+  await expectWithdrawn();
 });
 
 test.each(['network', 'HTTP', 'empty success'])('standalone %s failure is not deletion', async (stage) => {

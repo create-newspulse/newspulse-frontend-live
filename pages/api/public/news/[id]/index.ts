@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 
 import { getPublicApiBaseUrl } from '../../../../../lib/publicApiBase';
 import { getLocalizedArticleFields, normalizeRouteLocale, STRICT_LOCALE_POLICY } from '../../../../../lib/localizedArticleFields';
-import { parsePublicNewsArticle, parsePublicNewsGroupItems } from '../../../../../lib/publicNewsApi';
+import { isLegacyMissingArticle, parsePublicNewsArticle, parsePublicNewsGroupItems } from '../../../../../lib/publicNewsApi';
 import { pickFreshestArticleForLocale } from '../../../../../lib/translationGroupSync';
 import { withPublicReadDeadline } from '../../../../../lib/publicReadDeadline';
 import { getSafeRetryAfter } from '../../../../../lib/retryAfter';
@@ -67,6 +67,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (status < 200 || status >= 300 || !json || typeof json !== 'object' || Array.isArray(json)) {
       throw new Error('PUBLIC_NEWS_UNAVAILABLE');
     }
+    if (isLegacyMissingArticle(json)) {
+      res.setHeader('Cache-Control', 'no-store, max-age=0');
+      return res.status(200).json({ exists: false });
+    }
     const directArticle = parsePublicNewsArticle(json);
     if (!directArticle) throw new Error('INVALID_PUBLIC_NEWS_ARTICLE');
     let article = directArticle;
@@ -86,7 +90,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             cache: 'no-store',
             signal,
           });
-          if (groupRes.status === 404 || groupRes.status === 410) return [];
           if (!groupRes.ok) throw new Error('PUBLIC_NEWS_GROUP_UNAVAILABLE');
           const items = parsePublicNewsGroupItems(JSON.parse(await groupRes.text()));
           if (!items) throw new Error('INVALID_PUBLIC_NEWS_GROUP');

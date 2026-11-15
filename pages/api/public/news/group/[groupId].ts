@@ -45,7 +45,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         signal,
       });
       retryAfter = getSafeRetryAfter(upstream.headers?.get('Retry-After'));
-      if (upstream.status === 404 || upstream.status === 410) return { items: [] };
       if (!upstream.ok) throw new Error('PUBLIC_NEWS_UNAVAILABLE');
       const payload: unknown = JSON.parse(await upstream.text());
       const items = parsePublicNewsGroupItems(payload);

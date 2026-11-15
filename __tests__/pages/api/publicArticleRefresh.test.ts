@@ -5,6 +5,7 @@ import { IncomingMessage, ServerResponse } from 'node:http';
 import { Socket } from 'node:net';
 import groupHandler from '../../../pages/api/public/news/group/[groupId]';
 import articleHandler from '../../../pages/api/public/news/[id]/index';
+import slugHandler from '../../../pages/api/public/news/slug/[slug]';
 import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
 import { getServerSideProps } from '../../../pages/news/[slug]';
 
@@ -13,7 +14,7 @@ jest.mock('../../../lib/publicApiBase', () => ({
 }));
 jest.mock('../../../hooks/useArticleAnalytics', () => ({ useArticleAnalytics: jest.fn() }));
 
-type Route = 'group' | 'article';
+type Route = 'group' | 'article' | 'slug';
 
 function response(req: IncomingMessage) {
   const captured: { headers: Record<string, string>; body: unknown } = { headers: {}, body: undefined };
@@ -37,11 +38,11 @@ function response(req: IncomingMessage) {
 }
 
 function request(route: Route, lang = 'en'): NextApiRequest {
-  const path = route === 'group' ? 'group/group-1' : 'article-1';
+  const path = route === 'group' ? 'group/group-1' : route === 'slug' ? 'slug/story' : 'article-1';
   return Object.assign(new IncomingMessage(new Socket()), {
     method: 'GET',
     url: `/api/public/news/${path}?lang=${lang}&language=${lang}`,
-    query: { ...(route === 'group' ? { groupId: 'group-1' } : { id: 'article-1' }), lang, language: lang },
+    query: { ...(route === 'group' ? { groupId: 'group-1' } : route === 'slug' ? { slug: 'story' } : { id: 'article-1' }), lang, language: lang },
     headers: { cookie: 'test-session', authorization: 'test-authorization' },
     cookies: {}, body: undefined, env: {},
   });
@@ -50,7 +51,7 @@ function request(route: Route, lang = 'en'): NextApiRequest {
 async function read(route: Route, lang = 'en') {
   const req = request(route, lang);
   const res = response(req);
-  await (route === 'group' ? groupHandler : articleHandler)(req, res);
+  await ({ group: groupHandler, article: articleHandler, slug: slugHandler }[route])(req, res);
   return res;
 }
 
@@ -74,7 +75,7 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
-describe.each<Route>(['group', 'article'])('%s authoritative read boundary', (route) => {
+describe.each<Route>(['group', 'article', 'slug'])('%s authoritative read boundary', (route) => {
   test('missing configuration is unavailable, not absence', async () => {
     jest.mocked(getPublicApiBaseUrl).mockReturnValue('');
     const res = await read(route);
@@ -102,13 +103,13 @@ describe.each<Route>(['group', 'article'])('%s authoritative read boundary', (ro
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  test.each([404, 410])('confirmed HTTP %s remains authoritative absence', async (status) => {
+  test.each([404, 410])('HTTP %s is absence only for a supported detail contract', async (status) => {
     const upstream = new Response('private not-found diagnostics', { status });
     const readBody = jest.spyOn(upstream, 'text');
     fetchMock.mockResolvedValue(upstream);
     const res = await read(route);
-    expect(res.statusCode).toBe(route === 'group' ? 200 : status);
-    expect(res.body).toEqual(route === 'group' ? { items: [] } : { ok: false, message: 'NOT_FOUND' });
+    expect(res.statusCode).toBe(route === 'group' ? 503 : status);
+    expect(res.body).toEqual(route === 'group' ? { error: 'PUBLIC_NEWS_UNAVAILABLE' } : { ok: false, message: 'NOT_FOUND' });
     expect(readBody).not.toHaveBeenCalled();
   });
 
@@ -190,13 +191,13 @@ test('an authoritative non-public direct record remains withdrawn even if its gr
   expect((await read('article')).statusCode).toBe(404);
 });
 
-test.each([404, 410])('a confirmed group %s may establish absence of the requested variant', async (status) => {
+test.each([404, 410])('an unsupported group %s cannot establish absence of the requested variant', async (status) => {
   fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ article: { ...story, translationGroupId: 'group-1' } })))
     .mockResolvedValueOnce(new Response('', { status }));
-  expect((await read('article', 'gu')).statusCode).toBe(404);
+  expect((await read('article', 'gu')).statusCode).toBe(503);
 });
 
-describe.each<Route>(['group', 'article'])('%s validated public envelope', (route) => {
+describe.each<Route>(['group', 'article', 'slug'])('%s validated public envelope', (route) => {
   test.each([
     { _id: story._id },
     { ...story, deletedAt: { unexpected: true } },
@@ -288,3 +289,260 @@ test.each([
     expect(result).not.toHaveProperty('notFound');
   },
 );
+
+describe.each(['slug', 'article'] as const)('%s legacy absence', (route) => {
+  test('preserves the exact HTTP 200 exists:false contract without further reads', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ exists: false })))
+      .mockResolvedValue(new Response(JSON.stringify({ items: [story] })));
+    const res = await read(route);
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ exists: false });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([
+    { exists: false, ok: false },
+    { exists: false, article: story },
+    { exists: false, errors: ['private diagnostic'] },
+  ])('does not trust contradictory or failed absence payload %j', async (payload) => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(payload)));
+    const res = await read(route);
+    expect(res.statusCode).toBe(503);
+    expect(res.body).toEqual({ error: 'PUBLIC_NEWS_UNAVAILABLE' });
+  });
+});
+
+describe.each(['en', 'hi', 'gu'] as const)('%s direct URL safety', (lang) => {
+  const localized = { ...story, language: lang };
+
+  test.each([404, 410])('slug HTTP %s never consults a stale successful listing', async (status) => {
+    fetchMock.mockResolvedValueOnce(new Response('', { status }))
+      .mockResolvedValue(new Response(JSON.stringify({ items: [localized] })));
+    const res = await read('slug', lang);
+    expect(res.statusCode).toBe(status);
+    expect(res.body).toEqual({ ok: false, message: 'NOT_FOUND' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([403, 409, 500, 502, 503, 504])('slug HTTP %s remains a failure, never a successful null', async (status) => {
+    const upstream = new Response('private diagnostics', { status, headers: { 'Retry-After': '45' } });
+    const body = jest.spyOn(upstream, 'text');
+    fetchMock.mockResolvedValueOnce(upstream);
+    const res = await read('slug', lang);
+    expect(res.statusCode).toBe(status);
+    expect(res.body).toEqual({ error: 'PUBLIC_NEWS_UNAVAILABLE' });
+    expect(res.headers['Retry-After']).toBe('45');
+    expect(body).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([403, 404, 409, 410, 503])('ID HTTP %s after legacy slug discovery never revives the listing record', async (status) => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ article: null })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [localized] })))
+      .mockResolvedValueOnce(new Response('private detail failure', { status }));
+    const res = await read('slug', lang);
+    expect(res.statusCode).toBe(status);
+    expect(res.body).toEqual(status === 404 || status === 410
+      ? { ok: false, message: 'NOT_FOUND' } : { error: 'PUBLIC_NEWS_UNAVAILABLE' });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  test.each([
+    { status: 'draft' }, { status: 'unpublished' }, { status: 'archived' },
+    { isDeleted: true }, { deletedAt: '2026-01-02T00:00:00.000Z' },
+    { publishedAt: '2999-01-01T00:00:00.000Z' },
+  ])('a nonpublic ID result %j cannot fall back to the published listing snapshot', async (changes) => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ article: null })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [localized] })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ article: { ...localized, ...changes } })));
+    const res = await read('slug', lang);
+    expect(res.statusCode).toBe(404);
+    expect(res.body).not.toHaveProperty('article');
+  });
+
+  test.each(['native', 'published edition', 'approved translation'])('retains a verified %s despite an unsupported optional group', async (variant) => {
+    const sourceLang = lang === 'gu' ? 'en' : 'gu';
+    const record = {
+      ...localized, translationGroupId: 'group-1', translationKey: 'stable-story',
+      slug: 'persisted-slug', canonicalSlug: 'persisted-slug',
+      ...(variant === 'published edition' ? { isTranslated: true, translations: { en: true, hi: true, gu: true } } : {}),
+      ...(variant === 'approved translation' ? {
+        language: sourceLang,
+        translations: { [lang]: { status: 'APPROVED', title: 'Translated title', content: '<p>Translated body</p>', slug: 'persisted-slug' } },
+      } : {}),
+    };
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ article: record })))
+      .mockResolvedValueOnce(new Response('', { status: 404 }));
+    const res = await read('slug', lang);
+    expect(res.statusCode).toBe(200);
+    const projected = { ...record };
+    delete projected.isTranslated;
+    expect(res.body).toEqual({ article: projected });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[1][0])).toContain('/api/public/news/group/');
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/translations/'))).toBe(false);
+  });
+
+  test('preserves a verified historical public-only copy through the existing generic detail route', async () => {
+    const copy = {
+      ...localized, _id: '507f1f77bcf86cd799439011', slug: `historical-copy-${lang}`,
+      translationGroupId: 'historical-group', createdAt: '2020-01-01T00:00:00.000Z',
+    };
+    fetchMock.mockImplementation(async (input) => {
+      const target = new URL(String(input));
+      if (target.origin === 'http://backend.test') {
+        if (target.pathname.includes('/slug/') || target.pathname.includes('/group/')) return new Response('', { status: 404 });
+        if (target.pathname === `/api/public/news/${copy.slug}`) return new Response(JSON.stringify(copy));
+        throw new Error('Unexpected mocked Backend read');
+      }
+      if (target.pathname === '/api/public/news') return new Response(JSON.stringify({ items: [] }));
+      const route = target.pathname.includes('/slug/') ? 'slug' : 'article';
+      const req = request(route, lang);
+      req.url = `${target.pathname}${target.search}`;
+      req.query = { lang, language: lang, ...(route === 'slug' ? { slug: copy.slug } : { id: copy.slug }) };
+      const res = response(req);
+      await (route === 'slug' ? slugHandler : articleHandler)(req, res);
+      return new Response(JSON.stringify(res.body), { status: res.statusCode });
+    });
+    const ctx = ssrContext(lang);
+    ctx.params = { slug: copy.slug };
+    const result = await getServerSideProps(ctx);
+    expect(result).toHaveProperty('props.article._id', copy._id);
+    expect(result).toHaveProperty('props.article.slug', copy.slug);
+    expect(result).toHaveProperty('props.article.language', lang);
+    expect(result).toHaveProperty('props.error', null);
+    expect(ctx.res.statusCode).toBe(200);
+  });
+
+  test('SSR treats verified legacy exists:false as absence rather than an outage', async () => {
+    serveIdProxy({ exists: false }, 200);
+    const ctx = ssrContext(lang);
+    expect(await getServerSideProps(ctx)).toEqual({ notFound: true });
+    expect(ctx.res.statusCode).not.toBe(503);
+  });
+});
+
+test.each([403, 404, 409, 410, 503])('a group HTTP %s never becomes a successful empty group', async (status) => {
+  fetchMock.mockResolvedValueOnce(new Response('private diagnostics', { status }));
+  const res = await read('group');
+  expect(res.statusCode).toBe(503);
+  expect(res.body).toEqual({ error: 'PUBLIC_NEWS_UNAVAILABLE' });
+});
+
+test.each([403, 404, 409, 410, 503])('a legacy listing HTTP %s cannot become article absence', async (status) => {
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ article: null })))
+    .mockResolvedValueOnce(new Response('', { status }));
+  const res = await read('slug');
+  expect(res.statusCode).toBe(status === 404 || status === 410 ? 503 : status);
+  expect(res.body).toEqual({ error: 'PUBLIC_NEWS_UNAVAILABLE' });
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+});
+
+test.each([404, 410])('Pulse detail HTTP %s overrides a stale successful slug snapshot', async (status) => {
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ article: { ...story, category: 'pulse-dialogue' } })))
+    .mockResolvedValueOnce(new Response('', { status }));
+  const res = await read('slug');
+  expect(res.statusCode).toBe(status);
+  expect(res.body).toEqual({ ok: false, message: 'NOT_FOUND' });
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+});
+
+test.each([{}, { article: null }, { ok: false, article: story }, { article: { _id: story._id } }])(
+  'an invalid ID success %j after legacy discovery never serves the stale listing',
+  async (payload) => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ article: null })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [story] })))
+      .mockResolvedValueOnce(new Response(JSON.stringify(payload)));
+    const res = await read('slug');
+    expect(res.statusCode).toBe(503);
+    expect(res.body).toEqual({ error: 'PUBLIC_NEWS_UNAVAILABLE' });
+  },
+);
+
+test('legacy discovery serves only the verified ID DTO, including Backend-owned canonical resolution', async () => {
+  const copy = { ...story, _id: '507f1f77bcf86cd799439011', title: 'Stale list title', internalOwner: 'private owner' };
+  const verified = { ...story, _id: '507f191e810c19729de860ea', title: 'Current canonical title', slug: 'canonical-story' };
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ article: null })))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ items: [copy] })))
+    .mockResolvedValueOnce(new Response(JSON.stringify({
+      article: { ...verified, workflow: 'private workflow' }, diagnostics: 'private envelope',
+    })));
+  const res = await read('slug');
+  expect(res.statusCode).toBe(200);
+  expect(res.body).toEqual({ article: verified });
+  expect(String(fetchMock.mock.calls[2][0])).toContain(`/api/public/news/${copy._id}?`);
+});
+
+test.each(['en', 'hi', 'gu'])('pending %s compatibility returns only public progress metadata', async (sourceLang) => {
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
+    status: 'pending', sourceLang, editorialWorkflow: 'private workflow', diagnostics: 'private envelope',
+  }), { status: 202 }));
+  const res = await read('slug');
+  expect(res.statusCode).toBe(200);
+  expect(res.body).toEqual({ status: 'pending', sourceLang });
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+test.each([
+  { outerStatus: 200, httpStatus: 200, field: 'status', pendingStatus: 'pending', sourceLang: 'gu' },
+  { outerStatus: 202, httpStatus: 202, field: 'translationStatus', pendingStatus: 'translating', sourceLang: 'hi' },
+  { outerStatus: 'success', httpStatus: 200, field: 'state', pendingStatus: 'pending', sourceLang: 'en' },
+])('$sourceLang nested translation progress reads $field behind outer status $outerStatus', async ({
+  outerStatus, httpStatus, field, pendingStatus, sourceLang,
+}) => {
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
+    status: outerStatus,
+    data: { [field]: pendingStatus, sourceLang, editorialWorkflow: 'private workflow' },
+    diagnostics: 'private envelope',
+  }), { status: httpStatus }));
+  const res = await read('slug', sourceLang);
+  expect(res.statusCode).toBe(200);
+  expect(res.body).toEqual({ status: pendingStatus, sourceLang });
+  expect(res.headers['Cache-Control']).toBe('no-store');
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+test.each([
+  { failure: 'HTTP 503', httpStatus: 503, payload: { status: 200, data: { status: 'pending' } } },
+  { failure: 'failed envelope', httpStatus: 200, payload: { status: 200, ok: false, data: { status: 'pending' } } },
+  { failure: 'nested error', httpStatus: 200, payload: { status: 200, data: { status: 'pending', error: 'private diagnostic' } } },
+])('nested translation progress cannot override $failure', async ({ httpStatus, payload }) => {
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(payload), { status: httpStatus }));
+  const res = await read('slug');
+  expect(res.statusCode).toBe(503);
+  expect(res.body).toEqual({ error: 'PUBLIC_NEWS_UNAVAILABLE' });
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+test('nested translation progress metadata does not override a published record status', async () => {
+  const article = { ...story, translationStatus: 'pending' };
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ status: 200, data: article })));
+  const res = await read('slug');
+  expect(res.statusCode).toBe(200);
+  expect(res.body).toEqual({ article });
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+test('all legacy discovery reads share the four-second deadline', async () => {
+  jest.useFakeTimers();
+  let signal: AbortSignal | null | undefined;
+  fetchMock.mockImplementationOnce(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    return new Response(JSON.stringify({ article: null }));
+  }).mockResolvedValueOnce(new Response(JSON.stringify({ items: [story] })))
+    .mockImplementationOnce(async (_url, init) => {
+      signal = init?.signal;
+      const upstream = new Response('{}');
+      jest.spyOn(upstream, 'text').mockImplementation(() => new Promise<string>(() => {}));
+      return upstream;
+    });
+  let settled = false;
+  const pending = read('slug').then((res) => { settled = true; return res; });
+  await jest.advanceTimersByTimeAsync(3999);
+  expect(settled).toBe(false);
+  expect(fetchMock).toHaveBeenCalledTimes(3);
+  await jest.advanceTimersByTimeAsync(1);
+  expect((await pending).statusCode).toBe(503);
+  expect(signal?.aborted).toBe(true);
+  expect(jest.getTimerCount()).toBe(0);
+});

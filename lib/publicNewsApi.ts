@@ -117,12 +117,18 @@ function responseRecord(payload: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function failedPublicNewsPayload(payload: Record<string, unknown> | null): boolean {
-  return Boolean(payload && (
-    payload.ok === false || payload.success === false || payload.error ||
-    (Array.isArray(payload.errors) ? payload.errors.length : payload.errors) ||
-    payload.stack || payload.stackTrace
+export function failedPublicNewsPayload(payload: unknown): boolean {
+  const record = responseRecord(payload);
+  return Boolean(record && (
+    record.ok === false || record.success === false || record.error ||
+    (Array.isArray(record.errors) ? record.errors.length : record.errors) ||
+    record.stack || record.stackTrace
   ));
+}
+
+export function isLegacyMissingArticle(payload: unknown): payload is { exists: false } {
+  const record = responseRecord(payload);
+  return record !== null && record.exists === false && Object.keys(record).length === 1;
 }
 
 type PublicFields = { [field: string]: true | PublicFields };
@@ -190,7 +196,7 @@ const publicSponsorScalars = publicScalars(
   'sponsoredEndAt campaignEndAt endAt endsAt endDate expiresAt linkedArticleSlug sponsoredArticleSlug targetArticleSlug destinationArticleSlug ' +
   'articleSlug linkedArticleId sponsoredArticleId targetArticleId destinationArticleId linkedSponsoredArticleId linkedSponsoredArticleSlug ' +
   'destinationUrl targetUrl linkUrl ctaUrl href url permalink canonicalUrl sponsorFeatureLinkedId linkedSponsoredFeatureId linkedFeatureId ' +
-  'sponsoredFeatureId featureId campaignId featureStatus active enabled _id id published isPublished status ' +
+  'sponsoredFeatureId featureId campaignId featureStatus active isActive enabled _id id published isPublished status ' +
   'ctaText ctaLabel buttonText buttonLabel actionLabel actionText linkText sponsorCtaText sponsorCtaLabel sponsorDestinationUrl sponsorDestinationHref sponsorTargetUrl sponsorCtaUrl ' +
   'tag label badge featureType featureLabel type storyType articleType contentType format placement slot position topic'
 );
@@ -348,7 +354,7 @@ function parsePublicNewsRecord(payload: unknown, listRecord = false): Article | 
 }
 
 export function parsePublicNewsArticle(payload: unknown): Article | null {
-  if (failedPublicNewsPayload(responseRecord(payload))) return null;
+  if (responseRecord(payload)?.exists === false || failedPublicNewsPayload(payload)) return null;
   return parsePublicNewsRecord(unwrapArticle(payload));
 }
 
@@ -694,7 +700,9 @@ export async function fetchPublicNewsById(options: {
       return { article: null, status: res.status, endpoint, error: `API ${res.status}` };
     }
 
-    const article = parsePublicNewsArticle(await res.json());
+    const payload: unknown = await res.json();
+    if (isLegacyMissingArticle(payload)) return { article: null, status: 404, endpoint };
+    const article = parsePublicNewsArticle(payload);
     if (!article) {
       logPublicNewsError('invalid_article_response', { status: res.status });
       return { article: null, endpoint, error: 'Invalid article response' };

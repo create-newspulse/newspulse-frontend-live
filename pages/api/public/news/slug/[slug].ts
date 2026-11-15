@@ -2,10 +2,13 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 
 import { getPublicApiBaseUrl } from '../../../../../lib/publicApiBase';
 import { getLocalizedArticleFields, getLocalizedSlug, normalizeRouteLocale, STRICT_LOCALE_POLICY, type RouteLocale } from '../../../../../lib/localizedArticleFields';
-import { unwrapArticle, unwrapArticles } from '../../../../../lib/publicNewsApi';
+import { failedPublicNewsPayload, isLegacyMissingArticle, parsePublicNewsArticle, parsePublicNewsGroupItems, parsePublicNewsList, type Article } from '../../../../../lib/publicNewsApi';
 import { pickFreshestArticleForLocale } from '../../../../../lib/translationGroupSync';
 import { isPulseDialogueArticle } from '../../../../../lib/pulseDialogue';
 import { withPublicReadDeadline } from '../../../../../lib/publicReadDeadline';
+import { getSafeRetryAfter } from '../../../../../lib/retryAfter';
+
+type ReadPublicJson = (url: string, timeoutMs?: number) => Promise<{ status: number; payload: unknown }>;
 
 function asSingleQueryValue(value: string | string[] | undefined): string {
   return String(Array.isArray(value) ? value[0] : value || '').trim();
@@ -24,7 +27,7 @@ function debugSlugResolution(stage: string, payload: Record<string, unknown>) {
   console.info('[api/public/news/slug]', { stage, ...payload });
 }
 
-function getArticleSlugCandidates(article: any, requestedLocale: RouteLocale): string[] {
+function getArticleSlugCandidates(article: Record<string, unknown>, requestedLocale: RouteLocale): string[] {
   const values = [
     getLocalizedSlug(article, requestedLocale),
     getLocalizedSlug(article, 'en'),
@@ -43,59 +46,56 @@ function getArticleSlugCandidates(article: any, requestedLocale: RouteLocale): s
     .filter((value, index, list) => Boolean(value) && list.indexOf(value) === index);
 }
 
-function getItemsFromPayload(payload: any): any[] {
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.items)) return payload.items;
-  if (Array.isArray(payload?.articles)) return payload.articles;
-  if (Array.isArray(payload?.data)) return payload.data;
-  if (Array.isArray(payload?.data?.items)) return payload.data.items;
-  if (Array.isArray(payload?.data?.articles)) return payload.data.articles;
-  return unwrapArticles(payload);
-}
-
-function isPendingTranslationPayload(payload: any): boolean {
-  if (!payload || typeof payload !== 'object') return false;
-  const direct = String((payload as any).status || (payload as any).translationStatus || (payload as any).state || '').toLowerCase();
-  if (direct === 'pending' || direct === 'translating') return true;
-
-  const nested = (payload as any).data && typeof (payload as any).data === 'object' ? (payload as any).data : null;
-  if (!nested) return false;
-
-  const nestedStatus = String((nested as any).status || (nested as any).translationStatus || (nested as any).state || '').toLowerCase();
-  return nestedStatus === 'pending' || nestedStatus === 'translating';
+function pendingTranslationResponse(payload: unknown): { status: 'pending' | 'translating'; sourceLang?: RouteLocale } | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload) || failedPublicNewsPayload(payload)) return null;
+  const record = payload as Record<string, unknown>;
+  const nested = record.data && typeof record.data === 'object' && !Array.isArray(record.data)
+    ? record.data as Record<string, unknown> : null;
+  if (failedPublicNewsPayload(nested)) return null;
+  const directStatus = String(record.status || record.translationStatus || record.state || '').toLowerCase();
+  const status = directStatus === 'pending' || directStatus === 'translating'
+    ? directStatus
+    : String(nested?.status || nested?.translationStatus || nested?.state || '').toLowerCase();
+  if (status !== 'pending' && status !== 'translating') return null;
+  const sourceLang = [
+    record.sourceLang, record.sourceLanguage, record.availableLang, record.availableLanguage,
+    nested?.sourceLang, nested?.sourceLanguage, nested?.availableLang, nested?.availableLanguage,
+  ].find((value) => typeof value === 'string' && ['en', 'hi', 'gu'].includes(value.trim().toLowerCase()));
+  return { status, ...(typeof sourceLang === 'string' ? { sourceLang: normalizeRouteLocale(sourceLang) } : {}) };
 }
 
 async function resolveArticleFromTranslationGroup(options: {
   base: string;
   qs: string;
-  requestHeaders: Record<string, string>;
-  article: any;
+  readJson: ReadPublicJson;
+  article: Article;
   requestedLocale: RouteLocale;
-}): Promise<any> {
+}): Promise<Article | null> {
   const translationGroupId = String(options.article?.translationGroupId || '').trim();
   if (!options.article?._id || !translationGroupId) return options.article;
 
   try {
     const groupUrl = `${options.base}/api/public/news/group/${encodeURIComponent(translationGroupId)}${options.qs}`;
-    const groupRes = await fetch(groupUrl, {
-      method: 'GET',
-      headers: options.requestHeaders,
-    });
-    const groupText = await groupRes.text().catch(() => '');
-    const groupJson = groupText ? JSON.parse(groupText) : { items: [] };
-    const groupItems = groupRes.ok ? getItemsFromPayload(groupJson) : [];
+    const groupRes = await options.readJson(groupUrl, 1500);
+    if (groupRes.status < 200 || groupRes.status >= 300) throw new Error('PUBLIC_NEWS_GROUP_UNAVAILABLE');
+    const groupItems = parsePublicNewsGroupItems(groupRes.payload);
+    if (!groupItems) throw new Error('INVALID_PUBLIC_NEWS_GROUP');
     return pickFreshestArticleForLocale({
       currentArticle: options.article,
       groupArticles: groupItems,
       locale: options.requestedLocale,
       policy: STRICT_LOCALE_POLICY,
-    }) || options.article;
+    });
   } catch {
+    if (process.env.NODE_ENV !== 'production') console.error('[api/public/news/slug] translation_group_unavailable');
+    const localized = getLocalizedArticleFields(options.article, options.requestedLocale, STRICT_LOCALE_POLICY);
+    if (localized.status === 'published' && !localized.isVisible) throw new Error('PUBLIC_NEWS_GROUP_UNAVAILABLE');
     return options.article;
   }
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
     return res.status(405).json({ ok: false, message: 'METHOD_NOT_ALLOWED' });
@@ -106,8 +106,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const base = getApiBase();
   if (!base) {
-    res.setHeader('Cache-Control', 'no-store');
-    return res.status(200).json({ article: null });
+    return res.status(503).json({ error: 'PUBLIC_NEWS_UNAVAILABLE' });
   }
 
   const qsIndex = (req.url || '').indexOf('?');
@@ -117,7 +116,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const targetUrl = `${base}/api/public/news/slug/${encodeURIComponent(slug)}${qs}`;
 
   const requestedLocale = normalizeRouteLocale(
-    asSingleQueryValue(req.query.language as any) || asSingleQueryValue(req.query.lang as any)
+    asSingleQueryValue(req.query.language) || asSingleQueryValue(req.query.lang)
   );
   const normalizedRequestedSlug = normalizeSlugValue(slug);
 
@@ -127,117 +126,100 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     authorization: String(req.headers.authorization || ''),
   };
 
-  const returnResolvedArticle = (json: any, article: any, stage: string) => {
+  const deadlineAt = Date.now() + 4000;
+  let retryAfter: string | undefined;
+  const readJson: ReadPublicJson = async (url, timeoutMs = 4000) => {
+    const remaining = Math.min(timeoutMs, deadlineAt - Date.now());
+    if (remaining <= 0) throw new Error('PUBLIC_NEWS_UNAVAILABLE');
+    return withPublicReadDeadline(remaining, async (signal) => {
+      const upstream = await fetch(url, { method: 'GET', headers: requestHeaders, cache: 'no-store', signal });
+      retryAfter = getSafeRetryAfter(upstream.headers?.get('Retry-After'));
+      const payload: unknown = upstream.ok ? JSON.parse(await upstream.text()) : null;
+      signal.throwIfAborted();
+      return { status: upstream.status, payload };
+    });
+  };
+  const unavailable = (status = 503) => {
+    if (retryAfter) res.setHeader('Retry-After', retryAfter);
+    return res.status(status >= 400 && status < 600 ? status : 503).json({ error: 'PUBLIC_NEWS_UNAVAILABLE' });
+  };
+  const notFound = (status = 404) => res.status(status).json({ ok: false, message: 'NOT_FOUND' });
+  const returnResolvedArticle = (article: Article, stage: string) => {
     const localized = getLocalizedArticleFields(article, requestedLocale, STRICT_LOCALE_POLICY);
+    if (!localized.isVisible) return notFound();
     debugSlugResolution(stage, {
       locale: requestedLocale,
       receivedSlug: normalizedRequestedSlug,
       resolvedSlug: localized.slug || normalizedRequestedSlug,
-      articleId: String(article?._id || article?.id || '').trim() || null,
+      articleId: article._id,
       translationFound: localized.translationFound,
     });
     res.setHeader('Cache-Control', 'no-store, max-age=0');
-    return res.status(200).json(json);
+    return res.status(200).json({ article });
   };
 
   try {
-    const upstream = await fetch(targetUrl, {
-      method: 'GET',
-      headers: requestHeaders,
-    });
-
-    const text = await upstream.text().catch(() => '');
-
-    try {
-      const json = text ? JSON.parse(text) : { article: null };
-      if (isPendingTranslationPayload(json)) {
-        res.setHeader('Cache-Control', 'no-store, max-age=0');
-        return res.status(200).json(json);
-      }
-
-      const article = unwrapArticle(json);
-      if (article?._id) {
-        let resolvedArticle = await resolveArticleFromTranslationGroup({
-          base,
-          qs,
-          requestHeaders,
-          article,
-          requestedLocale,
-        });
-        if (isPulseDialogueArticle(resolvedArticle)) {
-          const detailArticle = await withPublicReadDeadline(1500, async (signal) => {
-            const detailRes = await fetch(`${base}/api/public/news/${encodeURIComponent(resolvedArticle._id)}${qs}`, {
-              method: 'GET',
-              headers: requestHeaders,
-              cache: 'no-store',
-              signal,
-            });
-            if (!detailRes.ok) throw new Error('PULSE_DIALOGUE_DETAIL_UNAVAILABLE');
-            return unwrapArticle(JSON.parse(await detailRes.text()));
-          });
-          const detailLanguage = String(detailArticle?.language || (detailArticle as any)?.lang || '').trim();
-          if (detailArticle?._id !== resolvedArticle._id || !detailLanguage ||
-            normalizeRouteLocale(detailLanguage) !== requestedLocale || !isPulseDialogueArticle(detailArticle) ||
-            !getLocalizedArticleFields(detailArticle, requestedLocale, STRICT_LOCALE_POLICY).isVisible) {
-            throw new Error('PULSE_DIALOGUE_DETAIL_MISMATCH');
-          }
-          resolvedArticle = detailArticle;
-        }
-        const localized = getLocalizedArticleFields(resolvedArticle, requestedLocale, STRICT_LOCALE_POLICY);
-        if (localized.isVisible) {
-          return returnResolvedArticle({ ...json, article: resolvedArticle }, resolvedArticle, resolvedArticle === article ? 'direct-hit' : 'direct-group-hit');
-        }
-      }
-
-      const listParams = new URLSearchParams(qsIndex >= 0 ? (req.url || '').slice(qsIndex + 1) : '');
-      const currentLimit = Number(listParams.get('limit') || 0);
-      if (!Number.isFinite(currentLimit) || currentLimit < 200) listParams.set('limit', '200');
-      listParams.set('strictLocale', '1');
-
-      const listQuery = listParams.toString();
-      const listUrl = `${base}/api/public/news${listQuery ? `?${listQuery}` : ''}`;
-      const listRes = await fetch(listUrl, {
-        method: 'GET',
-        headers: requestHeaders,
-      });
-      const listText = await listRes.text().catch(() => '');
-      const listJson = listText ? JSON.parse(listText) : { items: [] };
-      const listItems = getItemsFromPayload(listJson);
-
-      const matched = listItems.find((item) => getArticleSlugCandidates(item, requestedLocale).includes(normalizedRequestedSlug));
-      if (!matched) {
-        debugSlugResolution('fallback-miss', {
-          locale: requestedLocale,
-          receivedSlug: normalizedRequestedSlug,
-          resolvedSlug: null,
-          articleId: null,
-          translationFound: false,
-        });
-        res.setHeader('Cache-Control', 'no-store, max-age=0');
-        return res.status(200).json({ article: null });
-      }
-
-      const matchedId = String(matched?._id || matched?.id || '').trim();
-      if (!matchedId) {
-        return returnResolvedArticle({ article: matched }, matched, 'fallback-list-only');
-      }
-
-      const detailUrl = `${base}/api/public/news/${encodeURIComponent(matchedId)}${qs}`;
-      const detailRes = await fetch(detailUrl, {
-        method: 'GET',
-        headers: requestHeaders,
-      });
-      const detailText = await detailRes.text().catch(() => '');
-      const detailJson = detailText ? JSON.parse(detailText) : { article: matched };
-      const detailArticle = unwrapArticle(detailJson) || matched;
-
-      return returnResolvedArticle(detailJson.article ? detailJson : { article: detailArticle }, detailArticle, 'fallback-by-id');
-    } catch {
-      res.setHeader('Cache-Control', 'no-store');
-      return res.status(200).json({ article: null });
+    const upstream = await readJson(targetUrl);
+    if (upstream.status === 404 || upstream.status === 410) return notFound(upstream.status);
+    if (upstream.status < 200 || upstream.status >= 300) return unavailable(upstream.status);
+    const json = upstream.payload;
+    if (isLegacyMissingArticle(json)) return res.status(200).json({ exists: false });
+    if (failedPublicNewsPayload(json) || (json && typeof json === 'object' && 'exists' in json && json.exists === false)) {
+      throw new Error('INVALID_PUBLIC_NEWS_ARTICLE');
     }
+    const pending = pendingTranslationResponse(json);
+    if (pending) return res.status(200).json(pending);
+
+    const article = parsePublicNewsArticle(json);
+    if (article) {
+      if (getLocalizedArticleFields(article, requestedLocale, STRICT_LOCALE_POLICY).status !== 'published') return notFound();
+      let resolvedArticle = await resolveArticleFromTranslationGroup({ base, qs, readJson, article, requestedLocale });
+      if (!resolvedArticle) return notFound();
+      if (isPulseDialogueArticle(resolvedArticle)) {
+        const detail = await readJson(`${base}/api/public/news/${encodeURIComponent(resolvedArticle._id)}${qs}`, 1500);
+        if (detail.status === 404 || detail.status === 410) return notFound(detail.status);
+        if (detail.status < 200 || detail.status >= 300) return unavailable(detail.status);
+        if (isLegacyMissingArticle(detail.payload)) return res.status(200).json({ exists: false });
+        const detailArticle = parsePublicNewsArticle(detail.payload);
+        if (!detailArticle) throw new Error('INVALID_PUBLIC_NEWS_ARTICLE');
+        const detailLocale = getLocalizedArticleFields(detailArticle, requestedLocale, STRICT_LOCALE_POLICY);
+        if (detailLocale.status !== 'published') return notFound();
+        const detailLanguage = detailArticle.language || ('lang' in detailArticle ? detailArticle.lang : '');
+        if (detailArticle._id !== resolvedArticle._id || typeof detailLanguage !== 'string' || !detailLanguage.trim() ||
+          normalizeRouteLocale(detailLanguage) !== requestedLocale || !isPulseDialogueArticle(detailArticle) || !detailLocale.isVisible) {
+          throw new Error('PULSE_DIALOGUE_DETAIL_MISMATCH');
+        }
+        resolvedArticle = detailArticle;
+      }
+      return returnResolvedArticle(resolvedArticle, resolvedArticle === article ? 'direct-hit' : 'direct-group-hit');
+    }
+
+    // Only the established legacy null response permits listing-based ID discovery.
+    if (!json || typeof json !== 'object' || Array.isArray(json) || !('article' in json) || json.article !== null) {
+      throw new Error('INVALID_PUBLIC_NEWS_ARTICLE');
+    }
+    const listParams = new URLSearchParams(qsIndex >= 0 ? (req.url || '').slice(qsIndex + 1) : '');
+    const currentLimit = Number(listParams.get('limit') || 0);
+    if (!Number.isFinite(currentLimit) || currentLimit < 200) listParams.set('limit', '200');
+    listParams.set('strictLocale', '1');
+
+    const list = await readJson(`${base}/api/public/news?${listParams.toString()}`);
+    if (list.status < 200 || list.status >= 300) {
+      return unavailable(list.status === 404 || list.status === 410 ? 503 : list.status);
+    }
+    const parsedList = parsePublicNewsList(list.payload);
+    if (!parsedList) throw new Error('INVALID_PUBLIC_NEWS_LIST');
+    const matched = parsedList.items.find((item) => getArticleSlugCandidates(item, requestedLocale).includes(normalizedRequestedSlug));
+    if (!matched) return res.status(200).json({ article: null });
+
+    const detail = await readJson(`${base}/api/public/news/${encodeURIComponent(matched._id)}${qs}`);
+    if (detail.status === 404 || detail.status === 410) return notFound(detail.status);
+    if (detail.status < 200 || detail.status >= 300) return unavailable(detail.status);
+    if (isLegacyMissingArticle(detail.payload)) return res.status(200).json({ exists: false });
+    const detailArticle = parsePublicNewsArticle(detail.payload);
+    if (!detailArticle) throw new Error('INVALID_PUBLIC_NEWS_ARTICLE');
+    return returnResolvedArticle(detailArticle, 'fallback-by-id');
   } catch {
-    res.setHeader('Cache-Control', 'no-store');
-    return res.status(200).json({ article: null });
+    return unavailable();
   }
 }
