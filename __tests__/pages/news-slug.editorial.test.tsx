@@ -22,6 +22,8 @@ jest.mock('../../src/i18n/LanguageProvider', () => ({
     t: (key: string) => ({
       'common.home': 'Home',
       'common.share': 'Share',
+      'articleShare.label': 'Share this article',
+      'articleShare.nativeShare': 'More sharing options',
       'common.relatedStories': 'Related Stories',
       'common.noResults': 'No related stories yet.',
       'common.trending': 'Trending Topics',
@@ -361,7 +363,9 @@ describe('pages/news/[slug] editorial detail', () => {
     expect(screen.getByText('Water situation image caption')).toBeTruthy();
     expect(screen.getByText('News Pulse Photo Desk')).toBeTruthy();
     expect(screen.getByText('Complete article content')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Share' })).toBeTruthy();
+    const shareBar = screen.getByRole('group', { name: 'Share this article' });
+    expect(shareBar.querySelectorAll('a, button')).toHaveLength(6);
+    expect(within(shareBar).getByRole('button', { name: 'More sharing options' })).toBeTruthy();
     expect(screen.getByText('Related Editorial')).toBeTruthy();
     expect(screen.queryByText(/Founder.s Voice|Opinion|Analysis|Commentary|Explainer/i)).toBeNull();
   });
@@ -1681,7 +1685,7 @@ describe('pages/news/[slug] editorial detail', () => {
     expect(figure?.getAttribute('data-np-post-id')).toBe('2050104453630718079');
     expect(frame).toBeTruthy();
     expect(statusLink?.getAttribute('href')).toBe('https://x.com/i/status/2050104453630718079');
-    expect(screen.getByRole('status').textContent).toBe('Loading X post...');
+    expect(within(consentGate).getByRole('status').textContent).toBe('Loading X post...');
     await waitFor(() => expect(loadTwitterWidgetsIn).toHaveBeenCalledTimes(1));
   });
 
@@ -1723,7 +1727,7 @@ describe('pages/news/[slug] editorial detail', () => {
     expect(fallbackLink.getAttribute('href')).toBe('https://x.com/i/status/2050104453630718079');
     expect(fallbackLink.getAttribute('target')).toBe('_blank');
     expect(fallbackLink.getAttribute('rel')).toBe('noopener noreferrer');
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByText('Loading X post...', { selector: '[role="status"]' })).toBeNull();
   });
 
   test('uses the article detail placeholder only when no usable image resolves', async () => {

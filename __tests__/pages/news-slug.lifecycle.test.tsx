@@ -72,6 +72,7 @@ async function expectWithdrawn() {
   expect(screen.queryByText('Original summary')).toBeNull();
   expect(screen.queryByText('Original body')).toBeNull();
   expect(document.querySelector('script[type="application/ld+json"]')).toBeNull();
+  expect(screen.queryByRole('group', { name: 'articleShare.label' })).toBeNull();
 }
 
 beforeEach(() => {
@@ -177,6 +178,8 @@ test('does not add mount-time reads or article polling', async () => {
   await act(async () => { await jest.advanceTimersByTimeAsync(60_000); });
   expect(fetchMock).not.toHaveBeenCalled();
   expect(screen.getByRole('heading', { name: 'Original title' })).toBeTruthy();
+  expect(screen.getAllByRole('group', { name: 'articleShare.label' })).toHaveLength(1);
+  expect(screen.queryByRole('button', { name: 'Share' })).toBeNull();
 });
 
 describe('pending translation read recovery', () => {
@@ -193,6 +196,7 @@ describe('pending translation read recovery', () => {
     const initialProps = props(article());
     const view = render(<NewsSlugDetailPage {...initialProps} />);
     view.rerender(<NewsSlugDetailPage {...initialProps} lang="hi" locale="hi" article={null} safeHtml="" pending />);
+    expect(screen.queryByRole('group', { name: 'articleShare.label' })).toBeNull();
     await act(async () => { await jest.advanceTimersByTimeAsync(1500); });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     await act(async () => { await jest.advanceTimersByTimeAsync(3999); });
@@ -258,7 +262,7 @@ test.each(['network', 'HTTP', 'JSON', 'invalid shape', 'failed envelope'])('%s g
   else fetchMock.mockResolvedValueOnce(json(stage === 'invalid shape' ? {} : { ok: false, items: [] }));
   render(<NewsSlugDetailPage {...props(article())} />);
   await refresh();
-  await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Showing previously loaded stories.'));
+  await waitFor(() => expect(screen.getByText(/Showing previously loaded stories\./, { selector: '[role="status"]' })).toBeTruthy());
   expect(screen.getByRole('heading', { name: 'Original title' })).toBeTruthy();
   expect(screen.getByText('Original body')).toBeTruthy();
   expect(screen.queryByRole('heading', { name: '404' })).toBeNull();
@@ -270,7 +274,7 @@ describe.each(['en', 'hi', 'gu'] as const)('%s unavailable group refresh', (lang
     fetchMock.mockResolvedValueOnce(json({ error: 'PUBLIC_NEWS_UNAVAILABLE' }, status));
     render(<NewsSlugDetailPage {...props(article({ language: lang }), lang)} />);
     await refresh();
-    await waitFor(() => expect(screen.getByRole('status')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/Showing previously loaded stories\./, { selector: '[role="status"]' })).toBeTruthy());
     expect(screen.getByRole('heading', { name: 'Original title' })).toBeTruthy();
     expect(screen.getByText('Original body')).toBeTruthy();
     expect(screen.queryByRole('heading', { name: '404' })).toBeNull();
@@ -343,7 +347,7 @@ test.each(['network', 'HTTP', 'empty success'])('standalone %s failure is not de
   else fetchMock.mockResolvedValueOnce(json({}, stage === 'HTTP' ? 503 : 200));
   render(<NewsSlugDetailPage {...props(article({ translationGroupId: undefined }))} />);
   await refresh();
-  await waitFor(() => expect(screen.getByRole('status')).toBeTruthy());
+  await waitFor(() => expect(screen.getByText(/Showing previously loaded stories\./, { selector: '[role="status"]' })).toBeTruthy());
   expect(screen.getByRole('heading', { name: 'Original title' })).toBeTruthy();
 });
 
@@ -433,7 +437,7 @@ test.each(['withdrawal', 'update'])('a late older response cannot overwrite a ne
   if (outcome === 'withdrawal') await expectWithdrawn();
   else await waitFor(() => expect(screen.getByRole('heading', { name: 'Newest title' })).toBeTruthy());
   expect(screen.queryByText('Stale title')).toBeNull();
-  expect(screen.queryByRole('status')).toBeNull();
+  expect(screen.queryByText(/Showing previously loaded stories\./, { selector: '[role="status"]' })).toBeNull();
 });
 
 test('late withdrawal cannot overwrite a newer published restore', async () => {
@@ -486,7 +490,7 @@ test('a stalled refresh is bounded, keeps content, and does not add polling', as
   const signal = fetchMock.mock.calls[0][1]?.signal;
   await act(async () => { await jest.advanceTimersByTimeAsync(4000); });
   expect(signal?.aborted).toBe(true);
-  expect(screen.getByRole('status').textContent).toContain('Showing previously loaded stories.');
+  expect(screen.getByText(/Showing previously loaded stories\./, { selector: '[role="status"]' })).toBeTruthy();
   expect(screen.getByRole('heading', { name: 'Original title' })).toBeTruthy();
   await act(async () => { await jest.advanceTimersByTimeAsync(60_000); });
   expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -504,7 +508,7 @@ describe.each(['group', 'standalone'])('%s malformed-record protection', (route)
     fetchMock.mockResolvedValueOnce(json(route === 'group' ? { items: [record] } : { article: record }));
     render(<NewsSlugDetailPage {...props(initial)} />);
     await refresh();
-    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Showing previously loaded stories.'));
+    await waitFor(() => expect(screen.getByText(/Showing previously loaded stories\./, { selector: '[role="status"]' })).toBeTruthy());
     expect(screen.getByRole('heading', { name: 'Original title' })).toBeTruthy();
     expect(screen.getByText('Original body')).toBeTruthy();
     expect(screen.queryByRole('heading', { name: '404' })).toBeNull();
@@ -542,7 +546,7 @@ test('incomparable same-ID withdrawal is an explicit ambiguous read, not fabrica
   render(<NewsSlugDetailPage {...props(current)} />);
   await refresh();
   expect(screen.getByRole('heading', { name: 'Original title' })).toBeTruthy();
-  expect(screen.getByRole('status')).toBeTruthy();
+  expect(screen.getByText(/Showing previously loaded stories\./, { selector: '[role="status"]' })).toBeTruthy();
   await refresh();
   await expectWithdrawn();
 });

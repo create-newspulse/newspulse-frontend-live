@@ -8,6 +8,7 @@ import { useRouter } from 'next/router';
 import dynamic from 'next/dynamic';
 import { trackDiscoveryClick } from '../../lib/analytics/articleAnalytics';
 
+import ArticleShareBar from '../../components/ArticleShareBar';
 import AdSlot from '../../src/components/ads/AdSlot';
 import CategoryHeader from '../../src/components/category/CategoryHeader';
 import { getCategoryIdentity, getCategoryQueryKey, getCategoryRouteKey } from '../../lib/categoryKeys';
@@ -683,13 +684,6 @@ function normalizeLang(value: unknown): 'en' | 'hi' | 'gu' {
   return 'en';
 }
 
-function stripQueryHash(path: string): string {
-  const raw = String(path || '/');
-  const noHash = raw.split('#')[0] || '/';
-  const noQuery = noHash.split('?')[0] || '/';
-  return noQuery || '/';
-}
-
 function localePrefix(lang: 'en' | 'hi' | 'gu'): '' | '/hi' | '/gu' {
   return lang === 'en' ? '' : (lang === 'hi' ? '/hi' : '/gu');
 }
@@ -1285,29 +1279,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
   const ogImage = React.useMemo(() => getLocalizedSeoValue(resolvedArticle, lang, 'ogImage', 'openGraphImage', 'image') || heroSrc || '', [heroSrc, lang, resolvedArticle]);
   const articleSeo = React.useMemo(() => buildArticleSeoMetadata(resolvedArticle, lang, siteUrl), [lang, resolvedArticle, siteUrl]);
 
-  const shareThis = async () => {
-    const url = canonicalUrl || (typeof window !== 'undefined' ? stripQueryHash(window.location.href) : '');
-    const shareTitle = String(displayTitle || 'News Pulse').trim();
-    if (!url) return;
-
-    try {
-      if (typeof navigator !== 'undefined' && 'share' in navigator) {
-        const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> };
-        if (typeof nav.share === 'function') {
-          await nav.share({ title: shareTitle, url });
-          return;
-        }
-      }
-    } catch {
-      // ignore
-    }
-
-    try {
-      await navigator.clipboard.writeText(url);
-    } catch {
-      // ignore
-    }
-  };
+  const canShare = Boolean(resolvedArticle && localized.isVisible && canonicalUrl && !pendingTranslate);
 
   const articleTitleParts = React.useMemo(() => splitStoryTitleHook(displayTitle), [displayTitle]);
   const articleTitleHookColor = React.useMemo(
@@ -1346,7 +1318,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
         {articleSeo?.breadcrumbJsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(articleSeo.breadcrumbJsonLd) }} /> : null}
       </Head>
 
-      <main className="min-h-screen bg-white">
+      <main className={`min-h-screen bg-white${canShare ? ' np-article-page--sharing' : ''}`}>
         <CategoryHeader
           categorySlug={categoryKey || 'news'}
           title={categoryHeaderTitle}
@@ -1494,15 +1466,9 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
                         </div>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={shareThis}
-                        className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 hover:bg-slate-50"
-                      >
-                        {tx('common.share', 'Share')}
-                      </button>
-
                     </div>
+
+                    {canShare ? <ArticleShareBar key={canonicalUrl} url={canonicalUrl} title={displayTitle || 'News Pulse'} /> : null}
 
                     {Array.isArray((resolvedArticle as any)?.tags) && (resolvedArticle as any)?.tags?.length ? (
                       <div className="flex flex-wrap gap-2 pt-1">
@@ -1696,6 +1662,16 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
       </main>
 
       <style jsx global>{`
+        @media (max-width: 767px) {
+          .np-article-page--sharing {
+            padding-bottom: calc(8rem + env(safe-area-inset-bottom, 0px));
+          }
+
+          .np-article-page--sharing .article-body :where(a, button, input, summary, [tabindex]) {
+            scroll-margin-bottom: calc(8rem + env(safe-area-inset-bottom, 0px));
+          }
+        }
+
         .article-body {
           color: #1e293b;
         }

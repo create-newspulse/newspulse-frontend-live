@@ -1,4 +1,12 @@
 {
+  "articleShare": {
+    "label": "Share this article",
+    "shareOn": "Share on {{platform}} (opens in a new tab)",
+    "copyLink": "Copy link",
+    "nativeShare": "More sharing options",
+    "copied": "Link copied.",
+    "error": "Sharing is unavailable. Copy the URL from your browser."
+  },
   "sponsoredContent": {
     "title": "Sponsored Content",
     "description": "Published sponsored articles across News Pulse editorial categories. Paid content is clearly labelled and remains separate from editorial rankings.",
