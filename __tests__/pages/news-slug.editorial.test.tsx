@@ -23,7 +23,7 @@ jest.mock('../../src/i18n/LanguageProvider', () => ({
       'common.home': 'Home',
       'common.share': 'Share',
       'articleShare.label': 'Share this article',
-      'articleShare.nativeShare': 'More sharing options',
+      'articleShare.nativeShare': 'More options',
       'common.relatedStories': 'Related Stories',
       'common.noResults': 'No related stories yet.',
       'common.trending': 'Trending Topics',
@@ -208,6 +208,13 @@ describe('public author metadata', () => {
 });
 
 describe('pages/news/[slug] editorial detail', () => {
+  function comparableArticleMarkup(container: HTMLElement) {
+    const menuId = container.querySelector('.np-article-share__menu')?.id;
+    if (!menuId) throw new Error('Expected the article share menu');
+    // useId changes across independent mounts, not with author metadata.
+    return container.innerHTML.split(menuId).join('article-share-menu');
+  }
+
   function renderAuthorArticle(overrides: Record<string, unknown> = {}, lang: 'en' | 'hi' | 'gu' = 'en') {
     return render(
       <NewsSlugDetailPage
@@ -269,10 +276,10 @@ describe('pages/news/[slug] editorial detail', () => {
 
   test.each(invalidAuthorBylines)('preserves normal article markup for absent, disabled or invalid author %p', (authorByline) => {
     const original = renderAuthorArticle();
-    const originalMarkup = original.container.innerHTML;
+    const originalMarkup = comparableArticleMarkup(original.container);
     original.unmount();
     const candidate = renderAuthorArticle({ authorByline });
-    expect(candidate.container.innerHTML).toBe(originalMarkup);
+    expect(comparableArticleMarkup(candidate.container)).toBe(originalMarkup);
     expect(screen.getByText('By Authorised Editor')).toBeTruthy();
     expect(screen.queryByTestId('author-byline')).toBeNull();
     expect(document.getElementById('about-author-heading')).toBeNull();
@@ -325,13 +332,13 @@ describe('pages/news/[slug] editorial detail', () => {
 
   test.each([undefined, { bylineSnapshot: { name: 'Public Contributor', designation: 'Public Voice' } }])('keeps Pulse Dialogue markup unchanged even with author metadata (%p)', (pulseDialogue) => {
     const original = renderAuthorArticle({ category: 'pulse-dialogue', pulseDialogue });
-    const originalMarkup = original.container.innerHTML;
+    const originalMarkup = comparableArticleMarkup(original.container);
     original.unmount();
     const candidate = renderAuthorArticle({ category: 'pulse-dialogue', pulseDialogue, authorByline: {
       enabled: true,
       snapshot: { name: 'Wrong author', publicDesignation: 'Writer', photoUrl: '/uploads/hidden.jpg', shortBio: 'Hidden bio' },
     } });
-    expect(candidate.container.innerHTML).toBe(originalMarkup);
+    expect(comparableArticleMarkup(candidate.container)).toBe(originalMarkup);
     expect(screen.queryByTestId('author-byline')).toBeNull();
     expect(document.getElementById('about-author-heading')).toBeNull();
   });
@@ -364,8 +371,12 @@ describe('pages/news/[slug] editorial detail', () => {
     expect(screen.getByText('News Pulse Photo Desk')).toBeTruthy();
     expect(screen.getByText('Complete article content')).toBeTruthy();
     const shareBar = screen.getByRole('group', { name: 'Share this article' });
-    expect(shareBar.querySelectorAll('a, button')).toHaveLength(6);
-    expect(within(shareBar).getByRole('button', { name: 'More sharing options' })).toBeTruthy();
+    expect(within(shareBar).getAllByRole('button')).toHaveLength(1);
+    expect(within(shareBar).queryByRole('dialog')).toBeNull();
+    fireEvent.click(within(shareBar).getByRole('button', { name: 'Share this article' }));
+    const shareMenu = within(shareBar).getByRole('dialog', { name: 'Share this article' });
+    expect(within(shareMenu).getAllByRole('link')).toHaveLength(5);
+    expect(within(shareMenu).getByRole('button', { name: 'More options' })).toBeTruthy();
     expect(screen.getByText('Related Editorial')).toBeTruthy();
     expect(screen.queryByText(/Founder.s Voice|Opinion|Analysis|Commentary|Explainer/i)).toBeNull();
   });

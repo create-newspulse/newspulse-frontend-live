@@ -3,7 +3,7 @@
     "label": "Share this article",
     "shareOn": "Share on {{platform}} (opens in a new tab)",
     "copyLink": "Copy link",
-    "nativeShare": "More sharing options",
+    "nativeShare": "More options",
     "copied": "Link copied.",
     "error": "Sharing is unavailable. Copy the URL from your browser."
   },
