@@ -77,6 +77,14 @@ describe.each(['en', 'hi', 'gu'] as const)('strict translated fields (%s)', (loc
 });
 
 describe('localizedArticleFields', () => {
+  test('resolved-locale metadata cannot override a conflicting foreign edition', () => {
+    const article = {
+      _id: '507f1f77bcf86cd79943c001', status: 'published', language: 'gu', resolvedLanguage: 'en',
+      title: 'Source title', content: '<p>Source body</p>', translations: { en: true, hi: false, gu: true },
+    };
+    expect(getLocalizedArticleFields(article, 'en', STRICT_LOCALE_POLICY).isVisible).toBe(false);
+  });
+
   test.each([undefined, '', 'unknown', 'fr'])('strict feeds do not assume English for missing/unsupported locale %s', (language) => {
     const article = {
       _id: 'unknown-locale', status: 'published', language,
@@ -105,7 +113,7 @@ describe('localizedArticleFields', () => {
 
   test('keeps published articles visible on Gujarati routes with base fallback', () => {
     const article: any = {
-      _id: 'article-1',
+      _id: '507f1f77bcf86cd79943c001',
       status: 'published',
       language: 'en',
       title: 'English title',
@@ -123,11 +131,11 @@ describe('localizedArticleFields', () => {
     expect(localized.title).toBe('English title');
     expect(localized.summary).toBe('English summary');
     expect(localized.bodyHtml).toBe('<p>English body</p>');
-    expect(localized.slug).toBe('english-title');
+    expect(localized.slug).toBe(article._id);
     expect(getLocalizedTitle(article, 'gu')).toBe('English title');
     expect(getLocalizedSummary(article, 'gu')).toBe('English summary');
     expect(getLocalizedContent(article, 'gu')).toBe('<p>English body</p>');
-    expect(getLocalizedSlug(article, 'gu')).toBe('english-title');
+    expect(getLocalizedSlug(article, 'gu')).toBe(article._id);
   });
 
   test('prefers Gujarati translation fields and localized slug when present', () => {

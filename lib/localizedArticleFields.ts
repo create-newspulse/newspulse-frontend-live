@@ -1,3 +1,5 @@
+import { resolveArticleSlug } from './articleSlugs';
+
 export type RouteLocale = 'en' | 'hi' | 'gu';
 
 export type LocalizedArticleFields = {
@@ -141,7 +143,10 @@ export function getLocaleTranslationStatus(article: any, locale: RouteLocale): '
 }
 
 function getSourceLocale(article: any): RouteLocale | null {
-  const raw = String(article?.sourceLang || article?.sourceLanguage || article?.language || article?.lang || '').trim().toLowerCase();
+  const resolved = String(article?.resolvedLanguage || article?.resolvedLang || '').trim().toLowerCase();
+  const edition = String(article?.language || article?.lang || '').trim().toLowerCase();
+  const raw = resolved && resolved === edition ? resolved
+    : String(article?.sourceLang || article?.sourceLanguage || article?.language || article?.lang || '').trim().toLowerCase();
   const base = raw.split(/[-_]/g)[0];
   if (!['en', 'english', 'hi', 'hindi', 'in', 'gu', 'gujarati'].includes(base)) return null;
   return normalizeRouteLocale(raw);
@@ -281,21 +286,6 @@ function getSourceBodyHtml(article: any): string {
   );
 }
 
-function getBaseSlug(article: any): string {
-  return sanitizeSlug(
-    pickNonEmpty(
-      article?.slug,
-      article?.seoSlug,
-      article?.originalSlug,
-      article?.sourceSlug,
-      article?.baseSlug,
-      article?.canonicalSlug,
-      article?._id,
-      article?.id
-    )
-  );
-}
-
 function getLocalizedFieldWithFallback(
   article: any,
   locale: RouteLocale,
@@ -336,21 +326,7 @@ export function getLocalizedContent(article: unknown, localeInput: unknown): str
 }
 
 export function getLocalizedSlug(article: unknown, localeInput: unknown): string {
-  const locale = normalizeRouteLocale(localeInput);
-  const item = article && typeof article === 'object' ? (article as any) : null;
-  if (!item) return '';
-
-  const explicit = sanitizeSlug(
-    pickNonEmpty(
-      getLocalizedFieldValue(item, locale, ['slug']),
-      extractTextLike(getNested(item, ['slugs', locale])),
-      extractTextLike(getNested(item, ['slug', locale])),
-      extractTextLike(item?.[`slug_${locale}`]),
-      extractTextLike(item?.[`slug${locale.toUpperCase()}`])
-    )
-  );
-
-  return explicit || getBaseSlug(item);
+  return resolveArticleSlug(article, localeInput);
 }
 
 export function getLocalizedCategoryLabel(article: unknown, localeInput: unknown): string {
@@ -428,8 +404,7 @@ export function getLocalizedArticleFields(
   );
 
   const localizedSlug = sanitizeSlug(getLocalizedFieldValue(item, requestedLocale, ['slug']));
-  const fallbackSlug = getBaseSlug(item);
-  const slug = localizedSlug || fallbackSlug;
+  const slug = resolveArticleSlug(item, requestedLocale);
   const translationFound = Boolean(
     titleResolved.translationFound ||
     summaryResolved.translationFound ||

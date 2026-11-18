@@ -124,7 +124,7 @@ describe('authoritative editorial topic archives', () => {
     const cards = [props.pinnedArticle, ...props.items];
     expect(cards).toHaveLength(3);
     for (const [index, story] of stories.entries()) {
-      const href = `${locale === 'en' ? '' : `/${locale}`}/news/${encodeURIComponent(story.slug)}`;
+      const href = `${locale === 'en' ? '' : `/${locale}`}/news/${encodeURIComponent(story.canonicalSlug)}`;
       expect(cards[index]).toMatchObject({
         id: story._id, href, titleText: story.title, category: story.category,
         translationKey: story.translationKey, translationGroupId: story.translationGroupId,
@@ -498,7 +498,7 @@ describe.each(['en', 'hi', 'gu'] as const)('%s mounted editorial lifecycle', (la
     await act(async () => { event(); });
     const heading = screen.getByRole('heading', { name: attached.title });
     expect(within(heading.closest('article')!).getByText(getMessagesForLang(lang).categories.techGadgets)).not.toBeNull();
-    expect(heading.closest('a')?.getAttribute('href')).toBe(`${lang === 'en' ? '' : `/${lang}`}/news/${attached.slug}`);
+    expect(heading.closest('a')?.getAttribute('href')).toBe(`${lang === 'en' ? '' : `/${lang}`}/news/${attached.canonicalSlug}`);
     expect(screen.queryByRole('heading', { name: storyFixture(13, lang).title })).toBeNull();
     fetchMock.mockImplementation(async (input) => topicResponse(input));
     await act(async () => { event(); });

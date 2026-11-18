@@ -1,108 +1,107 @@
 export type NewsLang = 'en' | 'hi' | 'gu';
 
-function normalizeLang(value: unknown): NewsLang {
-  const v = String(value || '').toLowerCase().trim();
+function knownLang(value: unknown): NewsLang | null {
+  const v = String(value || '').toLowerCase().trim().split(/[-_]/)[0];
   if (v === 'hi' || v === 'hindi' || v === 'in') return 'hi';
   if (v === 'gu' || v === 'gujarati') return 'gu';
-  return 'en';
+  return v === 'en' || v === 'english' ? 'en' : null;
 }
 
-function getSourceLang(article: any): NewsLang | null {
-  const raw = String(article?.sourceLang || article?.sourceLanguage || article?.language || article?.lang || '').trim();
-  if (!raw) return null;
-  return normalizeLang(raw);
-}
-
-function toSafeString(v: unknown): string {
-  if (typeof v === 'string') return v;
-  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
-  return '';
-}
-
-function pickFirstNonEmpty(...values: unknown[]): string {
-  for (const v of values) {
-    const s = toSafeString(v).trim();
-    if (s) return s;
-  }
-  return '';
-}
-
-function get(obj: any, path: string[]): unknown {
+function get(obj: unknown, path: string[]): unknown {
   let cur = obj;
   for (const key of path) {
     if (!cur || typeof cur !== 'object') return undefined;
-    cur = cur[key];
+    cur = (cur as Record<string, unknown>)[key];
   }
   return cur;
 }
 
-function pickLangField(article: any, lang: NewsLang, fieldNames: string[]): string {
-  const langKeys = [lang, lang === 'hi' ? 'in' : null].filter(Boolean) as string[];
+function slugText(value: unknown): string {
+  if (typeof value === 'string') return value.trim();
+  for (const key of ['text', 'value', 'slug']) {
+    const text = get(value, [key]);
+    if (typeof text === 'string' && text.trim()) return text.trim();
+  }
+  return '';
+}
 
+export function normalizeArticleSlug(value: unknown): string {
+  const raw = slugText(value);
+  try {
+    return decodeURIComponent(raw).trim();
+  } catch {
+    return '';
+  }
+}
+
+export function isArticleId(value: unknown): value is string {
+  return typeof value === 'string' && /^[a-f0-9]{24}$/i.test(value);
+}
+
+export function isLocalizedArticleSlug(value: unknown, lang: NewsLang): boolean {
+  const slug = normalizeArticleSlug(value);
+  if (!slug || /^(?:null|undefined)$/i.test(slug) || isArticleId(slug)
+    || /[/\\?#%\s\u0000-\u001f\u007f]/u.test(slug) || !/[\p{L}\p{N}]/u.test(slug)) return false;
+  const allowed = lang === 'hi' ? /[\p{Script=Latin}\p{Script=Devanagari}]/u
+    : lang === 'gu' ? /[\p{Script=Latin}\p{Script=Gujarati}]/u : /\p{Script=Latin}/u;
+  return [...slug].every(char => !/\p{L}/u.test(char) || allowed.test(char));
+}
+
+export function getArticleEditionLocale(article: unknown): NewsLang | null {
+  for (const key of ['language', 'lang', 'resolvedLanguage', 'resolvedLang', 'sourceLang', 'sourceLanguage']) {
+    const locale = knownLang(get(article, [key]));
+    if (locale) return locale;
+  }
+  return null;
+}
+
+function localizedSlug(article: unknown, lang: NewsLang): string {
   const candidates: unknown[] = [];
-
-  // Preferred structured shapes: slugs.{lang}, slug.{lang}
-  for (const lk of langKeys) {
-    for (const f of fieldNames) {
-      candidates.push(get(article, [f, lk]));
-      candidates.push(get(article, ['slugs', lk]));
-      candidates.push(get(article, ['slug', lk]));
+  for (const key of lang === 'hi' ? ['hi', 'in'] : [lang]) {
+    candidates.push(get(article, ['slugs', key]), get(article, ['slug', key]));
+    for (const group of ['translations', 'translation', 'i18n', 'localized', 'locales', 'byLang', 'textByLang']) {
+      candidates.push(get(article, [group, key, 'slug']), get(article, [group, 'slug', key]));
+    }
+    for (const field of [`slug_${key}`, `slug${key.toUpperCase()}`, `slug${key[0].toUpperCase()}${key.slice(1)}`, `${key}_slug`, `${key}Slug`]) {
+      candidates.push(get(article, [field]));
     }
   }
-
-  // Common nested translation shapes: translations.{lang}.slug
-  for (const lk of langKeys) {
-    for (const f of fieldNames) {
-      candidates.push(get(article, ['translations', lk, f]));
-      candidates.push(get(article, ['translation', lk, f]));
-      candidates.push(get(article, ['i18n', lk, f]));
-    }
-  }
-
-  // Flat suffix/prefix shapes: slug_en, slugEn, en_slug, enSlug
-  for (const lk of langKeys) {
-    const cap = lk.charAt(0).toUpperCase() + lk.slice(1);
-    for (const f of fieldNames) {
-      candidates.push(article?.[`${f}_${lk}`]);
-      candidates.push(article?.[`${f}${cap}`]);
-      candidates.push(article?.[`${lk}_${f}`]);
-      candidates.push(article?.[`${lk}${cap}`]);
-      candidates.push(article?.[`${lk}${f.charAt(0).toUpperCase()}${f.slice(1)}`]);
-    }
-  }
-
-  return pickFirstNonEmpty(...candidates);
+  const match = candidates.find(value => isLocalizedArticleSlug(value, lang));
+  return normalizeArticleSlug(match);
 }
 
-function sanitizeSlug(raw: string): string {
-  const s = String(raw || '').trim();
-  if (!s) return '';
-  // Keep as-is, but strip leading/trailing slashes.
-  return s.replace(/^\/+/, '').replace(/\/+$/, '');
+export function resolveArticleSlugs(article: unknown): Record<NewsLang, string> {
+  return { en: localizedSlug(article, 'en'), hi: localizedSlug(article, 'hi'), gu: localizedSlug(article, 'gu') };
 }
 
-export function resolveArticleSlugs(article: any): { en: string; hi: string; gu: string } {
-  const en = sanitizeSlug(pickFirstNonEmpty(pickLangField(article, 'en', ['slug']), article?.slug_en, article?.slugEn));
-  const hi = sanitizeSlug(pickFirstNonEmpty(pickLangField(article, 'hi', ['slug']), article?.slug_hi, article?.slugHi, article?.slug_in, article?.slugIn));
-  const gu = sanitizeSlug(pickFirstNonEmpty(pickLangField(article, 'gu', ['slug']), article?.slug_gu, article?.slugGu));
-
-  return { en, hi, gu };
-}
-
-export function resolveArticleSlug(article: any, langInput: unknown): string {
-  const lang = normalizeLang(langInput);
+export function resolveArticleSlug(article: unknown, langInput: unknown): string {
+  const lang = knownLang(langInput) || 'en';
   const slugs = resolveArticleSlugs(article);
+  const rawId = get(article, ['_id']) || get(article, ['id']);
+  const id = isArticleId(rawId) ? rawId.toLowerCase() : '';
+  const edition = getArticleEditionLocale(article);
+  const original = knownLang(get(article, ['originalLang']) || get(article, ['sourceLang'])) || edition;
+  const ownsBaseSlug = original === lang && get(article, ['isTranslated']) !== true;
 
-  const sourceLang = getSourceLang(article);
-
-  const picked = lang === 'hi' ? slugs.hi : lang === 'gu' ? slugs.gu : slugs.en;
-
-  // Cross-locale strictness:
-  // If the article has a known source language that differs from the requested locale,
-  // do NOT fall back to a generic/foreign slug. Let callers fall back to the id instead.
-  if (sourceLang && sourceLang !== lang) {
-    return sanitizeSlug(pickFirstNonEmpty(picked));
+  // Detail responses can deliberately choose the ID when an otherwise valid alias collides.
+  if (edition === lang) {
+    for (const field of ['canonicalSlug', 'localizedSlug']) {
+      const canonical = normalizeArticleSlug(get(article, [field]));
+      if (id && canonical.toLowerCase() === id) return id;
+      const foreignOwner = Object.entries(slugs).some(([locale, value]) => locale !== lang && value === canonical);
+      const localizedCanonical = get(article, ['isTranslated']) === true
+        && canonical !== normalizeArticleSlug(get(article, ['slug']));
+      if (isLocalizedArticleSlug(canonical, lang)
+        && (slugs[lang] === canonical || !foreignOwner && (ownsBaseSlug || localizedCanonical))) return canonical;
+    }
   }
-
-  return sanitizeSlug(pickFirstNonEmpty(picked, article?.slug, article?.seoSlug, article?._id, article?.id));
+  if (slugs[lang]) return slugs[lang];
+  if (ownsBaseSlug) {
+    for (const field of ['slug', 'seoSlug']) {
+      const legacy = normalizeArticleSlug(get(article, [field]));
+      const foreignOwner = Object.entries(slugs).some(([locale, value]) => locale !== lang && value === legacy);
+      if (!foreignOwner && isLocalizedArticleSlug(legacy, lang)) return legacy;
+    }
+  }
+  return id;
 }

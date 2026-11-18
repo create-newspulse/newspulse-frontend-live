@@ -1,10 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
-import { getPublicApiBaseUrl } from '../../lib/publicApiBase';
-import { unwrapArticles } from '../../lib/publicNewsApi';
-import { absolutePublicUrl, escapeXml, getArticleAlternates, getSitemapLastModified, isIndexablePublishedArticle, resolvePublicSiteUrl } from '../../lib/seo';
+import { fetchSitemapArticles } from '../../lib/articleSeo.server';
+import { absolutePublicUrl, escapeXml, getArticleAlternates, getSitemapLastModified, resolvePublicSiteUrl } from '../../lib/seo';
 
-const SITEMAP_UPSTREAM_TIMEOUT_MS = 8_000;
 const SITEMAP_FRESH_SECONDS = 300;
 const SITEMAP_STALE_SECONDS = 600;
 const SITEMAP_RETRY_AFTER_ERROR_SECONDS = 60;
@@ -58,43 +56,6 @@ function isStaleButUsable(entry: SitemapCacheEntry, nowMs: number): boolean {
   return nowMs - entry.generatedAt < (SITEMAP_FRESH_SECONDS + SITEMAP_STALE_SECONDS) * 1000;
 }
 
-async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
-  const timeout = (globalThis as any)?.AbortSignal?.timeout;
-  if (typeof timeout === 'function') {
-    return fetch(url, { ...init, signal: timeout(SITEMAP_UPSTREAM_TIMEOUT_MS) });
-  }
-
-  if (typeof AbortController === 'undefined') return fetch(url, init);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), SITEMAP_UPSTREAM_TIMEOUT_MS);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function fetchPublishedArticles(): Promise<{ articles: any[]; complete: boolean }> {
-  const base = String(getPublicApiBaseUrl() || '').trim().replace(/\/+$/, '');
-  if (!base) return { articles: [], complete: false };
-
-  const params = new URLSearchParams({ limit: '500', strictLocale: '1' });
-  try {
-    const response = await fetchWithTimeout(`${base}/api/public/news?${params.toString()}`, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-    });
-    const json = await response.json().catch(() => null);
-    if (!response.ok) return { articles: [], complete: false };
-    return {
-      articles: unwrapArticles(json).filter((article) => isIndexablePublishedArticle(article)),
-      complete: true,
-    };
-  } catch {
-    return { articles: [], complete: false };
-  }
-}
-
 function buildSitemapXml(articles: any[], siteUrl: string): string {
   const entries = new Map<string, string>();
 
@@ -125,7 +86,7 @@ async function getSitemapXml(siteUrl: string): Promise<SitemapCacheEntry> {
   if (cached && isFresh(cached, nowMs)) return cached;
   if (cached && cached.nextRetryAt > nowMs && isStaleButUsable(cached, nowMs)) return cached;
 
-  const { articles, complete } = await fetchPublishedArticles();
+  const { articles, complete } = await fetchSitemapArticles();
   if (!complete && cached && isStaleButUsable(cached, nowMs)) {
     cached.nextRetryAt = nowMs + SITEMAP_RETRY_AFTER_ERROR_SECONDS * 1000;
     return cached;

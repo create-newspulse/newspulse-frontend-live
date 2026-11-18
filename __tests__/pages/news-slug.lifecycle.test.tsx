@@ -2,7 +2,8 @@ import React from 'react';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import NewsSlugDetailPage from '../../pages/news/[slug]';
 import { dispatchPublicDataRefresh } from '../../lib/publicDataRefresh';
-import type { Article } from '../../lib/publicNewsApi';
+import { parsePublicNewsArticle, type Article } from '../../lib/publicNewsApi';
+import articleUrlContracts from '../fixtures/articleUrlContracts.json';
 
 jest.mock('next/head', () => ({
   __esModule: true,
@@ -89,6 +90,28 @@ afterEach(() => {
   global.fetch = originalFetch;
   jest.restoreAllMocks();
   jest.useRealTimers();
+});
+
+test('a resolved edition refresh preserves the collision-safe ID, Save Update content and withdrawal/restoration', async () => {
+  const story = parsePublicNewsArticle({ ...articleUrlContracts.candidate.collision.article, translationGroupId: 'collision-owner' });
+  if (!story) throw new Error('Expected a valid captured Backend article');
+  const canonical = `https://www.newspulse.co.in/news/${story._id}`;
+  render(<NewsSlugDetailPage {...props(story)} />);
+  const updated = { ...story, title: 'Updated published title', content: '<p>Updated published body</p>', updatedAt: '2026-11-01T00:00:00.000Z' };
+  fetchMock.mockResolvedValueOnce(json(updated));
+  await refresh();
+  await waitFor(() => expect(screen.getByRole('heading', { name: updated.title })).toBeTruthy());
+  expect(fetchMock.mock.calls[0][0]).toBe(`/api/public/news/${story._id}?lang=en&language=en`);
+  expect(document.querySelector('meta[property="og:url"]')?.getAttribute('content')).toBe(canonical);
+  expect(document.querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe(updated.title);
+  fetchMock.mockResolvedValueOnce(json({}, 404));
+  await refresh();
+  await expectWithdrawn();
+  fetchMock.mockResolvedValueOnce(json(updated));
+  await refresh();
+  await waitFor(() => expect(screen.getByRole('heading', { name: updated.title })).toBeTruthy());
+  expect(document.querySelector('meta[property="og:url"]')?.getAttribute('content')).toBe(canonical);
+  expect(fetchMock).toHaveBeenCalledTimes(3);
 });
 
 test.each(['en', 'hi', 'gu'] as const)('%s published sponsored article remains accessible and still withdraws on unpublish', async (lang) => {

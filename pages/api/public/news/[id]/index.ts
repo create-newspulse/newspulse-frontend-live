@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 
 import { getPublicApiBaseUrl } from '../../../../../lib/publicApiBase';
 import { getLocalizedArticleFields, normalizeRouteLocale, STRICT_LOCALE_POLICY } from '../../../../../lib/localizedArticleFields';
-import { isLegacyMissingArticle, parsePublicNewsArticle, parsePublicNewsGroupItems } from '../../../../../lib/publicNewsApi';
+import { isLegacyMissingArticle, isResolvedPublicArticleForLocale, parsePublicNewsArticle, parsePublicNewsGroupItems } from '../../../../../lib/publicNewsApi';
 import { pickFreshestArticleForLocale } from '../../../../../lib/translationGroupSync';
 import { withPublicReadDeadline } from '../../../../../lib/publicReadDeadline';
 import { getSafeRetryAfter } from '../../../../../lib/retryAfter';
@@ -76,7 +76,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     let article = directArticle;
     const translationGroupId = String(article.translationGroupId || '').trim();
 
-    if (translationGroupId) {
+    if (translationGroupId && !isResolvedPublicArticleForLocale(article, requestedLocale)) {
       try {
         const groupItems = await withPublicReadDeadline(1500, async (signal) => {
           const groupUrl = `${base}/api/public/news/group/${encodeURIComponent(translationGroupId)}${qs}`;

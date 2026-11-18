@@ -1,3 +1,5 @@
+import { normalizeArticleSlug } from './articleSlugs';
+
 export type NewsLang = 'en' | 'hi' | 'gu';
 
 function normalizeLang(value: unknown): NewsLang {
@@ -8,7 +10,7 @@ function normalizeLang(value: unknown): NewsLang {
 }
 
 export function buildNewsUrl(options: { id: string; slug?: string; lang?: unknown }): string {
-  const rawSlug = String(options.slug || '').trim();
+  const rawSlug = normalizeArticleSlug(options.slug);
   const rawId = String(options.id || '').trim();
   const slug = encodeURIComponent(rawSlug || rawId);
   const lang = normalizeLang(options.lang);

@@ -8,6 +8,7 @@ import { hasRenderedTwitterWidgetFrame, loadTwitterWidgetsIn } from '../../lib/x
 import { getAuthorBylineMetadata } from '../../lib/authorByline';
 import { getMessagesForLang } from '../../src/i18n/LanguageProvider';
 import * as storyTitleHook from '../../lib/storyTitleHook';
+import articleUrlContracts from '../fixtures/articleUrlContracts.json';
 
 let mockBylinePrefix = 'By';
 
@@ -247,6 +248,23 @@ describe('pages/news/[slug] editorial detail', () => {
     renderAuthorArticle({ tags: ['Navratri 2026'] }, locale);
     const tag = screen.getByRole('link', { name: '#navratri 2026' });
     expect(tag.getAttribute('href')).toBe(`${locale === 'en' ? '' : `/${locale}`}/topic/navratri-2026?q=navratri%202026`);
+  });
+
+  test.each(['en', 'hi', 'gu'] as const)('renders complete localized %s social tags and shares that same canonical', lang => {
+    const record = articleUrlContracts.candidate.editions[lang];
+    renderAuthorArticle(record, lang);
+    const canonical = `https://www.newspulse.co.in${lang === 'en' ? '' : `/${lang}`}/news/${encodeURIComponent(record.canonicalSlug)}`;
+    for (const [property, value] of Object.entries({
+      'og:title': record.title, 'og:description': record.summary, 'og:url': canonical,
+      'og:site_name': 'News Pulse',
+      'og:image': 'https://www.newspulse.co.in/brand/news-pulse-final-logo.png',
+    })) {
+      expect(document.querySelector(`meta[property="${property}"]`)?.getAttribute('content')).toBe(value);
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Share this article' }));
+    const whatsapp = screen.getAllByRole('link').find(link => link.getAttribute('href')?.startsWith('https://wa.me/'));
+    expect(whatsapp).toBeDefined();
+    expect(new URL(whatsapp!.getAttribute('href')!).searchParams.get('text')).toContain(canonical);
   });
 
   describe.each([

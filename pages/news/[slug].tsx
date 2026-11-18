@@ -1,5 +1,7 @@
 import type { GetServerSideProps } from 'next';
 import { PublicReadTimeoutError, withPublicReadDeadline } from '../../lib/publicReadDeadline';
+import { fetchArticleAlternates } from '../../lib/articleSeo.server';
+import { isArticleId, normalizeArticleSlug } from '../../lib/articleSlugs';
 import Head from 'next/head';
 import NextError from 'next/error';
 import Link from 'next/link';
@@ -14,7 +16,7 @@ import CategoryHeader from '../../src/components/category/CategoryHeader';
 import { getCategoryIdentity, getCategoryQueryKey, getCategoryRouteKey } from '../../lib/categoryKeys';
 import { filterPubliclyPublishedArticles, getLocalizedArticleFields, STRICT_LOCALE_POLICY, type RouteLocale } from '../../lib/localizedArticleFields';
 import { formatArticleBodyHtml, parseControlledFacebookBlock, parseControlledGalleryBlock, parseControlledInlineImageBlock, parseControlledInstagramBlock, parseControlledXBlock, parseControlledYouTubeBlock, splitArticleBodyBlocks, stripDuplicateOpeningParagraph, type ControlledArticleFacebookEmbed, type ControlledArticleGallery, type ControlledArticleInlineImage, type ControlledArticleInstagramEmbed, type ControlledArticleXEmbed, type ControlledArticleYouTubeEmbed } from '../../lib/articleBody';
-import { fetchPublicNewsById, fetchPublicNewsGroup, isLegacyMissingArticle, parsePublicNewsArticle, unwrapArticle, type Article } from '../../lib/publicNewsApi';
+import { fetchPublicNewsById, fetchPublicNewsGroup, isLegacyMissingArticle, isResolvedPublicArticleForLocale, parsePublicNewsArticle, unwrapArticle, type Article } from '../../lib/publicNewsApi';
 import { subscribePublicDataRefresh } from '../../lib/publicDataRefresh';
 import { compareArticleFreshness, findFreshestArticleById, pickFreshestArticleForLocale, shouldReplaceArticleWithFreshCandidate } from '../../lib/translationGroupSync';
 import { useI18n } from '../../src/i18n/LanguageProvider';
@@ -44,8 +46,8 @@ import {
 } from '../../lib/editorialDisplay';
 import {
   buildArticleSeoMetadata,
-  getArticleAlternates,
   getArticleCanonicalUrl,
+  NEWS_PULSE_BRAND_NAME,
   resolvePublicSiteUrl,
   safeJsonLd,
 } from '../../lib/seo';
@@ -979,7 +981,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
 
     try {
       const items = await withPublicReadDeadline(4000, async (signal) => {
-        if (translationGroupId) {
+        if (translationGroupId && !(source && isResolvedPublicArticleForLocale(source, toRouteLocale(lang)))) {
           const group = await fetchPublicNewsGroup({ translationGroupId, language: lang, signal });
           if (group.error) throw new Error('ARTICLE_REFRESH_UNAVAILABLE');
           return group.items;
@@ -1303,6 +1305,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
         {articleSeo?.description || seoDescription ? <meta name="description" content={articleSeo?.description || seoDescription} /> : null}
         {articleSeo?.robots ? <meta name="robots" content={articleSeo.robots} /> : null}
         <meta property="og:type" content="article" />
+        <meta property="og:site_name" content={NEWS_PULSE_BRAND_NAME} />
         {articleSeo?.ogTitle || ogTitle ? <meta property="og:title" content={articleSeo?.ogTitle || ogTitle} /> : null}
         {articleSeo?.ogDescription || ogDescription ? <meta property="og:description" content={articleSeo?.ogDescription || ogDescription} /> : null}
         {articleSeo?.ogUrl || canonicalUrl ? <meta property="og:url" content={articleSeo?.ogUrl || canonicalUrl} /> : null}
@@ -2439,6 +2442,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
       `${origin}/api/public/news/slug/${encodeURIComponent(rawSlug)}?${params.toString()}`,
       `${origin}/api/public/news/${encodeURIComponent(rawSlug)}?${params.toString()}`,
     ];
+    if (isArticleId(rawSlug)) endpoints.reverse();
 
     // Share the existing 4s detail + 1.5s related allowance, prioritizing the article.
     const readTimeoutMs = 5500;
@@ -2573,12 +2577,15 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
 
     // Canonicalize slug per language
     const canonicalSlug = String(localized.slug || '').trim();
-    if (canonicalSlug && canonicalSlug !== rawSlug) {
+    if (canonicalSlug && canonicalSlug !== normalizeArticleSlug(rawSlug)) {
       const destination = buildNewsUrl({ id: String(resolvedArticle._id || '').trim(), slug: canonicalSlug, lang });
       return { redirect: { destination, permanent: true } };
     }
 
     const html = localized.bodyHtml;
+    const alternatesPromise = fetchArticleAlternates(
+      resolvedArticle, siteUrl, Math.min(1500, Math.max(0, readDeadlineAt - performance.now()))
+    );
 
     const extra = await (async () => {
       const items = await relatedPromise;
@@ -2614,7 +2621,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
         siteUrl,
         seo: {
           canonicalUrl: getArticleCanonicalUrl(resolvedArticle, lang, siteUrl),
-          alternates: getArticleAlternates(resolvedArticle, siteUrl),
+          alternates: await alternatesPromise,
         },
       },
     };

@@ -69,12 +69,17 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
     jest.useRealTimers();
   });
 
-  test.each(['en', 'hi', 'gu'] as const)('renders %s public boolean availability metadata instead of an SSR 503, including a Gujarati-script slug', async (lang) => {
-    const slug = '\u0aa8\u0ab5\u0ab0\u0abe\u0aa4\u0acd\u0ab0\u0abf-persisted-story';
+  test.each(['en', 'hi', 'gu'] as const)('renders %s public boolean availability metadata and verifies the other editions', async (lang) => {
+    const slug = lang === 'gu' ? '\u0aa8\u0ab5\u0ab0\u0abe\u0aa4\u0acd\u0ab0\u0abf-persisted-story'
+      : lang === 'hi' ? '\u0928\u0935\u0930\u093e\u0924\u094d\u0930\u093f-persisted-story' : 'persisted-story';
     const translations = { en: true, hi: true, gu: true };
     const record = article({ language: lang, slug, translations });
-    const calls = mockFetchSequence((url) => url.includes('/api/public/news/slug/')
-      ? { article: record } : { items: [] });
+    const calls = mockFetchSequence((url) => {
+      if (url.includes('/api/public/news/slug/')) return { article: record };
+      if (url.includes('/api/public/news?')) return { items: [] };
+      const language = new URL(url).searchParams.get('lang');
+      return { article: article({ language, slug: `peer-${language}` }) };
+    });
     const ctx = createCtx(slug, lang);
     ctx.res.statusCode = 200;
     const result = await getServerSideProps(ctx);
@@ -86,7 +91,7 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
     });
     expect(ctx.res.statusCode).toBe(200);
     expect(calls[0]).toContain(`/api/public/news/slug/${encodeURIComponent(slug)}?lang=${lang}&language=${lang}`);
-    expect(calls).toHaveLength(2);
+    expect(calls).toHaveLength(4);
     expect(console.error).not.toHaveBeenCalled();
   });
 
@@ -171,8 +176,8 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
           return { ...storyPageFixture(lang, 1, 2), items: stories.slice(1) };
         }
         if (url.pathname === '/api/public/news') return { items: [] };
-        const resolved = publicArticles.find((item) =>
-          url.pathname === `/api/public/news/slug/${encodeURIComponent(item.slug)}`);
+        const resolved = publicArticles.find((_item, index) =>
+          url.pathname === `/api/public/news/slug/${encodeURIComponent(stories[index].canonicalSlug)}`);
         if (!resolved) throw new Error(`Unexpected fixture lookup: ${target}`);
         expect(url.origin).toBe('http://localhost:3000');
         expect(url.searchParams.get('lang')).toBe(lang);
@@ -192,14 +197,14 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
         const story = stories[index];
         const localized = getLocalizedArticleFields(publicArticles[index], lang, STRICT_LOCALE_POLICY);
         expect(localized.isVisible).toBe(true);
-        expect(localized.slug).toBe(story.slug);
+        expect(localized.slug).toBe(story.canonicalSlug);
         expect(card.href).toBe(buildNewsUrl({ id: story._id, slug: localized.slug, lang }));
         const slug = decodeURIComponent(new URL(card.href, 'http://localhost:3000').pathname.split('/').pop() || '');
         const result = await getServerSideProps({ ...ctx, params: { slug } });
         if (!('props' in result)) throw new Error('Topic link must resolve without a redirect or 404');
         const props = await result.props;
         expect(props).toMatchObject({
-          lang, slug: story.slug, error: null, pending: false,
+          lang, slug: story.canonicalSlug, error: null, pending: false,
           article: {
             _id: story._id, slug: story.slug, language: lang,
             title: story.title, category: story.category,

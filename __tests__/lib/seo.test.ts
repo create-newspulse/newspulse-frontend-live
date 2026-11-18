@@ -137,6 +137,30 @@ describe('public SEO helpers', () => {
     expect(alternates.find((item) => item.hrefLang === 'gu')).toBeUndefined();
   });
 
+  test('localized SEO never inherits the source edition text or its stored canonical', () => {
+    const stored = { ...article, seo: { ...article.seo, canonicalUrl: 'https://www.newspulse.co.in/gu/news/source-story' } };
+    const before = JSON.stringify(stored);
+    const translated = buildArticleSeoMetadata(stored, 'hi', 'https://www.newspulse.co.in');
+    expect(translated?.ogTitle).toBe(article.translations.hi.title);
+    expect(translated?.ogDescription).toBe(article.translations.hi.summary);
+    expect(translated?.ogUrl).toBe('https://www.newspulse.co.in/hi/news/hindi-real-headline');
+    expect(getArticleCanonicalUrl(stored, 'en', 'https://www.newspulse.co.in')).toBe('https://www.newspulse.co.in/news/real-english-headline');
+    expect(JSON.stringify(stored)).toBe(before);
+    const cached = { ...stored, language: 'hi', originalLang: 'en', isTranslated: true, translations: undefined,
+      title: article.translations.hi.title, summary: article.translations.hi.summary, slug: 'hindi-real-headline' };
+    expect(buildArticleSeoMetadata(cached, 'hi', 'https://www.newspulse.co.in')?.ogTitle).toBe(cached.title);
+  });
+
+  test.each([
+    { coverImageUrl: null },
+    { coverImageUrl: '/uploads/old.jpg', coverImage: { removed: true } },
+    { coverImageUrl: 'javascript:alert(1)' },
+  ])('uses the verified official image when a cover is absent, removed or unusable (%p)', cover => {
+    const seo = buildArticleSeoMetadata({ ...article, ...cover }, 'en', 'https://www.newspulse.co.in');
+    expect(seo?.ogImage).toBe('https://www.newspulse.co.in/brand/news-pulse-final-logo.png');
+    expect(seo?.twitterImage).toBe(seo?.ogImage);
+  });
+
   test('draft, deleted and old records are excluded from sitemap eligibility', () => {
     expect(isIndexablePublishedArticle(article, new Date('2026-08-02T00:00:00.000Z'))).toBe(true);
     expect(isIndexablePublishedArticle({ ...article, status: 'draft' }, new Date('2026-08-02T00:00:00.000Z'))).toBe(false);

@@ -1,6 +1,6 @@
 import { getPublicApiBaseUrl } from './publicApiBase';
 import { getCategoryQueryKey } from './categoryKeys';
-import { filterPubliclyPublishedArticles, getPublicArticleStatus } from './localizedArticleFields';
+import { filterPubliclyPublishedArticles, getLocalizedArticleFields, getPublicArticleStatus, STRICT_LOCALE_POLICY, type RouteLocale } from './localizedArticleFields';
 import type { AuthorBylinePayload } from './authorByline';
 import { getOrdinaryCategoryPagination, ORDINARY_PAGINATION_HEADER, validateOrdinaryPageRequest, type OrdinaryCategoryPagination } from './ordinaryCategoryPagination';
 import { FAITH_CULTURE_NEWS_UNAVAILABLE, FAITH_CULTURE_PAGINATION_HEADER, getFaithCulturePagination, validateFaithCulturePageRequest } from './faithCulturePagination';
@@ -11,6 +11,16 @@ export type ArticleBase = {
   _id: string;
   title?: string;
   slug?: string;
+  slugs?: Partial<Record<'en' | 'hi' | 'gu', string>>;
+  canonicalSlug?: string;
+  localizedSlug?: string;
+  originalLang?: string;
+  resolvedLang?: string;
+  resolvedLanguage?: string;
+  isTranslated?: boolean;
+  isFallback?: boolean;
+  availableLocales?: string[];
+  publishedLocales?: string[];
   translationGroupId?: string;
   translationKey?: string;
   updatedAt?: string;
@@ -28,6 +38,7 @@ export type ArticleBase = {
   coverImage?: {
     url?: string;
     publicId?: string;
+    removed?: boolean;
   };
   createdAt?: string;
   publishedAt?: string;
@@ -159,7 +170,7 @@ for (const locale of ['en', 'hi', 'gu', 'in']) {
 
 const mediaScalars = publicScalars(
   'url src assetUrl mediaUrl secureUrl secure_url cloudinaryUrl publicId alt altText caption credit ' +
-  'width height fitMode coverFitMode objectFit status mediaStatus state'
+  'width height fitMode coverFitMode objectFit status mediaStatus state removed'
 );
 let publicMedia: PublicFields = mediaScalars;
 for (let depth = 0; depth < 4; depth += 1) {
@@ -226,7 +237,8 @@ const publicArticleFields: PublicFields = {
     'readingTime readTime readingTimeText estimatedReadingTime readingMinutes readTimeMinutes estimatedReadMinutes ' +
     'originalTitle sourceTitle titleOriginal originalSummary sourceSummary summaryOriginal originalExcerpt sourceExcerpt excerptOriginal ' +
     'originalContent sourceContent contentOriginal originalHtml sourceHtml htmlOriginal originalBody sourceBody bodyOriginal ' +
-    'seoSlug originalSlug sourceSlug baseSlug canonicalSlug'
+    'seoSlug originalSlug sourceSlug baseSlug canonicalSlug localizedSlug canonicalDetailUrl ' +
+    'originalLang resolvedLang resolvedLanguage requestedLang requestedLanguage isTranslated isFallback availableLocales publishedLocales'
   ),
   source: publicScalars('title summary excerpt content html body'),
   slugs: publicLocales(publicText),
@@ -307,11 +319,15 @@ function validTranslationStatus(value: unknown, allowFailedTranslation = false):
 }
 
 function validLifecycleFields(record: Record<string, unknown>, allowFailedTranslation = false): boolean {
-  for (const key of ['status', 'state', 'language', 'lang', 'sourceLang', 'sourceLanguage', 'translationGroupId']) {
+  for (const key of ['status', 'state', 'language', 'lang', 'sourceLang', 'sourceLanguage', 'translationGroupId', 'originalLang', 'resolvedLang', 'resolvedLanguage']) {
     if (record[key] != null && typeof record[key] !== 'string') return false;
   }
-  for (const key of ['deleted', 'isDeleted', 'archived', 'isArchived', 'isPublished', 'published']) {
+  for (const key of ['deleted', 'isDeleted', 'archived', 'isArchived', 'isPublished', 'published', 'isTranslated', 'isFallback']) {
     if (record[key] != null && typeof record[key] !== 'boolean') return false;
+  }
+  for (const key of ['availableLocales', 'publishedLocales']) {
+    const value = record[key];
+    if (value != null && (!Array.isArray(value) || !value.every(locale => typeof locale === 'string'))) return false;
   }
   for (const key of ['deletedAt', 'archivedAt', 'publishedAt', 'publishAt', 'updatedAt', 'createdAt']) {
     const value = record[key];
@@ -356,6 +372,11 @@ function parsePublicNewsRecord(payload: unknown, listRecord = false): Article | 
 export function parsePublicNewsArticle(payload: unknown): Article | null {
   if (responseRecord(payload)?.exists === false || failedPublicNewsPayload(payload)) return null;
   return parsePublicNewsRecord(unwrapArticle(payload));
+}
+
+export function isResolvedPublicArticleForLocale(article: Article, locale: RouteLocale): boolean {
+  return (article.resolvedLanguage || article.resolvedLang) === locale && article.isFallback !== true
+    && getLocalizedArticleFields(article, locale, STRICT_LOCALE_POLICY).isVisible;
 }
 
 /** Null is an invalid read; an empty array is an authoritative empty group. */

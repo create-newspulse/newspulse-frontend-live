@@ -2,6 +2,7 @@ import type { RouteLocale } from './localizedArticleFields';
 import { getOrdinaryCategoryPagination } from './ordinaryCategoryPagination';
 import { getPublicApiBaseUrl } from './publicApiBase';
 import { withPublicReadDeadline } from './publicReadDeadline';
+import { resolveArticleSlug } from './articleSlugs';
 
 export const EDITORIAL_TRENDING_LIMIT = 6;
 export const EDITORIAL_TOPIC_PAGE_SIZE = 12;
@@ -96,7 +97,7 @@ function topicStory(value: unknown, lang: RouteLocale): EditorialTopicStory {
     throw new Error('Editorial topic story returned an unexpected language');
   }
   return {
-    _id: text(item._id), slug: text(item.slug), title: text(item.title),
+    _id: text(item._id), slug: text(resolveArticleSlug(item, lang)), title: text(item.title),
     summary: optionalText(item.summary) || '', language: lang, resolvedLang: lang,
     category: optionalText(item.category),
     imageUrl: optionalText(item.imageUrl ?? item.coverImageUrl),

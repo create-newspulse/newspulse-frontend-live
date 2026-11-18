@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 
 import { getPublicApiBaseUrl } from '../../../../../lib/publicApiBase';
 import { getLocalizedArticleFields, getLocalizedSlug, normalizeRouteLocale, STRICT_LOCALE_POLICY, type RouteLocale } from '../../../../../lib/localizedArticleFields';
-import { failedPublicNewsPayload, isLegacyMissingArticle, parsePublicNewsArticle, parsePublicNewsGroupItems, parsePublicNewsList, type Article } from '../../../../../lib/publicNewsApi';
+import { failedPublicNewsPayload, isLegacyMissingArticle, isResolvedPublicArticleForLocale, parsePublicNewsArticle, parsePublicNewsGroupItems, parsePublicNewsList, type Article } from '../../../../../lib/publicNewsApi';
 import { pickFreshestArticleForLocale } from '../../../../../lib/translationGroupSync';
 import { isPulseDialogueArticle } from '../../../../../lib/pulseDialogue';
 import { withPublicReadDeadline } from '../../../../../lib/publicReadDeadline';
@@ -71,6 +71,8 @@ async function resolveArticleFromTranslationGroup(options: {
   article: Article;
   requestedLocale: RouteLocale;
 }): Promise<Article | null> {
+  // A raw group row must not replace the Backend's resolved edition or collision-safe ID route.
+  if (isResolvedPublicArticleForLocale(options.article, options.requestedLocale)) return options.article;
   const translationGroupId = String(options.article?.translationGroupId || '').trim();
   if (!options.article?._id || !translationGroupId) return options.article;
 

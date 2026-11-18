@@ -1,0 +1,648 @@
+{
+  "deployed": {
+    "editions": {
+      "en": {
+        "_id": "507f1f77bcf86cd79943c001",
+        "status": "published",
+        "title": "Heritage 2026 in Gujarat",
+        "summary": "Heritage 2026 in Gujarat",
+        "description": "Heritage 2026 in Gujarat",
+        "content": "<p>Heritage 2026 in Gujarat</p>",
+        "slug": "heritage-2026-in-gujarat",
+        "slugs": {
+          "en": "heritage-2026-in-gujarat",
+          "hi": "गुजरात-की-विरासत-२०२६",
+          "gu": "ગુજરાતનો-વારસો-૨૦૨૬"
+        },
+        "canonicalSlug": "heritage-2026-in-gujarat",
+        "localizedSlug": "heritage-2026-in-gujarat",
+        "canonicalDetailUrl": "/news/heritage-2026-in-gujarat",
+        "language": "en",
+        "lang": "en",
+        "originalLang": "en",
+        "resolvedLang": "en",
+        "resolvedLanguage": "en",
+        "isTranslated": false,
+        "isFallback": false,
+        "translations": {
+          "en": true,
+          "hi": true,
+          "gu": true
+        },
+        "translationGroupId": "native-heritage",
+        "translationKey": "native-heritage",
+        "publishedAt": "2020-01-01T08:00:00.000Z",
+        "updatedAt": "2020-01-01T08:00:00.000Z",
+        "availableLocales": [
+          "en"
+        ],
+        "publishedLocales": [
+          "en"
+        ],
+        "category": "national",
+        "coverImageUrl": null,
+        "imageUrl": null
+      },
+      "hi": {
+        "_id": "507f1f77bcf86cd79943c002",
+        "status": "published",
+        "title": "गुजरात की विरासत २०२६",
+        "summary": "गुजरात की विरासत २०२६",
+        "description": "गुजरात की विरासत २०२६",
+        "content": "<p>गुजरात की विरासत २०२६</p>",
+        "slug": "गुजरात-की-विरासत-२०२६",
+        "slugs": {
+          "en": "heritage-2026-in-gujarat",
+          "hi": "गुजरात-की-विरासत-२०२६",
+          "gu": "ગુજરાતનો-વારસો-૨૦૨૬"
+        },
+        "canonicalSlug": "गुजरात-की-विरासत-२०२६",
+        "localizedSlug": "गुजरात-की-विरासत-२०२६",
+        "canonicalDetailUrl": "/hi/news/%E0%A4%97%E0%A5%81%E0%A4%9C%E0%A4%B0%E0%A4%BE%E0%A4%A4-%E0%A4%95%E0%A5%80-%E0%A4%B5%E0%A4%BF%E0%A4%B0%E0%A4%BE%E0%A4%B8%E0%A4%A4-%E0%A5%A8%E0%A5%A6%E0%A5%A8%E0%A5%AC",
+        "language": "hi",
+        "lang": "hi",
+        "originalLang": "hi",
+        "resolvedLang": "hi",
+        "resolvedLanguage": "hi",
+        "isTranslated": false,
+        "isFallback": false,
+        "translations": {
+          "en": true,
+          "hi": true,
+          "gu": true
+        },
+        "translationGroupId": "native-heritage",
+        "translationKey": "native-heritage",
+        "publishedAt": "2020-01-01T08:00:00.000Z",
+        "updatedAt": "2020-01-01T08:00:00.000Z",
+        "availableLocales": [
+          "hi"
+        ],
+        "publishedLocales": [
+          "hi"
+        ],
+        "category": "national",
+        "coverImageUrl": null,
+        "imageUrl": null
+      },
+      "gu": {
+        "_id": "507f1f77bcf86cd79943c003",
+        "status": "published",
+        "title": "ગુજરાતનો વારસો ૨૦૨૬",
+        "summary": "ગુજરાતનો વારસો ૨૦૨૬",
+        "description": "ગુજરાતનો વારસો ૨૦૨૬",
+        "content": "<p>ગુજરાતનો વારસો ૨૦૨૬</p>",
+        "slug": "ગુજરાતનો-વારસો-૨૦૨૬",
+        "slugs": {
+          "en": "heritage-2026-in-gujarat",
+          "hi": "गुजरात-की-विरासत-२०२६",
+          "gu": "ગુજરાતનો-વારસો-૨૦૨૬"
+        },
+        "canonicalSlug": "ગુજરાતનો-વારસો-૨૦૨૬",
+        "localizedSlug": "ગુજરાતનો-વારસો-૨૦૨૬",
+        "canonicalDetailUrl": "/gu/news/%E0%AA%97%E0%AB%81%E0%AA%9C%E0%AA%B0%E0%AA%BE%E0%AA%A4%E0%AA%A8%E0%AB%8B-%E0%AA%B5%E0%AA%BE%E0%AA%B0%E0%AA%B8%E0%AB%8B-%E0%AB%A8%E0%AB%A6%E0%AB%A8%E0%AB%AC",
+        "language": "gu",
+        "lang": "gu",
+        "originalLang": "gu",
+        "resolvedLang": "gu",
+        "resolvedLanguage": "gu",
+        "isTranslated": false,
+        "isFallback": false,
+        "translations": {
+          "en": true,
+          "hi": true,
+          "gu": true
+        },
+        "translationGroupId": "native-heritage",
+        "translationKey": "native-heritage",
+        "publishedAt": "2020-01-01T08:00:00.000Z",
+        "updatedAt": "2020-01-01T08:00:00.000Z",
+        "availableLocales": [
+          "gu"
+        ],
+        "publishedLocales": [
+          "gu"
+        ],
+        "category": "national",
+        "coverImageUrl": null,
+        "imageUrl": null
+      }
+    },
+    "foreign": [
+      {
+        "_id": "507f1f77bcf86cd79943c001",
+        "status": "published",
+        "title": "Heritage 2026 in Gujarat",
+        "summary": "Heritage 2026 in Gujarat",
+        "description": "Heritage 2026 in Gujarat",
+        "content": "<p>Heritage 2026 in Gujarat</p>",
+        "slug": "ગુજરાતનો-વારસો-૨૦૨૬",
+        "slugs": {
+          "gu": "ગુજરાતનો-વારસો-૨૦૨૬"
+        },
+        "canonicalSlug": "ગુજરાતનો-વારસો-૨૦૨૬",
+        "localizedSlug": "ગુજરાતનો-વારસો-૨૦૨૬",
+        "canonicalDetailUrl": "/news/%E0%AA%97%E0%AB%81%E0%AA%9C%E0%AA%B0%E0%AA%BE%E0%AA%A4%E0%AA%A8%E0%AB%8B-%E0%AA%B5%E0%AA%BE%E0%AA%B0%E0%AA%B8%E0%AB%8B-%E0%AB%A8%E0%AB%A6%E0%AB%A8%E0%AB%AC",
+        "language": "en",
+        "lang": "en",
+        "originalLang": "en",
+        "resolvedLang": "en",
+        "resolvedLanguage": "en",
+        "isTranslated": false,
+        "isFallback": false,
+        "translations": {
+          "en": true,
+          "hi": false,
+          "gu": false
+        },
+        "publishedAt": "2020-01-01T08:00:00.000Z",
+        "updatedAt": "2020-01-01T08:00:00.000Z",
+        "availableLocales": [
+          "en"
+        ],
+        "publishedLocales": [
+          "en"
+        ],
+        "category": "national",
+        "coverImageUrl": null,
+        "imageUrl": null
+      },
+      {
+        "_id": "507f1f77bcf86cd79943c001",
+        "status": "published",
+        "title": "Heritage 2026 in Gujarat",
+        "summary": "Heritage 2026 in Gujarat",
+        "description": "Heritage 2026 in Gujarat",
+        "content": "<p>Heritage 2026 in Gujarat</p>",
+        "slug": "ગુજરાતનો-વારસો-૨૦૨૬",
+        "slugs": {
+          "gu": "ગુજરાતનો-વારસો-૨૦૨૬"
+        },
+        "canonicalSlug": "ગુજરાતનો-વારસો-૨૦૨૬",
+        "localizedSlug": "ગુજરાતનો-વારસો-૨૦૨૬",
+        "canonicalDetailUrl": "/news/%E0%AA%97%E0%AB%81%E0%AA%9C%E0%AA%B0%E0%AA%BE%E0%AA%A4%E0%AA%A8%E0%AB%8B-%E0%AA%B5%E0%AA%BE%E0%AA%B0%E0%AA%B8%E0%AB%8B-%E0%AB%A8%E0%AB%A6%E0%AB%A8%E0%AB%AC",
+        "language": "en",
+        "lang": "en",
+        "originalLang": "en",
+        "resolvedLang": "en",
+        "resolvedLanguage": "en",
+        "isTranslated": false,
+        "isFallback": false,
+        "translations": {
+          "en": true,
+          "hi": false,
+          "gu": false
+        },
+        "publishedAt": "2020-01-01T08:00:00.000Z",
+        "updatedAt": "2020-01-01T08:00:00.000Z",
+        "availableLocales": [
+          "en"
+        ],
+        "publishedLocales": [
+          "en"
+        ],
+        "category": "national",
+        "coverImageUrl": null,
+        "imageUrl": null
+      }
+    ],
+    "cached": [
+      {
+        "_id": "507f1f77bcf86cd79943c003",
+        "status": "published",
+        "title": "Heritage 2026 in Gujarat",
+        "summary": "Heritage 2026 in Gujarat",
+        "description": "Heritage 2026 in Gujarat",
+        "content": "<p>Heritage 2026 in Gujarat</p>",
+        "slug": "ગુજરાતનો-વારસો-૨૦૨૬",
+        "slugs": {},
+        "canonicalSlug": "ગુજરાતનો-વારસો-૨૦૨૬",
+        "localizedSlug": "ગુજરાતનો-વારસો-૨૦૨૬",
+        "canonicalDetailUrl": "/news/%E0%AA%97%E0%AB%81%E0%AA%9C%E0%AA%B0%E0%AA%BE%E0%AA%A4%E0%AA%A8%E0%AB%8B-%E0%AA%B5%E0%AA%BE%E0%AA%B0%E0%AA%B8%E0%AB%8B-%E0%AB%A8%E0%AB%A6%E0%AB%A8%E0%AB%AC",
+        "language": "en",
+        "lang": "en",
+        "originalLang": "gu",
+        "resolvedLang": "en",
+        "resolvedLanguage": "en",
+        "isTranslated": true,
+        "isFallback": false,
+        "translations": {
+          "en": false,
+          "hi": false,
+          "gu": true
+        },
+        "publishedAt": "2020-01-01T08:00:00.000Z",
+        "updatedAt": "2020-01-01T08:00:00.000Z",
+        "availableLocales": [
+          "gu"
+        ],
+        "publishedLocales": [
+          "gu"
+        ],
+        "category": "national",
+        "coverImageUrl": null,
+        "imageUrl": null
+      },
+      {
+        "_id": "507f1f77bcf86cd79943c003",
+        "status": "published",
+        "title": "Heritage 2026 in Gujarat",
+        "summary": "Heritage 2026 in Gujarat",
+        "description": "Heritage 2026 in Gujarat",
+        "content": "<p>Heritage 2026 in Gujarat</p>",
+        "slug": "ગુજરાતનો-વારસો-૨૦૨૬",
+        "slugs": {},
+        "canonicalSlug": "ગુજરાતનો-વારસો-૨૦૨૬",
+        "localizedSlug": "ગુજરાતનો-વારસો-૨૦૨૬",
+        "canonicalDetailUrl": "/news/%E0%AA%97%E0%AB%81%E0%AA%9C%E0%AA%B0%E0%AA%BE%E0%AA%A4%E0%AA%A8%E0%AB%8B-%E0%AA%B5%E0%AA%BE%E0%AA%B0%E0%AA%B8%E0%AB%8B-%E0%AB%A8%E0%AB%A6%E0%AB%A8%E0%AB%AC",
+        "language": "en",
+        "lang": "en",
+        "originalLang": "gu",
+        "resolvedLang": "en",
+        "resolvedLanguage": "en",
+        "isTranslated": true,
+        "isFallback": false,
+        "translations": {
+          "en": false,
+          "hi": false,
+          "gu": true
+        },
+        "publishedAt": "2020-01-01T08:00:00.000Z",
+        "updatedAt": "2020-01-01T08:00:00.000Z",
+        "availableLocales": [
+          "gu"
+        ],
+        "publishedLocales": [
+          "gu"
+        ],
+        "category": "national",
+        "coverImageUrl": null,
+        "imageUrl": null
+      }
+    ],
+    "collision": {
+      "article": {
+        "_id": "507f1f77bcf86cd79943c001",
+        "status": "published",
+        "title": "Heritage 2026 in Gujarat",
+        "summary": "Heritage 2026 in Gujarat",
+        "description": "Heritage 2026 in Gujarat",
+        "content": "<p>Heritage 2026 in Gujarat</p>",
+        "slug": "shared-alias",
+        "slugs": {
+          "en": "shared-alias"
+        },
+        "canonicalSlug": "shared-alias",
+        "localizedSlug": "shared-alias",
+        "canonicalDetailUrl": "/news/shared-alias",
+        "language": "en",
+        "lang": "en",
+        "originalLang": "en",
+        "resolvedLang": "en",
+        "resolvedLanguage": "en",
+        "isTranslated": false,
+        "isFallback": false,
+        "translations": {
+          "en": true,
+          "hi": false,
+          "gu": false
+        },
+        "publishedAt": "2020-01-01T08:00:00.000Z",
+        "updatedAt": "2020-01-01T08:00:00.000Z",
+        "availableLocales": [
+          "en"
+        ],
+        "publishedLocales": [
+          "en"
+        ],
+        "category": "national",
+        "coverImageUrl": null,
+        "imageUrl": null
+      },
+      "aliasStatus": 200
+    }
+  },
+  "candidate": {
+    "editions": {
+      "en": {
+        "_id": "507f1f77bcf86cd79943c001",
+        "status": "published",
+        "title": "Heritage 2026 in Gujarat",
+        "summary": "Heritage 2026 in Gujarat",
+        "description": "Heritage 2026 in Gujarat",
+        "content": "<p>Heritage 2026 in Gujarat</p>",
+        "slug": "heritage-2026-in-gujarat",
+        "slugs": {
+          "en": "heritage-2026-in-gujarat",
+          "hi": "गुजरात-की-विरासत-२०२६",
+          "gu": "ગુજરાતનો-વારસો-૨૦૨૬"
+        },
+        "canonicalSlug": "heritage-2026-in-gujarat",
+        "localizedSlug": "heritage-2026-in-gujarat",
+        "canonicalDetailUrl": "/news/heritage-2026-in-gujarat",
+        "language": "en",
+        "lang": "en",
+        "originalLang": "en",
+        "resolvedLang": "en",
+        "resolvedLanguage": "en",
+        "isTranslated": false,
+        "isFallback": false,
+        "translations": {
+          "en": true,
+          "hi": true,
+          "gu": true
+        },
+        "translationGroupId": "native-heritage",
+        "translationKey": "native-heritage",
+        "publishedAt": "2020-01-01T08:00:00.000Z",
+        "updatedAt": "2020-01-01T08:00:00.000Z",
+        "availableLocales": [
+          "en"
+        ],
+        "publishedLocales": [
+          "en"
+        ],
+        "category": "national",
+        "coverImageUrl": null,
+        "imageUrl": null
+      },
+      "hi": {
+        "_id": "507f1f77bcf86cd79943c002",
+        "status": "published",
+        "title": "गुजरात की विरासत २०२६",
+        "summary": "गुजरात की विरासत २०२६",
+        "description": "गुजरात की विरासत २०२६",
+        "content": "<p>गुजरात की विरासत २०२६</p>",
+        "slug": "गुजरात-की-विरासत-२०२६",
+        "slugs": {
+          "en": "heritage-2026-in-gujarat",
+          "hi": "गुजरात-की-विरासत-२०२६",
+          "gu": "ગુજરાતનો-વારસો-૨૦૨૬"
+        },
+        "canonicalSlug": "गुजरात-की-विरासत-२०२६",
+        "localizedSlug": "गुजरात-की-विरासत-२०२६",
+        "canonicalDetailUrl": "/hi/news/%E0%A4%97%E0%A5%81%E0%A4%9C%E0%A4%B0%E0%A4%BE%E0%A4%A4-%E0%A4%95%E0%A5%80-%E0%A4%B5%E0%A4%BF%E0%A4%B0%E0%A4%BE%E0%A4%B8%E0%A4%A4-%E0%A5%A8%E0%A5%A6%E0%A5%A8%E0%A5%AC",
+        "language": "hi",
+        "lang": "hi",
+        "originalLang": "hi",
+        "resolvedLang": "hi",
+        "resolvedLanguage": "hi",
+        "isTranslated": false,
+        "isFallback": false,
+        "translations": {
+          "en": true,
+          "hi": true,
+          "gu": true
+        },
+        "translationGroupId": "native-heritage",
+        "translationKey": "native-heritage",
+        "publishedAt": "2020-01-01T08:00:00.000Z",
+        "updatedAt": "2020-01-01T08:00:00.000Z",
+        "availableLocales": [
+          "hi"
+        ],
+        "publishedLocales": [
+          "hi"
+        ],
+        "category": "national",
+        "coverImageUrl": null,
+        "imageUrl": null
+      },
+      "gu": {
+        "_id": "507f1f77bcf86cd79943c003",
+        "status": "published",
+        "title": "ગુજરાતનો વારસો ૨૦૨૬",
+        "summary": "ગુજરાતનો વારસો ૨૦૨૬",
+        "description": "ગુજરાતનો વારસો ૨૦૨૬",
+        "content": "<p>ગુજરાતનો વારસો ૨૦૨૬</p>",
+        "slug": "ગુજરાતનો-વારસો-૨૦૨૬",
+        "slugs": {
+          "en": "heritage-2026-in-gujarat",
+          "hi": "गुजरात-की-विरासत-२०२६",
+          "gu": "ગુજરાતનો-વારસો-૨૦૨૬"
+        },
+        "canonicalSlug": "ગુજરાતનો-વારસો-૨૦૨૬",
+        "localizedSlug": "ગુજરાતનો-વારસો-૨૦૨૬",
+        "canonicalDetailUrl": "/gu/news/%E0%AA%97%E0%AB%81%E0%AA%9C%E0%AA%B0%E0%AA%BE%E0%AA%A4%E0%AA%A8%E0%AB%8B-%E0%AA%B5%E0%AA%BE%E0%AA%B0%E0%AA%B8%E0%AB%8B-%E0%AB%A8%E0%AB%A6%E0%AB%A8%E0%AB%AC",
+        "language": "gu",
+        "lang": "gu",
+        "originalLang": "gu",
+        "resolvedLang": "gu",
+        "resolvedLanguage": "gu",
+        "isTranslated": false,
+        "isFallback": false,
+        "translations": {
+          "en": true,
+          "hi": true,
+          "gu": true
+        },
+        "translationGroupId": "native-heritage",
+        "translationKey": "native-heritage",
+        "publishedAt": "2020-01-01T08:00:00.000Z",
+        "updatedAt": "2020-01-01T08:00:00.000Z",
+        "availableLocales": [
+          "gu"
+        ],
+        "publishedLocales": [
+          "gu"
+        ],
+        "category": "national",
+        "coverImageUrl": null,
+        "imageUrl": null
+      }
+    },
+    "foreign": [
+      {
+        "_id": "507f1f77bcf86cd79943c001",
+        "status": "published",
+        "title": "Heritage 2026 in Gujarat",
+        "summary": "Heritage 2026 in Gujarat",
+        "description": "Heritage 2026 in Gujarat",
+        "content": "<p>Heritage 2026 in Gujarat</p>",
+        "slug": "ગુજરાતનો-વારસો-૨૦૨૬",
+        "slugs": {
+          "gu": "ગુજરાતનો-વારસો-૨૦૨૬"
+        },
+        "canonicalSlug": "507f1f77bcf86cd79943c001",
+        "localizedSlug": "507f1f77bcf86cd79943c001",
+        "canonicalDetailUrl": "/news/507f1f77bcf86cd79943c001",
+        "language": "en",
+        "lang": "en",
+        "originalLang": "en",
+        "resolvedLang": "en",
+        "resolvedLanguage": "en",
+        "isTranslated": false,
+        "isFallback": false,
+        "translations": {
+          "en": true,
+          "hi": false,
+          "gu": false
+        },
+        "publishedAt": "2020-01-01T08:00:00.000Z",
+        "updatedAt": "2020-01-01T08:00:00.000Z",
+        "availableLocales": [
+          "en"
+        ],
+        "publishedLocales": [
+          "en"
+        ],
+        "category": "national",
+        "coverImageUrl": null,
+        "imageUrl": null
+      },
+      {
+        "_id": "507f1f77bcf86cd79943c001",
+        "status": "published",
+        "title": "Heritage 2026 in Gujarat",
+        "summary": "Heritage 2026 in Gujarat",
+        "description": "Heritage 2026 in Gujarat",
+        "content": "<p>Heritage 2026 in Gujarat</p>",
+        "slug": "ગુજરાતનો-વારસો-૨૦૨૬",
+        "slugs": {
+          "gu": "ગુજરાતનો-વારસો-૨૦૨૬"
+        },
+        "canonicalSlug": "507f1f77bcf86cd79943c001",
+        "localizedSlug": "507f1f77bcf86cd79943c001",
+        "canonicalDetailUrl": "/news/507f1f77bcf86cd79943c001",
+        "language": "en",
+        "lang": "en",
+        "originalLang": "en",
+        "resolvedLang": "en",
+        "resolvedLanguage": "en",
+        "isTranslated": false,
+        "isFallback": false,
+        "translations": {
+          "en": true,
+          "hi": false,
+          "gu": false
+        },
+        "publishedAt": "2020-01-01T08:00:00.000Z",
+        "updatedAt": "2020-01-01T08:00:00.000Z",
+        "availableLocales": [
+          "en"
+        ],
+        "publishedLocales": [
+          "en"
+        ],
+        "category": "national",
+        "coverImageUrl": null,
+        "imageUrl": null
+      }
+    ],
+    "cached": [
+      {
+        "_id": "507f1f77bcf86cd79943c003",
+        "status": "published",
+        "title": "Heritage 2026 in Gujarat",
+        "summary": "Heritage 2026 in Gujarat",
+        "description": "Heritage 2026 in Gujarat",
+        "content": "<p>Heritage 2026 in Gujarat</p>",
+        "slug": "ગુજરાતનો-વારસો-૨૦૨૬",
+        "slugs": {},
+        "canonicalSlug": "507f1f77bcf86cd79943c003",
+        "localizedSlug": "507f1f77bcf86cd79943c003",
+        "canonicalDetailUrl": "/news/507f1f77bcf86cd79943c003",
+        "language": "en",
+        "lang": "en",
+        "originalLang": "gu",
+        "resolvedLang": "en",
+        "resolvedLanguage": "en",
+        "isTranslated": true,
+        "isFallback": false,
+        "translations": {
+          "en": false,
+          "hi": false,
+          "gu": true
+        },
+        "publishedAt": "2020-01-01T08:00:00.000Z",
+        "updatedAt": "2020-01-01T08:00:00.000Z",
+        "availableLocales": [
+          "gu"
+        ],
+        "publishedLocales": [
+          "gu"
+        ],
+        "category": "national",
+        "coverImageUrl": null,
+        "imageUrl": null
+      },
+      {
+        "_id": "507f1f77bcf86cd79943c003",
+        "status": "published",
+        "title": "Heritage 2026 in Gujarat",
+        "summary": "Heritage 2026 in Gujarat",
+        "description": "Heritage 2026 in Gujarat",
+        "content": "<p>Heritage 2026 in Gujarat</p>",
+        "slug": "ગુજરાતનો-વારસો-૨૦૨૬",
+        "slugs": {},
+        "canonicalSlug": "507f1f77bcf86cd79943c003",
+        "localizedSlug": "507f1f77bcf86cd79943c003",
+        "canonicalDetailUrl": "/news/507f1f77bcf86cd79943c003",
+        "language": "en",
+        "lang": "en",
+        "originalLang": "gu",
+        "resolvedLang": "en",
+        "resolvedLanguage": "en",
+        "isTranslated": true,
+        "isFallback": false,
+        "translations": {
+          "en": false,
+          "hi": false,
+          "gu": true
+        },
+        "publishedAt": "2020-01-01T08:00:00.000Z",
+        "updatedAt": "2020-01-01T08:00:00.000Z",
+        "availableLocales": [
+          "gu"
+        ],
+        "publishedLocales": [
+          "gu"
+        ],
+        "category": "national",
+        "coverImageUrl": null,
+        "imageUrl": null
+      }
+    ],
+    "collision": {
+      "article": {
+        "_id": "507f1f77bcf86cd79943c001",
+        "status": "published",
+        "title": "Heritage 2026 in Gujarat",
+        "summary": "Heritage 2026 in Gujarat",
+        "description": "Heritage 2026 in Gujarat",
+        "content": "<p>Heritage 2026 in Gujarat</p>",
+        "slug": "shared-alias",
+        "slugs": {
+          "en": "shared-alias"
+        },
+        "canonicalSlug": "507f1f77bcf86cd79943c001",
+        "localizedSlug": "507f1f77bcf86cd79943c001",
+        "canonicalDetailUrl": "/news/507f1f77bcf86cd79943c001",
+        "language": "en",
+        "lang": "en",
+        "originalLang": "en",
+        "resolvedLang": "en",
+        "resolvedLanguage": "en",
+        "isTranslated": false,
+        "isFallback": false,
+        "translations": {
+          "en": true,
+          "hi": false,
+          "gu": false
+        },
+        "publishedAt": "2020-01-01T08:00:00.000Z",
+        "updatedAt": "2020-01-01T08:00:00.000Z",
+        "availableLocales": [
+          "en"
+        ],
+        "publishedLocales": [
+          "en"
+        ],
+        "category": "national",
+        "coverImageUrl": null,
+        "imageUrl": null
+      },
+      "aliasStatus": 409
+    }
+  }
+}

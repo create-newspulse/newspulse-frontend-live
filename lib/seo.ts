@@ -3,9 +3,9 @@ import type { IncomingMessage } from 'http';
 import { resolveCoverImageUrl } from './coverImages';
 import {
   getArticleAuthorName,
-  getLocalizedSeoValue,
   getStoredSeoValue,
 } from './editorialDisplay';
+import { getArticleEditionLocale, resolveArticleSlug } from './articleSlugs';
 import { getPulseDialogueMetadata } from './pulseDialogue';
 import { getAuthorBylineMetadata } from './authorByline';
 import {
@@ -21,6 +21,7 @@ export const NEWS_PULSE_SITE_URL = 'https://www.newspulse.co.in';
 export const NEWS_PULSE_BRAND_NAME = 'News Pulse';
 export const NEWS_PULSE_PUBLISHER_NAME = 'News Pulse Media';
 export const NEWS_PULSE_LOGO_PATH = '/icons/icon-512x512.png';
+export const NEWS_PULSE_SOCIAL_IMAGE_PATH = '/brand/news-pulse-final-logo.png';
 export const NEWS_SITEMAP_WINDOW_DAYS = 2;
 
 export type SeoAlternate = {
@@ -104,6 +105,19 @@ function getLocalizedSeoOnlyValue(article: any, lang: RouteLocale, ...keys: stri
   return '';
 }
 
+function articleSeoText(article: any, lang: RouteLocale, ...keys: string[]): string {
+  const localized = getLocalizedSeoOnlyValue(article, lang, ...keys);
+  if (localized) return localized;
+  const original = article?.originalLang || article?.sourceLang || getArticleEditionLocale(article);
+  if (article?.isTranslated === true || !original || normalizeRouteLocale(original) !== lang) return '';
+  return getStoredSeoValue(article, ...keys);
+}
+
+function socialImageUrl(value: unknown, siteUrl: string): string {
+  const url = absolutePublicUrl(value, siteUrl);
+  return /^https?:\/\//i.test(url) ? url : '';
+}
+
 function isProductionRuntime(): boolean {
   const vercelEnv = String(process.env.VERCEL_ENV || '').toLowerCase();
   const explicit = String(process.env.NEWS_PULSE_DEPLOYMENT || process.env.NEWS_PULSE_ENV || '').toLowerCase();
@@ -185,31 +199,22 @@ export function getArticleCanonicalUrl(article: unknown, langInput: unknown, sit
   if (!item) return '';
 
   const lang = normalizeRouteLocale(langInput);
-  const localizedStored = getLocalizedSeoOnlyValue(item, lang, 'canonicalUrl', 'canonical', 'url');
-  if (localizedStored) return absolutePublicUrl(localizedStored, siteUrl);
-
-  if (lang === 'en') {
-    const stored = getStoredSeoValue(item, 'canonicalUrl', 'canonical', 'url');
-    if (stored) return absolutePublicUrl(stored, siteUrl);
-  }
-
-  const localized = getLocalizedArticleFields(item, lang, STRICT_LOCALE_POLICY);
+  const slug = resolveArticleSlug(item, lang);
   const id = String(item?._id || item?.id || '').trim();
-  const slug = localized.slug || String(item?.slug || id).trim();
-  if (!id && !slug) return '';
-  return absolutePublicUrl(buildNewsUrl({ id: id || slug, slug: slug || id, lang }), siteUrl);
+  if (!slug) return '';
+  return absolutePublicUrl(buildNewsUrl({ id, slug, lang }), siteUrl);
 }
 
-export function getArticleAlternates(article: unknown, siteUrl: string): SeoAlternate[] {
+export function getArticleAlternates(article: unknown, siteUrl: string, editions: unknown[] = []): SeoAlternate[] {
   const item = article && typeof article === 'object' ? (article as any) : null;
   if (!item) return [];
 
   const alternates: SeoAlternate[] = [];
   for (const lang of ['en', 'hi', 'gu'] as RouteLocale[]) {
-    const localized = getLocalizedArticleFields(item, lang, STRICT_LOCALE_POLICY);
-    if (!localized.isVisible || !localized.slug) continue;
-    const id = String(item?._id || item?.id || localized.slug).trim();
-    const href = absolutePublicUrl(buildNewsUrl({ id, slug: localized.slug, lang }), siteUrl);
+    const edition = editions.find(candidate => getArticleEditionLocale(candidate) === lang) || item;
+    const localized = getLocalizedArticleFields(edition, lang, STRICT_LOCALE_POLICY);
+    if (!localized.isVisible || !localized.slug || !isIndexablePublishedArticle(edition)) continue;
+    const href = getArticleCanonicalUrl(edition, lang, siteUrl);
     if (href) alternates.push({ hrefLang: lang, href });
   }
 
@@ -232,17 +237,17 @@ export function buildArticleSeoMetadata(article: unknown, langInput: unknown, si
   if (!localized.isVisible) return null;
 
   const canonicalUrl = getArticleCanonicalUrl(item, lang, siteUrl);
-  const title = cleanText(getLocalizedSeoValue(item, lang, 'pageTitle', 'seoTitle', 'metaTitle', 'title') || localized.title);
+  const title = cleanText(articleSeoText(item, lang, 'pageTitle', 'seoTitle', 'metaTitle', 'title') || localized.title);
   const description = truncate(
-    getLocalizedSeoValue(item, lang, 'metaDescription', 'seoDescription', 'description', 'summary', 'excerpt') ||
+    articleSeoText(item, lang, 'metaDescription', 'seoDescription', 'description', 'summary', 'excerpt') ||
       localized.summary ||
       localized.bodyHtml,
     180
   );
-  const ogTitle = cleanText(getLocalizedSeoValue(item, lang, 'ogTitle', 'openGraphTitle') || title);
-  const ogDescription = truncate(getLocalizedSeoValue(item, lang, 'ogDescription', 'openGraphDescription', 'socialDescription') || description, 220);
-  const heroImage = getLocalizedSeoValue(item, lang, 'ogImage', 'openGraphImage', 'twitterImage', 'image') || resolveCoverImageUrl(item, { lang }) || '';
-  const ogImage = absolutePublicUrl(heroImage, siteUrl);
+  const ogTitle = cleanText(articleSeoText(item, lang, 'ogTitle', 'openGraphTitle') || title);
+  const ogDescription = truncate(articleSeoText(item, lang, 'ogDescription', 'openGraphDescription', 'socialDescription') || description, 220);
+  const heroImage = item.coverImage?.removed === true ? '' : resolveCoverImageUrl(item, { lang });
+  const ogImage = socialImageUrl(heroImage, siteUrl) || absolutePublicUrl(NEWS_PULSE_SOCIAL_IMAGE_PATH, siteUrl);
   const pulseDialogue = getPulseDialogueMetadata(item);
   const authorByline = getAuthorBylineMetadata(item);
   const authorName = authorByline?.name || cleanText(pulseDialogue?.contributorName || getArticleAuthorName(item));
@@ -300,9 +305,9 @@ export function buildArticleSeoMetadata(article: unknown, langInput: unknown, si
     ogDescription,
     ogUrl: canonicalUrl,
     ogImage,
-    twitterTitle: cleanText(getLocalizedSeoValue(item, lang, 'twitterTitle') || ogTitle),
-    twitterDescription: truncate(getLocalizedSeoValue(item, lang, 'twitterDescription') || ogDescription, 220),
-    twitterImage: absolutePublicUrl(getLocalizedSeoValue(item, lang, 'twitterImage') || ogImage, siteUrl),
+    twitterTitle: cleanText(articleSeoText(item, lang, 'twitterTitle') || ogTitle),
+    twitterDescription: truncate(articleSeoText(item, lang, 'twitterDescription') || ogDescription, 220),
+    twitterImage: ogImage,
     publishedAt,
     modifiedAt,
     authorName,
