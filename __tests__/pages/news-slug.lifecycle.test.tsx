@@ -4,6 +4,7 @@ import NewsSlugDetailPage from '../../pages/news/[slug]';
 import { dispatchPublicDataRefresh } from '../../lib/publicDataRefresh';
 import { parsePublicNewsArticle, type Article } from '../../lib/publicNewsApi';
 import articleUrlContracts from '../fixtures/articleUrlContracts.json';
+import { buildSocialImageUrl } from '../../lib/articleSocialImage';
 
 jest.mock('next/head', () => ({
   __esModule: true,
@@ -73,6 +74,8 @@ async function expectWithdrawn() {
   expect(screen.queryByText('Original summary')).toBeNull();
   expect(screen.queryByText('Original body')).toBeNull();
   expect(document.querySelector('script[type="application/ld+json"]')).toBeNull();
+  expect(document.querySelector('meta[property^="og:"]')).toBeNull();
+  expect(document.querySelector('meta[name^="twitter:"]')).toBeNull();
   expect(screen.queryByRole('group', { name: 'articleShare.label' })).toBeNull();
 }
 
@@ -112,6 +115,41 @@ test('a resolved edition refresh preserves the collision-safe ID, Save Update co
   await waitFor(() => expect(screen.getByRole('heading', { name: updated.title })).toBeTruthy());
   expect(document.querySelector('meta[property="og:url"]')?.getAttribute('content')).toBe(canonical);
   expect(fetchMock).toHaveBeenCalledTimes(3);
+});
+
+test.each(['en', 'hi', 'gu'] as const)('Save Update refreshes %s social text and replaced/removed covers without changing the share menu', async lang => {
+  const headings = { en: 'Updated English headline', hi: 'नया हिंदी शीर्षक', gu: 'નવું ગુજરાતી શીર્ષક' };
+  const descriptions = { en: 'Updated English summary', hi: 'नया हिंदी विवरण', gu: 'નવો ગુજરાતી સારાંશ' };
+  const source = 'https://res.cloudinary.com/fixture/image/upload/v1/cover.png';
+  const descriptor = (value: string) => ({
+    source: value, url: buildSocialImageUrl(value, 75), type: 'image/jpeg' as const, width: 1200, height: 630, bytes: 90_000,
+  });
+  const publishedAt = '2025-01-01T00:00:00.000Z';
+  const initial = article({
+    language: lang, resolvedLanguage: lang, coverImageUrl: source, socialImage: descriptor(source),
+    publishedAt,
+  });
+  render(<NewsSlugDetailPage {...props(initial, lang)} />);
+  const replacement = source.replace('/v1/', '/v2/');
+  const updated = {
+    ...initial, title: headings[lang], summary: descriptions[lang], coverImageUrl: replacement,
+    socialImage: descriptor(replacement), updatedAt: '2026-01-02T00:00:00.000Z',
+  };
+  fetchMock.mockResolvedValueOnce(json({ article: updated }));
+  await refresh();
+  await waitFor(() => expect(document.querySelector('meta[property="og:title"]')?.getAttribute('content')).toBe(headings[lang]));
+  expect(document.querySelector('meta[property="og:description"]')?.getAttribute('content')).toBe(descriptions[lang]);
+  expect(document.querySelector('meta[property="og:image"]')?.getAttribute('content')).toBe(descriptor(replacement).url);
+  expect(document.querySelector('meta[property="og:image:secure_url"]')?.getAttribute('content')).toBe(descriptor(replacement).url);
+  expect(document.querySelector('meta[property="og:image:type"]')?.getAttribute('content')).toBe('image/jpeg');
+  expect(document.querySelector('meta[property="og:locale"]')?.getAttribute('content')).toBe(`${lang}_IN`);
+  expect(document.querySelectorAll('meta[property="og:title"]')).toHaveLength(1);
+  expect(screen.getAllByRole('group', { name: 'articleShare.label' })).toHaveLength(1);
+  fetchMock.mockResolvedValueOnce(json({ article: { ...updated, coverImage: { removed: true }, updatedAt: '2026-01-03T00:00:00.000Z' } }));
+  await refresh();
+  await waitFor(() => expect(document.querySelector('meta[property="og:image"]')?.getAttribute('content'))
+    .toBe('https://www.newspulse.co.in/brand/news-pulse-social.jpg'));
+  expect(document.querySelector('meta[property="article:published_time"]')?.getAttribute('content')).toBe(publishedAt);
 });
 
 test.each(['en', 'hi', 'gu'] as const)('%s published sponsored article remains accessible and still withdraws on unpublish', async (lang) => {
@@ -260,7 +298,7 @@ describe('pending translation read recovery', () => {
 
 test.each([
   { status: 'unpublished' }, { status: 'draft' }, { status: 'scheduled' },
-  { status: 'archived' }, { isDeleted: true }, { deleted: true },
+  { status: 'archived' }, { status: 'restricted' }, { visibility: 'private' }, { isPrivate: true }, { isDeleted: true }, { deleted: true },
   { deletedAt: '2026-01-02T00:00:00.000Z' }, { isPublished: false },
   { publishedAt: '2999-01-01T00:00:00.000Z' },
 ])('withdraws a same-ID authoritative lifecycle change %j', async (changes) => {

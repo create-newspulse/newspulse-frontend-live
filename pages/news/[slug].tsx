@@ -40,8 +40,6 @@ import {
   getImageAltText,
   getImageCaption,
   getImageCredit,
-  getLocalizedSeoValue,
-  getStoredSeoValue,
   isEditorialArticle,
 } from '../../lib/editorialDisplay';
 import {
@@ -1274,11 +1272,6 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
   const canonicalUrl = React.useMemo(() => {
     return getArticleCanonicalUrl(resolvedArticle, lang, siteUrl);
   }, [lang, resolvedArticle, siteUrl]);
-  const seoTitle = React.useMemo(() => getLocalizedSeoValue(resolvedArticle, lang, 'pageTitle', 'seoTitle', 'metaTitle', 'ogTitle', 'openGraphTitle', 'title') || displayTitle, [displayTitle, lang, resolvedArticle]);
-  const seoDescription = React.useMemo(() => getLocalizedSeoValue(resolvedArticle, lang, 'metaDescription', 'seoDescription', 'ogDescription', 'openGraphDescription', 'socialDescription', 'description') || displaySummary, [displaySummary, lang, resolvedArticle]);
-  const ogTitle = React.useMemo(() => getLocalizedSeoValue(resolvedArticle, lang, 'ogTitle', 'openGraphTitle') || seoTitle || displayTitle, [displayTitle, lang, resolvedArticle, seoTitle]);
-  const ogDescription = React.useMemo(() => getLocalizedSeoValue(resolvedArticle, lang, 'ogDescription', 'openGraphDescription', 'socialDescription') || seoDescription, [lang, resolvedArticle, seoDescription]);
-  const ogImage = React.useMemo(() => getLocalizedSeoValue(resolvedArticle, lang, 'ogImage', 'openGraphImage', 'image') || heroSrc || '', [heroSrc, lang, resolvedArticle]);
   const articleSeo = React.useMemo(() => buildArticleSeoMetadata(resolvedArticle, lang, siteUrl), [lang, resolvedArticle, siteUrl]);
 
   const canShare = Boolean(resolvedArticle && localized.isVisible && canonicalUrl && !pendingTranslate);
@@ -1301,22 +1294,31 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
   return (
     <>
       <Head>
-        <title>{`${(pendingTranslate && !displayTitle) ? 'Translating…' : (articleSeo?.title || seoTitle || displayTitle || 'News')} | News Pulse`}</title>
-        {articleSeo?.description || seoDescription ? <meta name="description" content={articleSeo?.description || seoDescription} /> : null}
+        <title>{`${(pendingTranslate && !displayTitle) ? 'Translating…' : (articleSeo?.title || 'News')} | News Pulse`}</title>
+        {articleSeo?.description ? <meta name="description" content={articleSeo.description} /> : null}
         {articleSeo?.robots ? <meta name="robots" content={articleSeo.robots} /> : null}
-        <meta property="og:type" content="article" />
-        <meta property="og:site_name" content={NEWS_PULSE_BRAND_NAME} />
-        {articleSeo?.ogTitle || ogTitle ? <meta property="og:title" content={articleSeo?.ogTitle || ogTitle} /> : null}
-        {articleSeo?.ogDescription || ogDescription ? <meta property="og:description" content={articleSeo?.ogDescription || ogDescription} /> : null}
-        {articleSeo?.ogUrl || canonicalUrl ? <meta property="og:url" content={articleSeo?.ogUrl || canonicalUrl} /> : null}
-        {articleSeo?.ogImage || ogImage ? <meta property="og:image" content={articleSeo?.ogImage || ogImage} /> : null}
-        <meta name="twitter:card" content="summary_large_image" />
+        {articleSeo ? [
+          <meta key="og:type" property="og:type" content="article" />,
+          <meta key="og:site_name" property="og:site_name" content={NEWS_PULSE_BRAND_NAME} />,
+          <meta key="og:locale" property="og:locale" content={articleSeo.ogLocale} />,
+          <meta key="og:title" property="og:title" content={articleSeo.ogTitle} />,
+          <meta key="og:description" property="og:description" content={articleSeo.ogDescription} />,
+          <meta key="og:url" property="og:url" content={articleSeo.ogUrl} />,
+          <meta key="og:image" property="og:image" content={articleSeo.ogImage} />,
+          <meta key="og:image:secure_url" property="og:image:secure_url" content={articleSeo.ogImage} />,
+          <meta key="og:image:type" property="og:image:type" content={articleSeo.ogImageType} />,
+          <meta key="og:image:width" property="og:image:width" content={String(articleSeo.ogImageWidth)} />,
+          <meta key="og:image:height" property="og:image:height" content={String(articleSeo.ogImageHeight)} />,
+          <meta key="og:image:alt" property="og:image:alt" content={articleSeo.ogImageAlt} />,
+          <meta key="twitter:card" name="twitter:card" content="summary_large_image" />,
+        ] : null}
         {articleSeo?.twitterTitle ? <meta name="twitter:title" content={articleSeo.twitterTitle} /> : null}
         {articleSeo?.twitterDescription ? <meta name="twitter:description" content={articleSeo.twitterDescription} /> : null}
         {articleSeo?.twitterImage ? <meta name="twitter:image" content={articleSeo.twitterImage} /> : null}
-        {publishedDate ? <meta property="article:published_time" content={publishedDate} /> : null}
-        {updatedDate ? <meta property="article:modified_time" content={updatedDate} /> : null}
-        {visibleAuthorName ? <meta name="author" content={visibleAuthorName} /> : null}
+        {articleSeo?.twitterImageAlt ? <meta name="twitter:image:alt" content={articleSeo.twitterImageAlt} /> : null}
+        {articleSeo && publishedDate ? <meta property="article:published_time" content={publishedDate} /> : null}
+        {articleSeo && updatedDate ? <meta property="article:modified_time" content={updatedDate} /> : null}
+        {articleSeo && visibleAuthorName ? <meta name="author" content={visibleAuthorName} /> : null}
         {articleSeo?.newsArticleJsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(articleSeo.newsArticleJsonLd) }} /> : null}
         {articleSeo?.breadcrumbJsonLd ? <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(articleSeo.breadcrumbJsonLd) }} /> : null}
       </Head>

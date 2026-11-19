@@ -16,12 +16,13 @@ import {
   type RouteLocale,
 } from './localizedArticleFields';
 import { buildNewsUrl } from './newsRoutes';
+import { isOfficialSocialImage, normalizeSocialImageSource, parseArticleSocialImage, SOCIAL_IMAGE_FALLBACK_PATH, SOCIAL_IMAGE_HEIGHT, SOCIAL_IMAGE_WIDTH } from './articleSocialImage';
 
 export const NEWS_PULSE_SITE_URL = 'https://www.newspulse.co.in';
 export const NEWS_PULSE_BRAND_NAME = 'News Pulse';
 export const NEWS_PULSE_PUBLISHER_NAME = 'News Pulse Media';
 export const NEWS_PULSE_LOGO_PATH = '/icons/icon-512x512.png';
-export const NEWS_PULSE_SOCIAL_IMAGE_PATH = '/brand/news-pulse-final-logo.png';
+export const NEWS_PULSE_SOCIAL_IMAGE_PATH = SOCIAL_IMAGE_FALLBACK_PATH;
 export const NEWS_SITEMAP_WINDOW_DAYS = 2;
 
 export type SeoAlternate = {
@@ -38,9 +39,15 @@ export type ArticleSeoMetadata = {
   ogDescription: string;
   ogUrl: string;
   ogImage: string;
+  ogImageType: 'image/jpeg';
+  ogImageWidth: number;
+  ogImageHeight: number;
+  ogImageAlt: string;
+  ogLocale: string;
   twitterTitle: string;
   twitterDescription: string;
   twitterImage: string;
+  twitterImageAlt: string;
   publishedAt: string;
   modifiedAt: string;
   authorName: string;
@@ -63,8 +70,9 @@ function cleanText(value: unknown): string {
 
 function truncate(value: string, maxLength: number): string {
   const text = cleanText(value);
-  if (text.length <= maxLength) return text;
-  const sliced = text.slice(0, maxLength - 1).trim();
+  const characters = [...text];
+  if (characters.length <= maxLength) return text;
+  const sliced = characters.slice(0, maxLength - 1).join('').trim();
   return sliced ? `${sliced}…` : '';
 }
 
@@ -84,20 +92,25 @@ function pickText(value: unknown): string {
 }
 
 function getLocalizedSeoOnlyValue(article: any, lang: RouteLocale, ...keys: string[]): string {
-  const containers: any[] = [];
-  const push = (value: any) => {
-    if (value && typeof value === 'object' && !Array.isArray(value) && !containers.includes(value)) containers.push(value);
+  const containers: Array<{ value: Record<string, unknown>; editorial: boolean }> = [];
+  const push = (value: unknown, editorial = false) => {
+    if (value && typeof value === 'object' && !Array.isArray(value) && !containers.some(entry => entry.value === value)) {
+      containers.push({ value: value as Record<string, unknown>, editorial });
+    }
   };
 
   for (const group of [article?.translations, article?.translation, article?.i18n, article?.localized, article?.locales, article?.byLang, article?.textByLang]) {
     push(group?.[lang]);
   }
-  push(article?.seo?.[lang]);
-  push(article?.meta?.[lang]);
+  for (const group of ['seo', 'meta', 'openGraph', 'og']) push(article?.[group]?.[lang], true);
 
-  for (const container of containers) {
+  for (const { value: container, editorial } of containers) {
     for (const key of keys) {
-      const value = pickText(container?.[key] || container?.seo?.[key] || container?.meta?.[key]);
+      const nested = ['seo', 'meta', 'openGraph', 'og'].map(group => {
+        const record = container[group];
+        return record && typeof record === 'object' ? (record as Record<string, unknown>)[key] : undefined;
+      });
+      const value = [key !== 'image' || editorial ? container[key] : undefined, ...nested].map(pickText).find(Boolean);
       if (value) return value;
     }
   }
@@ -113,9 +126,33 @@ function articleSeoText(article: any, lang: RouteLocale, ...keys: string[]): str
   return getStoredSeoValue(article, ...keys);
 }
 
-function socialImageUrl(value: unknown, siteUrl: string): string {
-  const url = absolutePublicUrl(value, siteUrl);
-  return /^https?:\/\//i.test(url) ? url : '';
+export function getArticleSocialImageSources(article: unknown, langInput: unknown): string[] {
+  if (!article || typeof article !== 'object' || Array.isArray(article)) return [];
+  const item = article as Record<string, unknown>;
+  const lang = normalizeRouteLocale(langInput);
+  if (!getLocalizedArticleFields(item, lang, STRICT_LOCALE_POLICY).isVisible) return [];
+  const scoped: Record<string, unknown> = { ...item, url: undefined, src: undefined };
+  const covers: unknown[] = [item.coverImage];
+  for (const group of ['translations', 'translation', 'i18n', 'localized', 'locales', 'byLang', 'textByLang']) {
+    const variants = item[group];
+    if (variants && typeof variants === 'object') {
+      const variant = (variants as Record<string, unknown>)[lang];
+      scoped[group] = { [lang]: variant };
+      if (variant && typeof variant === 'object') covers.push((variant as Record<string, unknown>).coverImage);
+    }
+  }
+  if (item.coverImage && typeof item.coverImage === 'object') covers.push((item.coverImage as Record<string, unknown>)[lang]);
+  const removed = covers.some(cover => {
+    if (!cover || typeof cover !== 'object') return false;
+    const record = cover as Record<string, unknown>;
+    return record.removed === true || ['trashed', 'deleted'].includes(String(record.status || record.mediaStatus || record.state || '').toLowerCase());
+  });
+  const editorial = articleSeoText({ ...item, image: undefined }, lang, 'ogImage', 'openGraphImage', 'image');
+  if (isOfficialSocialImage(editorial)) return [SOCIAL_IMAGE_FALLBACK_PATH];
+  const cover = removed ? '' : resolveCoverImageUrl(scoped, { lang });
+  return [...new Set([editorial, cover].map(value =>
+    isOfficialSocialImage(value) ? SOCIAL_IMAGE_FALLBACK_PATH : normalizeSocialImageSource(value)
+  ).filter(Boolean))];
 }
 
 function isProductionRuntime(): boolean {
@@ -240,14 +277,18 @@ export function buildArticleSeoMetadata(article: unknown, langInput: unknown, si
   const title = cleanText(articleSeoText(item, lang, 'pageTitle', 'seoTitle', 'metaTitle', 'title') || localized.title);
   const description = truncate(
     articleSeoText(item, lang, 'metaDescription', 'seoDescription', 'description', 'summary', 'excerpt') ||
-      localized.summary ||
-      localized.bodyHtml,
+      cleanText(localized.summary) ||
+      cleanText(localized.bodyHtml) ||
+      localized.title,
     180
   );
   const ogTitle = cleanText(articleSeoText(item, lang, 'ogTitle', 'openGraphTitle') || title);
   const ogDescription = truncate(articleSeoText(item, lang, 'ogDescription', 'openGraphDescription', 'socialDescription') || description, 220);
-  const heroImage = item.coverImage?.removed === true ? '' : resolveCoverImageUrl(item, { lang });
-  const ogImage = socialImageUrl(heroImage, siteUrl) || absolutePublicUrl(NEWS_PULSE_SOCIAL_IMAGE_PATH, siteUrl);
+  const verifiedImage = parseArticleSocialImage(item.socialImage);
+  const image = verifiedImage && getArticleSocialImageSources(item, lang).includes(verifiedImage.source) ? verifiedImage : null;
+  const fallbackOrigin = /^https:\/\//i.test(siteUrl) ? siteUrl : NEWS_PULSE_SITE_URL;
+  const ogImage = image?.url || absolutePublicUrl(NEWS_PULSE_SOCIAL_IMAGE_PATH, fallbackOrigin);
+  const ogImageAlt = cleanText(articleSeoText(item, lang, 'ogImageAlt', 'openGraphImageAlt') || ogTitle);
   const pulseDialogue = getPulseDialogueMetadata(item);
   const authorByline = getAuthorBylineMetadata(item);
   const authorName = authorByline?.name || cleanText(pulseDialogue?.contributorName || getArticleAuthorName(item));
@@ -305,9 +346,15 @@ export function buildArticleSeoMetadata(article: unknown, langInput: unknown, si
     ogDescription,
     ogUrl: canonicalUrl,
     ogImage,
+    ogImageType: 'image/jpeg',
+    ogImageWidth: image?.width || SOCIAL_IMAGE_WIDTH,
+    ogImageHeight: image?.height || SOCIAL_IMAGE_HEIGHT,
+    ogImageAlt,
+    ogLocale: { en: 'en_IN', hi: 'hi_IN', gu: 'gu_IN' }[lang],
     twitterTitle: cleanText(articleSeoText(item, lang, 'twitterTitle') || ogTitle),
     twitterDescription: truncate(articleSeoText(item, lang, 'twitterDescription') || ogDescription, 220),
     twitterImage: ogImage,
+    twitterImageAlt: cleanText(articleSeoText(item, lang, 'twitterImageAlt') || ogImageAlt),
     publishedAt,
     modifiedAt,
     authorName,

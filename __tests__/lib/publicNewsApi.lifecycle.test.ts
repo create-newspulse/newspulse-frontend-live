@@ -143,6 +143,21 @@ test('does not filter out lifecycle tombstones before the caller can reconcile t
   expect((await fetchPublicNewsGroup({ translationGroupId: 'group-1' })).items).toEqual([withdrawn]);
 });
 
+test('invalid optional social image claims cannot poison a valid published article read', () => {
+  const parsed = parsePublicNewsArticle({
+    ...story, socialImage: { url: 'http://private.test/image', error: 'untrusted image diagnostic' },
+  });
+  expect(parsed).toMatchObject({ ...story, socialImage: null });
+  expect(console.error).toHaveBeenCalledWith('[public-news] Invalid social image metadata ignored');
+});
+
+test.each([{ status: 'restricted' }, { visibility: 'private' }, { isPrivate: true }])('retains explicit privacy markers for visibility checks: %j', lifecycle => {
+  const parsed = parsePublicNewsArticle({ ...story, publishedAt: '2025-01-01T00:00:00.000Z', ...lifecycle });
+  expect(parsed).not.toBeNull();
+  expect(getLocalizedArticleFields(parsed, 'en', STRICT_LOCALE_POLICY).isVisible).toBe(false);
+  expect(buildArticleSeoMetadata(parsed, 'en', 'https://www.newspulse.co.in')).toBeNull();
+});
+
 test.each([
   { _id: story._id },
   { ...story, deletedAt: { unexpected: true } },

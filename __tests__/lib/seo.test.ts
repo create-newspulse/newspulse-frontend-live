@@ -1,4 +1,5 @@
-import { buildArticleSeoMetadata, getArticleAlternates, getArticleCanonicalUrl, isEligibleForNewsSitemap, isIndexablePublishedArticle } from '../../lib/seo';
+import { buildArticleSeoMetadata, getArticleAlternates, getArticleCanonicalUrl, getArticleSocialImageSources, isEligibleForNewsSitemap, isIndexablePublishedArticle } from '../../lib/seo';
+import { buildSocialImageUrl } from '../../lib/articleSocialImage';
 
 const article = {
   _id: 'article-1',
@@ -80,7 +81,7 @@ describe('public SEO helpers', () => {
     expect(seo?.robots).toContain('index');
     expect(seo?.ogTitle).toBe('Explicit OG Title');
     expect(seo?.ogUrl).toBe(seo?.canonicalUrl);
-    expect(seo?.ogImage).toBe('https://www.newspulse.co.in/uploads/real-image.jpg');
+    expect(seo?.ogImage).toBe('https://www.newspulse.co.in/brand/news-pulse-social.jpg');
     expect(seo?.twitterTitle).toBe('Explicit OG Title');
     expect(seo?.twitterImage).toBe(seo?.ogImage);
     expect(seo?.newsArticleJsonLd?.['@type']).toBe('NewsArticle');
@@ -157,7 +158,7 @@ describe('public SEO helpers', () => {
     { coverImageUrl: 'javascript:alert(1)' },
   ])('uses the verified official image when a cover is absent, removed or unusable (%p)', cover => {
     const seo = buildArticleSeoMetadata({ ...article, ...cover }, 'en', 'https://www.newspulse.co.in');
-    expect(seo?.ogImage).toBe('https://www.newspulse.co.in/brand/news-pulse-final-logo.png');
+    expect(seo?.ogImage).toBe('https://www.newspulse.co.in/brand/news-pulse-social.jpg');
     expect(seo?.twitterImage).toBe(seo?.ogImage);
   });
 
@@ -167,5 +168,68 @@ describe('public SEO helpers', () => {
     expect(isIndexablePublishedArticle({ ...article, deleted: true }, new Date('2026-08-02T00:00:00.000Z'))).toBe(false);
     expect(isEligibleForNewsSitemap(article, new Date('2026-08-02T00:00:00.000Z'))).toBe(true);
     expect(isEligibleForNewsSitemap({ ...article, publishedAt: '2026-07-20T00:00:00.000Z' }, new Date('2026-08-02T00:00:00.000Z'))).toBe(false);
+  });
+
+  test.each([
+    ['en', 'national', 'English headline', 'English summary', 'en_IN'],
+    ['hi', 'sports', 'हिंदी शीर्षक', 'हिंदी विवरण', 'hi_IN'],
+    ['gu', 'faith-culture', 'ગુજરાતી શીર્ષક', 'ગુજરાતી સારાંશ', 'gu_IN'],
+  ] as const)('uses verified image properties and edition-owned overrides for %s / %s', (lang, category, title, summary, ogLocale) => {
+    const source = 'https://res.cloudinary.com/fixture/image/upload/v1/news/edition.png';
+    const socialImage = { source, url: buildSocialImageUrl(source, 75), type: 'image/jpeg', width: 1200, height: 630, bytes: 100_000 };
+    const slug = { en: 'english-headline', hi: 'हिंदी-शीर्षक', gu: 'ગુજરાતી-શીર્ષક' }[lang];
+    const story = {
+      ...article, language: lang, originalLang: 'en', isTranslated: lang !== 'en', category,
+      resolvedLanguage: lang, canonicalSlug: slug, slugs: { [lang]: slug }, slug,
+      title, summary, translations: undefined, coverImageUrl: source, socialImage,
+      seo: { ogTitle: 'Wrong unscoped title', ogDescription: 'Wrong unscoped description', [lang]: { ogTitle: title, ogDescription: summary } },
+      openGraph: { [lang]: { ogImageAlt: title } },
+    };
+    const seo = buildArticleSeoMetadata(story, lang, 'https://www.newspulse.co.in');
+    expect(seo).toMatchObject({
+      ogTitle: title, ogDescription: summary, ogLocale, ogImage: socialImage.url,
+      ogImageWidth: 1200, ogImageHeight: 630, ogImageType: 'image/jpeg', ogImageAlt: title,
+      twitterTitle: title, twitterDescription: summary, twitterImage: socialImage.url, twitterImageAlt: title,
+    });
+    expect(seo?.ogUrl).toBe(seo?.canonicalUrl);
+    expect(seo?.publishedAt).toBe(article.publishedAt);
+    expect(seo?.ogUrl).toContain(`${lang === 'en' ? '' : `/${lang}`}/news/`);
+  });
+
+  test('preserves edition-specific OG images without borrowing another edition graphic or resurrecting removed covers', () => {
+    const cover = 'https://res.cloudinary.com/fixture/image/upload/v1/cover.jpg';
+    const editorial = 'https://res.cloudinary.com/fixture/image/upload/v1/hindi.jpg';
+    const otherEdition = 'https://res.cloudinary.com/fixture/image/upload/v1/gujarati.jpg';
+    const story = {
+      ...article, coverImageUrl: cover, image: cover, url: 'https://www.newspulse.co.in/news/story',
+      translations: {
+        ...article.translations,
+        hi: { ...article.translations.hi, image: cover, coverImage: { removed: true } },
+        gu: { image: otherEdition },
+      },
+    };
+    expect(getArticleSocialImageSources(story, 'hi')).toEqual([]);
+    expect(getArticleSocialImageSources({ ...story, seo: { hi: { image: editorial } } }, 'hi')).toEqual([editorial]);
+    expect(getArticleSocialImageSources({ ...story, coverImageUrl: undefined, image: undefined, translations: { gu: { image: otherEdition } } }, 'en')).toEqual([]);
+    expect(getArticleSocialImageSources({ ...article, coverImageUrl: cover, seo: { ogImage: '/brand/news-pulse-final-logo.png' } }, 'en'))
+      .toEqual(['/brand/news-pulse-social.jpg']);
+  });
+
+  test('replaced or removed covers cannot keep a stale verified preview', () => {
+    const source = 'https://res.cloudinary.com/fixture/image/upload/v1/old.jpg';
+    const socialImage = { source, url: buildSocialImageUrl(source, 75), type: 'image/jpeg', width: 1200, height: 630, bytes: 50_000 };
+    for (const change of [{ coverImageUrl: source.replace('/v1/', '/v2/') }, { coverImage: { removed: true } }]) {
+      const seo = buildArticleSeoMetadata({ ...article, coverImageUrl: source, socialImage, ...change }, 'en', 'https://www.newspulse.co.in');
+      expect(seo?.ogImage).toBe('https://www.newspulse.co.in/brand/news-pulse-social.jpg');
+    }
+  });
+
+  test('keeps Unicode intact when shortening descriptions and uses the localized headline for an empty body', () => {
+    const seo = buildArticleSeoMetadata({ ...article, seo: {}, summary: `${'a'.repeat(178)}😀 tail` }, 'en', 'https://www.newspulse.co.in');
+    expect(seo?.description).toBe(`${'a'.repeat(178)}😀…`);
+    const emptyBody = buildArticleSeoMetadata({
+      ...article, seo: {}, summary: '', content: '<p>&nbsp;</p><script>private script</script>',
+    }, 'en', 'https://www.newspulse.co.in');
+    expect(emptyBody?.ogDescription).toBe(article.title);
   });
 });

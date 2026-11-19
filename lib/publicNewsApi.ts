@@ -6,6 +6,7 @@ import { getOrdinaryCategoryPagination, ORDINARY_PAGINATION_HEADER, validateOrdi
 import { FAITH_CULTURE_NEWS_UNAVAILABLE, FAITH_CULTURE_PAGINATION_HEADER, getFaithCulturePagination, validateFaithCulturePageRequest } from './faithCulturePagination';
 import { getFaithCultureTopic } from './faithCultureTopics';
 import { getSafeRetryAfter } from './retryAfter';
+import { parseArticleSocialImage, type ArticleSocialImage } from './articleSocialImage';
 
 export type ArticleBase = {
   _id: string;
@@ -21,6 +22,7 @@ export type ArticleBase = {
   isFallback?: boolean;
   availableLocales?: string[];
   publishedLocales?: string[];
+  socialImage?: ArticleSocialImage | null;
   translationGroupId?: string;
   translationKey?: string;
   updatedAt?: string;
@@ -192,7 +194,7 @@ const publicImages: PublicFields = {
 };
 const publicSeo = publicScalars(
   'pageTitle seoTitle metaTitle title metaDescription seoDescription description summary excerpt ogTitle openGraphTitle ' +
-  'ogDescription openGraphDescription socialDescription ogImage openGraphImage image twitterTitle twitterDescription twitterImage ' +
+  'ogDescription openGraphDescription socialDescription ogImage openGraphImage image ogImageAlt openGraphImageAlt twitterTitle twitterDescription twitterImage twitterImageAlt ' +
   'canonicalUrl canonical url robots'
 );
 const publicSeoFields: PublicFields = Object.fromEntries(
@@ -231,7 +233,7 @@ const publicArticleFields: PublicFields = {
   ...publicSeo, ...publicSeoFields, ...publicSponsorFields, ...publicTextFields, ...publicImages,
   ...publicScalars(
     '_id id translationGroupId translationKey updatedAt modifiedAt createdAt publishedAt publishAt publishDate ' +
-    'syncVersion translationSyncVersion version status state deleted isDeleted deletedAt archived isArchived archivedAt isPublished published ' +
+    'syncVersion translationSyncVersion version status state visibility isPrivate deleted isDeleted deletedAt archived isArchived archivedAt isPublished published ' +
     'language lang sourceLang sourceLanguage provider generatedAt sourceNewsId categoryKey region district desk type editorialType editorial_type ' +
     'storyType story_type authorName writerName reporterName createdByName userName authorDesignation authorRole authorTitle designation bylineDesignation ' +
     'readingTime readTime readingTimeText estimatedReadingTime readingMinutes readTimeMinutes estimatedReadMinutes ' +
@@ -241,6 +243,7 @@ const publicArticleFields: PublicFields = {
     'originalLang resolvedLang resolvedLanguage requestedLang requestedLanguage isTranslated isFallback availableLocales publishedLocales'
   ),
   source: publicScalars('title summary excerpt content html body'),
+  socialImage: publicScalars('source url width height type bytes'),
   slugs: publicLocales(publicText),
   translationStatus: publicLocales(true),
   author: publicScalars('name displayName fullName title label designation role'),
@@ -300,7 +303,7 @@ export function projectPublicNewsArticle(article: unknown): Record<string, unkno
 function hasPublicRecordDiagnostics(record: Record<string, unknown>, fields: PublicFields): boolean {
   if (failedPublicNewsPayload(record)) return true;
   return Object.entries(fields).some(([key, selection]) => {
-    if (selection === true) return false;
+    if (selection === true || key === 'socialImage') return false;
     const value = record[key];
     const values = Array.isArray(value) ? value : [value];
     return values.some((value) => {
@@ -319,10 +322,10 @@ function validTranslationStatus(value: unknown, allowFailedTranslation = false):
 }
 
 function validLifecycleFields(record: Record<string, unknown>, allowFailedTranslation = false): boolean {
-  for (const key of ['status', 'state', 'language', 'lang', 'sourceLang', 'sourceLanguage', 'translationGroupId', 'originalLang', 'resolvedLang', 'resolvedLanguage']) {
+  for (const key of ['status', 'state', 'visibility', 'language', 'lang', 'sourceLang', 'sourceLanguage', 'translationGroupId', 'originalLang', 'resolvedLang', 'resolvedLanguage']) {
     if (record[key] != null && typeof record[key] !== 'string') return false;
   }
-  for (const key of ['deleted', 'isDeleted', 'archived', 'isArchived', 'isPublished', 'published', 'isTranslated', 'isFallback']) {
+  for (const key of ['deleted', 'isDeleted', 'isPrivate', 'archived', 'isArchived', 'isPublished', 'published', 'isTranslated', 'isFallback']) {
     if (record[key] != null && typeof record[key] !== 'boolean') return false;
   }
   for (const key of ['availableLocales', 'publishedLocales']) {
@@ -366,7 +369,13 @@ function parsePublicNewsRecord(payload: unknown, listRecord = false): Article | 
   const fields = listRecord ? publicListingFields : publicArticleFields;
   if (!record || typeof record._id !== 'string' || !record._id.trim() ||
     !validLifecycleFields(record, listRecord) || hasPublicRecordDiagnostics(record, fields)) return null;
-  return { ...projectPublicFields(record, fields), _id: record._id };
+  const projected = projectPublicFields(record, fields);
+  if (record.socialImage != null) {
+    const image = parseArticleSocialImage(record.socialImage);
+    if (!image) console.error('[public-news] Invalid social image metadata ignored');
+    projected.socialImage = image;
+  }
+  return { ...projected, _id: record._id };
 }
 
 export function parsePublicNewsArticle(payload: unknown): Article | null {

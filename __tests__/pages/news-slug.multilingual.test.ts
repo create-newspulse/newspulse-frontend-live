@@ -97,7 +97,8 @@ describe.each(['deployed', 'candidate'] as const)('%s Backend compatibility', ve
     const metadata = buildArticleSeoMetadata(props.article, lang, NEWS_PULSE_SITE_URL);
     expect(metadata).toMatchObject({
       ogTitle: record.title, ogDescription: record.summary, ogUrl: props.seo.canonicalUrl,
-      ogImage: `${NEWS_PULSE_SITE_URL}/brand/news-pulse-final-logo.png`,
+      ogImage: `${NEWS_PULSE_SITE_URL}/brand/news-pulse-social.jpg`,
+      ogImageType: 'image/jpeg', ogImageWidth: 1200, ogImageHeight: 630, ogImageAlt: record.title, ogLocale: `${lang}_IN`,
       publishedAt: record.publishedAt,
     });
     expect(console.error).not.toHaveBeenCalled();

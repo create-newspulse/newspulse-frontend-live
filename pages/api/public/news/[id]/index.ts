@@ -6,6 +6,7 @@ import { isLegacyMissingArticle, isResolvedPublicArticleForLocale, parsePublicNe
 import { pickFreshestArticleForLocale } from '../../../../../lib/translationGroupSync';
 import { withPublicReadDeadline } from '../../../../../lib/publicReadDeadline';
 import { getSafeRetryAfter } from '../../../../../lib/retryAfter';
+import { withArticleSocialImage } from '../../../../../lib/articleSocialImage.server';
 
 function asSingleQueryValue(value: string | string[] | undefined): string {
   return String(Array.isArray(value) ? value[0] : value || '').trim();
@@ -16,6 +17,7 @@ function getApiBase(): string {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const deadlineAt = performance.now() + 4000;
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
     return res.status(405).json({ ok: false, message: 'METHOD_NOT_ALLOWED' });
@@ -123,7 +125,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     res.setHeader('Cache-Control', 'no-store, max-age=0');
-    return res.status(200).json({ article });
+    return res.status(200).json({ article: await withArticleSocialImage(article, requestedLocale, deadlineAt - performance.now()) });
   } catch {
     res.setHeader('Cache-Control', 'no-store');
     if (retryAfter) res.setHeader('Retry-After', retryAfter);

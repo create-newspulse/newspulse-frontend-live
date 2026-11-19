@@ -256,9 +256,12 @@ describe('pages/news/[slug] editorial detail', () => {
     const canonical = `https://www.newspulse.co.in${lang === 'en' ? '' : `/${lang}`}/news/${encodeURIComponent(record.canonicalSlug)}`;
     for (const [property, value] of Object.entries({
       'og:title': record.title, 'og:description': record.summary, 'og:url': canonical,
-      'og:site_name': 'News Pulse',
-      'og:image': 'https://www.newspulse.co.in/brand/news-pulse-final-logo.png',
+      'og:type': 'article', 'og:site_name': 'News Pulse', 'og:locale': `${lang}_IN`,
+      'og:image': 'https://www.newspulse.co.in/brand/news-pulse-social.jpg',
+      'og:image:secure_url': 'https://www.newspulse.co.in/brand/news-pulse-social.jpg',
+      'og:image:type': 'image/jpeg', 'og:image:width': '1200', 'og:image:height': '630', 'og:image:alt': record.title,
     })) {
+      expect(document.querySelectorAll(`meta[property="${property}"]`)).toHaveLength(1);
       expect(document.querySelector(`meta[property="${property}"]`)?.getAttribute('content')).toBe(value);
     }
     fireEvent.click(screen.getByRole('button', { name: 'Share this article' }));

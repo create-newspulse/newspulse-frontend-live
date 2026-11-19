@@ -166,6 +166,10 @@ export function getPublicArticleStatus(article: any): LocalizedArticleFields['st
   if (statusRaw === 'archived' || statusRaw === 'archive') return 'unpublished';
 
   const explicitlyUnpublished =
+    article?.isPrivate === true ||
+    ['private', 'restricted'].includes(String(article?.visibility || '').trim().toLowerCase()) ||
+    statusRaw === 'private' ||
+    statusRaw === 'restricted' ||
     article?.isPublished === false ||
     article?.published === false ||
     statusRaw === 'unpublished' ||

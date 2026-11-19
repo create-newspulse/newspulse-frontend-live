@@ -3,11 +3,14 @@
 import type { GetServerSidePropsContext, NextApiRequest, NextApiResponse } from 'next';
 import { IncomingMessage, ServerResponse } from 'node:http';
 import { Socket } from 'node:net';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import groupHandler from '../../../pages/api/public/news/group/[groupId]';
 import articleHandler from '../../../pages/api/public/news/[id]/index';
 import slugHandler from '../../../pages/api/public/news/slug/[slug]';
 import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
 import { getServerSideProps } from '../../../pages/news/[slug]';
+import { buildSocialImageUrl } from '../../../lib/articleSocialImage';
 
 jest.mock('../../../lib/publicApiBase', () => ({
   getPublicApiBaseUrl: jest.fn(() => 'http://backend.test'),
@@ -76,6 +79,40 @@ afterEach(() => {
 });
 
 describe.each<Route>(['group', 'article', 'slug'])('%s authoritative read boundary', (route) => {
+  test('adds a verified edition preview without changing the cover or forwarding reader credentials to the image host', async () => {
+    const source = `https://res.cloudinary.com/fixture/image/upload/v1/api-${route}-cover.png`;
+    const bytes = readFileSync(join(process.cwd(), 'public', 'brand', 'news-pulse-social.jpg'));
+    const localized = {
+      ...story, language: 'gu', resolvedLanguage: 'gu', title: 'ગુજરાતી શીર્ષક', summary: 'ગુજરાતી સારાંશ',
+      category: 'business', coverImageUrl: source,
+    };
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(route === 'group' ? { items: [localized] } : { article: localized })))
+      .mockResolvedValueOnce(new Response(Uint8Array.from(bytes), { headers: { 'Content-Type': 'image/jpeg' } }));
+    const res = await read(route, 'gu');
+    const expected = {
+      ...localized, socialImage: {
+        source, url: buildSocialImageUrl(source, 75), width: 1200, height: 630, bytes: bytes.length, type: 'image/jpeg',
+      },
+    };
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual(route === 'group' ? { items: [expected] } : { article: expected });
+    expect(res.headers['Cache-Control']).toBe('no-store, max-age=0');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1][1]?.headers).toEqual({ Accept: 'image/jpeg', 'User-Agent': 'NewsPulse-SocialPreview/1.0' });
+  });
+
+  test('does not request social images for a restricted record', async () => {
+    const restricted = {
+      ...story, status: 'restricted', publishedAt: '2025-01-01T00:00:00.000Z',
+      coverImageUrl: 'https://res.cloudinary.com/fixture/image/upload/v1/private.jpg',
+    };
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(route === 'group' ? { items: [restricted] } : { article: restricted })));
+    const res = await read(route);
+    expect(res.statusCode).toBe(route === 'group' ? 200 : 404);
+    expect(res.body).toEqual(route === 'group' ? { items: [restricted] } : { ok: false, message: 'NOT_FOUND' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   test('missing configuration is unavailable, not absence', async () => {
     jest.mocked(getPublicApiBaseUrl).mockReturnValue('');
     const res = await read(route);
@@ -375,9 +412,7 @@ describe.each(['en', 'hi', 'gu'] as const)('%s direct URL safety', (lang) => {
       .mockResolvedValueOnce(new Response('', { status: 404 }));
     const res = await read('slug', lang);
     expect(res.statusCode).toBe(200);
-    const projected = { ...record };
-    delete projected.isTranslated;
-    expect(res.body).toEqual({ article: projected });
+    expect(res.body).toEqual({ article: record });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(String(fetchMock.mock.calls[1][0])).toContain('/api/public/news/group/');
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/translations/'))).toBe(false);

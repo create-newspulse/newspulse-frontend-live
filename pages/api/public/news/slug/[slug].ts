@@ -7,6 +7,7 @@ import { pickFreshestArticleForLocale } from '../../../../../lib/translationGrou
 import { isPulseDialogueArticle } from '../../../../../lib/pulseDialogue';
 import { withPublicReadDeadline } from '../../../../../lib/publicReadDeadline';
 import { getSafeRetryAfter } from '../../../../../lib/retryAfter';
+import { withArticleSocialImage } from '../../../../../lib/articleSocialImage.server';
 
 type ReadPublicJson = (url: string, timeoutMs?: number) => Promise<{ status: number; payload: unknown }>;
 
@@ -146,7 +147,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(status >= 400 && status < 600 ? status : 503).json({ error: 'PUBLIC_NEWS_UNAVAILABLE' });
   };
   const notFound = (status = 404) => res.status(status).json({ ok: false, message: 'NOT_FOUND' });
-  const returnResolvedArticle = (article: Article, stage: string) => {
+  const returnResolvedArticle = async (article: Article, stage: string) => {
     const localized = getLocalizedArticleFields(article, requestedLocale, STRICT_LOCALE_POLICY);
     if (!localized.isVisible) return notFound();
     debugSlugResolution(stage, {
@@ -157,7 +158,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       translationFound: localized.translationFound,
     });
     res.setHeader('Cache-Control', 'no-store, max-age=0');
-    return res.status(200).json({ article });
+    return res.status(200).json({ article: await withArticleSocialImage(article, requestedLocale, deadlineAt - Date.now()) });
   };
 
   try {
@@ -193,7 +194,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
         resolvedArticle = detailArticle;
       }
-      return returnResolvedArticle(resolvedArticle, resolvedArticle === article ? 'direct-hit' : 'direct-group-hit');
+      return await returnResolvedArticle(resolvedArticle, resolvedArticle === article ? 'direct-hit' : 'direct-group-hit');
     }
 
     // Only the established legacy null response permits listing-based ID discovery.
@@ -220,7 +221,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (isLegacyMissingArticle(detail.payload)) return res.status(200).json({ exists: false });
     const detailArticle = parsePublicNewsArticle(detail.payload);
     if (!detailArticle) throw new Error('INVALID_PUBLIC_NEWS_ARTICLE');
-    return returnResolvedArticle(detailArticle, 'fallback-by-id');
+    return await returnResolvedArticle(detailArticle, 'fallback-by-id');
   } catch {
     return unavailable();
   }
