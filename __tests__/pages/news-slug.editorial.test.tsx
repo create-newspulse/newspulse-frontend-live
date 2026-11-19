@@ -250,7 +250,7 @@ describe('pages/news/[slug] editorial detail', () => {
     expect(tag.getAttribute('href')).toBe(`${locale === 'en' ? '' : `/${locale}`}/topic/navratri-2026?q=navratri%202026`);
   });
 
-  test.each(['en', 'hi', 'gu'] as const)('renders complete localized %s social tags and shares that same canonical', lang => {
+  test.each(['en', 'hi', 'gu'] as const)('retains %s canonical metadata while every action shares its stable ID link', async lang => {
     const record = articleUrlContracts.candidate.editions[lang];
     renderAuthorArticle(record, lang);
     const canonical = `https://www.newspulse.co.in${lang === 'en' ? '' : `/${lang}`}/news/${encodeURIComponent(record.canonicalSlug)}`;
@@ -264,10 +264,34 @@ describe('pages/news/[slug] editorial detail', () => {
       expect(document.querySelectorAll(`meta[property="${property}"]`)).toHaveLength(1);
       expect(document.querySelector(`meta[property="${property}"]`)?.getAttribute('content')).toBe(value);
     }
-    fireEvent.click(screen.getByRole('button', { name: 'Share this article' }));
-    const whatsapp = screen.getAllByRole('link').find(link => link.getAttribute('href')?.startsWith('https://wa.me/'));
-    expect(whatsapp).toBeDefined();
-    expect(new URL(whatsapp!.getAttribute('href')!).searchParams.get('text')).toContain(canonical);
+    const shareUrl = `https://www.newspulse.co.in${lang === 'en' ? '' : `/${lang}`}/s/${record._id}`;
+    const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    const originalShare = Object.getOwnPropertyDescriptor(navigator, 'share');
+    const writeText = jest.fn(async (_value: string) => {});
+    const share = jest.fn(async (_value: ShareData) => {});
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    Object.defineProperty(navigator, 'share', { configurable: true, value: share });
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'Share this article' }));
+      const menu = screen.getByRole('dialog', { name: 'Share this article' });
+      const links = within(menu).getAllByRole('link').map(link => new URL(link.getAttribute('href')!));
+      expect(links).toHaveLength(5);
+      expect(links[0].searchParams.get('u')).toBe(shareUrl);
+      expect(links[1].searchParams.get('url')).toBe(shareUrl);
+      expect(links[2].searchParams.get('text')).toBe(`${record.title} ${shareUrl}`);
+      expect(links[3].searchParams.get('url')).toBe(shareUrl);
+      expect(links[4].searchParams.get('url')).toBe(shareUrl);
+      fireEvent.click(within(menu).getByRole('button', { name: 'articleShare.copyLink' }));
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith(shareUrl));
+      fireEvent.click(within(menu).getByRole('button', { name: 'More options' }));
+      await waitFor(() => expect(share).toHaveBeenCalledWith({ title: record.title, url: shareUrl }));
+      expect(writeText).toHaveBeenCalledTimes(1);
+    } finally {
+      if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
+      else Reflect.deleteProperty(navigator, 'clipboard');
+      if (originalShare) Object.defineProperty(navigator, 'share', originalShare);
+      else Reflect.deleteProperty(navigator, 'share');
+    }
   });
 
   describe.each([

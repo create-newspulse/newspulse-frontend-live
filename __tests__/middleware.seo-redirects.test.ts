@@ -107,6 +107,23 @@ describe('dynamic SEO redirects middleware', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
+  test.each(['en', 'hi', 'gu'] as const)('%s Smart Share links retain their edition for documents and data requests', async locale => {
+    global.fetch = jest.fn().mockResolvedValue(jsonResponse({ destination: '/news/unrelated-story', statusCode: 301 }));
+    for (const dataRequest of [false, true]) {
+      const prefix = locale === 'en' ? '' : `/${locale}`;
+      const req = request(`https://www.newspulse.co.in${prefix}/s/507f1f77bcf86cd799439011`);
+      req.nextUrl.pathname = '/s/507f1f77bcf86cd799439011';
+      req.nextUrl.locale = locale;
+      req.cookies.get.mockReturnValue({ value: locale === 'gu' ? 'hi' : 'gu' });
+      if (dataRequest) req.headers.set('x-nextjs-data', '1');
+      const response = await middleware(req);
+      expect(response.status).toBe(200);
+      expect(response.headers.get('location')).toBeNull();
+      expect(response.cookies.get('NEXT_LOCALE')?.value).toBe(locale);
+    }
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
   test('redirect service failure fails open without caching an error as a redirect', async () => {
     global.fetch = jest.fn().mockRejectedValue(new Error('offline')) as any;
 

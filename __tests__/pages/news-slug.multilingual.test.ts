@@ -2,6 +2,7 @@ import type { GetServerSidePropsContext, NextApiRequest, NextApiResponse } from 
 import { IncomingMessage, ServerResponse } from 'http';
 import { Socket } from 'net';
 import { getServerSideProps } from '../../pages/news/[slug]';
+import { getServerSideProps as getShareProps } from '../../pages/s/[slug]';
 import { getServerSideProps as legacyProps } from '../../pages/news/[...parts]';
 import slugProxy from '../../pages/api/public/news/slug/[slug]';
 import idProxy from '../../pages/api/public/news/[id]/index';
@@ -9,6 +10,8 @@ import { fetchArticleAlternates } from '../../lib/articleSeo.server';
 import { resolveArticleSlug } from '../../lib/articleSlugs';
 import { parsePublicNewsArticle } from '../../lib/publicNewsApi';
 import { buildArticleSeoMetadata, getArticleAlternates, NEWS_PULSE_SITE_URL, type SeoAlternate } from '../../lib/seo';
+import { buildSocialImageUrl } from '../../lib/articleSocialImage';
+import { buildNewsShareUrl } from '../../lib/newsRoutes';
 import contracts from '../fixtures/articleUrlContracts.json';
 
 jest.mock('../../lib/publicApiBase', () => ({ getPublicApiBaseUrl: () => 'https://backend.test' }));
@@ -104,6 +107,37 @@ describe.each(['deployed', 'candidate'] as const)('%s Backend compatibility', ve
     expect(console.error).not.toHaveBeenCalled();
   });
 
+  test.each(locales)('%s short links render the published edition without a redirect or slug lookup', async lang => {
+    const sourceId = fixture.editions.gu._id;
+    const record = fixture.editions[lang];
+    const before = JSON.stringify(fixture);
+    jest.mocked(global.fetch).mockImplementation(async input => {
+      const url = new URL(String(input));
+      if (url.pathname === '/api/public/news') return response({ items: [] });
+      const requested = url.searchParams.get('lang') as typeof lang;
+      return response({ article: fixture.editions[requested] });
+    });
+    const ctx = context(sourceId, lang);
+    ctx.resolvedUrl = buildNewsShareUrl({ id: sourceId, lang });
+    ctx.query = { lang: lang === 'gu' ? 'hi' : 'gu', slug: '507f1f77bcf86cd79943ffff' };
+    const result = await getShareProps(ctx);
+    if (!('props' in result)) throw new Error('Short links must render the article, not redirect');
+    const props = await result.props;
+    const canonical = `${NEWS_PULSE_SITE_URL}${lang === 'en' ? '' : `/${lang}`}/news/${encodeURIComponent(record.canonicalSlug)}`;
+    expect(props.article).toMatchObject({ _id: record._id, title: record.title, publishedAt: record.publishedAt });
+    expect(props.safeHtml).toContain(record.content);
+    expect(props.seo?.canonicalUrl).toBe(canonical);
+    expect(props.seo?.alternates?.map(link => link.hrefLang)).toEqual(['en', 'hi', 'gu', 'x-default']);
+    expect(buildArticleSeoMetadata(props.article, lang, NEWS_PULSE_SITE_URL)).toMatchObject({
+      ogTitle: record.title, ogDescription: record.summary, ogUrl: canonical, ogLocale: `${lang}_IN`,
+      ogImage: `${NEWS_PULSE_SITE_URL}/brand/news-pulse-social.jpg`,
+    });
+    expect(ctx.res.getHeader('Cache-Control')).toContain('no-store');
+    expect(new URL(String(jest.mocked(global.fetch).mock.calls[0][0])).pathname).toBe(`/api/public/news/${sourceId}`);
+    expect(jest.mocked(global.fetch).mock.calls.some(([url]) => String(url).includes('/news/slug/'))).toBe(false);
+    expect(JSON.stringify(fixture)).toBe(before);
+  });
+
   test.each(['en', 'hi'] as const)('switching a Gujarati published alias to %s resolves its native edition', async lang => {
     const record = fixture.editions[lang];
     jest.mocked(global.fetch).mockImplementation(async input =>
@@ -111,6 +145,93 @@ describe.each(['deployed', 'candidate'] as const)('%s Backend compatibility', ve
     const destination = `${lang === 'en' ? '' : `/${lang}`}/news/${encodeURIComponent(record.canonicalSlug)}`;
     expect(await getServerSideProps(context(fixture.editions.gu.slug, lang)))
       .toEqual({ redirect: { destination, permanent: true } });
+  });
+
+  test.each([
+    { slug: undefined }, { slug: '' }, { slug: 'old-published-slug' }, { slug: 'undefined' },
+    { slug: '507f1f77bcf86cd799439011/other' }, { slug: ['507f1f77bcf86cd799439011'] },
+  ])('invalid short identity %j cannot cause an article lookup', async ({ slug }) => {
+    const ctx = context('', 'en');
+    ctx.params = { slug };
+    expect(await getShareProps(ctx)).toEqual({ notFound: true });
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  test.each([404, 410])('a short-link ID response %s cannot fall through to a colliding slug', async status => {
+    jest.mocked(global.fetch).mockResolvedValueOnce(response({}, status));
+    expect(await getShareProps(context(fixture.editions.en._id, 'en'))).toEqual({ notFound: true });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([
+    { status: 'draft' }, { status: 'unpublished' }, { isDeleted: true },
+    { status: 'restricted' }, { visibility: 'private' }, { isPrivate: true },
+    { status: 'scheduled', publishedAt: '2999-01-01T00:00:00.000Z' },
+  ])('short links do not expose a nonpublic edition: %j', async lifecycle => {
+    const record = { ...fixture.editions.gu, ...lifecycle };
+    jest.mocked(global.fetch).mockImplementation(async input =>
+      new URL(String(input)).pathname === '/api/public/news' ? response({ items: [] }) : response({ article: record }));
+    expect(await getShareProps(context(record._id, 'gu'))).toEqual({ notFound: true });
+  });
+
+  test('a missing translated edition is not replaced with source-language content or a pending preview', async () => {
+    jest.mocked(global.fetch).mockResolvedValue(response({ article: fixture.editions.en }));
+    expect(await getShareProps(context(fixture.editions.en._id, 'hi'))).toEqual({ notFound: true });
+    jest.mocked(global.fetch).mockReset().mockImplementation(async () => response({ status: 'pending', sourceLang: 'en' }));
+    expect(await getShareProps(context(fixture.editions.en._id, 'hi'))).toEqual({ notFound: true });
+    expect(await getServerSideProps(context(fixture.editions.en._id, 'hi'))).toHaveProperty('props.pending', true);
+  });
+
+  test.each([409, 503])('an ambiguous or unavailable ID read (%s) remains an observable failure', async status => {
+    jest.mocked(global.fetch).mockResolvedValue(response({}, status));
+    const ctx = context(fixture.editions.en._id, 'en');
+    const result = await getShareProps(ctx);
+    expect(ctx.res.statusCode).toBe(503);
+    expect(result).toHaveProperty('props.article', null);
+    expect(result).toHaveProperty('props.error', 'Article temporarily unavailable');
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  test('future publication and later text or cover changes refresh the same stable short link', async () => {
+    const id = '7f0000000000000000000099';
+    const source = 'https://res.cloudinary.com/fixture/image/upload/v1/future-cover.png';
+    const descriptor = (image: string) => ({
+      source: image, url: buildSocialImageUrl(image, 75), type: 'image/jpeg' as const,
+      width: 1200, height: 630, bytes: 90_000,
+    });
+    const published = {
+      ...fixture.editions.en, _id: id, translations: { en: true },
+      availableLocales: ['en'], publishedLocales: ['en'], status: 'published',
+      coverImageUrl: source, socialImage: descriptor(source),
+    };
+    let current: Record<string, unknown> = { ...published, status: 'draft' };
+    jest.mocked(global.fetch).mockImplementation(async input =>
+      new URL(String(input)).pathname === '/api/public/news' ? response({ items: [] }) : response({ article: current }));
+    const read = () => getShareProps(context(id, 'en'));
+    expect(await read()).toEqual({ notFound: true });
+    current = published;
+    const first = await read();
+    if (!('props' in first)) throw new Error('Newly published articles must automatically acquire a share page');
+    const initial = await first.props;
+    const replacement = source.replace('/v1/', '/v2/');
+    current = {
+      ...published, title: 'Updated headline', summary: 'Updated description', description: 'Updated description',
+      coverImageUrl: replacement, socialImage: descriptor(replacement),
+    };
+    const updated = await read();
+    if (!('props' in updated)) throw new Error('The stable share route must survive Save Update');
+    const props = await updated.props;
+    expect(buildArticleSeoMetadata(props.article, 'en', NEWS_PULSE_SITE_URL)).toMatchObject({
+      ogTitle: 'Updated headline', ogDescription: 'Updated description', ogImage: descriptor(replacement).url,
+      publishedAt: published.publishedAt,
+    });
+    expect(props.seo?.canonicalUrl).toBe(initial.seo?.canonicalUrl);
+    current = { ...current, coverImage: { removed: true } };
+    const removed = await read();
+    if (!('props' in removed)) throw new Error('Cover removal must not remove the share page');
+    expect(buildArticleSeoMetadata((await removed.props).article, 'en', NEWS_PULSE_SITE_URL)?.ogImage)
+      .toBe(`${NEWS_PULSE_SITE_URL}/brand/news-pulse-social.jpg`);
+    expect(buildNewsShareUrl({ id, lang: 'en' })).toBe(`/s/${id}`);
   });
 
   test.each(['foreign', 'cached'] as const)('%s legacy alias redirects once to a stable ID without rewriting stored identity', async kind => {

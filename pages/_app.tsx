@@ -20,6 +20,7 @@ import { usePublicVersion } from '../hooks/usePublicVersion';
 import { CookieConsentProvider } from '../src/consent/CookieConsentProvider';
 import FirebaseForegroundMessaging from '../components/FirebaseForegroundMessaging';
 import { ReporterAuthProvider } from '../hooks/useReporterPortalSession';
+import { isNewsSharePath } from '../lib/newsRoutes';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -158,6 +159,7 @@ function RouteLanguageSync() {
 
     // Parse ?lang= from asPath instead of router.query to avoid dependency churn.
     const queryLang = (() => {
+      if (isNewsSharePath(pathOnly)) return null;
       try {
         const q = (asPath.split('?')[1] || '').split('#')[0] || '';
         if (!q) return null;

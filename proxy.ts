@@ -1,4 +1,5 @@
 import { withPublicReadDeadline } from './lib/publicReadDeadline';
+import { isNewsSharePath } from './lib/newsRoutes';
 import { NextRequest, NextResponse } from 'next/server';
 
 const COOKIE_KEY = 'np_locale';
@@ -45,6 +46,7 @@ function getRedirectBackendBase(): string {
 
 function isPublicRedirectCandidate(pathname: string): boolean {
   const lower = pathname.toLowerCase();
+  if (isNewsSharePath(lower)) return false;
   if (lower === '/admin' || lower.startsWith('/admin/')) return false;
   if (lower === '/admin-api' || lower.startsWith('/admin-api/')) return false;
   if (lower === '/api' || lower.startsWith('/api/')) return false;
@@ -263,7 +265,8 @@ export async function proxy(req: NextRequest) {
   const nextDefaultLocale = normalizeLocale(url.defaultLocale) || 'en';
 
   const localeInPath: Locale | null =
-    localeFromPrefix || (nextLocale && nextLocale !== nextDefaultLocale ? nextLocale : null);
+    localeFromPrefix || (nextLocale && nextLocale !== nextDefaultLocale ? nextLocale : null)
+      || (isNewsSharePath(pathname) ? nextDefaultLocale : null);
 
   // When URL explicitly sets locale, keep NEXT_LOCALE aligned so Next doesn't mis-detect.
   if (localeInPath) {

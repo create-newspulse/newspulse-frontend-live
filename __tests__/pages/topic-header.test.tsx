@@ -2,7 +2,7 @@ import React from 'react';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import MyApp from '../../pages/_app';
 import TopicPage, { type TopicPageProps } from '../../pages/topic/[slug]';
-import { buildNewsUrl } from '../../lib/newsRoutes';
+import { buildNewsShareUrl, buildNewsUrl } from '../../lib/newsRoutes';
 import { editorialTopicPath } from '../../lib/publicEditorialTopics';
 import type { RouteLocale } from '../../lib/localizedArticleFields';
 import { getMessagesForLang } from '../../src/i18n/LanguageProvider';
@@ -186,4 +186,29 @@ test.each([
   mockRouter.locale = 'en';
   const { container } = render(<MyApp Component={() => <main>Existing page</main>} pageProps={{}} />);
   expect(container.querySelectorAll('[data-news-pulse-top-header="true"]')).toHaveLength(count);
+});
+
+test.each(['en', 'hi', 'gu'] as const)('%s Smart Share hydration cannot be switched by a conflicting legacy language query', locale => {
+  const otherLocale = locale === 'gu' ? 'hi' : 'gu';
+  mockRouter.locale = locale;
+  mockRouter.pathname = '/s/[slug]';
+  mockRouter.asPath = `${buildNewsShareUrl({ id: '507f1f77bcf86cd799439011', lang: locale })}?lang=${otherLocale}`;
+  document.cookie = `NEXT_LOCALE=${otherLocale}; path=/`;
+  const { container } = render(<MyApp Component={() => <main>Published article</main>} pageProps={{}} />);
+  expect(mockRouter.replace).not.toHaveBeenCalled();
+  expect(document.documentElement.lang).toBe(locale);
+  expect(container.querySelectorAll('[data-news-pulse-top-header="true"]')).toHaveLength(0);
+  expect(screen.getAllByRole('button', { name: 'Back' })).toHaveLength(1);
+  fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+  expect(mockRouter.push).toHaveBeenCalledWith(locale === 'en' ? '/' : `/${locale}`);
+});
+
+test('legacy language queries still navigate ordinary article links to their requested edition', () => {
+  mockRouter.locale = 'en';
+  mockRouter.pathname = '/news/[slug]';
+  mockRouter.asPath = '/news/existing-story?lang=hi&from=share#article';
+  render(<MyApp Component={() => <main>Published article</main>} pageProps={{}} />);
+  expect(mockRouter.replace).toHaveBeenCalledWith(
+    '/news/existing-story?from=share#article', '/news/existing-story?from=share#article', { shallow: false, locale: 'hi' },
+  );
 });

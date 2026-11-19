@@ -1,4 +1,4 @@
-import type { GetServerSideProps } from 'next';
+import type { GetServerSideProps, GetServerSidePropsContext } from 'next';
 import { PublicReadTimeoutError, withPublicReadDeadline } from '../../lib/publicReadDeadline';
 import { fetchArticleAlternates } from '../../lib/articleSeo.server';
 import { isArticleId, normalizeArticleSlug } from '../../lib/articleSlugs';
@@ -21,7 +21,7 @@ import { subscribePublicDataRefresh } from '../../lib/publicDataRefresh';
 import { compareArticleFreshness, findFreshestArticleById, pickFreshestArticleForLocale, shouldReplaceArticleWithFreshCandidate } from '../../lib/translationGroupSync';
 import { useI18n } from '../../src/i18n/LanguageProvider';
 import { tHeading, toLanguageKey } from '../../utils/localizedNames';
-import { buildNewsUrl, isNavigableNewsHref } from '../../lib/newsRoutes';
+import { buildNewsShareUrl, buildNewsUrl, isNavigableNewsHref } from '../../lib/newsRoutes';
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
 import { isSponsoredContent, resolveSponsoredContentMeta } from '../../lib/sponsoredContent';
 import { debugStoryCard, getStoryId, getStoryReactKey } from '../../lib/storyIdentity';
@@ -43,6 +43,7 @@ import {
   isEditorialArticle,
 } from '../../lib/editorialDisplay';
 import {
+  absolutePublicUrl,
   buildArticleSeoMetadata,
   getArticleCanonicalUrl,
   NEWS_PULSE_BRAND_NAME,
@@ -1273,6 +1274,10 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
     return getArticleCanonicalUrl(resolvedArticle, lang, siteUrl);
   }, [lang, resolvedArticle, siteUrl]);
   const articleSeo = React.useMemo(() => buildArticleSeoMetadata(resolvedArticle, lang, siteUrl), [lang, resolvedArticle, siteUrl]);
+  const shareUrl = React.useMemo(
+    () => absolutePublicUrl(buildNewsShareUrl({ id: getStoryId(resolvedArticle), lang }), siteUrl) || canonicalUrl,
+    [canonicalUrl, lang, resolvedArticle, siteUrl]
+  );
 
   const canShare = Boolean(resolvedArticle && localized.isVisible && canonicalUrl && !pendingTranslate);
 
@@ -1473,7 +1478,7 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
 
                     </div>
 
-                    {canShare ? <ArticleShareBar key={canonicalUrl} url={canonicalUrl} title={displayTitle || 'News Pulse'} /> : null}
+                    {canShare ? <ArticleShareBar key={canonicalUrl} url={shareUrl} title={displayTitle || 'News Pulse'} /> : null}
 
                     {Array.isArray((resolvedArticle as any)?.tags) && (resolvedArticle as any)?.tags?.length ? (
                       <div className="flex flex-wrap gap-2 pt-1">
@@ -2388,13 +2393,18 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
   );
 }
 
-export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
+export const getServerSideProps = async (
+  ctx: GetServerSidePropsContext,
+  options: { shortLink?: boolean } = {},
+): ReturnType<GetServerSideProps<Props>> => {
   const lang = normalizeLang(ctx.locale);
   const locale = String(ctx.locale || lang);
   const siteUrl = resolvePublicSiteUrl(ctx.req);
   ctx.res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   ctx.res.setHeader('Pragma', 'no-cache');
   ctx.res.setHeader('Expires', '0');
+
+  if (options.shortLink && !isArticleId(ctx.params?.slug)) return { notFound: true };
 
   const messages = await (async () => {
     try {
@@ -2440,11 +2450,12 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
       authorization: String(ctx.req.headers.authorization || ''),
     };
 
-    const endpoints = [
+    const idEndpoint = `${origin}/api/public/news/${encodeURIComponent(rawSlug)}?${params.toString()}`;
+    const endpoints = options.shortLink ? [idEndpoint] : [
       `${origin}/api/public/news/slug/${encodeURIComponent(rawSlug)}?${params.toString()}`,
-      `${origin}/api/public/news/${encodeURIComponent(rawSlug)}?${params.toString()}`,
+      idEndpoint,
     ];
-    if (isArticleId(rawSlug)) endpoints.reverse();
+    if (!options.shortLink && isArticleId(rawSlug)) endpoints.reverse();
 
     // Share the existing 4s detail + 1.5s related allowance, prioritizing the article.
     const readTimeoutMs = 5500;
@@ -2479,6 +2490,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
     });
 
     if (isPendingTranslationPayload(data)) {
+      if (options.shortLink) return { notFound: true };
       debugNewsDetailResolution('ssr-pending', {
         locale: lang,
         receivedSlug: rawSlug,
@@ -2579,7 +2591,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
 
     // Canonicalize slug per language
     const canonicalSlug = String(localized.slug || '').trim();
-    if (canonicalSlug && canonicalSlug !== normalizeArticleSlug(rawSlug)) {
+    if (!options.shortLink && canonicalSlug && canonicalSlug !== normalizeArticleSlug(rawSlug)) {
       const destination = buildNewsUrl({ id: String(resolvedArticle._id || '').trim(), slug: canonicalSlug, lang });
       return { redirect: { destination, permanent: true } };
     }

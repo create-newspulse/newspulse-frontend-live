@@ -1,6 +1,7 @@
 import React from 'react';
 import { useRouter } from 'next/router';
 import { ArrowLeft } from 'lucide-react';
+import { isNewsSharePath } from '../../../lib/newsRoutes';
 
 function stripQueryHash(path: string): string {
   const raw = String(path || '/');
@@ -40,7 +41,7 @@ function needsSmartBack(pathnameNoLocale: string): boolean {
   // National states pages already include their own Back UI.
   if (p.startsWith('/national/states')) return false;
 
-  if (p.startsWith('/news/')) return true;
+  if (p.startsWith('/news/') || isNewsSharePath(p)) return true;
   if (p === '/breaking') return true;
   if (p.startsWith('/regional/') && p !== '/regional/gujarat') return true;
   if (p === '/search' || p.startsWith('/search/')) return true;

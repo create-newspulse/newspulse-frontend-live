@@ -1,4 +1,4 @@
-import { buildNewsUrl, isNavigableNewsHref } from '../../lib/newsRoutes';
+import { buildNewsShareUrl, buildNewsUrl, isNavigableNewsHref } from '../../lib/newsRoutes';
 
 describe('article link generation', () => {
   test('keeps the canonical /news/<slug> route for English', () => {
@@ -19,6 +19,22 @@ describe('article link generation', () => {
   test('returns the non-navigable placeholder when nothing resolves', () => {
     expect(buildNewsUrl({ id: '', slug: '', lang: 'en' })).toBe('#');
   });
+});
+
+describe('stable article sharing links', () => {
+  test.each([
+    ['en', '/s/507f1f77bcf86cd799439011'],
+    ['hi', '/hi/s/507f1f77bcf86cd799439011'],
+    ['gu', '/gu/s/507f1f77bcf86cd799439011'],
+  ])('uses the public ID rather than a mutable slug for %s', (lang, expected) => {
+    expect(buildNewsShareUrl({ id: '507F1F77BCF86CD799439011', lang })).toBe(expected);
+  });
+
+  test.each(['', 'undefined', 'legacy-story', '507f1f77bcf86cd799439011/other', ' 507f1f77bcf86cd799439011', '507f1f77bcf86cd79943901z'])(
+    'does not invent a short link for an unsupported identity: %s', id => {
+      expect(isNavigableNewsHref(buildNewsShareUrl({ id, lang: 'gu' }))).toBe(false);
+    }
+  );
 });
 
 describe('isNavigableNewsHref', () => {

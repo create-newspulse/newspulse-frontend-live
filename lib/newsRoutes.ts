@@ -1,4 +1,4 @@
-import { normalizeArticleSlug } from './articleSlugs';
+import { isArticleId, normalizeArticleSlug } from './articleSlugs';
 
 export type NewsLang = 'en' | 'hi' | 'gu';
 
@@ -22,6 +22,17 @@ export function buildNewsUrl(options: { id: string; slug?: string; lang?: unknow
   const prefix = lang === 'en' ? '' : `/${lang}`;
 
   return `${prefix}/news/${slug}`;
+}
+
+export function buildNewsShareUrl(options: { id: string; lang?: unknown }): string {
+  if (!isArticleId(options.id)) return '#';
+  const lang = normalizeLang(options.lang);
+  const prefix = lang === 'en' ? '' : `/${lang}`;
+  return `${prefix}/s/${options.id.toLowerCase()}`;
+}
+
+export function isNewsSharePath(pathname: string): boolean {
+  return /^\/(?:(?:en|hi|gu)\/)?s(?:\/|$)/i.test(pathname);
 }
 
 /** `buildNewsUrl` returns '#' when an article has no usable id/slug; such links must not be clickable. */
