@@ -11,6 +11,7 @@ import slugHandler from '../../../pages/api/public/news/slug/[slug]';
 import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
 import { getServerSideProps } from '../../../pages/news/[slug]';
 import { buildSocialImageUrl } from '../../../lib/articleSocialImage';
+import { PREVIEW_TRACE_HEADER } from '../../../lib/socialPreviewDiagnostics.server';
 
 jest.mock('../../../lib/publicApiBase', () => ({
   getPublicApiBaseUrl: jest.fn(() => 'http://backend.test'),
@@ -99,6 +100,30 @@ describe.each<Route>(['group', 'article', 'slug'])('%s authoritative read bounda
     expect(res.headers['Cache-Control']).toBe('no-store, max-age=0');
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[1][1]?.headers).toEqual({ Accept: 'image/jpeg', 'User-Agent': 'NewsPulse-SocialPreview/1.0' });
+  });
+
+  test.each(['article', 'slug'] as const)('%s correlates backend diagnostics while preserving the public response', async route => {
+    const trace = 'smart_share:00000000-0000-4000-8000-000000000000';
+    const req = request(route, 'gu');
+    req.headers[PREVIEW_TRACE_HEADER] = trace;
+    const res = response(req);
+    const info = jest.spyOn(console, 'info').mockImplementation(() => {});
+    const localized = { ...story, language: 'gu' };
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ article: localized })));
+    await ({ article: articleHandler, slug: slugHandler }[route])(req, res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ article: localized });
+    expect(fetchMock.mock.calls[0][1]?.headers).not.toHaveProperty(PREVIEW_TRACE_HEADER);
+    res.emit('finish');
+    res.emit('close');
+    const events = info.mock.calls.filter(([prefix]) => prefix === '[social-preview]').map(([, json]) => JSON.parse(String(json)));
+    expect(events).toEqual([expect.objectContaining({
+      phase: 'backend', language: 'gu', routeType: 'smart_share',
+      correlationId: trace.split(':')[1], responseStatus: 200, backendReadCount: 1,
+      backendReads: [expect.objectContaining({ status: 200, completed: true, failure: null })],
+    })]);
+    expect(JSON.stringify(events)).not.toContain('test-session');
+    expect(JSON.stringify(events)).not.toContain('test-authorization');
   });
 
   test('does not request social images for a restricted record', async () => {

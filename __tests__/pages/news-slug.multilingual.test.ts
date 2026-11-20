@@ -12,6 +12,7 @@ import { parsePublicNewsArticle } from '../../lib/publicNewsApi';
 import { buildArticleSeoMetadata, getArticleAlternates, NEWS_PULSE_SITE_URL, type SeoAlternate } from '../../lib/seo';
 import { buildSocialImageUrl } from '../../lib/articleSocialImage';
 import { buildNewsShareUrl } from '../../lib/newsRoutes';
+import { PREVIEW_REQUEST_ID_HEADER, PREVIEW_TRACE_HEADER } from '../../lib/socialPreviewDiagnostics.server';
 import contracts from '../fixtures/articleUrlContracts.json';
 
 jest.mock('../../lib/publicApiBase', () => ({ getPublicApiBaseUrl: () => 'https://backend.test' }));
@@ -47,6 +48,37 @@ afterEach(() => {
 // the Backend fixture blocked databases, external services and persistent writes.
 describe.each(['deployed', 'candidate'] as const)('%s Backend compatibility', version => {
   const fixture = contracts[version];
+
+  test.each(locales)('%s original and short HTML requests produce correlated, content-free render diagnostics', async lang => {
+    const record = fixture.editions[lang];
+    for (const [routeType, loader, slug] of [
+      ['article', getServerSideProps, record.canonicalSlug], ['smart_share', getShareProps, record._id],
+    ] as const) {
+      jest.mocked(console.info).mockClear();
+      jest.mocked(global.fetch).mockReset().mockImplementation(async input => {
+        const url = new URL(String(input));
+        if (url.pathname === '/api/public/news') return response({ items: [] });
+        const requested = url.searchParams.get('lang') as typeof lang;
+        return response({ article: fixture.editions[requested] });
+      });
+      const ctx = context(slug, lang);
+      const result = await loader(ctx);
+      expect(result).toHaveProperty('props.article._id', record._id);
+      const correlationId = String(ctx.res.getHeader(PREVIEW_REQUEST_ID_HEADER));
+      const headers = new Headers(jest.mocked(global.fetch).mock.calls[0][1]?.headers);
+      expect(headers.get(PREVIEW_TRACE_HEADER)).toBe(`${routeType}:${correlationId}`);
+      ctx.res.emit('finish');
+      const events = jest.mocked(console.info).mock.calls.filter(([prefix]) => prefix === '[social-preview]')
+        .map(([, json]) => JSON.parse(String(json)));
+      expect(events).toEqual([expect.objectContaining({
+        phase: 'render', correlationId, language: lang, routeType, completed: true, responseStatus: 200,
+        openGraph: { complete: true, missingFields: [] },
+        image: { selection: 'official_fallback', fallback: true },
+      })]);
+      expect(JSON.stringify(events)).not.toContain(record.title);
+      expect(JSON.stringify(events)).not.toContain(record._id);
+    }
+  });
 
   test.each(locales)('%s keeps authoritative route metadata through both detail proxies', async lang => {
     const record = fixture.editions[lang];

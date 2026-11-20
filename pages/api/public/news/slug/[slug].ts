@@ -8,6 +8,7 @@ import { isPulseDialogueArticle } from '../../../../../lib/pulseDialogue';
 import { withPublicReadDeadline } from '../../../../../lib/publicReadDeadline';
 import { getSafeRetryAfter } from '../../../../../lib/retryAfter';
 import { withArticleSocialImage } from '../../../../../lib/articleSocialImage.server';
+import { readWithPreviewDiagnostics, startBackendPreviewDiagnostics } from '../../../../../lib/socialPreviewDiagnostics.server';
 
 type ReadPublicJson = (url: string, timeoutMs?: number) => Promise<{ status: number; payload: unknown }>;
 
@@ -104,6 +105,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ ok: false, message: 'METHOD_NOT_ALLOWED' });
   }
 
+  const requestedLocale = normalizeRouteLocale(
+    asSingleQueryValue(req.query.language) || asSingleQueryValue(req.query.lang)
+  );
+  const diagnostics = startBackendPreviewDiagnostics(req, res, requestedLocale);
   const slug = String(req.query.slug || '').trim();
   if (!slug) return res.status(400).json({ ok: false, message: 'MISSING_SLUG' });
 
@@ -118,9 +123,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Backend contract: /api/public/news/slug/:slug?lang=...
   const targetUrl = `${base}/api/public/news/slug/${encodeURIComponent(slug)}${qs}`;
 
-  const requestedLocale = normalizeRouteLocale(
-    asSingleQueryValue(req.query.language) || asSingleQueryValue(req.query.lang)
-  );
   const normalizedRequestedSlug = normalizeSlugValue(slug);
 
   const requestHeaders = {
@@ -133,14 +135,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   let retryAfter: string | undefined;
   const readJson: ReadPublicJson = async (url, timeoutMs = 4000) => {
     const remaining = Math.min(timeoutMs, deadlineAt - Date.now());
-    if (remaining <= 0) throw new Error('PUBLIC_NEWS_UNAVAILABLE');
-    return withPublicReadDeadline(remaining, async (signal) => {
+    if (remaining <= 0) {
+      diagnostics?.fail('timeout');
+      throw new Error('PUBLIC_NEWS_UNAVAILABLE');
+    }
+    return readWithPreviewDiagnostics(diagnostics, recordStatus => withPublicReadDeadline(remaining, async (signal) => {
       const upstream = await fetch(url, { method: 'GET', headers: requestHeaders, cache: 'no-store', signal });
+      recordStatus(upstream.status);
       retryAfter = getSafeRetryAfter(upstream.headers?.get('Retry-After'));
       const payload: unknown = upstream.ok ? JSON.parse(await upstream.text()) : null;
       signal.throwIfAborted();
       return { status: upstream.status, payload };
-    });
+    }));
   };
   const unavailable = (status = 503) => {
     if (retryAfter) res.setHeader('Retry-After', retryAfter);
@@ -158,7 +164,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       translationFound: localized.translationFound,
     });
     res.setHeader('Cache-Control', 'no-store, max-age=0');
-    return res.status(200).json({ article: await withArticleSocialImage(article, requestedLocale, deadlineAt - Date.now()) });
+    return res.status(200).json({ article: await withArticleSocialImage(article, requestedLocale, deadlineAt - Date.now(), diagnostics?.imageFailure) });
   };
 
   try {

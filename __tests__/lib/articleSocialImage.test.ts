@@ -146,6 +146,25 @@ test('bounds a slow read within the caller deadline and retries after the short 
   expect(fetchMock).toHaveBeenCalledTimes(2);
 });
 
+test('reports request-local image diagnostics without changing timeout, cache or fallback behavior', async () => {
+  jest.useFakeTimers();
+  fetchMock.mockImplementationOnce(() => new Promise<Response>(() => {}));
+  const article = story();
+  const firstFailure = jest.fn();
+  const sharedFailure = jest.fn();
+  const first = withArticleSocialImage(article, 'en', 600, firstFailure);
+  const shared = withArticleSocialImage(article, 'en', 4000, sharedFailure);
+  await jest.advanceTimersByTimeAsync(500);
+  expect(await first).toEqual(article);
+  expect(await shared).toEqual(article);
+  expect(firstFailure.mock.calls).toEqual([['timeout']]);
+  expect(sharedFailure.mock.calls).toEqual([['shared_unavailable']]);
+  const cachedFailure = jest.fn();
+  expect(await withArticleSocialImage(article, 'en', 4000, cachedFailure)).toEqual(article);
+  expect(cachedFailure.mock.calls).toEqual([['cached_unavailable']]);
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
 test.each([
   { status: 'draft' }, { status: 'unpublished' }, { deleted: true },
   { status: 'restricted' }, { visibility: 'private' }, { isPrivate: true },

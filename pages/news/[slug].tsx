@@ -1,6 +1,7 @@
 import type { GetServerSideProps, GetServerSidePropsContext } from 'next';
 import { PublicReadTimeoutError, withPublicReadDeadline } from '../../lib/publicReadDeadline';
 import { fetchArticleAlternates } from '../../lib/articleSeo.server';
+import { startArticlePreviewDiagnostics } from '../../lib/socialPreviewDiagnostics.server';
 import { isArticleId, normalizeArticleSlug } from '../../lib/articleSlugs';
 import Head from 'next/head';
 import NextError from 'next/error';
@@ -2398,6 +2399,7 @@ export const getServerSideProps = async (
   options: { shortLink?: boolean } = {},
 ): ReturnType<GetServerSideProps<Props>> => {
   const lang = normalizeLang(ctx.locale);
+  const diagnostics = startArticlePreviewDiagnostics(ctx.req, ctx.res, lang, options.shortLink ? 'smart_share' : 'article');
   const locale = String(ctx.locale || lang);
   const siteUrl = resolvePublicSiteUrl(ctx.req);
   ctx.res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -2464,7 +2466,9 @@ export const getServerSideProps = async (
       let data: any = null;
       let article: Article | null = null;
       for (const endpoint of endpoints) {
-        const res = await fetch(endpoint, { method: 'GET', headers, cache: 'no-store', signal });
+        const res = await fetch(endpoint, {
+          method: 'GET', headers: { ...headers, ...diagnostics?.requestHeaders }, cache: 'no-store', signal,
+        });
         if (res.status === 404 || res.status === 410) { data = null; continue; }
         if (res.ok === false) throw new Error('Article upstream unavailable');
         const next = await res.json();
@@ -2620,6 +2624,7 @@ export const getServerSideProps = async (
       };
     })();
 
+    diagnostics?.captureArticle(resolvedArticle, siteUrl);
     return {
       props: {
         messages,
@@ -2645,6 +2650,7 @@ export const getServerSideProps = async (
       : error instanceof Error && error.message === 'Article upstream unavailable' ? 'upstream_http_error'
       : error instanceof SyntaxError ? 'invalid_json'
       : 'request_or_render_error';
+    diagnostics?.fail(reason);
     console.error('[news] Article SSR unavailable', { locale: lang, reason });
     ctx.res.statusCode = 503;
     ctx.res.setHeader('Retry-After', '30');
