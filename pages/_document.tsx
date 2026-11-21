@@ -1,4 +1,18 @@
 import Document, { Html, Head, Main, NextScript } from 'next/document';
+import { COOKIE_CONSENT_NAME, COOKIE_CONSENT_VERSION, decodeCurrentConsent, readCookieValue } from '../src/consent/cookieConsent';
+
+// Static/ISR HTML is shared. Resolve localStorage before the body paints, not in a mount effect.
+export const initialThemeScript = `(() => {
+  const raw = (${readCookieValue})(${JSON.stringify(COOKIE_CONSENT_NAME)});
+  const consent = (${decodeCurrentConsent})(raw, ${JSON.stringify(COOKIE_CONSENT_VERSION)}, Date.now());
+  if (!consent || !consent.categories || consent.categories.preferences !== true) return;
+  try {
+    const style = (localStorage.getItem('np_style') || '').trim().toLowerCase();
+    if (style === 'midnight' || (style !== 'aurora' && localStorage.getItem('theme') === 'dark')) {
+      document.documentElement.classList.add('dark');
+    }
+  } catch { console.warn('[theme] Preference storage unavailable; starting in Aurora.'); }
+})();`;
 
 export default class MyDocument extends Document {
   render() {
@@ -6,6 +20,7 @@ export default class MyDocument extends Document {
     return (
       <Html lang={locale}>
         <Head>
+          <script id="np-initial-theme" dangerouslySetInnerHTML={{ __html: initialThemeScript }} />
           {/* Meta Tags */}
           <meta name="theme-color" content="#102A43" />
           <meta name="apple-mobile-web-app-capable" content="yes" />

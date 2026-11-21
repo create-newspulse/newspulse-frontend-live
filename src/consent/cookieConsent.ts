@@ -106,14 +106,14 @@ export const cookieTechnologyInventory: CookieTechnologyInventoryItem[] = [
     sourceFile: 'utils/ThemeContext.tsx',
   },
   {
-    name: 'np_home_style_id_v1',
+    name: 'np_style',
     provider: 'News Pulse',
     category: 'preferences',
-    purpose: 'Stores the selected homepage style preset for the public homepage preview controls.',
-    duration: 'localStorage/sessionStorage: until cleared by the user or the tab closes',
+    purpose: 'Remembers the Aurora or Midnight style explicitly selected on the public website.',
+    duration: 'localStorage: until cleared by the user',
     currentStatus: 'Conditionally active',
     storageType: 'localStorage',
-    sourceFile: 'pages/index.tsx',
+    sourceFile: 'utils/ThemeContext.tsx',
   },
   {
     name: 'np_visitor_id_v1',
@@ -314,34 +314,42 @@ export function createConsentRecord(decision: CookieConsentDecision, categories:
   };
 }
 
-export function parseConsentRecord(rawValue: string | undefined | null, nowDate = new Date()): CookieConsentRecord | null {
+// Also embedded in the document's pre-paint script. Keep this decoder self-contained.
+export function decodeCurrentConsent(rawValue: string | undefined | null, version: string, now: number):
+  (Pick<CookieConsentRecord, 'decision' | 'updatedAt' | 'expiresAt'> & { categories?: unknown }) | null {
   if (!rawValue) return null;
 
   try {
     const decoded = decodeURIComponent(rawValue);
     const parsed = JSON.parse(decoded);
     if (!parsed || typeof parsed !== 'object') return null;
-    if (parsed.version !== COOKIE_CONSENT_VERSION) return null;
+    if (parsed.version !== version) return null;
     if (parsed.decision !== 'accepted' && parsed.decision !== 'rejected' && parsed.decision !== 'custom') return null;
 
     const expiresAt = typeof parsed.expiresAt === 'string' ? parsed.expiresAt : '';
     const expiresDate = new Date(expiresAt);
-    if (!expiresAt || Number.isNaN(expiresDate.getTime()) || expiresDate.getTime() <= nowDate.getTime()) return null;
+    if (!expiresAt || Number.isNaN(expiresDate.getTime()) || expiresDate.getTime() <= now) return null;
 
     const updatedAt = typeof parsed.updatedAt === 'string' ? parsed.updatedAt : '';
     const updatedDate = new Date(updatedAt);
     if (!updatedAt || Number.isNaN(updatedDate.getTime())) return null;
 
-    return {
-      version: COOKIE_CONSENT_VERSION,
-      decision: parsed.decision,
-      categories: normalizeCategories(parsed.categories),
-      updatedAt,
-      expiresAt,
-    };
+    return parsed;
   } catch {
     return null;
   }
+}
+
+export function parseConsentRecord(rawValue: string | undefined | null, nowDate = new Date()): CookieConsentRecord | null {
+  const parsed = decodeCurrentConsent(rawValue, COOKIE_CONSENT_VERSION, nowDate.getTime());
+  if (!parsed) return null;
+  return {
+    version: COOKIE_CONSENT_VERSION,
+    decision: parsed.decision,
+    categories: normalizeCategories(parsed.categories),
+    updatedAt: parsed.updatedAt,
+    expiresAt: parsed.expiresAt,
+  };
 }
 
 export function serializeConsentRecord(record: CookieConsentRecord): string {

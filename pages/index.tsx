@@ -64,7 +64,7 @@ import { getLiveTvDisplayBadgeLabel, resolveLiveTvPresentation } from "../src/li
 import { usePublicFounderToggles } from "../hooks/usePublicFounderToggles";
 import { DEFAULT_PUBLIC_FOUNDER_TOGGLES, type PublicFounderToggles } from "../lib/publicFounderToggles";
 import { subscribePublicDataRefresh } from "../lib/publicDataRefresh";
-import { hasStoredConsentForCategory } from "../src/consent/cookieConsent";
+import { PUBLIC_STYLES, publicPalette, PublicStyleName, useTheme } from "../utils/ThemeContext";
 import { filterPubliclyPublishedArticles, filterVisibleArticlesForLocale, getLocalizedArticleFields, isPubliclyPublishedArticle, STRICT_LOCALE_POLICY } from "../lib/localizedArticleFields";
 import { formatPublicArticleLocation } from "../lib/publicLocation";
 import {
@@ -112,71 +112,6 @@ import {
  */
 
 const cx = (...c: Array<string | false | null | undefined>) => c.filter(Boolean).join(" ");
-
-const STYLE_STORAGE_KEY = 'np_style';
-
-function readSavedStyleId(): string | null {
-  if (typeof window === 'undefined') return null;
-  if (!hasStoredConsentForCategory('preferences')) return null;
-  try {
-    const raw = window.localStorage.getItem(STYLE_STORAGE_KEY);
-    const v = String(raw || '').trim().toLowerCase();
-    return v ? v : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeSavedStyleId(themeId: string) {
-  if (typeof window === 'undefined') return;
-  if (!hasStoredConsentForCategory('preferences')) return;
-  try {
-    window.localStorage.setItem(STYLE_STORAGE_KEY, String(themeId || ''));
-  } catch {}
-}
-
-const THEMES = [
-  {
-    id: "aurora",
-    name: "Aurora",
-    mode: "light",
-    bg:
-      "radial-gradient(900px circle at 18% 12%, rgba(37,99,235,0.14), transparent 50%), radial-gradient(800px circle at 78% 18%, rgba(124,58,237,0.12), transparent 54%), radial-gradient(900px circle at 62% 86%, rgba(16,185,129,0.10), transparent 58%), linear-gradient(180deg, #f8fafc 0%, #f6f7ff 40%, #ffffff 100%)",
-    surface: "rgba(255,255,255,0.92)",
-    surface2: "rgba(255,255,255,0.72)",
-    border: "rgba(15,23,42,0.10)",
-    text: "#0b1220",
-    sub: "rgba(15,23,42,0.72)",
-    muted: "rgba(15,23,42,0.52)",
-    chip: "rgba(15,23,42,0.045)",
-    chipHover: "rgba(15,23,42,0.075)",
-    accent: "#2563eb",
-    accent2: "#7c3aed",
-    live: "#dc2626",
-    breaking: "#b91c1c",
-  },
-  {
-    id: "midnight",
-    name: "Midnight",
-    mode: "dark",
-    bg:
-      "radial-gradient(1000px circle at 16% 12%, rgba(59,130,246,0.26), transparent 48%), radial-gradient(900px circle at 78% 18%, rgba(168,85,247,0.20), transparent 52%), radial-gradient(900px circle at 65% 88%, rgba(34,197,94,0.14), transparent 56%), linear-gradient(180deg, #050814 0%, #060a18 42%, #050814 100%)",
-    surface: "rgba(255,255,255,0.070)",
-    surface2: "rgba(255,255,255,0.048)",
-    border: "rgba(255,255,255,0.11)",
-    text: "rgba(255,255,255,0.96)",
-    sub: "rgba(255,255,255,0.72)",
-    muted: "rgba(255,255,255,0.58)",
-    chip: "rgba(255,255,255,0.06)",
-    chipHover: "rgba(255,255,255,0.095)",
-    accent: "#38bdf8",
-    accent2: "#a78bfa",
-    live: "#ef4444",
-    breaking: "#f97316",
-  },
-] as const;
-
-const getTheme = (id: string) => THEMES.find((t) => t.id === id) || THEMES[0];
 
 const CATEGORIES = [
   { key: "breaking", label: "Breaking", Icon: Flame },
@@ -502,7 +437,6 @@ const MENU_QUICK_THEME: Record<"home" | "videos" | "search", { base: string; hov
 };
 
 const DEFAULT_PREFS = {
-  themeId: "aurora",
   lang: "English",
 
   liveTvEmbedUrl: "",
@@ -962,7 +896,6 @@ export const getServerSideProps: GetServerSideProps<HomePageStaticProps> = async
 function normalizePrefs(input: any) {
   const p = { ...DEFAULT_PREFS, ...(input || {}) };
 
-  if (!THEMES.some((t) => t.id === p.themeId)) p.themeId = DEFAULT_PREFS.themeId;
   if (!["English", "Hindi", "Gujarati"].includes(p.lang)) p.lang = DEFAULT_PREFS.lang;
   p.showPreviewNotice = !!p.showPreviewNotice;
   p.liveTvEmbedUrl = typeof p.liveTvEmbedUrl === "string" ? p.liveTvEmbedUrl : "";
@@ -1337,7 +1270,8 @@ function ToggleRow({ theme, title, sub, value, onToggle, disabled = false }: any
   );
 }
 
-function ThemePicker({ theme, themeId, setThemeId }: any) {
+function ThemePicker({ theme }: { theme: typeof publicPalette & { mode: string } }) {
+  const { mode, setMode } = useTheme();
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -1353,8 +1287,6 @@ function ThemePicker({ theme, themeId, setThemeId }: any) {
     return () => window.removeEventListener("mousedown", onDown);
   }, [open]);
 
-  const current = getTheme(themeId);
-
   return (
     <div ref={wrapRef} className="relative">
       <button
@@ -1365,8 +1297,8 @@ function ThemePicker({ theme, themeId, setThemeId }: any) {
       >
         <span className="hidden md:inline">{t('common.style')}</span>
         <span className="inline-flex items-center gap-2">
-          <span className="h-3.5 w-3.5 rounded-full border" style={{ background: current.accent, borderColor: theme.border }} />
-          <span className="font-extrabold">{current.name}</span>
+          <span className="h-3.5 w-3.5 rounded-full border" style={{ background: theme.accent, borderColor: theme.border }} />
+          <span className="font-extrabold"><PublicStyleName /></span>
           <ChevronDown className="h-4 w-4" style={{ color: theme.muted }} />
         </span>
       </button>
@@ -1382,14 +1314,15 @@ function ThemePicker({ theme, themeId, setThemeId }: any) {
             style={{ background: theme.surface, borderColor: theme.border }}
           >
             <div className="p-2">
-              {THEMES.map((t) => {
-                const active = t.id === themeId;
+              {PUBLIC_STYLES.map((t) => {
+                const active = t.mode === mode;
                 return (
                   <button
                     key={t.id}
                     type="button"
+                    aria-pressed={active}
                     onClick={() => {
-                      setThemeId(t.id);
+                      setMode(t.mode);
                       setOpen(false);
                     }}
                     className="flex w-full items-center justify-between gap-3 rounded-2xl px-3 py-2 text-sm font-semibold border"
@@ -1404,7 +1337,7 @@ function ThemePicker({ theme, themeId, setThemeId }: any) {
                     }}
                   >
                     <span className="flex items-center gap-2">
-                      <span className="h-3.5 w-3.5 rounded-full border" style={{ background: getTheme(t.id).accent, borderColor: theme.border }} />
+                      <span className="h-3.5 w-3.5 rounded-full border" style={{ background: t.accent, borderColor: theme.border }} />
                       {t.name}
                     </span>
                     {active ? <Check className="h-4 w-4" style={{ color: theme.accent }} /> : null}
@@ -1767,9 +1700,9 @@ function TrendingStrip({ theme, onPick }: any) {
             <span
               className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-extrabold border"
               style={{
-                background: theme.mode === "dark" ? "rgba(239,68,68,0.18)" : "rgba(239,68,68,0.10)",
+                background: "var(--np-trending-bg, rgba(239,68,68,0.10))",
                 borderColor: "rgba(239,68,68,0.35)",
-                color: theme.mode === "dark" ? "rgba(255,255,255,0.92)" : theme.text,
+                color: `var(--np-trending-text, ${theme.text})`,
               }}
             >
               <Flame className="h-4 w-4" style={{ color: theme.live }} /> {t('common.trending')}
@@ -2304,9 +2237,7 @@ function ExploreCategoriesPanel({ theme, prefs, activeKey, onPick, founderToggle
         className="border-b px-4 py-4 sm:px-5"
         style={{
           borderColor: theme.border,
-          background: theme.mode === 'dark'
-            ? 'linear-gradient(135deg, rgba(56,189,248,0.12), rgba(167,139,250,0.10) 55%, transparent 100%)'
-            : 'linear-gradient(135deg, rgba(37,99,235,0.10), rgba(124,58,237,0.08) 55%, rgba(255,255,255,0.72) 100%)',
+          background: 'var(--np-desk-bg, linear-gradient(135deg, rgba(37,99,235,0.10), rgba(124,58,237,0.08) 55%, rgba(255,255,255,0.72) 100%))',
         }}
       >
         <div className="flex items-start justify-between gap-3">
@@ -2611,12 +2542,8 @@ function FeaturedCard({ theme, item, onToast, isLoading = false, hasReadError = 
           className="pointer-events-none absolute inset-0"
           style={{
             background: isSponsoredFeatureCard
-              ? (theme.mode === 'dark'
-                ? 'linear-gradient(135deg, rgba(245,158,11,0.18), rgba(120,53,15,0.08) 42%, transparent 78%), radial-gradient(circle at 82% 18%, rgba(251,191,36,0.18), transparent 30%)'
-                : 'linear-gradient(135deg, rgba(245,158,11,0.16), rgba(255,251,235,0.78) 46%, rgba(255,255,255,0.92) 78%), radial-gradient(circle at 84% 18%, rgba(251,191,36,0.18), transparent 30%)')
-              : (theme.mode === 'dark'
-                ? 'radial-gradient(circle at top left, rgba(56,189,248,0.16), transparent 36%), radial-gradient(circle at 85% 20%, rgba(167,139,250,0.14), transparent 32%)'
-                : 'radial-gradient(circle at top left, rgba(37,99,235,0.10), transparent 36%), radial-gradient(circle at 85% 20%, rgba(124,58,237,0.09), transparent 32%)'),
+              ? 'var(--np-lead-sponsored-bg, linear-gradient(135deg, rgba(245,158,11,0.16), rgba(255,251,235,0.78) 46%, rgba(255,255,255,0.92) 78%), radial-gradient(circle at 84% 18%, rgba(251,191,36,0.18), transparent 30%))'
+              : 'var(--np-lead-bg, radial-gradient(circle at top left, rgba(37,99,235,0.10), transparent 36%), radial-gradient(circle at 85% 20%, rgba(124,58,237,0.09), transparent 32%))',
           }}
         />
 
@@ -2712,7 +2639,7 @@ function FeaturedCard({ theme, item, onToast, isLoading = false, hasReadError = 
               className="mt-5 rounded-[24px] border px-4 py-3 text-sm leading-6"
               style={{
                 borderColor: 'rgba(245,158,11,0.22)',
-                background: theme.mode === 'dark' ? 'rgba(120,53,15,0.18)' : 'rgba(255,251,235,0.88)',
+                background: 'var(--np-sponsored-chip, rgba(255,251,235,0.88))',
                 color: theme.sub,
               }}
             >
@@ -2975,9 +2902,7 @@ function MoreReadsSection({ theme, items, lang }: any) {
         className="flex items-center justify-between gap-3 border-b p-4 sm:p-5"
         style={{
           borderColor: theme.border,
-          background: theme.mode === 'dark'
-            ? 'linear-gradient(135deg, rgba(56,189,248,0.08), transparent 58%)'
-            : 'linear-gradient(135deg, rgba(37,99,235,0.08), rgba(255,255,255,0.72) 58%)',
+          background: 'var(--np-fresh-bg, linear-gradient(135deg, rgba(37,99,235,0.08), rgba(255,255,255,0.72) 58%))',
         }}
       >
         <div className="min-w-0">
@@ -3182,12 +3107,8 @@ function LiveTVWidget({ theme, liveTvSettings }: { theme: any; liveTvSettings: P
   }, [fallbackVideoUrl, offlineLoopVideoUrl, offlinePosterImageUrl, presentation.playerUrl]);
 
   const accentBackground = presentation.highlightBreaking
-    ? theme.mode === 'dark'
-      ? 'linear-gradient(135deg, rgba(220,38,38,0.32), rgba(234,88,12,0.18) 58%, rgba(56,189,248,0.10) 100%)'
-      : 'linear-gradient(135deg, rgba(220,38,38,0.18), rgba(249,115,22,0.12) 58%, rgba(37,99,235,0.08) 100%)'
-    : theme.mode === 'dark'
-      ? 'linear-gradient(135deg, rgba(239,68,68,0.16), rgba(56,189,248,0.10) 68%, transparent 100%)'
-      : 'linear-gradient(135deg, rgba(220,38,38,0.10), rgba(37,99,235,0.07) 68%, rgba(255,255,255,0.74) 100%)';
+    ? 'var(--np-tv-breaking-bg, linear-gradient(135deg, rgba(220,38,38,0.18), rgba(249,115,22,0.12) 58%, rgba(37,99,235,0.08) 100%))'
+    : 'var(--np-tv-bg, linear-gradient(135deg, rgba(220,38,38,0.10), rgba(37,99,235,0.07) 68%, rgba(255,255,255,0.74) 100%))';
 
   return (
     <Surface theme={theme} className="overflow-hidden">
@@ -3283,7 +3204,7 @@ function LiveTVWidget({ theme, liveTvSettings }: { theme: any; liveTvSettings: P
             style={{
               borderColor: theme.border,
               color: theme.text,
-              background: theme.mode === 'dark' ? 'rgba(30,41,59,0.72)' : 'rgba(248,250,252,0.98)',
+              background: 'var(--np-tv-link-bg, rgba(248,250,252,0.98))',
             }}
             aria-label="Open Live TV page"
           >
@@ -3335,9 +3256,7 @@ function HomeEditorialSection({ theme, title, href, items, lang, Icon, error = f
         className="border-b px-4 py-4 sm:px-5"
         style={{
           borderColor: theme.border,
-          background: theme.mode === 'dark'
-            ? 'linear-gradient(135deg, rgba(56,189,248,0.10), rgba(167,139,250,0.09) 65%, transparent 100%)'
-            : 'linear-gradient(135deg, rgba(37,99,235,0.07), rgba(124,58,237,0.06) 65%, rgba(255,255,255,0.72) 100%)',
+          background: 'var(--np-snapshots-bg, linear-gradient(135deg, rgba(37,99,235,0.07), rgba(124,58,237,0.06) 65%, rgba(255,255,255,0.72) 100%))',
         }}
       >
         <div className="flex items-center justify-between gap-4">
@@ -3551,9 +3470,7 @@ function SnapshotsCard({ theme }: any) {
         className="border-b px-4 py-4"
         style={{
           borderColor: theme.border,
-          background: theme.mode === 'dark'
-            ? 'linear-gradient(135deg, rgba(16,185,129,0.14), rgba(56,189,248,0.08) 72%, transparent 100%)'
-            : 'linear-gradient(135deg, rgba(16,185,129,0.10), rgba(37,99,235,0.05) 72%, rgba(255,255,255,0.72) 100%)',
+          background: 'var(--np-briefing-bg, linear-gradient(135deg, rgba(16,185,129,0.10), rgba(37,99,235,0.05) 72%, rgba(255,255,255,0.72) 100%))',
         }}
       >
         <div className="text-[12px] font-extrabold uppercase tracking-[0.16em]" style={{ color: theme.sub }}>
@@ -3651,10 +3568,7 @@ function AppPromoSection({ theme, onToast }: any) {
                 <span
                   className="px-2 py-1 rounded-2xl"
                   style={{
-                    background:
-                      theme.mode === "dark"
-                        ? "linear-gradient(90deg, rgba(56,189,248,0.20), rgba(167,139,250,0.16))"
-                        : "linear-gradient(90deg, rgba(37,99,235,0.12), rgba(124,58,237,0.10))",
+                    background: "var(--np-app-badge-bg, linear-gradient(90deg, rgba(37,99,235,0.12), rgba(124,58,237,0.10)))",
                   }}
                 >
                   <span style={{ color: theme.accent }}>{brandFirst}</span> <span style={{ color: theme.accent2 }}>{brandSecond}</span>
@@ -3673,7 +3587,7 @@ function AppPromoSection({ theme, onToast }: any) {
                   onClick={() => onToast(`${t('common.appStore')} release information is not available right now.`) }
                   className="rounded-3xl px-5 py-4 text-sm font-extrabold border transition hover:opacity-[0.98] inline-flex items-center gap-2"
                   style={{
-                    background: theme.mode === "dark" ? "rgba(0,0,0,0.55)" : "#0b1220",
+                    background: "var(--np-app-link-bg, #0b1220)",
                     color: "#fff",
                     borderColor: "rgba(255,255,255,0.12)",
                   }}
@@ -3758,10 +3672,7 @@ export function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
   const { t } = useI18n();
   const { openPreferences } = useCookieConsent();
 
-  const footerBg =
-    theme.mode === "dark"
-      ? "linear-gradient(180deg, rgba(10,14,35,0.95) 0%, rgba(7,10,24,0.98) 100%)"
-      : "linear-gradient(180deg, rgba(10,14,35,0.92) 0%, rgba(7,10,24,0.98) 100%)";
+  const footerBg = "var(--np-footer-bg, linear-gradient(180deg, rgba(10,14,35,0.92) 0%, rgba(7,10,24,0.98) 100%))";
 
   const businessLinks = [
     { label: t('footer.advertiseWithUs'), href: localizePath('/advertise-with-us', lang) },
@@ -3794,7 +3705,7 @@ export function SiteFooter({ theme, onToast, footerTextOverride, lang }: any) {
   ];
 
   return (
-    <div className="mt-6" style={{ background: footerBg }}>
+    <div data-np-home-palette={theme.mode} className="mt-6" style={{ background: footerBg }}>
       <div className="mx-auto w-full max-w-[1440px] px-4 md:px-8 py-10">
         <div className="grid gap-10 md:grid-cols-12">
           <div className="md:col-span-5">
@@ -3899,19 +3810,14 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
   const { toggles: founderToggles } = usePublicFounderToggles();
   const SAFE_MODE = isSafeMode();
   const [prefs, setPrefs] = useState<any>(() => normalizePrefs(DEFAULT_PREFS));
-  const theme = useMemo(() => getTheme(prefs.themeId), [prefs.themeId]);
+  const { mode } = useTheme();
+  const theme = useMemo(() => ({ ...publicPalette, mode }), [mode]);
   usePublicMode();
 
   const apiLang = useMemo(() => {
     const code = toUiLangCode(lang);
     return (code === 'en' ? 'en' : code === 'hi' ? 'hi' : 'gu') as 'en' | 'hi' | 'gu';
   }, [lang]);
-
-  const setThemeId = React.useCallback((themeId: string) => {
-    const next = String(themeId || '').trim().toLowerCase();
-    if (THEMES.some((t) => t.id === next)) writeSavedStyleId(next);
-    setPrefs((p: any) => normalizePrefs({ ...p, themeId: next }));
-  }, []);
 
   const getLocalizedBreakingHref = React.useCallback(
     (tab: 'breaking' | 'live'): string => {
@@ -4007,13 +3913,6 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
   }, []);
 
   React.useEffect(() => {
-    const saved = readSavedStyleId();
-    if (saved && THEMES.some((t) => t.id === saved)) {
-      setPrefs((current: any) => normalizePrefs({ ...current, themeId: saved }));
-    }
-  }, []);
-
-  React.useEffect(() => {
     if (typeof window === 'undefined') return;
 
     return subscribePublicDataRefresh(() => {
@@ -4096,41 +3995,6 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
     return () => controller.abort();
   }, [apiLang, homepagePublicRefreshTick]);
 
-
-  // Apply backend-controlled defaults (do not persist). Keep this one-shot.
-  const appliedPublishedDefaultsRef = useRef(false);
-  React.useEffect(() => {
-    if (enablePublicSettingsDrawer) return;
-    if (appliedPublishedDefaultsRef.current) return;
-    if (!effectiveSettings || settingsError) return;
-
-    // Never override an explicit user style choice (fixes Midnight flip on Back).
-    const saved = readSavedStyleId();
-    if (saved && THEMES.some((t) => t.id === saved)) {
-      appliedPublishedDefaultsRef.current = true;
-      return;
-    }
-
-    const themePreset = (effectiveSettings as any)?.languageTheme?.themePreset;
-
-    if (typeof themePreset === 'string') {
-      const next = themePreset.toLowerCase().trim();
-      if (next === 'default') {
-        setPrefs((p: any) => ({ ...p, themeId: DEFAULT_PREFS.themeId }));
-      } else if (next === 'system') {
-        const prefersDark = typeof window !== 'undefined' && window.matchMedia
-          ? window.matchMedia('(prefers-color-scheme: dark)').matches
-          : false;
-        setPrefs((p: any) => ({ ...p, themeId: prefersDark ? 'midnight' : 'aurora' }));
-      } else if (next === 'aurora' || next === 'light' || next === 'ocean' || next === 'sunset') {
-        setPrefs((p: any) => ({ ...p, themeId: 'aurora' }));
-      } else if (next === 'midnight' || next === 'night' || next === 'dark') {
-        setPrefs((p: any) => ({ ...p, themeId: 'midnight' }));
-      }
-    }
-
-    appliedPublishedDefaultsRef.current = true;
-  }, [enablePublicSettingsDrawer, effectiveSettings, settingsError]);
 
   const publishedLanguageOptions = useMemo(() => {
     const raw = (effectiveSettings as any)?.languageTheme?.languages;
@@ -4595,7 +4459,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
     .sort((a, b) => a.order - b.order);
 
   return (
-    <div className="relative min-h-screen w-full overflow-x-hidden overflow-hidden bg-gray-50/30" style={{ background: theme.bg }}>
+    <div className="np-home relative min-h-screen w-full overflow-x-hidden overflow-hidden bg-gray-50/30" style={{ background: theme.bg }}>
       <Head>
         <title>{HOMEPAGE_TITLE}</title>
         <meta name="description" content={HOMEPAGE_DESCRIPTION} />
@@ -4842,7 +4706,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
                   setPrefs((p: any) => ({ ...p, lang: UI_LANG_LABEL[nextCode] }));
                 }}
               />
-              <ThemePicker theme={theme} themeId={prefs.themeId} setThemeId={setThemeId} />
+              <ThemePicker theme={theme} />
 
               {enablePublicSettingsDrawer ? (
                 <IconButton theme={theme} onClick={() => setSettingsOpen(true)} label={t('common.settings')}>
@@ -4931,9 +4795,7 @@ export default function UiPreviewV145({ initialHomepageSponsoredFeature, initial
                 className="border-b px-4 py-3 sm:px-5"
                 style={{
                   borderColor: theme.border,
-                  background: theme.mode === 'dark'
-                    ? 'linear-gradient(135deg, rgba(245,158,11,0.18), rgba(120,53,15,0.12) 62%, transparent 100%)'
-                    : 'linear-gradient(135deg, rgba(245,158,11,0.12), rgba(251,191,36,0.08) 62%, rgba(255,255,255,0.92) 100%)',
+                  background: 'var(--np-sponsored-bg, linear-gradient(135deg, rgba(245,158,11,0.12), rgba(251,191,36,0.08) 62%, rgba(255,255,255,0.92) 100%))',
                 }}
               >
                 <div className="text-[11px] font-black uppercase tracking-[0.22em] text-amber-700">Sponsored Feature</div>

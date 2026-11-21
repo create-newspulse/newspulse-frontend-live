@@ -174,14 +174,12 @@ export function HomeRightRailLatestNews({ theme = DEFAULT_HOME_RIGHT_RAIL_THEME,
   ] as const;
 
   return (
-    <div className="overflow-hidden rounded-[28px] border border-slate-200/70 bg-white/85 backdrop-blur shadow-[0_22px_48px_-38px_rgba(15,23,42,0.34)] transition hover:shadow-[0_28px_56px_-38px_rgba(15,23,42,0.38)]">
+    <div data-np-home-palette={theme.mode} className="overflow-hidden rounded-[28px] border border-slate-200/70 bg-white/85 backdrop-blur shadow-[0_22px_48px_-38px_rgba(15,23,42,0.34)] transition hover:shadow-[0_28px_56px_-38px_rgba(15,23,42,0.38)]">
       <div
         className="border-b p-4"
         style={{
           borderColor: theme.border,
-          background: theme.mode === 'dark'
-            ? 'linear-gradient(135deg, rgba(167,139,250,0.12), transparent 58%)'
-            : 'linear-gradient(135deg, rgba(37,99,235,0.08), rgba(255,255,255,0.70) 58%)',
+          background: 'var(--np-latest-bg, linear-gradient(135deg, rgba(37,99,235,0.08), rgba(255,255,255,0.70) 58%))',
         }}
       >
         <div className="flex items-start justify-between gap-3">
@@ -219,7 +217,7 @@ export function HomeRightRailLatestNews({ theme = DEFAULT_HOME_RIGHT_RAIL_THEME,
                   borderColor: isActive ? theme.accent : theme.border,
                   color: isActive ? theme.accent : theme.sub,
                   background: isActive
-                    ? (theme.mode === 'dark' ? 'rgba(56,189,248,0.12)' : 'rgba(37,99,235,0.08)')
+                    ? 'var(--np-latest-selected-bg, rgba(37,99,235,0.08))'
                     : theme.surface,
                 }}
               >
@@ -540,14 +538,12 @@ export function HomeRightRailYouthDesk({ theme = DEFAULT_HOME_RIGHT_RAIL_THEME, 
   if (!youth.loading && rightRailYouthTrendingItems.length === 0) return null;
 
   return (
-    <div className="overflow-hidden rounded-[28px] border shadow-[0_18px_42px_-34px_rgba(15,23,42,0.30)]" style={{ background: theme.surface2, borderColor: theme.border }}>
+    <div data-np-home-palette={theme.mode} className="overflow-hidden rounded-[28px] border shadow-[0_18px_42px_-34px_rgba(15,23,42,0.30)]" style={{ background: theme.surface2, borderColor: theme.border }}>
       <div
         className="flex items-center justify-between gap-3 border-b px-4 py-4"
         style={{
           borderColor: theme.border,
-          background: theme.mode === 'dark'
-            ? 'linear-gradient(135deg, rgba(79,70,229,0.16), rgba(56,189,248,0.08) 70%, transparent 100%)'
-            : 'linear-gradient(135deg, rgba(79,70,229,0.10), rgba(37,99,235,0.05) 70%, rgba(255,255,255,0.72) 100%)',
+          background: 'var(--np-youth-bg, linear-gradient(135deg, rgba(79,70,229,0.10), rgba(37,99,235,0.05) 70%, rgba(255,255,255,0.72) 100%))',
         }}
       >
         <div className="min-w-0">
@@ -568,10 +564,8 @@ export function HomeRightRailYouthDesk({ theme = DEFAULT_HOME_RIGHT_RAIL_THEME, 
               aria-hidden="true"
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border"
               style={{
-                borderColor: theme.mode === 'dark' ? 'rgba(148,163,184,0.22)' : 'rgba(99,102,241,0.18)',
-                background: theme.mode === 'dark'
-                  ? 'linear-gradient(135deg, rgba(79,70,229,0.22), rgba(14,165,233,0.12))'
-                  : 'linear-gradient(135deg, rgba(79,70,229,0.12), rgba(14,165,233,0.08))',
+                borderColor: 'var(--np-youth-border, rgba(99,102,241,0.18))',
+                background: 'var(--np-youth-chip, linear-gradient(135deg, rgba(79,70,229,0.12), rgba(14,165,233,0.08)))',
               }}
             >
               <GraduationCap className="h-3.5 w-3.5" style={{ color: theme.accent2 }} />

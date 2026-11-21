@@ -1,6 +1,7 @@
 import React from 'react';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import MyApp from '../../pages/_app';
+import { initialThemeScript } from '../../pages/_document';
 import TopicPage, { type TopicPageProps } from '../../pages/topic/[slug]';
 import { buildNewsShareUrl, buildNewsUrl } from '../../lib/newsRoutes';
 import { editorialTopicPath } from '../../lib/publicEditorialTopics';
@@ -10,6 +11,7 @@ import { storyFixture, topicFixture } from '../fixtures/editorialTopics';
 import SponsoredContentPage from '../../pages/sponsored-content';
 import { sponsoredContentPath } from '../../lib/publicSponsoredNews';
 import { sponsoredNewsFixture } from '../fixtures/sponsoredNews';
+import { createConsentRecord, deleteConsentCookie, writeConsentCookie } from '../../src/consent/cookieConsent';
 
 const mockRouter = {
   isReady: true, locale: 'en', defaultLocale: 'en', pathname: '/topic/[slug]',
@@ -17,6 +19,7 @@ const mockRouter = {
   replace: jest.fn(async () => true), push: jest.fn(async () => true), back: jest.fn(),
   events: { on: jest.fn(), off: jest.fn() },
 };
+let mockThemePreset: string | null = null;
 
 jest.mock('next/router', () => ({ useRouter: () => mockRouter }));
 jest.mock('next/head', () => ({ __esModule: true, default: ({ children }: React.PropsWithChildren) => <>{children}</> }));
@@ -40,7 +43,7 @@ jest.mock('../../hooks/useReporterPortalSession', () => ({
 }));
 jest.mock('../../src/context/PublicSettingsContext', () => ({
   PublicSettingsProvider: ({ children }: React.PropsWithChildren) => <>{children}</>,
-  usePublicSettings: () => ({ settings: null, error: null }),
+  usePublicSettings: () => ({ settings: { languageTheme: { themePreset: mockThemePreset } }, error: null }),
 }));
 jest.mock('../../utils/PublicModeProvider', () => ({
   PublicModeProvider: ({ children }: React.PropsWithChildren) => <>{children}</>,
@@ -87,6 +90,8 @@ function mount(lang: RouteLocale = 'en') {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockThemePreset = null;
+  deleteConsentCookie();
   jest.spyOn(console, 'error').mockImplementation(() => {});
   Object.defineProperty(window, 'matchMedia', {
     configurable: true, writable: true,
@@ -102,6 +107,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  deleteConsentCookie();
   jest.restoreAllMocks();
   window.matchMedia = originalMatchMedia;
   document.documentElement.classList.remove('dark');
@@ -176,6 +182,43 @@ test('the existing Aurora/Midnight style control works without changing cards or
   expect(document.documentElement.classList.contains('dark')).toBe(false);
   expect(articleLink()).toBe(before);
   expect(container.querySelectorAll('[data-news-pulse-top-header="true"]')).toHaveLength(1);
+});
+
+test.each([null, 'midnight', 'system'])('a dark device and a published %s preset cannot select or save Midnight', preset => {
+  mockThemePreset = preset;
+  const media = window.matchMedia('(prefers-color-scheme: dark)');
+  jest.mocked(window.matchMedia).mockReturnValue({ ...media, matches: true });
+  writeConsentCookie(createConsentRecord('custom', { preferences: true }));
+  mount();
+  expect(document.documentElement.classList.contains('dark')).toBe(false);
+  expect(localStorage.getItem('theme')).toBeNull();
+  expect(localStorage.getItem('np_style')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Style' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Midnight' }));
+  expect(document.documentElement.classList.contains('dark')).toBe(true);
+  expect(localStorage.getItem('np_style')).toBe('midnight');
+});
+
+test.each([
+  ['midnight', 'system', true, 'Midnight'],
+  ['aurora', 'dark', true, 'Aurora'],
+  [null, 'dark', true, 'Midnight'],
+  [null, 'system', true, 'Aurora'],
+  ['midnight', 'dark', false, 'Aurora'],
+] as const)('restores style=%s, legacy=%s, consent=%s before React mounts without rewriting it', (style, legacy, allowed, expected) => {
+  if (style) localStorage.setItem('np_style', style);
+  localStorage.setItem('theme', legacy);
+  writeConsentCookie(createConsentRecord('custom', { preferences: allowed }));
+  const read = jest.spyOn(Storage.prototype, 'getItem');
+  const write = jest.spyOn(Storage.prototype, 'setItem');
+
+  new Function(initialThemeScript)(); // The actual inline script, before any React components mount.
+  expect(document.documentElement.classList.contains('dark')).toBe(expected === 'Midnight');
+  mount('hi');
+  fireEvent.click(screen.getByRole('button', { name: 'Style' }));
+  expect(screen.getByRole('button', { name: expected, pressed: true })).toBeTruthy();
+  if (!allowed) expect(read.mock.calls.filter(([key]) => key === 'theme' || key === 'np_style')).toEqual([]);
+  expect(write.mock.calls.filter(([key]) => key === 'theme' || key === 'np_style')).toEqual([]);
 });
 
 test.each([

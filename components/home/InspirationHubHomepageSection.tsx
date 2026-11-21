@@ -53,16 +53,14 @@ export default function InspirationHubHomepageSection({ theme, href, sectionTitl
   return (
     <section
       className="overflow-hidden rounded-[32px] border shadow-[0_30px_80px_-56px_rgba(15,23,42,0.42)]"
+      data-np-home-palette={theme.mode}
       style={{ background: theme.surface2, borderColor: theme.border }}
     >
       <div
         className="border-b px-4 py-5 sm:px-6"
         style={{
           borderColor: theme.border,
-          background:
-            theme.mode === "dark"
-              ? "linear-gradient(135deg, rgba(45,212,191,0.16), rgba(56,189,248,0.10) 58%, rgba(250,204,21,0.06) 100%)"
-              : "linear-gradient(135deg, rgba(20,184,166,0.10), rgba(14,165,233,0.08) 58%, rgba(250,204,21,0.08) 100%)",
+          background: "var(--np-inspiration-bg, linear-gradient(135deg, rgba(20,184,166,0.10), rgba(14,165,233,0.08) 58%, rgba(250,204,21,0.08) 100%))",
         }}
       >
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -134,7 +132,7 @@ export default function InspirationHubHomepageSection({ theme, href, sectionTitl
           <div className="p-4 sm:p-5">
             <div
               className="relative overflow-hidden rounded-[26px] border shadow-[0_18px_44px_-34px_rgba(15,23,42,0.55)]"
-              style={{ borderColor: theme.border, background: theme.mode === "dark" ? "#06121a" : "#dff6f3" }}
+              style={{ borderColor: theme.border, background: "var(--np-drone-bg, #dff6f3)" }}
             >
               <div className="relative aspect-[16/9] w-full overflow-hidden bg-black">
                 {hasEmbed ? (
@@ -154,10 +152,7 @@ export default function InspirationHubHomepageSection({ theme, href, sectionTitl
                     <div
                       className="absolute inset-0"
                       style={{
-                        background:
-                          theme.mode === "dark"
-                            ? "radial-gradient(circle at 20% 18%, rgba(45,212,191,0.22), transparent 28%), radial-gradient(circle at 82% 20%, rgba(56,189,248,0.20), transparent 34%), linear-gradient(180deg, rgba(6,18,26,1) 0%, rgba(9,32,44,1) 45%, rgba(7,26,34,1) 100%)"
-                            : "radial-gradient(circle at 18% 18%, rgba(45,212,191,0.28), transparent 28%), radial-gradient(circle at 82% 20%, rgba(14,165,233,0.24), transparent 34%), linear-gradient(180deg, rgba(233,249,246,1) 0%, rgba(217,241,243,1) 50%, rgba(233,246,252,1) 100%)",
+                        background: "var(--np-drone-offline-bg, radial-gradient(circle at 18% 18%, rgba(45,212,191,0.28), transparent 28%), radial-gradient(circle at 82% 20%, rgba(14,165,233,0.24), transparent 34%), linear-gradient(180deg, rgba(233,249,246,1) 0%, rgba(217,241,243,1) 50%, rgba(233,246,252,1) 100%))",
                       }}
                     />
                     <div className="absolute inset-x-0 bottom-0 h-[45%] bg-[linear-gradient(180deg,transparent,rgba(15,23,42,0.42))]" />
@@ -239,10 +234,7 @@ export default function InspirationHubHomepageSection({ theme, href, sectionTitl
               className="overflow-hidden rounded-[26px] border px-5 py-6"
               style={{
                 borderColor: theme.border,
-                background:
-                  theme.mode === "dark"
-                    ? "linear-gradient(160deg, rgba(250,204,21,0.10), rgba(45,212,191,0.08) 45%, rgba(255,255,255,0.04) 100%)"
-                    : "linear-gradient(160deg, rgba(254,249,195,0.82), rgba(204,251,241,0.72) 45%, rgba(255,255,255,0.94) 100%)",
+                background: "var(--np-inspiration-card, linear-gradient(160deg, rgba(254,249,195,0.82), rgba(204,251,241,0.72) 45%, rgba(255,255,255,0.94) 100%))",
               }}
             >
               <div className="text-[11px] font-extrabold uppercase tracking-[0.16em]" style={{ color: theme.sub }}>

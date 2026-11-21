@@ -8,6 +8,76 @@
   --np-red: #D62828;
   --np-slate: #64748B;
   --np-white: #FFFFFF;
+  --np-theme-bg: radial-gradient(900px circle at 18% 12%, rgba(37,99,235,0.14), transparent 50%), radial-gradient(800px circle at 78% 18%, rgba(124,58,237,0.12), transparent 54%), radial-gradient(900px circle at 62% 86%, rgba(16,185,129,0.10), transparent 58%), linear-gradient(180deg, #f8fafc 0%, #f6f7ff 40%, #ffffff 100%);
+  --np-theme-surface: rgba(255,255,255,0.92);
+  --np-theme-surface2: rgba(255,255,255,0.72);
+  --np-theme-border: rgba(15,23,42,0.10);
+  --np-theme-text: #0b1220;
+  --np-theme-sub: rgba(15,23,42,0.72);
+  --np-theme-muted: rgba(15,23,42,0.52);
+  --np-theme-chip: rgba(15,23,42,0.045);
+  --np-theme-chip-hover: rgba(15,23,42,0.075);
+  --np-theme-accent: #2563eb;
+  --np-theme-accent2: #7c3aed;
+  --np-theme-live: #dc2626;
+  --np-theme-breaking: #b91c1c;
+}
+
+html:not(.dark) { color-scheme: only light; }
+html.dark {
+  --np-theme-bg: radial-gradient(1000px circle at 16% 12%, rgba(59,130,246,0.26), transparent 48%), radial-gradient(900px circle at 78% 18%, rgba(168,85,247,0.20), transparent 52%), radial-gradient(900px circle at 65% 88%, rgba(34,197,94,0.14), transparent 56%), linear-gradient(180deg, #050814 0%, #060a18 42%, #050814 100%);
+  --np-theme-surface: rgba(255,255,255,0.070);
+  --np-theme-surface2: rgba(255,255,255,0.048);
+  --np-theme-border: rgba(255,255,255,0.11);
+  --np-theme-text: rgba(255,255,255,0.96);
+  --np-theme-sub: rgba(255,255,255,0.72);
+  --np-theme-muted: rgba(255,255,255,0.58);
+  --np-theme-chip: rgba(255,255,255,0.06);
+  --np-theme-chip-hover: rgba(255,255,255,0.095);
+  --np-theme-accent: #38bdf8;
+  --np-theme-accent2: #a78bfa;
+  --np-theme-live: #ef4444;
+  --np-theme-breaking: #f97316;
+}
+
+html.dark .np-public-top-header {
+  --np-theme-surface: rgba(15,23,42,0.92);
+  --np-theme-surface2: rgba(255,255,255,0.08);
+  --np-theme-border: rgba(255,255,255,0.13);
+  --np-theme-chip-hover: rgba(255,255,255,0.11);
+}
+
+.np-midnight-name, .dark .np-aurora-name { display: none; }
+.dark .np-midnight-name { display: inline; }
+
+/* Home can paint before hydration; shared sections can also receive a standalone palette. */
+.dark .np-home, [data-np-home-palette="dark"] {
+  --np-trending-bg: rgba(239,68,68,0.18);
+  --np-trending-text: rgba(255,255,255,0.92);
+  --np-desk-bg: linear-gradient(135deg, rgba(56,189,248,0.12), rgba(167,139,250,0.10) 55%, transparent 100%);
+  --np-lead-sponsored-bg: linear-gradient(135deg, rgba(245,158,11,0.18), rgba(120,53,15,0.08) 42%, transparent 78%), radial-gradient(circle at 82% 18%, rgba(251,191,36,0.18), transparent 30%);
+  --np-lead-bg: radial-gradient(circle at top left, rgba(56,189,248,0.16), transparent 36%), radial-gradient(circle at 85% 20%, rgba(167,139,250,0.14), transparent 32%);
+  --np-sponsored-chip: rgba(120,53,15,0.18);
+  --np-fresh-bg: linear-gradient(135deg, rgba(56,189,248,0.08), transparent 58%);
+  --np-tv-breaking-bg: linear-gradient(135deg, rgba(220,38,38,0.32), rgba(234,88,12,0.18) 58%, rgba(56,189,248,0.10) 100%);
+  --np-tv-bg: linear-gradient(135deg, rgba(239,68,68,0.16), rgba(56,189,248,0.10) 68%, transparent 100%);
+  --np-tv-link-bg: rgba(30,41,59,0.72);
+  --np-snapshots-bg: linear-gradient(135deg, rgba(56,189,248,0.10), rgba(167,139,250,0.09) 65%, transparent 100%);
+  --np-briefing-bg: linear-gradient(135deg, rgba(16,185,129,0.14), rgba(56,189,248,0.08) 72%, transparent 100%);
+  --np-app-badge-bg: linear-gradient(90deg, rgba(56,189,248,0.20), rgba(167,139,250,0.16));
+  --np-app-link-bg: rgba(0,0,0,0.55);
+  --np-footer-bg: linear-gradient(180deg, rgba(10,14,35,0.95) 0%, rgba(7,10,24,0.98) 100%);
+  --np-sponsored-bg: linear-gradient(135deg, rgba(245,158,11,0.18), rgba(120,53,15,0.12) 62%, transparent 100%);
+  --np-spotlight-bg: linear-gradient(135deg, rgba(56,189,248,0.10), rgba(244,114,182,0.09) 65%, transparent 100%);
+  --np-latest-bg: linear-gradient(135deg, rgba(167,139,250,0.12), transparent 58%);
+  --np-latest-selected-bg: rgba(56,189,248,0.12);
+  --np-youth-bg: linear-gradient(135deg, rgba(79,70,229,0.16), rgba(56,189,248,0.08) 70%, transparent 100%);
+  --np-youth-border: rgba(148,163,184,0.22);
+  --np-youth-chip: linear-gradient(135deg, rgba(79,70,229,0.22), rgba(14,165,233,0.12));
+  --np-inspiration-bg: linear-gradient(135deg, rgba(45,212,191,0.16), rgba(56,189,248,0.10) 58%, rgba(250,204,21,0.06) 100%);
+  --np-drone-bg: #06121a;
+  --np-drone-offline-bg: radial-gradient(circle at 20% 18%, rgba(45,212,191,0.22), transparent 28%), radial-gradient(circle at 82% 20%, rgba(56,189,248,0.20), transparent 34%), linear-gradient(180deg, rgba(6,18,26,1) 0%, rgba(9,32,44,1) 45%, rgba(7,26,34,1) 100%);
+  --np-inspiration-card: linear-gradient(160deg, rgba(250,204,21,0.10), rgba(45,212,191,0.08) 45%, rgba(255,255,255,0.04) 100%);
 }
 
 .newsPulseLogo {

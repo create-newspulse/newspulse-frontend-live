@@ -1,7 +1,24 @@
-import { createContext, useContext, useMemo, useState, useEffect, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState, useLayoutEffect, ReactNode } from 'react';
 import { hasStoredConsentForCategory } from '../src/consent/cookieConsent';
 
-export type ThemeMode = 'light' | 'dark' | 'system';
+export type ThemeMode = 'light' | 'dark';
+
+export const PUBLIC_STYLES = [
+  { id: 'aurora', mode: 'light', name: 'Aurora', accent: '#2563eb' },
+  { id: 'midnight', mode: 'dark', name: 'Midnight', accent: '#38bdf8' },
+] as const;
+
+export const publicPalette = {
+  bg: 'var(--np-theme-bg)', surface: 'var(--np-theme-surface)', surface2: 'var(--np-theme-surface2)',
+  border: 'var(--np-theme-border)', text: 'var(--np-theme-text)', sub: 'var(--np-theme-sub)',
+  muted: 'var(--np-theme-muted)', chip: 'var(--np-theme-chip)', chipHover: 'var(--np-theme-chip-hover)',
+  accent: 'var(--np-theme-accent)', accent2: 'var(--np-theme-accent2)',
+  live: 'var(--np-theme-live)', breaking: 'var(--np-theme-breaking)',
+};
+
+export function PublicStyleName() {
+  return <><span className="np-aurora-name">Aurora</span><span className="np-midnight-name">Midnight</span></>;
+}
 
 interface ThemeContextType {
   isDark: boolean;
@@ -13,54 +30,26 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const ThemeProvider = ({ children }: { children: ReactNode }) => {
-  const [mode, setMode] = useState<ThemeMode>('system');
-  const [systemDark, setSystemDark] = useState(false);
-
-  useEffect(() => {
-    const media = window.matchMedia('(prefers-color-scheme: dark)');
-    setSystemDark(media.matches);
-
-    const savedTheme = hasStoredConsentForCategory('preferences') ? localStorage.getItem('theme') : null;
-    if (savedTheme === 'dark' || savedTheme === 'light' || savedTheme === 'system') {
-      setMode(savedTheme as ThemeMode);
-    } else {
-      setMode('system');
-    }
+  const [mode, setModeState] = useState<ThemeMode>('light');
+  useLayoutEffect(() => {
+    setModeState(document.documentElement.classList.contains('dark') ? 'dark' : 'light');
   }, []);
 
-  useEffect(() => {
-    const media = window.matchMedia('(prefers-color-scheme: dark)');
-    const onChange = (e: MediaQueryListEvent) => setSystemDark(e.matches);
+  const setMode = useCallback((next: ThemeMode) => {
+    document.documentElement.classList.toggle('dark', next === 'dark');
+    setModeState(next);
+    if (!hasStoredConsentForCategory('preferences')) return;
     try {
-      media.addEventListener('change', onChange);
-      return () => media.removeEventListener('change', onChange);
+      localStorage.setItem('np_style', next === 'dark' ? 'midnight' : 'aurora');
+      localStorage.setItem('theme', next);
     } catch {
-      // Safari legacy
-      // @ts-ignore
-      media.addListener(onChange);
-      // @ts-ignore
-      return () => media.removeListener(onChange);
+      console.warn('[theme] Preference storage unavailable; the selection applies to this visit.');
     }
   }, []);
 
-  const isDark = useMemo(() => {
-    if (mode === 'dark') return true;
-    if (mode === 'light') return false;
-    return systemDark;
-  }, [mode, systemDark]);
-
-  useEffect(() => {
-    // Apply theme to document
-    document.documentElement.classList.toggle('dark', isDark);
-    try {
-      if (hasStoredConsentForCategory('preferences')) localStorage.setItem('theme', mode);
-      else localStorage.removeItem('theme');
-    } catch {}
-  }, [isDark, mode]);
-
-  const toggleTheme = () => setMode(isDark ? 'light' : 'dark');
-
-  const value = useMemo(() => ({ isDark, mode, toggleTheme, setMode }), [isDark, mode]);
+  const value = useMemo(() => ({
+    isDark: mode === 'dark', mode, setMode, toggleTheme: () => setMode(mode === 'dark' ? 'light' : 'dark'),
+  }), [mode, setMode]);
 
   return (
     <ThemeContext.Provider value={value}>

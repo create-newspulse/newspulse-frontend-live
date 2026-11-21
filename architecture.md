@@ -52,6 +52,8 @@ Production is identified using `VERCEL_ENV=production` or the explicit `NEWS_PUL
 - Public-version watching, route-language synchronization, SEO alternates, shared navigation, Firebase foreground messaging, and analytics integrations.
 - A reporter-auth provider around protected reporter pages.
 
+Aurora is the public default in all editions. [The document](./pages/_document.tsx) restores a consented `np_style` choice (or the legacy `theme` value) before paint; `system`, device settings and published presets do not opt readers into Midnight. [ThemeContext](./utils/ThemeContext.tsx) keeps both style controls and the root `dark` class aligned, and writes preferences only on an explicit selection with preference consent.
+
 [The shared BrandTopHeader](./src/components/layout/BrandTopHeader.tsx) is mounted once by [the application shell](./pages/_app.tsx) on its existing category/header routes, topic archives and Sponsored Content archive. It owns the logo, navigation drawer, route-based language selection and existing style controls; archive pages retain their own title, description, cards and pagination below it.
 
 [pages/_document.tsx](./pages/_document.tsx) owns the document shell and includes one static `google-adsense-account` meta tag in the global head for AdSense site verification. This tag does not load advertising scripts or enable Auto Ads; existing advertising consent gates remain unchanged. Page-level layouts and content remain in the individual page/component trees.

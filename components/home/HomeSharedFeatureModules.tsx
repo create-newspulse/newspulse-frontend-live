@@ -118,7 +118,7 @@ function surfaceStyle(theme: SharedTheme): React.CSSProperties {
 
 function Surface({ theme = DEFAULT_SHARED_THEME, className, children }: { theme?: SharedTheme; className?: string; children: React.ReactNode }) {
   return (
-    <div className={classNames('rounded-3xl border shadow-[0_18px_70px_-60px_rgba(0,0,0,0.40)]', className)} style={surfaceStyle(theme)}>
+    <div data-np-home-palette={theme.mode} className={classNames('rounded-3xl border shadow-[0_18px_70px_-60px_rgba(0,0,0,0.40)]', className)} style={surfaceStyle(theme)}>
       {children}
     </div>
   );
@@ -435,9 +435,7 @@ export function HomeSpotlightCarousel({
         className="border-b px-4 py-4 sm:px-5"
         style={{
           borderColor: theme.border,
-          background: theme.mode === 'dark'
-            ? 'linear-gradient(135deg, rgba(56,189,248,0.10), rgba(244,114,182,0.09) 65%, transparent 100%)'
-            : 'linear-gradient(135deg, rgba(37,99,235,0.08), rgba(244,114,182,0.08) 65%, rgba(255,255,255,0.76) 100%)',
+          background: 'var(--np-spotlight-bg, linear-gradient(135deg, rgba(37,99,235,0.08), rgba(244,114,182,0.08) 65%, rgba(255,255,255,0.76) 100%))',
         }}
       >
         <div className="flex items-center justify-between gap-4">

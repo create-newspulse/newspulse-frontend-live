@@ -3,9 +3,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Check, ChevronDown, Menu } from 'lucide-react';
 import { useI18n } from '../../i18n/LanguageProvider';
 import { usePublicSettings } from '../../context/PublicSettingsContext';
-import { hasStoredConsentForCategory } from '../../consent/cookieConsent';
 import { useLanguage, type NewsPulseLanguage } from '../../../utils/LanguageContext';
-import { useTheme, type ThemeMode } from '../../../utils/ThemeContext';
+import { PUBLIC_STYLES, publicPalette, PublicStyleName, useTheme } from '../../../utils/ThemeContext';
 import { usePublicFounderToggles } from '../../../hooks/usePublicFounderToggles';
 import HeaderLogo from './HeaderLogo';
 import SharedMobileNavigationDrawer from './SharedMobileNavigationDrawer';
@@ -15,80 +14,13 @@ export type BrandTopHeaderProps = {
   onMenuClick?: () => void;
 };
 
-const STYLE_STORAGE_KEY = 'np_style';
-
-type HeaderThemeId = 'aurora' | 'midnight';
-type HeaderTheme = {
-  id: HeaderThemeId;
-  name: string;
-  mode: ThemeMode;
-  surface: string;
-  surface2: string;
-  border: string;
-  text: string;
-  sub: string;
-  muted: string;
-  chipHover: string;
-  accent: string;
-};
-
-const HEADER_THEMES: HeaderTheme[] = [
-  {
-    id: 'aurora',
-    name: 'Aurora',
-    mode: 'light',
-    surface: 'rgba(255,255,255,0.92)',
-    surface2: 'rgba(255,255,255,0.72)',
-    border: 'rgba(15,23,42,0.10)',
-    text: '#0b1220',
-    sub: 'rgba(15,23,42,0.72)',
-    muted: 'rgba(15,23,42,0.52)',
-    chipHover: 'rgba(15,23,42,0.075)',
-    accent: '#2563eb',
-  },
-  {
-    id: 'midnight',
-    name: 'Midnight',
-    mode: 'dark',
-    surface: 'rgba(15,23,42,0.92)',
-    surface2: 'rgba(255,255,255,0.08)',
-    border: 'rgba(255,255,255,0.13)',
-    text: 'rgba(255,255,255,0.96)',
-    sub: 'rgba(255,255,255,0.72)',
-    muted: 'rgba(255,255,255,0.58)',
-    chipHover: 'rgba(255,255,255,0.11)',
-    accent: '#38bdf8',
-  },
-];
+type HeaderTheme = typeof publicPalette;
 
 const HEADER_LANG_OPTIONS: Array<{ code: NewsPulseLanguage; label: string }> = [
   { code: 'gu', label: 'Gujarati' },
   { code: 'hi', label: 'Hindi' },
   { code: 'en', label: 'English' },
 ];
-
-function getHeaderTheme(themeId: string): HeaderTheme {
-  return HEADER_THEMES.find((theme) => theme.id === themeId) || HEADER_THEMES[0];
-}
-
-function readSavedStyleId(): HeaderThemeId | null {
-  if (typeof window === 'undefined') return null;
-  if (!hasStoredConsentForCategory('preferences')) return null;
-  try {
-    const raw = String(window.localStorage.getItem(STYLE_STORAGE_KEY) || '').trim().toLowerCase();
-    return raw === 'midnight' ? 'midnight' : raw === 'aurora' ? 'aurora' : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeSavedStyleId(themeId: HeaderThemeId) {
-  if (typeof window === 'undefined') return;
-  if (!hasStoredConsentForCategory('preferences')) return;
-  try {
-    window.localStorage.setItem(STYLE_STORAGE_KEY, themeId);
-  } catch {}
-}
 
 function normalizeLangCode(raw: unknown): NewsPulseLanguage | null {
   const value = String(raw || '').trim().toLowerCase();
@@ -179,11 +111,11 @@ function HeaderLanguagePicker({ theme }: { theme: HeaderTheme }) {
   );
 }
 
-function HeaderThemePicker({ theme, themeId, setThemeId }: { theme: HeaderTheme; themeId: HeaderThemeId; setThemeId: (themeId: HeaderThemeId) => void }) {
+function HeaderThemePicker({ theme }: { theme: HeaderTheme }) {
+  const { mode, setMode } = useTheme();
   const { t } = useI18n();
   const [open, setOpen] = React.useState(false);
   const wrapRef = React.useRef<HTMLDivElement | null>(null);
-  const current = getHeaderTheme(themeId);
 
   React.useEffect(() => {
     if (!open) return;
@@ -208,8 +140,8 @@ function HeaderThemePicker({ theme, themeId, setThemeId }: { theme: HeaderTheme;
       >
         <span className="hidden md:inline">{t('common.style')}</span>
         <span className="inline-flex min-w-0 items-center gap-2">
-          <span className="h-3.5 w-3.5 shrink-0 rounded-full border" style={{ background: current.accent, borderColor: theme.border }} />
-          <span className="truncate font-extrabold">{current.name}</span>
+          <span className="h-3.5 w-3.5 shrink-0 rounded-full border" style={{ background: theme.accent, borderColor: theme.border }} />
+          <span className="truncate font-extrabold"><PublicStyleName /></span>
           <ChevronDown className="h-4 w-4 shrink-0" style={{ color: theme.muted }} />
         </span>
       </button>
@@ -225,14 +157,15 @@ function HeaderThemePicker({ theme, themeId, setThemeId }: { theme: HeaderTheme;
             style={{ background: theme.surface, borderColor: theme.border }}
           >
             <div className="p-2">
-              {HEADER_THEMES.map((option) => {
-                const active = option.id === themeId;
+              {PUBLIC_STYLES.map((option) => {
+                const active = option.mode === mode;
                 return (
                   <button
                     key={option.id}
                     type="button"
+                    aria-pressed={active}
                     onClick={() => {
-                      setThemeId(option.id);
+                      setMode(option.mode);
                       setOpen(false);
                     }}
                     className="flex w-full items-center justify-between gap-3 rounded-2xl border px-3 py-2 text-sm font-semibold"
@@ -259,24 +192,9 @@ function HeaderThemePicker({ theme, themeId, setThemeId }: { theme: HeaderTheme;
 }
 
 export default function BrandTopHeader({ showMenuButton = true, onMenuClick }: BrandTopHeaderProps) {
-  const { setMode } = useTheme();
+  const theme = publicPalette;
   const { toggles: founderToggles } = usePublicFounderToggles();
   const [menuOpen, setMenuOpen] = React.useState(false);
-  const [themeId, setThemeIdState] = React.useState<HeaderThemeId>('aurora');
-  const theme = React.useMemo(() => getHeaderTheme(themeId), [themeId]);
-
-  React.useEffect(() => {
-    const saved = readSavedStyleId();
-    if (!saved) return;
-    setThemeIdState(saved);
-    setMode(getHeaderTheme(saved).mode);
-  }, [setMode]);
-
-  const setThemeId = React.useCallback((next: HeaderThemeId) => {
-    setThemeIdState(next);
-    writeSavedStyleId(next);
-    setMode(getHeaderTheme(next).mode);
-  }, [setMode]);
 
   const openMenu = React.useCallback(() => {
     if (onMenuClick) {
@@ -309,7 +227,7 @@ export default function BrandTopHeader({ showMenuButton = true, onMenuClick }: B
 
           <div className="ml-auto flex min-w-0 basis-full items-center justify-end gap-2 sm:basis-auto">
             <HeaderLanguagePicker theme={theme} />
-            <HeaderThemePicker theme={theme} themeId={themeId} setThemeId={setThemeId} />
+            <HeaderThemePicker theme={theme} />
           </div>
         </div>
       </div>

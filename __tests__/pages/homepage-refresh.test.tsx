@@ -1,7 +1,8 @@
 import React from 'react';
 import { act, render, renderHook, screen } from '@testing-library/react';
 import { renderToString } from 'react-dom/server';
-import HomePage, { getServerSideProps } from '../../pages/index';
+import PublicHomePage, { getServerSideProps } from '../../pages/index';
+import { ThemeProvider } from '../../utils/ThemeContext';
 import { PublicSettingsProvider, usePublicSettings } from '../../src/context/PublicSettingsContext';
 import { fetchPublicSettings, fetchPublishedPublicSettings, normalizePublicSettings } from '../../src/lib/publicSettings';
 import { dispatchPublicDataRefresh } from '../../lib/publicDataRefresh';
@@ -48,6 +49,9 @@ jest.mock('../../lib/getMessages', () => ({ getMessages: jest.fn(async () => ({}
 jest.mock('../../lib/publicSponsoredFeatureSource', () => ({ normalizeSponsoredFeatureLang: (lang: string) => lang, resolvePublicHomepageSponsoredFeature: jest.fn(async () => ({ feature: null })) }));
 
 const props = { messages: {}, seo: { canonicalUrl: '/' }, initialHomepageSponsoredFeature: null, initialTopStory: null, initialFreshStories: [] };
+function HomePage(props: React.ComponentProps<typeof PublicHomePage>) {
+  return <ThemeProvider><PublicHomePage {...props} /></ThemeProvider>;
+}
 const published = (version = '426', appPromo = false) => normalizePublicSettings({
   version,
   published: {
