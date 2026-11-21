@@ -1,9 +1,9 @@
 import { getArticleEditionLocale, isArticleId } from './articleSlugs';
 import { getLocalizedArticleFields, STRICT_LOCALE_POLICY, type RouteLocale } from './localizedArticleFields';
 import { getPublicApiBaseUrl } from './publicApiBase';
-import { parsePublicNewsArticle, parsePublicNewsList, type Article } from './publicNewsApi';
+import { parsePublicNewsArticle, type Article } from './publicNewsApi';
 import { withPublicReadDeadline } from './publicReadDeadline';
-import { getArticleAlternates, isIndexablePublishedArticle, type SeoAlternate } from './seo';
+import { getArticleAlternates, type SeoAlternate } from './seo';
 
 const LOCALES: RouteLocale[] = ['en', 'hi', 'gu'];
 
@@ -47,29 +47,4 @@ export async function fetchArticleAlternates(article: Article, siteUrl: string, 
     }
   }));
   return getArticleAlternates(article, siteUrl, editions.filter((edition): edition is Article => edition !== null));
-}
-
-export async function fetchSitemapArticles(): Promise<{ articles: Article[]; complete: boolean }> {
-  const base = getPublicApiBaseUrl().replace(/\/+$/, '');
-  const results = await Promise.all(LOCALES.map(async lang => {
-    try {
-      if (!base) throw new Error('Public backend is not configured');
-      return await withPublicReadDeadline(8000, async signal => {
-        const query = new URLSearchParams({ limit: '500', strictLocale: '1', lang, language: lang });
-        const response = await fetch(`${base}/api/public/news?${query}`, {
-          method: 'GET', headers: { Accept: 'application/json' }, signal,
-        });
-        if (!response.ok) throw new Error('Public sitemap feed unavailable');
-        const read = parsePublicNewsList(await response.json());
-        signal.throwIfAborted();
-        if (!read) throw new Error('Invalid public sitemap feed');
-        return read.items.filter(article => isIndexablePublishedArticle(article)
-          && getLocalizedArticleFields(article, lang, STRICT_LOCALE_POLICY).isVisible);
-      });
-    } catch {
-      console.error('[seo] Sitemap locale unavailable', { locale: lang });
-      return null;
-    }
-  }));
-  return { articles: results.flatMap(items => items || []), complete: results.every(items => items !== null) };
 }

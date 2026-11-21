@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
-import { fetchSitemapArticles } from '../../lib/articleSeo.server';
-import { absolutePublicUrl, escapeXml, getArticleAlternates, getSitemapLastModified, resolvePublicSiteUrl } from '../../lib/seo';
+import { absolutePublicUrl, escapeXml, resolvePublicSiteUrl } from '../../lib/seo';
+import { fetchSitemapStories, setSitemapCache, sitemapUnavailable, SITEMAP_LOCALES, type SitemapEdition } from '../../lib/sitemap.server';
 
 const SITEMAP_FRESH_SECONDS = 300;
 const SITEMAP_STALE_SECONDS = 600;
@@ -14,12 +14,16 @@ const STATIC_PUBLIC_PATHS = [
   '/international',
   '/business',
   '/science-technology',
+  '/tech-gadgets',
   '/sports',
   '/lifestyle',
   '/glamour',
   '/web-stories',
   '/viral-videos',
   '/editorial',
+  '/faith-culture',
+  '/pulse-dialogue',
+  '/sponsored-content',
   '/youth-pulse',
   '/inspiration-hub',
   '/community-reporter',
@@ -39,76 +43,56 @@ type SitemapCacheEntry = {
   xml: string;
   generatedAt: number;
   nextRetryAt: number;
-  complete: boolean;
 };
 
 const sitemapCache = new Map<string, SitemapCacheEntry>();
+const refreshing = new Map<string, Promise<SitemapCacheEntry | null>>();
 
-function getNowMs(): number {
-  return Date.now();
-}
-
-function isFresh(entry: SitemapCacheEntry, nowMs: number): boolean {
-  return nowMs - entry.generatedAt < SITEMAP_FRESH_SECONDS * 1000;
-}
-
-function isStaleButUsable(entry: SitemapCacheEntry, nowMs: number): boolean {
+function usable(entry: SitemapCacheEntry, nowMs: number): boolean {
   return nowMs - entry.generatedAt < (SITEMAP_FRESH_SECONDS + SITEMAP_STALE_SECONDS) * 1000;
 }
 
-function buildSitemapXml(articles: any[], siteUrl: string): string {
+function buildSitemapXml(stories: SitemapEdition[][], siteUrl: string): string {
   const entries = new Map<string, string>();
-
-  for (const path of STATIC_PUBLIC_PATHS) {
-    const loc = absolutePublicUrl(path, siteUrl);
-    if (loc) entries.set(loc, '');
-  }
-
-  for (const article of articles) {
-    const lastmod = getSitemapLastModified(article);
-    for (const alternate of getArticleAlternates(article, siteUrl)) {
-      if (alternate.hrefLang === 'x-default') continue;
-      if (!entries.has(alternate.href)) entries.set(alternate.href, lastmod);
+  function addGroup(editions: Pick<SitemapEdition, 'locale' | 'href' | 'lastmod'>[]) {
+    const defaultEdition = editions.find(item => item.locale === 'en') || editions[0];
+    const links = [...editions, { locale: 'x-default', href: defaultEdition.href }]
+      .map(({ locale, href }) => `    <xhtml:link rel="alternate" hreflang="${locale}" href="${escapeXml(href)}" />`).join('\n');
+    for (const { href, lastmod } of editions) {
+      entries.set(href, `  <url>\n    <loc>${escapeXml(href)}</loc>${lastmod ? `\n    <lastmod>${escapeXml(lastmod)}</lastmod>` : ''}\n${links}\n  </url>`);
     }
   }
-
-  const urls = Array.from(entries.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([loc, lastmod]) => `  <url>\n    <loc>${escapeXml(loc)}</loc>${lastmod ? `\n    <lastmod>${escapeXml(lastmod)}</lastmod>` : ''}\n  </url>`)
-    .join('\n');
-
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
+  for (const path of STATIC_PUBLIC_PATHS) {
+    addGroup(SITEMAP_LOCALES.map(locale => ({
+      locale, lastmod: '', href: absolutePublicUrl(locale === 'en' ? path : `/${locale}${path === '/' ? '' : path}`, siteUrl),
+    })));
+  }
+  stories.forEach(addGroup);
+  const urls = Array.from(entries.keys()).sort().map(loc => entries.get(loc)).join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${urls}\n</urlset>\n`;
 }
 
-async function getSitemapXml(siteUrl: string): Promise<SitemapCacheEntry> {
-  const nowMs = getNowMs();
+async function getSitemapXml(siteUrl: string): Promise<SitemapCacheEntry | null> {
+  const nowMs = Date.now();
   const cached = sitemapCache.get(siteUrl);
-  if (cached && isFresh(cached, nowMs)) return cached;
-  if (cached && cached.nextRetryAt > nowMs && isStaleButUsable(cached, nowMs)) return cached;
-
-  const { articles, complete } = await fetchSitemapArticles();
-  if (!complete && cached && isStaleButUsable(cached, nowMs)) {
-    cached.nextRetryAt = nowMs + SITEMAP_RETRY_AFTER_ERROR_SECONDS * 1000;
+  if (cached && usable(cached, nowMs) && (nowMs - cached.generatedAt < SITEMAP_FRESH_SECONDS * 1000 || nowMs < cached.nextRetryAt)) {
     return cached;
   }
-
-  const entry: SitemapCacheEntry = {
-    xml: buildSitemapXml(articles, siteUrl),
-    generatedAt: nowMs,
-    nextRetryAt: complete ? 0 : nowMs + SITEMAP_RETRY_AFTER_ERROR_SECONDS * 1000,
-    complete,
-  };
-  sitemapCache.set(siteUrl, entry);
-  return entry;
-}
-
-function setSitemapCacheHeaders(res: NextApiResponse, complete: boolean) {
-  const maxAge = complete ? SITEMAP_FRESH_SECONDS : SITEMAP_RETRY_AFTER_ERROR_SECONDS;
-  const stale = complete ? SITEMAP_STALE_SECONDS : SITEMAP_RETRY_AFTER_ERROR_SECONDS;
-  const value = `public, s-maxage=${maxAge}, stale-while-revalidate=${stale}`;
-  res.setHeader('Cache-Control', value);
-  res.setHeader('CDN-Cache-Control', value);
-  res.setHeader('Vercel-CDN-Cache-Control', value);
+  const pending = refreshing.get(siteUrl);
+  if (pending) return pending;
+  const refresh = (async () => {
+    const stories = await fetchSitemapStories(siteUrl, 25000);
+    if (stories === null) {
+      if (!cached || !usable(cached, Date.now())) return null;
+      cached.nextRetryAt = Date.now() + SITEMAP_RETRY_AFTER_ERROR_SECONDS * 1000;
+      return cached;
+    }
+    const entry = { xml: buildSitemapXml(stories, siteUrl), generatedAt: Date.now(), nextRetryAt: 0 };
+    sitemapCache.set(siteUrl, entry);
+    return entry;
+  })().finally(() => refreshing.delete(siteUrl));
+  refreshing.set(siteUrl, refresh);
+  return refresh;
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -119,7 +103,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const siteUrl = resolvePublicSiteUrl(req);
   const sitemap = await getSitemapXml(siteUrl);
+  if (!sitemap) return sitemapUnavailable(res);
   res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-  setSitemapCacheHeaders(res, sitemap.complete);
+  const remaining = SITEMAP_FRESH_SECONDS - Math.floor((Date.now() - sitemap.generatedAt) / 1000);
+  setSitemapCache(res, remaining > 0 ? `public, s-maxage=${remaining}, stale-while-revalidate=${SITEMAP_STALE_SECONDS}` : 'no-store');
   res.status(200).send(sitemap.xml);
 }
