@@ -33,7 +33,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         method: 'GET', headers: { Accept: 'application/json' }, signal,
       });
       if (!upstream.ok) throw new Error(`Legacy trending request failed (${upstream.status})`);
-      // Retain the existing array/{items} contract and its fixed-shortcut fallback.
       return normalizeTrendingTopics(await upstream.json()).map(({ source, ...topic }) => topic);
     }),
   ]);
@@ -48,8 +47,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     })) : [];
   const legacy = legacyResult.status === 'fulfilled' && legacyResult.value.length
     ? legacyResult.value : DEFAULT_TRENDING_TOPICS;
+  const items = mergeTrendingTopics(editorial, legacy);
   return res.status(200).json({
-    items: mergeTrendingTopics(editorial, legacy),
+    items,
+    // A later editorial refresh can unhide a shortcut while its upstream is offline.
+    ...(items.filter((topic) => !topic.source).length < legacy.length ? { shortcutSnapshot: legacy } : {}),
     ...(editorialResult.status === 'rejected' ? { editorialReadError: true } : {}),
+    ...(legacyResult.status === 'rejected' ? { legacyReadError: true } : {}),
   });
 }

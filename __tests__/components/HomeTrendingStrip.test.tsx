@@ -114,6 +114,23 @@ describe.each(['en', 'hi', 'gu'] as const)('%s mounted Trending lifecycle', (lan
     expect(interval).not.toHaveBeenCalled();
   });
 
+  test('a shortcut outage keeps an exact override even when a fresh editorial selection unmasks it', async () => {
+    const exact = '/weather?station=GJ%2F01#now';
+    const shortcuts = DEFAULT_TRENDING_TOPICS.map((row) => row.key === 'weather' ? { ...row, href: exact } : row);
+    fetchMock.mockResolvedValue(jsonResponse({
+      items: [editorial(lang, 'weather'), ...shortcuts.filter((topic) => topic.key !== 'weather')], shortcutSnapshot: shortcuts,
+    }));
+    const { container } = render(<LanguageProvider initialLang={lang}><HomeTrendingStrip /></LanguageProvider>);
+    expect((await screen.findByRole('link', { name: topicNames[lang] })).getAttribute('href')).toBe('/topic/weather');
+    fetchMock.mockResolvedValue(jsonResponse({ items: [editorial(lang), ...DEFAULT_TRENDING_TOPICS], legacyReadError: true }));
+    await act(async () => { versionEvent('shortcut-outage'); });
+    const links = Array.from(container.querySelectorAll('a'));
+    expect(links.map((link) => link.getAttribute('href'))).toEqual(['/topic/navratri-2026', ...shortcuts.map((row) => row.href)]);
+    const weather = screen.getByRole('link', { name: getMessagesForLang(lang).trending.weather });
+    fireEvent.click(weather);
+    expect(mockRouter.push).toHaveBeenCalledWith(exact);
+  });
+
   test.each(['network', '503', 'malformed', 'editorial-fallback', 'timeout'])('%s retains the previous valid list; genuine empty can remove editorial chips', async (failure) => {
     render(<LanguageProvider initialLang={lang}><HomeTrendingStrip /></LanguageProvider>);
     await screen.findByRole('link', { name: topicNames[lang] });

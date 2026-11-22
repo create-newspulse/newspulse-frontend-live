@@ -16,9 +16,37 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
+const destinationSources = new Set(['approved-policy', 'founder-override', 'legacy-unclassified', 'search-fallback']);
+const backendColors = new Map<string, TrendingTopic['colorKey']>([
+  ['blue', 'trending'], ['red', 'breaking'], ['green', 'sports'], ['yellow', 'gold'], ['orange', 'fuel'],
+  ['sky', 'weather'], ['purple', 'gujarat'], ['emerald', 'markets'], ['indigo', 'tech'], ['teal', 'education'],
+]);
+
+function isPublicPath(value: unknown): value is string {
+  return typeof value === 'string' && value.startsWith('/') && !value.startsWith('//')
+    && value === value.trim() && !/[\\\u0000-\u001f\u007f]/u.test(value);
+}
+
 function normalizeItems(payload: unknown): unknown[] {
   if (Array.isArray(payload)) return payload;
   if (isRecord(payload)) {
+    if (payload.ok === false || payload.success === false) throw new Error('Unsuccessful trending response');
+    if ('data' in payload) {
+      const data = payload.data;
+      // Old/cached envelopes contain stored hrefs, not authoritative public destinations.
+      if (payload.success !== true || !isRecord(data) || data.source !== 'db'
+        || data.destinationPolicyVersion !== 1 || !Array.isArray(data.items)) {
+        throw new Error('Trending shortcut destination policy unavailable');
+      }
+      return data.items.map((row: unknown) => {
+        if (!isRecord(row) || typeof row.destinationSource !== 'string' || !destinationSources.has(row.destinationSource)
+          || !isPublicPath(row.publicHref) || typeof row.key !== 'string' || !row.key.trim()
+          || typeof row.label !== 'string' || !row.label.trim() || typeof row.colorKey !== 'string' || !row.colorKey.trim()) {
+          throw new Error('Invalid trending shortcut destination contract');
+        }
+        return { key: row.key, label: row.label, href: row.publicHref, colorKey: backendColors.get(row.colorKey) ?? row.colorKey };
+      });
+    }
     const items = payload.items;
     if (Array.isArray(items)) return items;
   }
@@ -43,7 +71,7 @@ function normalizeTopic(raw: unknown): TrendingTopic | null {
 
   // If backend doesn't provide a valid href, route to search temporarily.
   // (UI/route still works and avoids a "dead" chip.)
-  const href = rawHref && rawHref.startsWith('/') ? rawHref : toSearchHref(label);
+  const href = isPublicPath(rawHref) ? rawHref : toSearchHref(label);
   const colorKey = DEFAULT_TRENDING_TOPICS.find((topic) => topic.colorKey === rawColorKey)?.colorKey
     ?? (rawColorKey === 'trending' ? 'trending' : '__default');
 
@@ -98,6 +126,8 @@ export function getTrendingTopicsRequestUrl(lang: RouteLocale = 'en'): string {
 export type TrendingTopicsRead = {
   items: TrendingTopic[];
   authoritative: boolean;
+  legacyOnlyFallback?: true;
+  shortcutSnapshot?: TrendingTopic[];
 };
 
 export async function readTrendingTopics(lang: RouteLocale = 'en', signal?: AbortSignal): Promise<TrendingTopicsRead> {
@@ -109,14 +139,27 @@ export async function readTrendingTopics(lang: RouteLocale = 'en', signal?: Abor
       if (!res.ok) throw new Error(`Trending request failed (${res.status})`);
       const json: unknown = await res.json();
       if (isRecord(json) && (json.ok === false || json.success === false
-        || ('editorialReadError' in json && typeof json.editorialReadError !== 'boolean'))) {
+        || ('editorialReadError' in json && typeof json.editorialReadError !== 'boolean')
+        || ('legacyReadError' in json && typeof json.legacyReadError !== 'boolean'))) {
         throw new Error('Invalid trending response');
       }
-      if (normalizeItems(json).some((item) => !normalizeTopic(item))) throw new Error('Invalid trending item');
-      const topics = normalizeTrendingTopics(json);
-      const authoritative = !isRecord(json) || json.editorialReadError !== true;
-      if (!authoritative) console.warn('[trending-topics] Editorial topics unavailable; shortcuts are fallback only');
-      return { items: topics.length ? topics : DEFAULT_TRENDING_TOPICS, authoritative };
+      const items = normalizeItems(json);
+      if (items.some((item) => !normalizeTopic(item))) throw new Error('Invalid trending item');
+      const topics = normalizeTrendingTopics(items);
+      let shortcutSnapshot: TrendingTopic[] | undefined;
+      if (isRecord(json) && 'shortcutSnapshot' in json) {
+        const snapshot = json.shortcutSnapshot;
+        if (!Array.isArray(snapshot) || !snapshot.every((row) => isRecord(row) && !row.source && normalizeTopic(row))) {
+          throw new Error('Invalid trending shortcut snapshot');
+        }
+        shortcutSnapshot = normalizeTrendingTopics(snapshot);
+      }
+      const editorialFailed = isRecord(json) && json.editorialReadError === true;
+      const legacyFailed = isRecord(json) && json.legacyReadError === true;
+      if (editorialFailed || legacyFailed) console.warn('[trending-topics] Trending data partially unavailable');
+      return { items: topics.length ? topics : DEFAULT_TRENDING_TOPICS, authoritative: !editorialFailed && !legacyFailed,
+        ...(shortcutSnapshot ? { shortcutSnapshot } : {}),
+        ...(legacyFailed && !editorialFailed ? { legacyOnlyFallback: true } : {}) };
     }, signal);
   } catch (error) {
     if (!signal?.aborted) console.warn('[trending-topics] Using default shortcuts', error);

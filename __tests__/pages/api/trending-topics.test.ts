@@ -60,6 +60,59 @@ test('an empty editorial response leaves the legacy list unchanged', async () =>
   expect((await invoke()).json).toHaveBeenCalledWith({ items: DEFAULT_TRENDING_TOPICS });
 });
 
+const colors = ['red', 'green', 'yellow', 'orange', 'sky', 'purple', 'emerald', 'indigo', 'teal'];
+const rawItems = [
+  { key: 'trending', label: 'Trending', href: '/trending', colorKey: 'blue' },
+  ...DEFAULT_TRENDING_TOPICS.map(({ key, label }, i) => ({ key, label, href: `/${key}`, colorKey: colors[i] })),
+];
+const policyItems = rawItems.map((row, i) => ({
+  ...row, enabled: true, order: i, publicHref: i ? DEFAULT_TRENDING_TOPICS[i - 1].href : '/trending',
+  destinationSource: i ? 'approved-policy' : 'legacy-unclassified',
+}));
+const envelope = (items: unknown[], destinationPolicyVersion = 1, source = 'db') =>
+  ({ success: true, data: { items, source, destinationPolicyVersion } });
+
+test.each(['en', 'hi', 'gu'] as const)('%s policy envelope keeps the approved nine; passing raw hrefs would change seven', async (lang) => {
+  fetchMock.mockImplementation(async (url) => String(url).includes('/api/public/topics?')
+    ? jsonResponse({ ok: true, lang, items: [topicFixture(lang)] }) : jsonResponse(envelope(policyItems)));
+  const body = (await invoke(lang)).json.mock.calls[0][0];
+  expect(body.items[0]).toMatchObject({ source: 'editorial', href: '/topic/navratri-2026', label: topicNames[lang] });
+  expect(body.items.slice(1)).toEqual(DEFAULT_TRENDING_TOPICS);
+  expect(body.items.slice(1).map((item: { href: string }) => item.href)).toEqual([
+    '/breaking', '/sports', '/business', '/business', '/national', '/regional/gujarat', '/business', '/science-technology', '/youth-pulse',
+  ]);
+  expect(body.legacyReadError).toBeUndefined();
+  expect(console.warn).not.toHaveBeenCalled();
+});
+
+test('selection order, a custom topic and an exact override take precedence without using the raw URL', async () => {
+  const custom = { ...policyItems[2], key: 'custom', label: 'Local Desk', publicHref: '/local', destinationSource: 'legacy-unclassified' };
+  const override = { ...policyItems[5], publicHref: '/hi/weather?place=GJ%2F01#live', destinationSource: 'founder-override' };
+  fetchMock.mockImplementation(async (url) => String(url).includes('/api/public/topics?')
+    ? jsonResponse({ ok: true, lang: 'hi', items: [] }) : jsonResponse(envelope([custom, override])));
+  expect((await invoke('hi')).json).toHaveBeenCalledWith({ items: [
+    { key: 'custom', label: 'Local Desk', href: '/local', colorKey: 'sports' },
+    { key: 'weather', label: 'Weather', href: override.publicHref, colorKey: 'weather' },
+  ] });
+});
+
+test.each([
+  ['old Backend on db', { success: true, data: { items: rawItems, source: 'db' } }],
+  ['newer unknown version', envelope(policyItems, 2)], ['offline defaults', envelope(policyItems, 1, 'default')],
+  ['unresolved rows', envelope(rawItems)], ['mixed rows', envelope([policyItems[1], rawItems[2]])],
+  ['invalid explicit URL', envelope([{ ...policyItems[5], destinationSource: 'founder-override', publicHref: '//bad.invalid' }])],
+  ['unknown decision', envelope([{ ...policyItems[5], destinationSource: 'db' }])],
+  ['error envelope', { ...envelope(policyItems), success: false }],
+])('%s preserves fresh editorial selections with non-authoritative approved fallback links', async (_name, payload) => {
+  fetchMock.mockImplementation(async (url) => String(url).includes('/api/public/topics?')
+    ? jsonResponse({ ok: true, lang: 'en', items: [topicFixture()] }) : jsonResponse(payload));
+  const body = (await invoke()).json.mock.calls[0][0];
+  expect(body.legacyReadError).toBe(true);
+  expect(body.items[0].href).toBe('/topic/navratri-2026');
+  expect(body.items.slice(1)).toEqual(DEFAULT_TRENDING_TOPICS);
+  expect(console.warn).toHaveBeenCalled();
+});
+
 test.each(['reject', '404', '503', 'malformed', 'too-many'])('editorial %s failure cannot empty or replace the legacy strip', async (failure) => {
   fetchMock.mockImplementation(async (input) => {
     if (!String(input).includes('/api/public/topics?')) return jsonResponse(DEFAULT_TRENDING_TOPICS);
@@ -97,6 +150,7 @@ test('dedupes editorial keys/hrefs and lets editorial beat matching legacy entri
   expect(body.items[0]).toMatchObject({ key: 'sports', source: 'editorial' });
   expect(body.items.some((item: { key: string }) => item.key === 'alias')).toBe(false);
   expect(body.items.filter((item: { href: string }) => item.href === '/business')).toHaveLength(3);
+  expect(body.shortcutSnapshot.find((item: { key: string }) => item.key === 'sports').href).toBe('/sports');
 });
 
 test('parallel reads finish on their deadline and preserve the successful legacy result', async () => {
@@ -127,7 +181,7 @@ test('two stalled upstreams share a four-second window, not serial deadlines', a
   fetchMock.mockImplementation(() => new Promise(() => {}));
   const pending = invoke();
   await jest.advanceTimersByTimeAsync(EDITORIAL_TOPICS_TIMEOUT_MS);
-  expect((await pending).json).toHaveBeenCalledWith({ items: DEFAULT_TRENDING_TOPICS, editorialReadError: true });
+  expect((await pending).json).toHaveBeenCalledWith({ items: DEFAULT_TRENDING_TOPICS, editorialReadError: true, legacyReadError: true });
   expect(fetchMock).toHaveBeenCalledTimes(2);
   expect(fetchMock.mock.calls.every(([, init]) => init?.signal?.aborted)).toBe(true);
 });
