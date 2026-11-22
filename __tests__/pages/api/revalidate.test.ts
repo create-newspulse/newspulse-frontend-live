@@ -34,7 +34,10 @@ beforeEach(() => {
     ...process.env, REVALIDATE_SECRET: secret, NEXT_REVALIDATE_SECRET: '',
   });
 });
-afterEach(() => jest.restoreAllMocks());
+afterEach(() => {
+  jest.restoreAllMocks();
+  jest.useRealTimers();
+});
 
 describe('canonical category revalidation', () => {
   test.each([
@@ -97,25 +100,25 @@ describe('backend explicit-path revalidation', () => {
   ];
   const backendAuth = { query: {}, headers: { 'x-revalidate-secret': secret } };
   const categoryPaths = ['/business', '/science-technology', '/tech-gadgets', '/regional/gujarat'];
+  const skipped = [...backendPaths, ...localized(`/news/${articleId}`)];
 
-  test.each(categoryPaths)('%s explicit paths preserve EN/HI/GU without category or state helpers', async (categoryPath) => {
+  test.each(categoryPaths)('%s invalidates each localized listing, not live article reads', async (categoryPath) => {
     const paths = [...backendPaths, ...localized(categoryPath)];
-    const expected = [...paths, ...localized(`/news/${articleId}`)];
+    const expected = localized(categoryPath);
     const res = await invoke({ ...backendPayload, paths }, backendAuth);
 
     expect(res.revalidate.mock.calls.map(([path]) => path)).toEqual(expected);
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith({ ok: true, revalidated: expected, failed: [] });
+    expect(res.json).toHaveBeenCalledWith({ ok: true, revalidated: expected, failed: [], skipped });
   });
 
-  test('repeated explicit paths and derived article/homepage/Latest paths regenerate only once in first-seen order', async () => {
-    const expected = [
-      ...backendPaths, ...categoryPaths.flatMap(localized), ...localized(`/news/${articleId}`),
-    ];
+  test('duplicate and previous-category paths regenerate only once in first-seen order', async () => {
+    const expected = categoryPaths.flatMap(localized);
+    const all = [...backendPaths, ...expected, ...localized(`/news/${articleId}`)];
     const res = await invoke({
       ...backendPayload,
       paths: [
-        ...expected, ...expected,
+        ...all, ...all,
         ' /business?source=previous#copy ', '/hi/science-technology#copy',
         '/gu/tech-gadgets?source=copy', '/hi/regional/gujarat?source=previous#copy',
         `/news/${articleId}?source=duplicate`, '/latest#copy', '/?source=copy',
@@ -124,16 +127,17 @@ describe('backend explicit-path revalidation', () => {
 
     expect(res.revalidate.mock.calls.map(([path]) => path)).toEqual(expected);
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith({ ok: true, revalidated: expected, failed: [] });
+    expect(res.json).toHaveBeenCalledWith({ ok: true, revalidated: expected, failed: [], skipped });
   });
 
   test('explicit category and Gujarat failures remain partial and do not stop later paths or retry duplicates', async () => {
     const paths = [...backendPaths, ...categoryPaths.flatMap(localized)];
-    const expected = [...paths, ...localized(`/news/${articleId}`)];
+    const expected = categoryPaths.flatMap(localized);
     const failed = [
-      { path: '/hi/science-technology', error: 'Science regeneration unavailable' },
-      { path: '/gu/regional/gujarat', error: 'Regional regeneration unavailable' },
+      { path: '/hi/science-technology', error: 'REVALIDATE_FAILED' },
+      { path: '/gu/regional/gujarat', error: 'REVALIDATE_FAILED' },
     ];
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
     const res = await invoke({
       ...backendPayload,
       paths: [...paths, ...failed.map(({ path }) => path)],
@@ -141,16 +145,84 @@ describe('backend explicit-path revalidation', () => {
       ...backendAuth,
       revalidate: async (path) => {
         const failure = failed.find((item) => item.path === path);
-        if (failure) throw new Error(failure.error);
+        if (failure) throw new Error('upstream unavailable');
       },
     });
 
     expect(res.revalidate.mock.calls.map(([path]) => path)).toEqual(expected);
-    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.status).toHaveBeenCalledWith(503);
     expect(res.json).toHaveBeenCalledWith({
       ok: false,
       revalidated: expected.filter((path) => !failed.some((item) => item.path === path)),
-      failed,
+      failed, skipped,
+    });
+  });
+
+  test('an 18-path Save Update finishes in two bounded waves rather than 18 sequential renders', async () => {
+    jest.useFakeTimers();
+    const starts: number[] = [];
+    const start = Date.now();
+    const pending = invoke({ ...backendPayload, paths: [...backendPaths, ...localized('/business')] }, {
+      ...backendAuth, revalidate: async () => {
+        starts.push(Date.now() - start);
+        await new Promise(resolve => setTimeout(resolve, 600));
+      },
+    });
+    await jest.advanceTimersByTimeAsync(1200);
+    const res = await pending;
+    expect(starts).toEqual([0, 0, 600]);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({ ok: true, revalidated: localized('/business'), failed: [], skipped });
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  test('one shared cutoff reports completed, outstanding and unstarted paths; retry needs no article mutation', async () => {
+    jest.useFakeTimers();
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const paths = [...localized('/business'), '/sports'];
+    const delivery = { tags: ['articles'], paths };
+    const late: Array<() => void> = [];
+    let responded = false;
+    const pending = invoke(delivery, { ...backendAuth, revalidate: async path => {
+      if (path === '/business') await new Promise(resolve => setTimeout(resolve, 2500));
+      else await new Promise<void>(resolve => late.push(resolve));
+    } }).then(res => { responded = true; return res; });
+    await jest.advanceTimersByTimeAsync(3999);
+    expect(responded).toBe(false);
+    await jest.advanceTimersByTimeAsync(1);
+    const res = await pending;
+    expect(res.status).toHaveBeenCalledWith(504);
+    expect(res.setHeader).toHaveBeenCalledWith('Retry-After', '5');
+    expect(res.json).toHaveBeenCalledWith({
+      ok: false, revalidated: ['/business'], skipped: commonPaths,
+      failed: [
+        { path: '/hi/business', error: 'REVALIDATE_TIMEOUT' },
+        { path: '/gu/business', error: 'REVALIDATE_TIMEOUT' },
+        { path: '/sports', error: 'REVALIDATE_NOT_STARTED' },
+      ],
+    });
+    late.forEach(finish => finish());
+    await jest.advanceTimersByTimeAsync(5000);
+    expect(res.revalidate).toHaveBeenCalledTimes(3);
+    expect(res.json).toHaveBeenCalledTimes(1);
+    expect(jest.getTimerCount()).toBe(0);
+    const retry = await invoke({ ...delivery, paths: paths.slice(1) }, backendAuth);
+    expect(retry.json).toHaveBeenCalledWith({ ok: true, revalidated: paths.slice(1), failed: [], skipped: commonPaths });
+  });
+
+  test('skips known non-ISR routes but preserves explicit unknown paths and nested static listings', async () => {
+    const live = ['/en/', '/hi/topic/local', '/gu/topic/local/', '/gu/regional', '/gu/youth-pulse'];
+    const cached = ['/gu/regional/gujarat', '/news', '/hi/custom-page'];
+    const res = await invoke({ tags: ['articles'], paths: [...live, ...cached] }, backendAuth);
+    expect(res.revalidate.mock.calls.map(([path]) => path)).toEqual(cached);
+    expect(res.json).toHaveBeenCalledWith({ ok: true, revalidated: cached, failed: [], skipped: [...live, ...commonPaths] });
+  });
+
+  test('an article callback with only the Regional category helper reaches its real listing in all locales', async () => {
+    const res = await invoke({ articleId, categoryKey: 'regional' }, backendAuth);
+    expect(res.json).toHaveBeenCalledWith({
+      ok: true, revalidated: localized('/regional/gujarat'), failed: [],
+      skipped: [...localized(`/news/${articleId}`), ...localized('/regional'), ...commonPaths],
     });
   });
 });
@@ -166,33 +238,36 @@ describe('existing revalidation contracts', () => {
       articleId: 'id/one', articleSlug: 'story one', articleSlugs: ['second', 'story one'],
       paths: ['/news/id%2Fone', '/latest', '/latest?source=duplicate'],
     });
-    expect(res.revalidate.mock.calls.map(([path]) => path)).toEqual([
+    expect(res.revalidate).not.toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith({ ok: true, revalidated: [], failed: [], skipped: [
       '/news/id%2Fone', '/latest', '/hi/news/id%2Fone', '/gu/news/id%2Fone',
       ...localized('/news/story%20one'), ...localized('/news/second'),
       '/hi/latest', '/gu/latest', '/', '/hi', '/gu',
-    ]);
+    ] });
   });
 
   test('localized article slugs target only their supplied locale', async () => {
     const hi = '\u0938\u092e\u093e\u091a\u093e\u0930';
     const gu = '\u0ab8\u0aae\u0abe\u0a9a\u0abe\u0ab0';
     const res = await invoke({ articleSlugs: { en: 'english-story', hi, gu, unknown: 'ignored' } });
-    expect(res.revalidate.mock.calls.map(([path]) => path)).toEqual([
+    expect(res.revalidate).not.toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith({ ok: true, revalidated: [], failed: [], skipped: [
       '/news/english-story', `/hi/news/${encodeURIComponent(hi)}`, `/gu/news/${encodeURIComponent(gu)}`, ...commonPaths,
-    ]);
+    ] });
   });
 
   test('partial Next regeneration failures remain explicit and do not stop other paths', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
     const res = await invoke({ categoryKey: 'tech' }, {
       revalidate: async (path) => {
         if (path === '/hi/science-technology') throw new Error('Regeneration unavailable');
       },
     });
     expect(res.revalidate.mock.calls.map(([path]) => path)).toEqual([...localized('/science-technology'), ...commonPaths]);
-    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.status).toHaveBeenCalledWith(503);
     expect(res.json).toHaveBeenCalledWith({
       ok: false, revalidated: ['/science-technology', '/gu/science-technology', ...commonPaths],
-      failed: [{ path: '/hi/science-technology', error: 'Regeneration unavailable' }],
+      failed: [{ path: '/hi/science-technology', error: 'REVALIDATE_FAILED' }],
     });
   });
 
