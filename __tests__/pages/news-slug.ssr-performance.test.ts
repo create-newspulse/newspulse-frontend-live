@@ -1,3 +1,6 @@
+import type { GetServerSidePropsContext } from 'next';
+import { IncomingMessage, ServerResponse } from 'node:http';
+import { Socket } from 'node:net';
 import { getServerSideProps } from '../../pages/news/[slug]';
 import { getServerSideProps as getLegacyProps } from '../../pages/news/[...parts]';
 import { getServerSideProps as getTopicProps } from '../../pages/topic/[slug]';
@@ -33,14 +36,14 @@ function article(overrides: Record<string, any> = {}) {
   };
 }
 
-function createCtx(slug: string, locale = 'en') {
+function createCtx(slug: string, locale = 'en'): GetServerSidePropsContext {
+  const req = Object.assign(new IncomingMessage(new Socket()), {
+    headers: { host: 'www.newspulse.co.in', 'x-forwarded-proto': 'https' }, cookies: {},
+  });
   return {
-    locale,
-    params: { slug },
-    query: {},
-    req: { headers: { host: 'www.newspulse.co.in', 'x-forwarded-proto': 'https' } },
-    res: { setHeader: jest.fn() },
-  } as any;
+    locale, params: { slug }, query: {}, resolvedUrl: `/news/${slug}`,
+    req, res: new ServerResponse(req),
+  };
 }
 
 function mockFetchSequence(handler: (url: string) => any) {
@@ -148,7 +151,7 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
     const ctx = createCtx('unavailable-story', 'hi');
     const result = await getServerSideProps(ctx);
     expect(ctx.res.statusCode).toBe(503);
-    expect(ctx.res.setHeader).toHaveBeenCalledWith('Retry-After', '30');
+    expect(ctx.res.getHeader('Retry-After')).toBe('30');
     expect(console.error).toHaveBeenCalledWith('[news] Article SSR unavailable', { locale: 'hi', reason });
     expect(JSON.stringify([result, jest.mocked(console.error).mock.calls])).not.toContain('private');
   });
@@ -274,7 +277,7 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
         expect(props.article).toEqual(record);
         expect(props).toMatchObject({ lang, slug, error: null, pending: false, safeHtml: '<p>Body</p>', topStories: [], relatedStories: [] });
         expect(ctx.res.statusCode).toBe(200);
-        expect(ctx.res.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        expect(ctx.res.getHeader('Cache-Control')).toBe('no-store, no-cache, must-revalidate, proxy-revalidate');
         expect(fetchMock.mock.calls.map(([input]) => new URL(String(input)).pathname))
           .toEqual(source === 'slug' ? [slugPath, '/api/public/news'] : [slugPath, idPath, '/api/public/news']);
         for (const [input, init] of fetchMock.mock.calls) {
@@ -310,7 +313,7 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
     await jest.advanceTimersByTimeAsync(1);
     expect(completed).toBe(true);
     expect(ctx.res.statusCode).toBe(503);
-    expect(ctx.res.setHeader).toHaveBeenCalledWith('Retry-After', '30');
+    expect(ctx.res.getHeader('Retry-After')).toBe('30');
     expect(signal?.aborted).toBe(true);
     expect((await pending as any).props.article).toBeNull();
     expect(jest.getTimerCount()).toBe(0);

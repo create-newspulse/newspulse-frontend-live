@@ -4,7 +4,7 @@ import { getPublicApiBaseUrl } from '../../../../../lib/publicApiBase';
 import { getLocalizedArticleFields, normalizeRouteLocale, STRICT_LOCALE_POLICY } from '../../../../../lib/localizedArticleFields';
 import { isLegacyMissingArticle, isResolvedPublicArticleForLocale, parsePublicNewsArticle, parsePublicNewsGroupItems } from '../../../../../lib/publicNewsApi';
 import { pickFreshestArticleForLocale } from '../../../../../lib/translationGroupSync';
-import { withPublicReadDeadline } from '../../../../../lib/publicReadDeadline';
+import { PublicReadTimeoutError, withPublicReadDeadline } from '../../../../../lib/publicReadDeadline';
 import { getSafeRetryAfter } from '../../../../../lib/retryAfter';
 import { withArticleSocialImage } from '../../../../../lib/articleSocialImage.server';
 import { readWithPreviewDiagnostics, startBackendPreviewDiagnostics } from '../../../../../lib/socialPreviewDiagnostics.server';
@@ -82,8 +82,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const translationGroupId = String(article.translationGroupId || '').trim();
 
     if (translationGroupId && !isResolvedPublicArticleForLocale(article, requestedLocale)) {
+      const directLocale = getLocalizedArticleFields(directArticle, requestedLocale, STRICT_LOCALE_POLICY);
       try {
-        const groupItems = await readWithPreviewDiagnostics(diagnostics, recordStatus => withPublicReadDeadline(1500, async (signal) => {
+        // A group refresh is optional only if the direct response can serve this locale.
+        const groupTimeoutMs = directLocale.isVisible ? Math.min(1500, deadlineAt - performance.now()) : 1500;
+        if (groupTimeoutMs <= 0) throw new PublicReadTimeoutError();
+        const groupItems = await readWithPreviewDiagnostics(diagnostics, recordStatus => withPublicReadDeadline(groupTimeoutMs, async (signal) => {
           const groupUrl = `${base}/api/public/news/group/${encodeURIComponent(translationGroupId)}${qs}`;
           const groupRes = await fetch(groupUrl, {
             method: 'GET',
@@ -115,7 +119,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       } catch {
         // The direct read is still authoritative when the optional locale lookup fails.
         if (process.env.NODE_ENV !== 'production') console.error('[api/public/news/[id]] translation_group_unavailable');
-        const directLocale = getLocalizedArticleFields(directArticle, requestedLocale, STRICT_LOCALE_POLICY);
         if (directLocale.status === 'published' && !directLocale.isVisible) {
           throw new Error('PUBLIC_NEWS_GROUP_UNAVAILABLE');
         }

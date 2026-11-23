@@ -10,6 +10,7 @@ import articleHandler from '../../../pages/api/public/news/[id]/index';
 import slugHandler from '../../../pages/api/public/news/slug/[slug]';
 import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
 import { getServerSideProps } from '../../../pages/news/[slug]';
+import { getServerSideProps as getShareProps } from '../../../pages/s/[slug]';
 import { buildSocialImageUrl } from '../../../lib/articleSocialImage';
 import { PREVIEW_TRACE_HEADER } from '../../../lib/socialPreviewDiagnostics.server';
 
@@ -246,6 +247,19 @@ test.each(['hi', 'gu'])('a group outage cannot turn an unresolved %s variant int
   expect(res.body).toEqual({ error: 'PUBLIC_NEWS_UNAVAILABLE' });
 });
 
+test('a needed group lookup can still resolve the requested edition after a slow direct read', async () => {
+  jest.useFakeTimers();
+  const source = { ...story, translationGroupId: 'group-1' };
+  const edition = { ...source, _id: 'gu-edition', language: 'gu', title: 'ગુજરાતી સમાચાર', content: '<p>ગુજરાતી લેખ</p>' };
+  fetchMock.mockImplementationOnce(() => new Promise(resolve => setTimeout(() => resolve(Response.json(source)), 3900)))
+    .mockImplementationOnce(() => new Promise(resolve => setTimeout(() => resolve(Response.json({ items: [edition] })), 900)));
+  const pending = read('article', 'gu');
+  await jest.advanceTimersByTimeAsync(4800);
+  const res = await pending;
+  expect(res.statusCode).toBe(200);
+  expect(res.body).toEqual({ article: edition });
+});
+
 test('an authoritative non-public direct record remains withdrawn even if its group lookup fails', async () => {
   fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
     article: { ...story, status: 'draft', translationGroupId: 'group-1' },
@@ -297,6 +311,49 @@ function ssrContext(locale = 'en'): GetServerSidePropsContext {
     resolvedUrl: `/news/${story._id}`,
   };
 }
+
+test.each([
+  ['original', getServerSideProps], ['Smart Share', getShareProps],
+] as const)('%s keeps a slow verified ID detail when its optional legacy group stalls', async (_route, load) => {
+  jest.useFakeTimers();
+  const id = '507f1f77bcf86cd799439011';
+  const record = { ...story, _id: id, slug: id, translationGroupId: 'group-1' };
+  const delay = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+  let groupSignal: AbortSignal | null | undefined;
+  fetchMock.mockImplementation(async (input, init) => {
+    const url = new URL(String(input));
+    if (url.origin === 'http://backend.test' && url.pathname === '/api/public/news/group/group-1') {
+      groupSignal = init?.signal;
+      return new Promise<Response>(() => {});
+    }
+    if (url.pathname === '/api/public/news') return Response.json({ items: [] });
+    if (url.pathname !== `/api/public/news/${id}`) throw new Error('Unexpected fixture URL');
+    if (url.origin === 'http://backend.test') {
+      await delay(3900);
+      return Response.json(record);
+    }
+    await delay(250); // SSR-to-proxy transit is outside the proxy's read budget.
+    const req = request('article');
+    req.query.id = id;
+    req.url = `${url.pathname}${url.search}`;
+    const res = response(req);
+    await articleHandler(req, res);
+    return Response.json(res.body, { status: res.statusCode });
+  });
+
+  const ctx = ssrContext();
+  ctx.params = { slug: id };
+  const started = performance.now();
+  const result = load(ctx).then(rendered => ({ rendered, elapsed: performance.now() - started }));
+  await jest.advanceTimersByTimeAsync(5500);
+  const { rendered, elapsed } = await result;
+  expect(ctx.res.statusCode).toBe(200);
+  expect(rendered).toHaveProperty('props.article', record);
+  expect(rendered).toHaveProperty('props.safeHtml', record.content);
+  expect(elapsed).toBeLessThanOrEqual(4250);
+  expect(groupSignal?.aborted).toBe(true);
+  expect(jest.getTimerCount()).toBe(0);
+});
 
 function serveIdProxy(payload: unknown, status: number) {
   fetchMock.mockImplementation(async (input) => {
