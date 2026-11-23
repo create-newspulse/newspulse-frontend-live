@@ -10,9 +10,11 @@ import { getPulseDialogueMetadata } from './pulseDialogue';
 import { getAuthorBylineMetadata } from './authorByline';
 import {
   getLocalizedArticleFields,
+  getLocalizedFieldValue,
   getPublicArticleStatus,
   normalizeRouteLocale,
   STRICT_LOCALE_POLICY,
+  type LocalizedArticleFields,
   type RouteLocale,
 } from './localizedArticleFields';
 import { buildNewsUrl } from './newsRoutes';
@@ -133,13 +135,17 @@ export function getArticleSocialImageSources(article: unknown, langInput: unknow
   if (!getLocalizedArticleFields(item, lang, STRICT_LOCALE_POLICY).isVisible) return [];
   const scoped: Record<string, unknown> = { ...item, url: undefined, src: undefined };
   const covers: unknown[] = [item.coverImage];
+  let editionCover = '';
   for (const group of ['translations', 'translation', 'i18n', 'localized', 'locales', 'byLang', 'textByLang']) {
+    delete scoped[group];
     const variants = item[group];
-    if (variants && typeof variants === 'object') {
-      const variant = (variants as Record<string, unknown>)[lang];
-      scoped[group] = { [lang]: variant };
-      if (variant && typeof variant === 'object') covers.push((variant as Record<string, unknown>).coverImage);
-    }
+    if (!variants || typeof variants !== 'object') continue;
+    const map = variants as Record<string, unknown>;
+    const variant = map[lang] ?? (lang === 'hi' ? map.in : undefined);
+    if (!variant || typeof variant !== 'object' || Array.isArray(variant)) continue;
+    const fields = variant as Record<string, unknown>;
+    covers.push(fields.coverImage);
+    if (!editionCover) editionCover = resolveCoverImageUrl({ ...fields, url: undefined, src: undefined }, { lang });
   }
   if (item.coverImage && typeof item.coverImage === 'object') covers.push((item.coverImage as Record<string, unknown>)[lang]);
   const removed = covers.some(cover => {
@@ -147,12 +153,31 @@ export function getArticleSocialImageSources(article: unknown, langInput: unknow
     const record = cover as Record<string, unknown>;
     return record.removed === true || ['trashed', 'deleted'].includes(String(record.status || record.mediaStatus || record.state || '').toLowerCase());
   });
-  const editorial = articleSeoText({ ...item, image: undefined }, lang, 'ogImage', 'openGraphImage', 'image');
-  if (isOfficialSocialImage(editorial)) return [SOCIAL_IMAGE_FALLBACK_PATH];
-  const cover = removed ? '' : resolveCoverImageUrl(scoped, { lang });
-  return [...new Set([editorial, cover].map(value =>
-    isOfficialSocialImage(value) ? SOCIAL_IMAGE_FALLBACK_PATH : normalizeSocialImageSource(value)
-  ).filter(Boolean))];
+  const cover = removed ? '' : editionCover || resolveCoverImageUrl(scoped, { lang });
+  const source = isOfficialSocialImage(cover) ? SOCIAL_IMAGE_FALLBACK_PATH : normalizeSocialImageSource(cover);
+  return source ? [source] : [];
+}
+
+function previewField(item: Record<string, unknown>, localized: LocalizedArticleFields, keys: string[], legacy: string): string {
+  const lang = localized.requestedLocale;
+  const ownEdition = localized.sourceLocale === lang;
+  const original = item.originalLang || item.sourceLang || item.sourceLanguage;
+  const translatedDetail = ownEdition && (item.isTranslated === true || Boolean(original && normalizeRouteLocale(original) !== lang));
+  const text = (value: unknown) => typeof value === 'string' && value !== '[object Object]' ? cleanText(value) : '';
+  const explicit = text(getLocalizedFieldValue(item, lang, keys));
+  if (explicit) return explicit;
+  if (ownEdition) {
+    for (const key of keys) {
+      const current = text(item[key]);
+      if (current) return current;
+    }
+  }
+  // Resolved translations may retain the source-language originalTitle/originalContent.
+  return translatedDetail ? '' : text(legacy);
+}
+
+export function getArticlePreviewHeadline(item: Record<string, unknown>, localized: LocalizedArticleFields): string {
+  return previewField(item, localized, ['title', 'headline', 'name'], localized.title);
 }
 
 function isProductionRuntime(): boolean {
@@ -282,8 +307,10 @@ export function buildArticleSeoMetadata(article: unknown, langInput: unknown, si
       localized.title,
     180
   );
-  const ogTitle = cleanText(articleSeoText(item, lang, 'ogTitle', 'openGraphTitle') || title);
-  const ogDescription = truncate(articleSeoText(item, lang, 'ogDescription', 'openGraphDescription', 'socialDescription') || description, 220);
+  const ogTitle = getArticlePreviewHeadline(item, localized);
+  if (!ogTitle) return null;
+  const ogDescription = truncate(previewField(item, localized, ['summary', 'excerpt', 'description', 'dek'], localized.summary)
+    || previewField(item, localized, ['bodyHtml', 'html', 'content', 'body'], localized.bodyHtml) || ogTitle, 180);
   const verifiedImage = parseArticleSocialImage(item.socialImage);
   const image = verifiedImage && getArticleSocialImageSources(item, lang).includes(verifiedImage.source) ? verifiedImage : null;
   const fallbackOrigin = /^https:\/\//i.test(siteUrl) ? siteUrl : NEWS_PULSE_SITE_URL;
@@ -351,8 +378,8 @@ export function buildArticleSeoMetadata(article: unknown, langInput: unknown, si
     ogImageHeight: image?.height || SOCIAL_IMAGE_HEIGHT,
     ogImageAlt,
     ogLocale: { en: 'en_IN', hi: 'hi_IN', gu: 'gu_IN' }[lang],
-    twitterTitle: cleanText(articleSeoText(item, lang, 'twitterTitle') || ogTitle),
-    twitterDescription: truncate(articleSeoText(item, lang, 'twitterDescription') || ogDescription, 220),
+    twitterTitle: ogTitle,
+    twitterDescription: ogDescription,
     twitterImage: ogImage,
     twitterImageAlt: cleanText(articleSeoText(item, lang, 'twitterImageAlt') || ogImageAlt),
     publishedAt,

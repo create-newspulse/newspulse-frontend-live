@@ -48,6 +48,7 @@ import {
   absolutePublicUrl,
   buildArticleSeoMetadata,
   getArticleCanonicalUrl,
+  getArticlePreviewHeadline,
   NEWS_PULSE_BRAND_NAME,
   resolvePublicSiteUrl,
   safeJsonLd,
@@ -2572,7 +2573,6 @@ export const getServerSideProps = async (
     if (!resolvedArticle?._id) {
       return { notFound: true };
     }
-
     debugNewsDetailResolution('ssr-resolved', {
       locale: lang,
       receivedSlug: rawSlug,
@@ -2586,6 +2586,11 @@ export const getServerSideProps = async (
     if (!options.shortLink && canonicalSlug && canonicalSlug !== normalizeArticleSlug(rawSlug)) {
       const destination = buildNewsUrl({ id: String(resolvedArticle._id || '').trim(), slug: canonicalSlug, lang });
       return { redirect: { destination, permanent: true } };
+    }
+
+    const canonicalUrl = getArticleCanonicalUrl(resolvedArticle, lang, siteUrl);
+    if (!canonicalUrl || !getArticlePreviewHeadline(resolvedArticle, localized)) {
+      throw new Error('Invalid article response');
     }
 
     const alternatesPromise = fetchArticleAlternates(
@@ -2608,7 +2613,7 @@ export const getServerSideProps = async (
         pending: false,
         siteUrl,
         seo: {
-          canonicalUrl: getArticleCanonicalUrl(resolvedArticle, lang, siteUrl),
+          canonicalUrl,
           alternates: await alternatesPromise,
         },
       },

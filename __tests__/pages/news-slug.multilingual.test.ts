@@ -224,6 +224,19 @@ describe.each(['deployed', 'candidate'] as const)('%s Backend compatibility', ve
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
+  test('a visible record without a usable headline cannot become a successful preview on either route', async () => {
+    const record = { ...fixture.editions.gu, title: '<p>&nbsp;</p>', seo: { ogTitle: 'Stale title' } };
+    jest.mocked(global.fetch).mockImplementation(async input =>
+      new URL(String(input)).pathname === '/api/public/news' ? response({ items: [] }) : response({ article: record }));
+    for (const [loader, slug] of [[getServerSideProps, record.canonicalSlug], [getShareProps, record._id]] as const) {
+      const ctx = context(slug, 'gu');
+      expect(await loader(ctx)).toHaveProperty('props.article', null);
+      expect(ctx.res.statusCode).toBe(503);
+      expect(ctx.res.getHeader('Retry-After')).toBeDefined();
+    }
+    expect(await getServerSideProps(context('old-alias', 'gu'))).toHaveProperty('redirect.permanent', true);
+  });
+
   test('future publication and later text or cover changes refresh the same stable short link', async () => {
     const id = '7f0000000000000000000099';
     const source = 'https://res.cloudinary.com/fixture/image/upload/v1/future-cover.png';
@@ -249,12 +262,16 @@ describe.each(['deployed', 'candidate'] as const)('%s Backend compatibility', ve
     current = {
       ...published, title: 'Updated headline', summary: 'Updated description', description: 'Updated description',
       coverImageUrl: replacement, socialImage: descriptor(replacement),
+      seo: { metaTitle: 'Search title', metaDescription: 'Search description', ogImage: source,
+        ogTitle: published.title, ogDescription: published.summary, twitterTitle: published.title, twitterDescription: published.summary },
     };
     const updated = await read();
     if (!('props' in updated)) throw new Error('The stable share route must survive Save Update');
     const props = await updated.props;
     expect(buildArticleSeoMetadata(props.article, 'en', NEWS_PULSE_SITE_URL)).toMatchObject({
       ogTitle: 'Updated headline', ogDescription: 'Updated description', ogImage: descriptor(replacement).url,
+      twitterTitle: 'Updated headline', twitterDescription: 'Updated description', twitterImage: descriptor(replacement).url,
+      title: 'Search title', description: 'Search description',
       publishedAt: published.publishedAt,
     });
     expect(props.seo?.canonicalUrl).toBe(initial.seo?.canonicalUrl);

@@ -1,6 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 import { getPublicApiBaseUrl } from '../../../../../lib/publicApiBase';
+import { getArticleEditionLocale } from '../../../../../lib/articleSlugs';
+import { conflictingStoryIdentity, sameStory } from '../../../../../lib/articleSeo.server';
 import { getLocalizedArticleFields, getLocalizedSlug, normalizeRouteLocale, STRICT_LOCALE_POLICY, type RouteLocale } from '../../../../../lib/localizedArticleFields';
 import { failedPublicNewsPayload, isLegacyMissingArticle, isResolvedPublicArticleForLocale, parsePublicNewsArticle, parsePublicNewsGroupItems, parsePublicNewsList, type Article } from '../../../../../lib/publicNewsApi';
 import { pickFreshestArticleForLocale } from '../../../../../lib/translationGroupSync';
@@ -218,15 +220,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     const parsedList = parsePublicNewsList(list.payload);
     if (!parsedList) throw new Error('INVALID_PUBLIC_NEWS_LIST');
-    const matched = parsedList.items.find((item) => getArticleSlugCandidates(item, requestedLocale).includes(normalizedRequestedSlug));
-    if (!matched) return res.status(200).json({ article: null });
+    const matches = parsedList.items.filter((item) => getArticleSlugCandidates(item, requestedLocale).includes(normalizedRequestedSlug));
+    if (!matches.length) return res.status(200).json({ article: null });
+    const native = matches.filter(item => getArticleEditionLocale(item) === requestedLocale);
+    const candidates = native.length ? native : matches;
+    const [matched] = candidates;
+    if (candidates.some(item => item._id !== matched._id) || !matches.every(item => sameStory(matched, item))) {
+      return unavailable(409);
+    }
 
     const detail = await readJson(`${base}/api/public/news/${encodeURIComponent(matched._id)}${qs}`);
     if (detail.status === 404 || detail.status === 410) return notFound(detail.status);
     if (detail.status < 200 || detail.status >= 300) return unavailable(detail.status);
     if (isLegacyMissingArticle(detail.payload)) return res.status(200).json({ exists: false });
     const detailArticle = parsePublicNewsArticle(detail.payload);
-    if (!detailArticle) throw new Error('INVALID_PUBLIC_NEWS_ARTICLE');
+    // The authoritative ID endpoint may resolve a historical copy to a new canonical ID.
+    if (!detailArticle || conflictingStoryIdentity(matched, detailArticle)) throw new Error('INVALID_PUBLIC_NEWS_ARTICLE');
     return await returnResolvedArticle(detailArticle, 'fallback-by-id');
   } catch {
     return unavailable();

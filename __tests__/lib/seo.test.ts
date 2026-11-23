@@ -79,10 +79,11 @@ describe('public SEO helpers', () => {
     expect(seo?.description).toBe('Explicit SEO description from admin.');
     expect(seo?.canonicalUrl).toBe('https://www.newspulse.co.in/news/real-english-headline');
     expect(seo?.robots).toContain('index');
-    expect(seo?.ogTitle).toBe('Explicit OG Title');
+    expect(seo?.ogTitle).toBe(article.title);
+    expect(seo?.ogDescription).toBe(article.summary);
     expect(seo?.ogUrl).toBe(seo?.canonicalUrl);
     expect(seo?.ogImage).toBe('https://www.newspulse.co.in/brand/news-pulse-social.jpg');
-    expect(seo?.twitterTitle).toBe('Explicit OG Title');
+    expect(seo?.twitterTitle).toBe(article.title);
     expect(seo?.twitterImage).toBe(seo?.ogImage);
     expect(seo?.newsArticleJsonLd?.['@type']).toBe('NewsArticle');
     expect(seo?.newsArticleJsonLd?.headline).toBe('Explicit SEO Title');
@@ -196,7 +197,7 @@ describe('public SEO helpers', () => {
     expect(seo?.ogUrl).toContain(`${lang === 'en' ? '' : `/${lang}`}/news/`);
   });
 
-  test('preserves edition-specific OG images without borrowing another edition graphic or resurrecting removed covers', () => {
+  test('shares only the current edition cover, even when saved social artwork or branding is still present', () => {
     const cover = 'https://res.cloudinary.com/fixture/image/upload/v1/cover.jpg';
     const editorial = 'https://res.cloudinary.com/fixture/image/upload/v1/hindi.jpg';
     const otherEdition = 'https://res.cloudinary.com/fixture/image/upload/v1/gujarati.jpg';
@@ -209,10 +210,28 @@ describe('public SEO helpers', () => {
       },
     };
     expect(getArticleSocialImageSources(story, 'hi')).toEqual([]);
-    expect(getArticleSocialImageSources({ ...story, seo: { hi: { image: editorial } } }, 'hi')).toEqual([editorial]);
+    expect(getArticleSocialImageSources({ ...story, seo: { hi: { image: editorial } } }, 'hi')).toEqual([]);
     expect(getArticleSocialImageSources({ ...story, coverImageUrl: undefined, image: undefined, translations: { gu: { image: otherEdition } } }, 'en')).toEqual([]);
     expect(getArticleSocialImageSources({ ...article, coverImageUrl: cover, seo: { ogImage: '/brand/news-pulse-final-logo.png' } }, 'en'))
-      .toEqual(['/brand/news-pulse-social.jpg']);
+      .toEqual([cover]);
+    const variant = { ...article.translations.hi, url: 'https://www.newspulse.co.in/hi/news/hindi-real-headline', coverImageUrl: editorial };
+    expect(getArticleSocialImageSources({ ...story, translations: undefined, translation: { hi: variant, gu: { image: otherEdition } } }, 'hi'))
+      .toEqual([editorial]);
+  });
+
+  test.each(['en', 'hi', 'gu'] as const)('all categories use the current %s edition, including a new category with only a body excerpt', lang => {
+    const [title, excerpt] = { en: ['Updated headline', 'Current text.'], hi: ['नया शीर्षक', 'वर्तमान लेख।'], gu: ['નવું શીર્ષક', 'વર્તમાન લેખ.'] }[lang];
+    for (const category of ['breaking', 'regional', 'gujarat', 'national', 'international', 'world-news', 'business', 'science-technology',
+      'tech', 'tech-gadgets', 'sports', 'lifestyle', 'faith-culture', 'glamour', 'web-stories', 'viral-videos', 'editorial',
+      'pulse-dialogue', 'youth-pulse', 'inspiration-hub', 'community-reporter', 'sponsored-content', 'new-desk']) {
+      const seo = buildArticleSeoMetadata({
+        ...article, category, language: lang, resolvedLanguage: lang, originalLang: 'en', isTranslated: lang !== 'en',
+        translations: undefined, title, summary: '', content: `<p>${excerpt}</p>`, originalTitle: 'Earlier headline',
+        originalContent: 'Earlier source body', originalSummary: lang === 'en' ? '' : 'Wrong source summary',
+        seo: { ...article.seo, twitterTitle: 'Earlier headline', twitterDescription: 'Earlier summary' },
+      }, lang, 'https://www.newspulse.co.in');
+      expect(seo).toMatchObject({ ogTitle: title, twitterTitle: title, ogDescription: excerpt, twitterDescription: excerpt, ogLocale: `${lang}_IN` });
+    }
   });
 
   test('replaced or removed covers cannot keep a stale verified preview', () => {

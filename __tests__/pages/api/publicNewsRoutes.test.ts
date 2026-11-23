@@ -1164,4 +1164,23 @@ describe('public news route localization', () => {
     expect(res.statusCode).toBe(200);
     expect(res.body.article._id).toBe('article-hi');
   });
+
+  test.each(['collision', 'wrong-detail', 'same-story-edition'] as const)('legacy slug discovery: %s', async scenario => {
+    const record = { _id: 'native-hi', language: 'hi', slug: 'shared-slug', title: 'हिंदी शीर्षक', status: 'published', translationGroupId: 'one' };
+    const other = { ...record, _id: 'other', language: 'en', translationGroupId: scenario === 'same-story-edition' ? 'one' : 'two' };
+    const fetchMock = jest.fn().mockResolvedValueOnce(jsonResponse({ article: null }))
+      .mockResolvedValueOnce(jsonResponse({ items: scenario === 'wrong-detail' ? [record] : [other, record] }))
+      .mockResolvedValueOnce(jsonResponse({ article: scenario === 'wrong-detail' ? { ...other, language: 'hi' } : record }));
+    global.fetch = fetchMock;
+    const res = createRes();
+    await newsBySlugHandler(createReq({ url: '/api/public/news/slug/shared-slug?lang=hi', query: { slug: record.slug, lang: 'hi' } }) as any, res as any);
+    if (scenario === 'same-story-edition') {
+      expect(res.statusCode).toBe(200);
+      expect(String(fetchMock.mock.calls[2][0])).toContain('/news/native-hi?');
+    } else {
+      expect(res.statusCode).toBe(scenario === 'collision' ? 409 : 503);
+      expect(res.body.article).toBeUndefined();
+      expect(fetchMock).toHaveBeenCalledTimes(scenario === 'collision' ? 2 : 3);
+    }
+  });
 });

@@ -7,9 +7,13 @@ import { getArticleAlternates, type SeoAlternate } from './seo';
 
 const LOCALES: RouteLocale[] = ['en', 'hi', 'gu'];
 
-function sameStory(left: Article, right: Article): boolean {
-  if (left.translationGroupId && right.translationGroupId && left.translationGroupId !== right.translationGroupId) return false;
-  if (left.translationKey && right.translationKey && left.translationKey !== right.translationKey) return false;
+export function conflictingStoryIdentity(left: Article, right: Article): boolean {
+  return Boolean((left.translationGroupId && right.translationGroupId && left.translationGroupId !== right.translationGroupId)
+    || (left.translationKey && right.translationKey && left.translationKey !== right.translationKey));
+}
+
+export function sameStory(left: Article, right: Article): boolean {
+  if (conflictingStoryIdentity(left, right)) return false;
   return left._id === right._id
     || Boolean(left.translationGroupId && left.translationGroupId === right.translationGroupId)
     || Boolean(left.translationKey && left.translationKey === right.translationKey);

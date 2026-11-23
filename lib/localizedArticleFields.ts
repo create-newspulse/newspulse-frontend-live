@@ -209,7 +209,7 @@ function getLocaleKeys(locale: RouteLocale): string[] {
   return locale === 'hi' ? ['hi', 'in'] : [locale];
 }
 
-function getLocalizedFieldValue(article: any, locale: RouteLocale, fieldNames: string[]): string {
+export function getLocalizedFieldValue(article: Record<string, unknown>, locale: RouteLocale, fieldNames: string[]): string {
   const container = getRecord(getTranslationContainer(article));
   const localeKeys = getLocaleKeys(locale);
 
