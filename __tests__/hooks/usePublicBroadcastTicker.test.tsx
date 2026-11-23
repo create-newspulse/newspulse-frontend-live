@@ -11,6 +11,8 @@ jest.mock('../../lib/publicBroadcast', () => ({
 
 class FakeEventSource extends EventTarget {
   static instances: FakeEventSource[] = [];
+  static readonly CONNECTING = 0;
+  readyState = FakeEventSource.CONNECTING;
   readonly url: string;
   close = jest.fn();
 
@@ -129,6 +131,68 @@ test('SSE failure closes the stream and uses the existing HTTP fallback', async 
   expect(stream.close).toHaveBeenCalledTimes(1);
   expect(fetchPublicBroadcast).toHaveBeenCalledTimes(2);
   expect(result.current.breakingEnabled).toBe(true);
+});
+
+test('expected EOF reconnects after updates and pings; a failed reconnect still falls back and recovers', async () => {
+  jest.useFakeTimers();
+  const { result, unmount } = renderHook(() => usePublicBroadcastTicker({ lang: 'en' }));
+  await act(async () => {});
+  const stream = FakeEventSource.instances[0];
+  act(() => {
+    stream.emit(explicit());
+    stream.dispatchEvent(new Event('error')); // browser reconnecting after EOF
+    stream.dispatchEvent(new Event('open'));
+    stream.dispatchEvent(new MessageEvent('ping', { data: '{"t":1}' }));
+    stream.dispatchEvent(new Event('error'));
+  });
+  expect(stream.close).not.toHaveBeenCalled();
+  expect(fetchPublicBroadcast).toHaveBeenCalledTimes(1);
+  const disabled = { settings: { live: { enabled: false } }, items: { breaking: [], live: [] } };
+  act(() => {
+    stream.dispatchEvent(new Event('open'));
+    stream.emit(disabled);
+    stream.dispatchEvent(new Event('error'));
+  });
+  expect(result.current.liveEnabled).toBe(false);
+  expect(result.current.source).toBe('sse');
+  expect(stream.close).not.toHaveBeenCalled();
+
+  jest.mocked(fetchPublicBroadcast).mockRejectedValueOnce(new Error('connection lost'));
+  await act(async () => {
+    jest.advanceTimersByTime(5001);
+    stream.dispatchEvent(new Event('error')); // failed before a new frame
+  });
+  expect(stream.close).toHaveBeenCalledTimes(1);
+  expect(result.current.error).toBe('connection lost');
+  expect(result.current.liveEnabled).toBe(false);
+  jest.mocked(fetchPublicBroadcast).mockResolvedValueOnce(explicit());
+  await act(async () => {
+    jest.advanceTimersByTime(5001);
+    dispatchPublicDataRefresh({ version: 'recovered', previousVersion: 'before', source: 'test' });
+  });
+  expect(result.current.source).toBe('poll');
+  expect(result.current.error).toBeNull();
+  expect(result.current.liveEnabled).toBe(true);
+  unmount();
+  expect(stream.close).toHaveBeenCalledTimes(1);
+});
+
+test('switching language cancels the previous connection and prevents a late HTTP read from replacing the new snapshot', async () => {
+  let resolveOld!: (value: PublicBroadcast) => void;
+  jest.mocked(fetchPublicBroadcast).mockReturnValueOnce(new Promise(done => { resolveOld = done; }));
+  const { result, rerender, unmount } = renderHook(({ lang }: { lang: 'en' | 'gu' }) =>
+    usePublicBroadcastTicker({ lang }), { initialProps: { lang: 'en' as 'en' | 'gu' } });
+  const signal = jest.mocked(fetchPublicBroadcast).mock.calls[0][0]?.signal;
+  rerender({ lang: 'gu' });
+  await act(async () => {});
+  expect(signal?.aborted).toBe(true);
+  expect(FakeEventSource.instances[0].close).toHaveBeenCalledTimes(1);
+  expect(fetchPublicBroadcast).toHaveBeenCalledTimes(2);
+  act(() => FakeEventSource.instances[1].emit({ items: { live: [{ text: 'GU update' }] } }));
+  await act(async () => { resolveOld(explicit()); });
+  expect(result.current.liveTexts).toEqual(['GU update']);
+  unmount();
+  expect(FakeEventSource.instances[1].close).toHaveBeenCalledTimes(1);
 });
 
 test.each(['en', 'hi', 'gu'] as const)('keeps requested-language content and existing mode handling for %s', async (lang) => {

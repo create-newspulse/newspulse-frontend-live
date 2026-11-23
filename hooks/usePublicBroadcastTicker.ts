@@ -75,8 +75,6 @@ export function usePublicBroadcastTicker(options: {
 
   const inFlightRef = useRef<AbortController | null>(null);
   const fpRef = useRef<string>('');
-  const sseRef = useRef<EventSource | null>(null);
-  const sseFailedRef = useRef(false);
   const focusCooldownRef = useRef<number>(0);
   const lastFetchStartedAtRef = useRef<number>(0);
 
@@ -140,6 +138,10 @@ export function usePublicBroadcastTicker(options: {
 
     return () => {
       unsubscribe();
+      inFlightRef.current?.abort();
+      inFlightRef.current = null;
+      lastFetchStartedAtRef.current = 0;
+      focusCooldownRef.current = 0;
     };
   }, [enabled, refetch]);
 
@@ -150,19 +152,6 @@ export function usePublicBroadcastTicker(options: {
     if (!enableSse) return;
     if (typeof EventSource === 'undefined') return;
 
-    sseFailedRef.current = false;
-
-    const close = () => {
-      try {
-        sseRef.current?.close();
-      } catch {
-        // ignore
-      }
-      sseRef.current = null;
-    };
-
-    close();
-
     const url = `/public/broadcast/stream?lang=${encodeURIComponent(lang)}`;
     if (process.env.NODE_ENV !== 'production') {
       // Temporary debug log: selected language + exact URL being fetched.
@@ -170,16 +159,25 @@ export function usePublicBroadcastTicker(options: {
       console.debug(`[broadcast] lang=${lang} url=${url}`);
     }
     const es = new EventSource(url);
-    sseRef.current = es;
+    let active = true;
+    let receivedFrame = false;
+    const close = () => {
+      if (!active) return;
+      active = false;
+      es.close();
+    };
 
     es.addEventListener('open', () => {
-      setSource('sse');
-    });
+      if (active) setSource('sse');
+    }, { once: true });
 
-    es.addEventListener('broadcast_updated', (evt: any) => {
+    es.addEventListener('broadcast_updated', (evt: MessageEvent<string>) => {
+      if (!active) return;
       try {
-        const json = JSON.parse(String(evt?.data || 'null'));
+        const json: unknown = JSON.parse(evt.data);
+        if (!json || typeof json !== 'object' || Array.isArray(json)) return;
         applyBroadcast(json, 'sse');
+        receivedFrame = true;
         setError(null);
         setIsLoading(false);
       } catch {
@@ -187,16 +185,20 @@ export function usePublicBroadcastTicker(options: {
       }
     });
 
+    es.addEventListener('ping', () => { receivedFrame = true; });
     es.addEventListener('error', () => {
-      sseFailedRef.current = true;
+      if (!active) return;
+      // EOF after a complete snapshot (or unchanged ping) is the normal retry path.
+      if (receivedFrame && es.readyState === EventSource.CONNECTING) {
+        receivedFrame = false;
+        return;
+      }
       close();
       // Immediate fallback so UI recovers quickly.
       refetch('sse_error');
     });
 
-    return () => {
-      close();
-    };
+    return close;
   }, [applyBroadcast, enableSse, enabled, lang, refetch]);
 
   const emptyText = useMemo(() => {

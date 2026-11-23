@@ -1,215 +1,142 @@
+import { createHash } from 'node:crypto';
 import type { NextApiRequest, NextApiResponse } from 'next';
-import crypto from 'crypto';
 
 import { getPublicApiBaseUrl } from '../../../../lib/publicApiBase';
+import { clampTickerSpeedSeconds } from '../../../../lib/publicBroadcast';
+import { PublicReadTimeoutError, withPublicReadDeadline } from '../../../../lib/publicReadDeadline';
 
-function noStore(res: NextApiResponse) {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
+const SNAPSHOT_TIMEOUT_MS = 6_000; // Shared by all reads, below the 10s Vercel API limit.
+const RETRY_MS = 5_000;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function toOrigin(base: string): string {
-  return String(base || '').trim().replace(/\/+$/, '').replace(/\/api\/?$/, '');
-}
-
-async function safeJson(res: Response): Promise<any | null> {
-  const text = await res.text().catch(() => '');
-  if (!text) return null;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
+class UpstreamError extends Error {
+  constructor(readonly status: number) {
+    super(`Broadcast upstream returned ${status}`);
   }
 }
 
-function sseWrite(res: NextApiResponse, payload: { event?: string; data?: any }) {
-  if (payload.event) res.write(`event: ${payload.event}\n`);
-  const data = payload.data === undefined ? null : payload.data;
-  res.write(`data: ${JSON.stringify(data)}\n\n`);
+function isAccessDenied(error: unknown): error is UpstreamError {
+  return error instanceof UpstreamError && (error.status === 401 || error.status === 403);
 }
 
-function hashOf(json: any): string {
-  const str = JSON.stringify(json ?? null);
-  return crypto.createHash('sha1').update(str).digest('hex');
+async function readJson(url: string, signal: AbortSignal): Promise<unknown> {
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: { Accept: 'application/json', 'Cache-Control': 'no-store', Pragma: 'no-cache' },
+    cache: 'no-store',
+    signal,
+  });
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new UpstreamError(response.status);
+  }
+  const json: unknown = await response.json();
+  if (isRecord(json) && (json.ok === false || json.success === false)) throw new Error('Broadcast read failed');
+  return json;
 }
 
-function clampDurationSec(raw: unknown, fallback: number): number {
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.min(40, Math.max(10, n));
-}
-
-function unwrapItems(json: any): any[] {
-  if (!json) return [];
-  if (Array.isArray(json)) return json;
-  if (Array.isArray(json.items)) return json.items;
-  if (Array.isArray(json.data)) return json.data;
-  return [];
-}
-
-function normalizeConfig(raw: any) {
-  const root = raw && typeof raw === 'object' ? raw : {};
-  const cfg = root.config && typeof root.config === 'object' ? root.config : root;
-  const settings = root.settings && typeof root.settings === 'object' ? root.settings : null;
-
-  const breakingSrc = (cfg as any).breaking ?? (settings as any)?.breaking ?? null;
-  const liveSrc = (cfg as any).live ?? (settings as any)?.live ?? null;
-
-  const breakingEnabled = breakingSrc?.enabled;
-  const liveEnabled = liveSrc?.enabled;
-
-  const breakingDuration =
-    breakingSrc?.durationSec ?? breakingSrc?.durationSeconds ?? breakingSrc?.speedSec ?? breakingSrc?.speedSeconds;
-  const liveDuration = liveSrc?.durationSec ?? liveSrc?.durationSeconds ?? liveSrc?.speedSec ?? liveSrc?.speedSeconds;
-
+function tickerSettings(raw: unknown, defaultSpeed: number) {
+  const fields = isRecord(raw) ? raw : {};
   return {
-    breaking: {
-      enabled: breakingEnabled === undefined ? true : Boolean(breakingEnabled),
-      durationSec: clampDurationSec(breakingDuration, 18),
-    },
-    live: {
-      enabled: liveEnabled === undefined ? true : Boolean(liveEnabled),
-      durationSec: clampDurationSec(liveDuration, 24),
-    },
+    enabled: fields.enabled === undefined ? true : Boolean(fields.enabled),
+    mode: 'AUTO',
+    speedSec: clampTickerSpeedSeconds(fields.durationSec ?? fields.durationSeconds ?? fields.speedSec ?? fields.speedSeconds, defaultSpeed),
   };
 }
 
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
+function normalizeConfig(raw: unknown) {
+  if (!isRecord(raw)) throw new Error('Invalid broadcast config');
+  const cfg = isRecord(raw.config) ? raw.config : raw;
+  const settings = isRecord(raw.settings) ? raw.settings : {};
+  const breaking = cfg.breaking ?? settings.breaking;
+  const live = cfg.live ?? settings.live;
+  return {
+    _meta: { hasSettings: isRecord(breaking) || isRecord(live) },
+    settings: { breaking: tickerSettings(breaking, 18), live: tickerSettings(live, 24) },
+  };
+}
+
+async function readConfig(base: string, query: string, signal: AbortSignal) {
+  try {
+    return normalizeConfig(await readJson(`${base}/config${query}`, signal));
+  } catch (primary) {
+    if (signal.aborted || isAccessDenied(primary)) throw primary;
+    try {
+      return normalizeConfig(await readJson(`${base}/settings${query}`, signal));
+    } catch (legacy) {
+      // An items-only backend has no published settings to override the tickers.
+      if (primary instanceof UpstreamError && primary.status === 404 && legacy instanceof UpstreamError && legacy.status === 404) {
+        return normalizeConfig({});
+      }
+      throw legacy;
+    }
+  }
+}
+
+async function readItems(url: string, signal: AbortSignal): Promise<unknown[]> {
+  const json = await readJson(url, signal);
+  if (Array.isArray(json)) return json;
+  if (isRecord(json) && Array.isArray(json.items)) return json.items;
+  if (isRecord(json) && Array.isArray(json.data)) return json.data;
+  throw new Error('Invalid broadcast items');
+}
+
+async function readSnapshot(origin: string, lang: string, signal: AbortSignal) {
+  const base = `${origin}/api/public/broadcast`;
+  const [config, breaking, live] = await Promise.all([
+    readConfig(base, lang && `?lang=${lang}`, signal),
+    readItems(`${base}/items?type=breaking${lang && `&lang=${lang}`}`, signal),
+    readItems(`${base}/items?type=live${lang && `&lang=${lang}`}`, signal),
+  ]);
+  return { ok: true, ...config, items: { breaking, live } };
+}
+
+export const config = { api: { bodyParser: false } };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
     return res.status(405).json({ ok: false, message: 'METHOD_NOT_ALLOWED' });
   }
 
-  noStore(res);
+  const origin = getPublicApiBaseUrl();
+  if (!origin) return res.status(503).json({ ok: false, message: 'BROADCAST_UNAVAILABLE' });
+  const rawLang = String(req.query.lang || '').trim().toLowerCase();
+  const lang = ['en', 'hi', 'gu'].includes(rawLang) ? rawLang : '';
 
-  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
+  const connection = new AbortController();
+  const abort = () => connection.abort();
+  res.once('close', abort);
+  req.once('aborted', abort);
+  try {
+    if (req.aborted || res.destroyed) return;
+    const snapshot = await withPublicReadDeadline(SNAPSHOT_TIMEOUT_MS, signal =>
+      readSnapshot(origin, lang, AbortSignal.any([signal, connection.signal])), connection.signal);
+    if (connection.signal.aborted) return;
 
-  // Flush headers (Node)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (res as any).flushHeaders?.();
-
-  const base = getPublicApiBaseUrl();
-  const origin = toOrigin(base);
-
-  const qLang = String((req.query as any)?.lang || '').toLowerCase().trim();
-  const langQuery = qLang === 'en' || qLang === 'hi' || qLang === 'gu' ? `?lang=${encodeURIComponent(qLang)}` : '';
-  const langParam = qLang === 'en' || qLang === 'hi' || qLang === 'gu' ? `&lang=${encodeURIComponent(qLang)}` : '';
-
-  let closed = false;
-  const markClosed = () => {
-    closed = true;
-  };
-
-  req.on('close', markClosed);
-  req.on('aborted', markClosed);
-
-  const fetchConfig = async (): Promise<any | null> => {
-    if (!origin) return null;
-    // Try config, then fallback settings.
-    const r1 = await fetch(`${origin}/api/public/broadcast/config${langQuery}`, {
-      method: 'GET',
-      headers: { Accept: 'application/json', 'Cache-Control': 'no-store', Pragma: 'no-cache' },
-      cache: 'no-store',
-    }).catch(() => null as any);
-    if (r1) {
-      const j = await safeJson(r1);
-      if (r1.ok && j) return j;
-    }
-
-    const r2 = await fetch(`${origin}/api/public/broadcast/settings${langQuery}`, {
-      method: 'GET',
-      headers: { Accept: 'application/json', 'Cache-Control': 'no-store', Pragma: 'no-cache' },
-      cache: 'no-store',
-    }).catch(() => null as any);
-    if (r2) {
-      const j = await safeJson(r2);
-      if (r2.ok && j) return j;
-    }
-
-    return null;
-  };
-
-  const fetchItems = async (type: 'breaking' | 'live'): Promise<any[]> => {
-    if (!origin) return [];
-    const url = `${origin}/api/public/broadcast/items?type=${encodeURIComponent(type)}${langParam}`;
-    const upstream = await fetch(url, {
-      method: 'GET',
-      headers: { Accept: 'application/json', 'Cache-Control': 'no-store', Pragma: 'no-cache' },
-      cache: 'no-store',
-    }).catch(() => null as any);
-    if (!upstream) return [];
-    const json = await safeJson(upstream);
-    if (!upstream.ok || !json) return [];
-    return unwrapItems(json);
-  };
-
-  const buildPayload = async (): Promise<any> => {
-    // Fail-open: allow clients to connect even without configured origin.
-    const cfgRaw = (await fetchConfig()) ?? { ok: true, config: { breaking: { enabled: true, durationSec: 18 }, live: { enabled: true, durationSec: 24 } } };
-    const normalizedCfg = normalizeConfig((cfgRaw as any).config ? cfgRaw : { config: (cfgRaw as any).settings ?? cfgRaw });
-
-    const [breakingItems, liveItems] = await Promise.all([fetchItems('breaking'), fetchItems('live')]);
-
-    return {
-      ok: true,
-      _meta: { hasSettings: true },
-      settings: {
-        breaking: { enabled: normalizedCfg.breaking.enabled, mode: 'AUTO', speedSec: normalizedCfg.breaking.durationSec },
-        live: { enabled: normalizedCfg.live.enabled, mode: 'AUTO', speedSec: normalizedCfg.live.durationSec },
-      },
-      items: { breaking: breakingItems, live: liveItems },
-    };
-  };
-
-  let lastHash = '';
-
-  // Initial payload
-  const first = await buildPayload().catch(() => ({
-    ok: true,
-    _meta: { hasSettings: false },
-    settings: { breaking: { enabled: true, mode: 'AUTO', speedSec: 18 }, live: { enabled: true, mode: 'AUTO', speedSec: 24 } },
-    items: { breaking: [], live: [] },
-  }));
-
-  lastHash = hashOf(first);
-  sseWrite(res, { event: 'broadcast_updated', data: first });
-
-  const pingTimer = setInterval(() => {
-    if (closed) return;
-    sseWrite(res, { event: 'ping', data: { t: Date.now() } });
-  }, 15_000);
-
-  const pollTimer = setInterval(async () => {
-    if (closed) return;
-    const next = await buildPayload().catch(() => null);
-    if (!next) return;
-
-    const h = hashOf(next);
-    if (h === lastHash) return;
-
-    lastHash = h;
-    sseWrite(res, { event: 'broadcast_updated', data: next });
-  }, 5_000);
-
-  const cleanup = () => {
-    clearInterval(pingTimer);
-    clearInterval(pollTimer);
-    try {
-      res.end();
-    } catch {
-      // ignore
-    }
-  };
-
-  req.on('close', cleanup);
-  req.on('aborted', cleanup);
+    // EventSource waits between snapshots in the browser, not inside the function.
+    const data = JSON.stringify(snapshot);
+    const id = createHash('sha1').update(data).digest('hex');
+    const event = req.headers['last-event-id'] === id
+      ? `event: ping\ndata: ${JSON.stringify({ t: Date.now() })}`
+      : `event: broadcast_updated\ndata: ${data}`;
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.end(`retry: ${RETRY_MS}\nid: ${id}\n${event}\n\n`);
+  } catch (error) {
+    if (connection.signal.aborted) return;
+    const timeout = error instanceof PublicReadTimeoutError;
+    res.status(timeout ? 504 : isAccessDenied(error) ? error.status : 502)
+      .json({ ok: false, message: timeout ? 'BROADCAST_TIMEOUT' : 'BROADCAST_UNAVAILABLE' });
+  } finally {
+    abort(); // Cancel any sibling reads left pending by an upstream failure.
+    res.off('close', abort);
+    req.off('aborted', abort);
+  }
 }

@@ -18,7 +18,8 @@ The root [package.json](./package.json) defines a Next.js 16 / React 19 applicat
 Browser
   +-- page navigation --> Next routing / proxy --> page and application providers
   +-- /api/... --------> Next API handler ------> backend or external service
-  +-- broadcast aliases -----------------------> rewrite to backend
+  +-- /public-api/... -------------------------> rewrite to backend
+  +-- /public/broadcast/... -------------------> Next broadcast API handlers
 
 SSR / static page loaders --> shared data helpers --> configured backend
 Initial page props --------> client state ---------> later refreshes
@@ -29,6 +30,7 @@ The exact path matters:
 - [proxy.ts](./proxy.ts) handles backend-driven SEO redirects, locale routing, and blocking legacy PWA endpoints. It skips API routes and Next internals.
 - [next.config.js](./next.config.js) configures locales, image sources, redirects, rewrites, and response headers. It disables automatic trailing-slash redirects.
 - [vercel.json](./vercel.json) adds deployment-specific rewrites, headers, and API function duration limits. Its public broadcast rewrites contain a fixed production backend target.
+- The homepage ticker [stream](./pages/api/public/broadcast/stream.ts) is not the Live TV video transport. It returns one no-store SSE snapshot per request, with a six-second shared upstream deadline. The [ticker hook](./hooks/usePublicBroadcastTicker.ts) lets EventSource reconnect after five seconds; `Last-Event-ID` yields a `ping` when unchanged. Incomplete connections still use the HTTP/version-refresh fallback. Live TV playback and schedules use their separate [page and public APIs](./pages/live-tv.tsx).
 - Browser calls through [lib/publicApiBase.ts](./lib/publicApiBase.ts) use an empty base so requests reach same-origin API routes. Server-side calls can go directly to the configured backend instead of making a loopback request to Next.js.
 
 ### Backend selection
