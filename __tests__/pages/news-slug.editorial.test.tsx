@@ -1,7 +1,9 @@
 import React from 'react';
+import { EventEmitter } from 'node:events';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
-import NewsSlugDetailPage, { ArticleFacebookEmbed, ArticleGallery, ArticleInlineImage, ArticleInstagramEmbed, ArticleXEmbed, ArticleYouTubeEmbed, getServerSideProps } from '../../pages/news/[slug]';
+import { ArticleDetailView as NewsSlugDetailPage, ArticleFacebookEmbed, ArticleGallery, ArticleInlineImage, ArticleInstagramEmbed, ArticleXEmbed, ArticleYouTubeEmbed, getServerSideProps } from '../../pages/news/[slug]';
+import { projectArticleRelatedStories } from '../../lib/articlePageData';
 import { formatArticleBodyHtml } from '../../lib/articleBody';
 import { fetchPublicNews } from '../../lib/publicNewsApi';
 import { hasRenderedTwitterWidgetFrame, loadTwitterWidgetsIn } from '../../lib/xWidgets';
@@ -218,11 +220,10 @@ describe('pages/news/[slug] editorial detail', () => {
 
   function renderAuthorArticle(overrides: Record<string, unknown> = {}, lang: 'en' | 'hi' | 'gu' = 'en') {
     return render(
-      <NewsSlugDetailPage
-        messages={{}} locale={lang} lang={lang} slug="author-story"
+      <NewsSlugDetailPage lang={lang} slug="author-story"
         siteUrl="https://www.newspulse.co.in"
         article={editorialArticle({ category: 'national', language: lang, slug: 'author-story', ...overrides }) as any}
-        safeHtml="<p>Newsroom article body.</p>" topStories={[]} relatedStories={[]}
+        safeHtml="<p>Newsroom article body.</p>" relatedStories={[]}
         error={null} pending={false}
       />
     );
@@ -391,15 +392,12 @@ describe('pages/news/[slug] editorial detail', () => {
   test('renders editorial detail fields without mixing author role and editorial type', async () => {
     render(
       <NewsSlugDetailPage
-        messages={{}}
-        locale="en"
         lang="en"
         slug="special-story"
         siteUrl="https://www.newspulse.co.in"
         article={editorialArticle() as any}
         safeHtml="<p>Complete article content</p>"
-        topStories={[]}
-        relatedStories={[editorialArticle({ _id: 'related-1', slug: 'related-editorial', title: 'Related Editorial', summary: 'Related summary' }) as any]}
+        relatedStories={projectArticleRelatedStories([editorialArticle({ _id: 'related-1', slug: 'related-editorial', title: 'Related Editorial', summary: 'Related summary' })], 'en')}
         error={null}
         pending={false}
       />
@@ -429,8 +427,6 @@ describe('pages/news/[slug] editorial detail', () => {
   test('renders Gujarati article title, summary, and content on Gujarati detail routes', async () => {
     render(
       <NewsSlugDetailPage
-        messages={{}}
-        locale="gu"
         lang="gu"
         slug="javabdar-digital-patrakarita"
         siteUrl="https://www.newspulse.co.in"
@@ -445,8 +441,7 @@ describe('pages/news/[slug] editorial detail', () => {
           image: { gu: { alt: 'ગુજરાતી છબી વર્ણન' } },
         }) as any}
         safeHtml="<p>ગુજરાતી લેખની સંપૂર્ણ સામગ્રી</p>"
-        topStories={[]}
-        relatedStories={[
+        relatedStories={projectArticleRelatedStories([
           editorialArticle({
             _id: 'related-gu',
             language: 'gu',
@@ -463,7 +458,7 @@ describe('pages/news/[slug] editorial detail', () => {
             content: '<p>Related English body</p>',
             slug: 'related-english-news',
           }) as any,
-        ]}
+        ], 'gu')}
         error={null}
         pending={false}
       />
@@ -489,14 +484,11 @@ describe('pages/news/[slug] editorial detail', () => {
 
     render(
       <NewsSlugDetailPage
-        messages={{}}
-        locale="en"
         lang="en"
         slug="special-story"
         siteUrl="https://www.newspulse.co.in"
         article={editorialArticle({ imageUrl, coverImage: { url: imageUrl }, coverImageUrl: imageUrl }) as any}
         safeHtml="<p>Complete article content</p>"
-        topStories={[]}
         relatedStories={[]}
         error={null}
         pending={false}
@@ -513,8 +505,6 @@ describe('pages/news/[slug] editorial detail', () => {
   ] as const)('renders %s Pulse attribution and each localized notice exactly once without staff fallback', async (routeLang, disclosure, disclaimer) => {
     render(
       <NewsSlugDetailPage
-        messages={{}}
-        locale={routeLang}
         lang={routeLang}
         slug="city-dialogue"
         siteUrl="https://www.newspulse.co.in"
@@ -550,7 +540,6 @@ describe('pages/news/[slug] editorial detail', () => {
           },
         }) as any}
         safeHtml="<p>Pulse Dialogue article body.</p>"
-        topStories={[]}
         relatedStories={[]}
         error={null}
         pending={false}
@@ -591,7 +580,7 @@ describe('pages/news/[slug] editorial detail', () => {
       bylineSnapshot: { name: 'Historical Writer', designation: 'Historical Role', photoUrl: '/historical.jpg' },
       contributor: { name: 'Current Writer', publicDesignation: 'Current Role', photoUrl: '/current.jpg' },
     } });
-    const props = { messages: {}, locale, lang: locale, slug: 'special-story', siteUrl: 'https://www.newspulse.co.in', safeHtml: '<p>Body</p>', topStories: [], relatedStories: [], error: null, pending: false };
+    const props = { lang: locale, slug: 'special-story', siteUrl: 'https://www.newspulse.co.in', safeHtml: '<p>Body</p>', relatedStories: [], error: null, pending: false };
     const view = render(<NewsSlugDetailPage {...props} article={makeArticle(true) as any} />);
     const href = `${locale === 'en' ? '' : `/${locale}`}/pulse-dialogue/contributors/current-writer`;
     expect(screen.getByRole('link', { name: 'View all contributions' }).getAttribute('href')).toBe(href);
@@ -610,8 +599,6 @@ describe('pages/news/[slug] editorial detail', () => {
   test('renders public contributor photo fallback without using the article cover image as the byline photo', async () => {
     render(
       <NewsSlugDetailPage
-        messages={{}}
-        locale="en"
         lang="en"
         slug="public-photo-dialogue"
         siteUrl="https://www.newspulse.co.in"
@@ -637,7 +624,6 @@ describe('pages/news/[slug] editorial detail', () => {
           },
         }) as any}
         safeHtml="<p>Pulse Dialogue public photo article body.</p>"
-        topStories={[]}
         relatedStories={[]}
         error={null}
         pending={false}
@@ -653,8 +639,6 @@ describe('pages/news/[slug] editorial detail', () => {
   test('keeps Pulse Dialogue no-photo byline layout clean', async () => {
     render(
       <NewsSlugDetailPage
-        messages={{}}
-        locale="en"
         lang="en"
         slug="no-photo-dialogue"
         siteUrl="https://www.newspulse.co.in"
@@ -677,7 +661,6 @@ describe('pages/news/[slug] editorial detail', () => {
           },
         }) as any}
         safeHtml="<p>Pulse Dialogue no photo article body.</p>"
-        topStories={[]}
         relatedStories={[]}
         error={null}
         pending={false}
@@ -695,8 +678,6 @@ describe('pages/news/[slug] editorial detail', () => {
   test('falls back to the clean no-photo layout when contributor photo loading fails', async () => {
     render(
       <NewsSlugDetailPage
-        messages={{}}
-        locale="en"
         lang="en"
         slug="broken-photo-dialogue"
         siteUrl="https://www.newspulse.co.in"
@@ -715,7 +696,6 @@ describe('pages/news/[slug] editorial detail', () => {
           },
         }) as any}
         safeHtml="<p>Pulse Dialogue broken photo article body.</p>"
-        topStories={[]}
         relatedStories={[]}
         error={null}
         pending={false}
@@ -735,8 +715,6 @@ describe('pages/news/[slug] editorial detail', () => {
       mockBylinePrefix = { en: 'By', hi: 'द्वारा', gu: 'દ્વારા' }[routeLang];
       const { unmount } = render(
         <NewsSlugDetailPage
-          messages={{}}
-          locale={routeLang}
           lang={routeLang}
           slug={`${routeLang}-shared-photo-dialogue`}
           siteUrl="https://www.newspulse.co.in"
@@ -761,7 +739,6 @@ describe('pages/news/[slug] editorial detail', () => {
             },
           }) as any}
           safeHtml={`<p>Shared Pulse Dialogue body ${routeLang}.</p>`}
-          topStories={[]}
           relatedStories={[]}
           error={null}
           pending={false}
@@ -781,8 +758,6 @@ describe('pages/news/[slug] editorial detail', () => {
   test('leaves normal non-Pulse article rendering unchanged even when contributor-like data is present', async () => {
     render(
       <NewsSlugDetailPage
-        messages={{}}
-        locale="en"
         lang="en"
         slug="normal-story"
         siteUrl="https://www.newspulse.co.in"
@@ -801,7 +776,6 @@ describe('pages/news/[slug] editorial detail', () => {
           },
         }) as any}
         safeHtml="<p>Normal article body.</p>"
-        topStories={[]}
         relatedStories={[]}
         error={null}
         pending={false}
@@ -817,14 +791,11 @@ describe('pages/news/[slug] editorial detail', () => {
   test('renders controlled inline article images responsively with caption, credit, and fallback', async () => {
     render(
       <NewsSlugDetailPage
-        messages={{}}
-        locale="en"
         lang="en"
         slug="special-story"
         siteUrl="https://www.newspulse.co.in"
         article={editorialArticle() as any}
         safeHtml={'<p>Complete article content</p><figure class="np-inline-image" data-np-block="inline-image" data-np-media-id="media_123"><img class="np-inline-image__media" src="https://cdn.newspulse.co.in/images/story.jpg" alt="Flood rescue image" width="1200" height="800" loading="lazy" decoding="async" /><figcaption class="np-inline-image__caption"><span class="np-inline-image__caption-text" data-np-caption="true">Flood rescue image</span><span class="np-inline-image__credit" data-np-credit="true">Photo: News Pulse / Staff</span></figcaption></figure><p>After image paragraph.</p>'}
-        topStories={[]}
         relatedStories={[]}
         error={null}
         pending={false}
@@ -964,14 +935,11 @@ describe('pages/news/[slug] editorial detail', () => {
 
     render(
       <NewsSlugDetailPage
-        messages={{}}
-        locale="en"
         lang="en"
         slug="special-story"
         siteUrl="https://www.newspulse.co.in"
         article={editorialArticle() as any}
         safeHtml={safeHtml}
-        topStories={[]}
         relatedStories={[]}
         error={null}
         pending={false}
@@ -1008,14 +976,11 @@ describe('pages/news/[slug] editorial detail', () => {
 
     render(
       <NewsSlugDetailPage
-        messages={{}}
-        locale="en"
         lang="en"
         slug="special-story"
         siteUrl="https://www.newspulse.co.in"
         article={editorialArticle() as any}
         safeHtml={safeHtml}
-        topStories={[]}
         relatedStories={[]}
         error={null}
         pending={false}
@@ -1053,14 +1018,11 @@ describe('pages/news/[slug] editorial detail', () => {
 
     render(
       <NewsSlugDetailPage
-        messages={{}}
-        locale="en"
         lang="en"
         slug="special-story"
         siteUrl="https://www.newspulse.co.in"
         article={editorialArticle() as any}
         safeHtml={safeHtml}
-        topStories={[]}
         relatedStories={[]}
         error={null}
         pending={false}
@@ -1212,14 +1174,11 @@ describe('pages/news/[slug] editorial detail', () => {
 
     render(
       <NewsSlugDetailPage
-        messages={{}}
-        locale="en"
         lang="en"
         slug="special-story"
         siteUrl="https://www.newspulse.co.in"
         article={editorialArticle() as any}
         safeHtml={safeHtml}
-        topStories={[]}
         relatedStories={[]}
         error={null}
         pending={false}
@@ -1239,14 +1198,11 @@ describe('pages/news/[slug] editorial detail', () => {
 
     render(
       <NewsSlugDetailPage
-        messages={{}}
-        locale="en"
         lang="en"
         slug="special-story"
         siteUrl="https://www.newspulse.co.in"
         article={editorialArticle() as any}
         safeHtml={safeHtml}
-        topStories={[]}
         relatedStories={[]}
         error={null}
         pending={false}
@@ -1313,14 +1269,11 @@ describe('pages/news/[slug] editorial detail', () => {
 
     render(
       <NewsSlugDetailPage
-        messages={{}}
-        locale="en"
         lang="en"
         slug="special-story"
         siteUrl="https://www.newspulse.co.in"
         article={editorialArticle() as any}
         safeHtml={safeHtml}
-        topStories={[]}
         relatedStories={[]}
         error={null}
         pending={false}
@@ -1374,14 +1327,11 @@ describe('pages/news/[slug] editorial detail', () => {
 
     render(
       <NewsSlugDetailPage
-        messages={{}}
-        locale="en"
         lang="en"
         slug="special-story"
         siteUrl="https://www.newspulse.co.in"
         article={editorialArticle() as any}
         safeHtml={safeHtml}
-        topStories={[]}
         relatedStories={[]}
         error={null}
         pending={false}
@@ -1412,14 +1362,11 @@ describe('pages/news/[slug] editorial detail', () => {
 
     render(
       <NewsSlugDetailPage
-        messages={{}}
-        locale="en"
         lang="en"
         slug="special-story"
         siteUrl="https://www.newspulse.co.in"
         article={editorialArticle() as any}
         safeHtml={safeHtml}
-        topStories={[]}
         relatedStories={[]}
         error={null}
         pending={false}
@@ -1489,14 +1436,11 @@ describe('pages/news/[slug] editorial detail', () => {
 
       render(
         <NewsSlugDetailPage
-          messages={{}}
-          locale={language}
           lang={language}
           slug="special-story"
           siteUrl="https://www.newspulse.co.in"
           article={editorialArticle({ language }) as any}
           safeHtml={safeHtml}
-          topStories={[]}
           relatedStories={[]}
           error={null}
           pending={false}
@@ -1513,14 +1457,11 @@ describe('pages/news/[slug] editorial detail', () => {
 
     render(
       <NewsSlugDetailPage
-        messages={{}}
-        locale="en"
         lang="en"
         slug="special-story"
         siteUrl="https://www.newspulse.co.in"
         article={editorialArticle() as any}
         safeHtml={safeHtml}
-        topStories={[]}
         relatedStories={[]}
         error={null}
         pending={false}
@@ -1550,14 +1491,11 @@ describe('pages/news/[slug] editorial detail', () => {
 
     render(
       <NewsSlugDetailPage
-        messages={{}}
-        locale="en"
         lang="en"
         slug="special-story"
         siteUrl="https://www.newspulse.co.in"
         article={editorialArticle() as any}
         safeHtml={safeHtml}
-        topStories={[]}
         relatedStories={[]}
         error={null}
         pending={false}
@@ -1572,14 +1510,11 @@ describe('pages/news/[slug] editorial detail', () => {
 
     render(
       <NewsSlugDetailPage
-        messages={{}}
-        locale="en"
         lang="en"
         slug="special-story"
         siteUrl="https://www.newspulse.co.in"
         article={editorialArticle() as any}
         safeHtml={safeHtml}
-        topStories={[]}
         relatedStories={[]}
         error={null}
         pending={false}
@@ -1594,14 +1529,11 @@ describe('pages/news/[slug] editorial detail', () => {
   test('does not render Facebook iframe resources for articles without controlled Facebook blocks', async () => {
     render(
       <NewsSlugDetailPage
-        messages={{}}
-        locale="en"
         lang="en"
         slug="special-story"
         siteUrl="https://www.newspulse.co.in"
         article={editorialArticle() as any}
         safeHtml="<p>Complete article content</p>"
-        topStories={[]}
         relatedStories={[]}
         error={null}
         pending={false}
@@ -1691,14 +1623,11 @@ describe('pages/news/[slug] editorial detail', () => {
 
       render(
         <NewsSlugDetailPage
-          messages={{}}
-          locale={language}
           lang={language}
           slug="special-story"
           siteUrl="https://www.newspulse.co.in"
           article={editorialArticle({ language }) as any}
           safeHtml={safeHtml}
-          topStories={[]}
           relatedStories={[]}
           error={null}
           pending={false}
@@ -1715,14 +1644,11 @@ describe('pages/news/[slug] editorial detail', () => {
 
     render(
       <NewsSlugDetailPage
-        messages={{}}
-        locale="en"
         lang="en"
         slug="special-story"
         siteUrl="https://www.newspulse.co.in"
         article={editorialArticle() as any}
         safeHtml={safeHtml}
-        topStories={[]}
         relatedStories={[]}
         error={null}
         pending={false}
@@ -1748,14 +1674,11 @@ describe('pages/news/[slug] editorial detail', () => {
   test('does not initialize X widgets for articles without controlled X blocks', async () => {
     render(
       <NewsSlugDetailPage
-        messages={{}}
-        locale="en"
         lang="en"
         slug="special-story"
         siteUrl="https://www.newspulse.co.in"
         article={editorialArticle() as any}
         safeHtml="<p>Complete article content</p>"
-        topStories={[]}
         relatedStories={[]}
         error={null}
         pending={false}
@@ -1789,14 +1712,11 @@ describe('pages/news/[slug] editorial detail', () => {
   test('uses the article detail placeholder only when no usable image resolves', async () => {
     render(
       <NewsSlugDetailPage
-        messages={{}}
-        locale="en"
         lang="en"
         slug="special-story"
         siteUrl="https://www.newspulse.co.in"
         article={editorialArticle({ imageUrl: 'C:\\fakepath\\broken.jpg', coverImage: null, coverImageUrl: '' }) as any}
         safeHtml="<p>Complete article content</p>"
-        topStories={[]}
         relatedStories={[]}
         error={null}
         pending={false}
@@ -1809,8 +1729,6 @@ describe('pages/news/[slug] editorial detail', () => {
   test('renders Hindi article body on Hindi detail routes', async () => {
     render(
       <NewsSlugDetailPage
-        messages={{}}
-        locale="hi"
         lang="hi"
         slug="jimmedar-digital-patrakarita"
         siteUrl="https://www.newspulse.co.in"
@@ -1824,7 +1742,6 @@ describe('pages/news/[slug] editorial detail', () => {
           editorialType: 'editorial',
         }) as any}
         safeHtml="<p>हिंदी लेख की पूरी सामग्री</p>"
-        topStories={[]}
         relatedStories={[]}
         error={null}
         pending={false}
@@ -1840,14 +1757,11 @@ describe('pages/news/[slug] editorial detail', () => {
   test('shows pending translation copy with source-language reading option', async () => {
     render(
       <NewsSlugDetailPage
-        messages={{}}
-        locale="gu"
         lang="gu"
         slug="pending-story"
         siteUrl="https://www.newspulse.co.in"
         article={null}
         safeHtml=""
-        topStories={[]}
         relatedStories={[]}
         error={null}
         pending
@@ -1884,14 +1798,11 @@ describe('pages/news/[slug] editorial detail', () => {
 
     render(
       <NewsSlugDetailPage
-        messages={{}}
-        locale="en"
         lang="en"
         slug="special-story"
         siteUrl="https://www.newspulse.co.in"
         article={editorialArticle() as any}
         safeHtml="<p>Complete article content</p>"
-        topStories={[]}
         relatedStories={[]}
         error={null}
         pending={false}
@@ -1918,7 +1829,7 @@ describe('pages/news/[slug] editorial detail', () => {
       locale: 'en',
       params: { slug: 'missing-editorial' },
       req: { headers: { host: 'localhost:3000' } },
-      res: { setHeader: jest.fn() },
+      res: Object.assign(new EventEmitter(), { setHeader: jest.fn() }),
     };
 
     global.fetch = jest.fn(() => Promise.resolve({ json: async () => ({ article: null }) })) as any;

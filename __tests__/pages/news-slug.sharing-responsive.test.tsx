@@ -49,9 +49,9 @@ async function loadArticle(locale: Lang, width: number, height = 800) {
   const html = renderToStaticMarkup(
     <LanguageProvider initialLang={locale}>
       <NewsSlugDetailPage
-        lang={locale} locale={locale} messages={{}} slug="share-story" siteUrl="https://www.newspulse.co.in"
+        lang={locale} slug="share-story" siteUrl="https://www.newspulse.co.in"
         article={article}
-        safeHtml={body} topStories={[]} relatedStories={[]} pending={false} error={null}
+        relatedStories={[]} pending={false} error={null}
       />
     </LanguageProvider>
   );

@@ -42,8 +42,7 @@ function article(overrides: Record<string, unknown> = {}) {
 
 function props(story: Article, lang: 'en' | 'hi' | 'gu' = 'en'): React.ComponentProps<typeof NewsSlugDetailPage> {
   return {
-    messages: {}, locale: lang, lang, slug: story.slug || story._id,
-    article: story, safeHtml: story.content || '', topStories: [], relatedStories: [],
+    lang, slug: story.slug || story._id, article: story, relatedStories: [],
     error: null, pending: false, siteUrl: 'https://www.newspulse.co.in',
   };
 }
@@ -256,7 +255,7 @@ describe('pending translation read recovery', () => {
     });
     const initialProps = props(article());
     const view = render(<NewsSlugDetailPage {...initialProps} />);
-    view.rerender(<NewsSlugDetailPage {...initialProps} lang="hi" locale="hi" article={null} safeHtml="" pending />);
+    view.rerender(<NewsSlugDetailPage {...initialProps} lang="hi" article={null} pending />);
     expect(screen.queryByRole('group', { name: 'articleShare.label' })).toBeNull();
     await act(async () => { await jest.advanceTimersByTimeAsync(1500); });
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -275,7 +274,7 @@ describe('pending translation read recovery', () => {
   test('still accepts an eligible published translation without another read', async () => {
     jest.useFakeTimers();
     fetchMock.mockResolvedValueOnce(json({ article: article() }));
-    render(<NewsSlugDetailPage {...props(article())} article={null} safeHtml="" pending />);
+    render(<NewsSlugDetailPage {...props(article())} article={null} pending />);
     await act(async () => { await jest.advanceTimersByTimeAsync(1500); });
     expect(screen.getByRole('heading', { name: 'Original title' })).toBeTruthy();
     expect(screen.getByText('Original body')).toBeTruthy();
@@ -286,7 +285,7 @@ describe('pending translation read recovery', () => {
   test('keeps the existing ten-attempt recovery limit', async () => {
     jest.useFakeTimers();
     fetchMock.mockImplementation(async () => json({ status: 'pending', sourceLang: 'en' }));
-    render(<NewsSlugDetailPage {...props(article())} article={null} safeHtml="" pending />);
+    render(<NewsSlugDetailPage {...props(article())} article={null} pending />);
     await act(async () => { await jest.advanceTimersByTimeAsync(16_500); });
     expect(fetchMock).toHaveBeenCalledTimes(10);
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
@@ -439,7 +438,7 @@ test('withdrawing a requested translation does not leak the original language', 
     translationStatus: { hi: 'APPROVED' },
   });
   fetchMock.mockResolvedValueOnce(json({ items: [{ ...initial, translationStatus: { hi: 'BLOCKED' } }] }));
-  render(<NewsSlugDetailPage {...props(initial, 'hi')} safeHtml="<p>Localized body</p>" />);
+  render(<NewsSlugDetailPage {...props(initial, 'hi')} />);
   await refresh();
   await expectWithdrawn();
   expect(screen.queryByText('Localized body')).toBeNull();

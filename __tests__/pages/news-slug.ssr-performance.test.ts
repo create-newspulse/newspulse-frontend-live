@@ -89,8 +89,7 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
     if (!('props' in result)) throw new Error('Expected a resolved article, not a redirect or 404');
     expect(await result.props).toMatchObject({
       lang, slug, error: null, pending: false,
-      article: { _id: record._id, language: lang, slug, translations },
-      safeHtml: '<p>Body</p>',
+      article: { _id: record._id, language: lang, slug, translations, content: '<p>Body</p>' },
     });
     expect(ctx.res.statusCode).toBe(200);
     expect(calls[0]).toContain(`/api/public/news/slug/${encodeURIComponent(slug)}?lang=${lang}&language=${lang}`);
@@ -120,7 +119,6 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
         article: { _id: current._id, slug: current.slug, campaignStatus }, error: null, pending: false,
         seo: { canonicalUrl: `https://www.newspulse.co.in${lang === 'en' ? '' : `/${lang}`}/news/${current.slug}` },
         relatedStories: [{ _id: 'ordinary' }, { _id: 'older' }],
-        topStories: [{ _id: 'ordinary' }, { _id: 'older' }],
       });
       expect(ctx.res.statusCode).toBe(200);
       expect(calls).toHaveLength(2);
@@ -214,7 +212,7 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
             translationKey: story.translationKey, translationGroupId: story.translationGroupId,
           },
         });
-        expect(props.safeHtml).toContain('Body');
+        expect(props.article?.content).toContain('Body');
       }
       expect(calls.filter((url) => url.includes('/api/public/news/slug/'))).toHaveLength(3);
       expect(calls).toHaveLength(8);
@@ -275,7 +273,7 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
         if (!('props' in result)) throw new Error('Expected the original published article');
         const props = await result.props;
         expect(props.article).toEqual(record);
-        expect(props).toMatchObject({ lang, slug, error: null, pending: false, safeHtml: '<p>Body</p>', topStories: [], relatedStories: [] });
+        expect(props).toMatchObject({ lang, slug, error: null, pending: false, relatedStories: [] });
         expect(ctx.res.statusCode).toBe(200);
         expect(ctx.res.getHeader('Cache-Control')).toBe('no-store, no-cache, must-revalidate, proxy-revalidate');
         expect(fetchMock.mock.calls.map(([input]) => new URL(String(input)).pathname))
@@ -332,7 +330,7 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
     expect(completed).toBe(true);
     const result = await pending as any;
     expect(result.props.article.title).toBe('Gujarat Budget 2026');
-    expect(result.props.safeHtml).toContain('Body');
+    expect(result.props.article.content).toContain('Body');
     expect(result.props.relatedStories).toEqual([]);
     expect(jest.getTimerCount()).toBe(0);
   });
@@ -366,7 +364,7 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
     const result: any = await getServerSideProps(createCtx('gujarat-budget-2026'));
 
     expect(result.props.article._id).toBe('507f1f77bcf86cd799439011');
-    expect(result.props.safeHtml).toContain('Body');
+    expect(result.props.article.content).toContain('Body');
     expect(result.props.relatedStories).toHaveLength(1);
     expect(result.props.relatedStories[0]._id).toBe('other-1');
     expect(result.props.relatedStories.map((item: any) => item._id)).not.toContain('draft-related');
@@ -380,8 +378,45 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
     });
 
     await getServerSideProps(createCtx('gujarat-budget-2026'));
-
     expect(calls.some((url) => url.includes('/api/public/news/group/'))).toBe(false);
+  });
+
+  test.each(['en', 'hi', 'gu'] as const)('%s ships the complete detail once and no recommendation bodies on either route', async lang => {
+    const body = `<p>${{ en: 'Paragraph ', hi: 'अनुच्छेद ', gu: 'ફકરો ' }[lang].repeat(1600)}</p><p>Final paragraph.</p>`;
+    const main = article({ language: lang, content: body, body, slug: 'original' });
+    const related = Array.from({ length: 12 }, (_, i) => article({
+      _id: `card-${i}`, slug: `card-${i}`, language: lang, title: `Headline ${i}`,
+      content: `Unused recommendation body ${body}`, imageUrl: `/img/${i}.jpg`, translationKey: `peer-${i}`,
+    }));
+    mockFetchSequence(url => url.includes('/api/public/news?') ? { items: [
+      { ...related[0], visibility: 'restricted', title: 'Restricted headline' }, ...related,
+    ] } : { article: main });
+    for (const shortLink of [false, true]) {
+      const result = await getServerSideProps(createCtx(shortLink ? main._id : main.slug, lang), { shortLink });
+      if (!('props' in result)) throw new Error('Expected the complete public article');
+      const props = await result.props;
+      const wire = JSON.stringify(props);
+      expect(props.article?.content).toBe(body);
+      expect(props.article).not.toHaveProperty('body');
+      expect(props.bodyIsContent).toBe(true);
+      expect(wire).not.toMatch(/Unused recommendation body|Restricted headline|safeHtml|topStories|"messages"/);
+      expect(wire.match(/Final paragraph\./g)).toHaveLength(1);
+      expect(Buffer.byteLength(wire)).toBeLessThan(128_000);
+      expect(props.relatedStories.flatMap(s => s.card ? [s.card.title] : [])).toEqual(related.slice(0, 6).map(s => s.title));
+      expect(props.relatedStories.map(s => s.translationKey)).toEqual(related.map((_, i) => `peer-${i}`));
+    }
+  });
+
+  test('does not truncate intrinsically large articles or discard distinct body data', async () => {
+    const content = `<p>${'માહિતી '.repeat(8000)}</p><p>Last paragraph.</p>`;
+    const main = article({ content, body: 'Distinct legacy representation' });
+    mockFetchSequence(url => url.includes('/api/public/news?') ? { items: [] } : { article: main });
+    const result = await getServerSideProps(createCtx(main.slug));
+    if (!('props' in result)) throw new Error('Expected a long published article');
+    const props = await result.props;
+    expect(Buffer.byteLength(content)).toBeGreaterThan(128_000);
+    expect(props.article).toMatchObject({ content, body: 'Distinct legacy representation' });
+    expect(props.bodyIsContent).toBeUndefined();
   });
 
   test('keeps the blocking path to a single article request plus one list request', async () => {
@@ -411,7 +446,7 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
 
     expect(result.props.article._id).toBe('507f1f77bcf86cd799439011');
     expect(result.props.relatedStories).toEqual([]);
-    expect(result.props.topStories).toEqual([]);
+    expect(result.props).not.toHaveProperty('topStories');
   });
 
   test('returns notFound when no article resolves', async () => {

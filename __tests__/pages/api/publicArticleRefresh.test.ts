@@ -349,7 +349,7 @@ test.each([
   const { rendered, elapsed } = await result;
   expect(ctx.res.statusCode).toBe(200);
   expect(rendered).toHaveProperty('props.article', record);
-  expect(rendered).toHaveProperty('props.safeHtml', record.content);
+  expect(rendered).toHaveProperty('props.article.content', record.content);
   expect(elapsed).toBeLessThanOrEqual(4250);
   expect(groupSignal?.aborted).toBe(true);
   expect(jest.getTimerCount()).toBe(0);

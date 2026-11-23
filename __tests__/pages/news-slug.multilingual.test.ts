@@ -157,7 +157,7 @@ describe.each(['deployed', 'candidate'] as const)('%s Backend compatibility', ve
     const props = await result.props;
     const canonical = `${NEWS_PULSE_SITE_URL}${lang === 'en' ? '' : `/${lang}`}/news/${encodeURIComponent(record.canonicalSlug)}`;
     expect(props.article).toMatchObject({ _id: record._id, title: record.title, publishedAt: record.publishedAt });
-    expect(props.safeHtml).toContain(record.content);
+    expect(props.article?.content).toBe(record.content);
     expect(props.seo?.canonicalUrl).toBe(canonical);
     expect(props.seo?.alternates?.map(link => link.hrefLang)).toEqual(['en', 'hi', 'gu', 'x-default']);
     expect(buildArticleSeoMetadata(props.article, lang, NEWS_PULSE_SITE_URL)).toMatchObject({

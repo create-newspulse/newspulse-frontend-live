@@ -15,6 +15,7 @@ import ArticleShareBar from '../../components/ArticleShareBar';
 import AdSlot from '../../src/components/ads/AdSlot';
 import CategoryHeader from '../../src/components/category/CategoryHeader';
 import { getCategoryIdentity, getCategoryQueryKey, getCategoryRouteKey } from '../../lib/categoryKeys';
+import { packDetailArticle, projectArticleRelatedStories } from '../../lib/articlePageData';
 import { filterPubliclyPublishedArticles, getLocalizedArticleFields, STRICT_LOCALE_POLICY, type RouteLocale } from '../../lib/localizedArticleFields';
 import { formatArticleBodyHtml, parseControlledFacebookBlock, parseControlledGalleryBlock, parseControlledInlineImageBlock, parseControlledInstagramBlock, parseControlledXBlock, parseControlledYouTubeBlock, splitArticleBodyBlocks, stripDuplicateOpeningParagraph, type ControlledArticleFacebookEmbed, type ControlledArticleGallery, type ControlledArticleInlineImage, type ControlledArticleInstagramEmbed, type ControlledArticleXEmbed, type ControlledArticleYouTubeEmbed } from '../../lib/articleBody';
 import { fetchPublicNewsById, fetchPublicNewsGroup, isLegacyMissingArticle, isResolvedPublicArticleForLocale, parsePublicNewsArticle, unwrapArticle, type Article } from '../../lib/publicNewsApi';
@@ -25,7 +26,7 @@ import { tHeading, toLanguageKey } from '../../utils/localizedNames';
 import { buildNewsShareUrl, buildNewsUrl, isNavigableNewsHref } from '../../lib/newsRoutes';
 import { COVER_PLACEHOLDER_SRC, resolveCoverImageUrl } from '../../lib/coverImages';
 import { isSponsoredContent, resolveSponsoredContentMeta } from '../../lib/sponsoredContent';
-import { debugStoryCard, getStoryId, getStoryReactKey } from '../../lib/storyIdentity';
+import { debugStoryCard, getStoryId } from '../../lib/storyIdentity';
 import { formatEditorialDateTime } from '../../lib/storyDateTime';
 import { getStoryTitleHookColor, splitStoryTitleHook } from '../../lib/storyTitleHook';
 import StoryImage, { ArticleHeroImage } from '../../src/components/story/StoryImage';
@@ -733,14 +734,11 @@ function categoryLabelFromKey(key: string): string {
 }
 
 type Props = {
-  messages: any;
-  locale: string;
   lang: 'en' | 'hi' | 'gu';
   slug: string;
   article: Article | null;
-  safeHtml: string;
-  topStories: Article[];
-  relatedStories: Article[];
+  bodyIsContent?: true;
+  relatedStories: ReturnType<typeof projectArticleRelatedStories>;
   error?: string | null;
   pending?: boolean;
   pendingSourceLang?: 'en' | 'hi' | 'gu' | null;
@@ -931,7 +929,14 @@ function debugNewsDetailResolution(stage: string, payload: Record<string, unknow
   console.info('[pages/news/[slug]]', { stage, ...payload });
 }
 
-export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, relatedStories, error, pending, pendingSourceLang = null, siteUrl }: Props) {
+export default function NewsSlugDetailPage({ article: packed, bodyIsContent, ...props }: Props) {
+  // Restore the exact public record for SEO, reading time and Save Update comparisons.
+  const article = React.useMemo(() => packed && bodyIsContent ? { ...packed, body: packed.content } : packed, [packed, bodyIsContent]);
+  const safeHtml = React.useMemo(() => sanitizeContent(getLocalizedArticleFields(article, props.lang, STRICT_LOCALE_POLICY).bodyHtml), [article, props.lang]);
+  return <ArticleDetailView {...props} article={article} safeHtml={safeHtml} />;
+}
+
+export function ArticleDetailView({ lang, slug, article, safeHtml, relatedStories, error, pending, pendingSourceLang = null, siteUrl }: Props & { safeHtml: string }) {
   const { t } = useI18n();
   const router = useRouter();
 
@@ -1624,26 +1629,23 @@ export default function NewsSlugDetailPage({ lang, slug, article, safeHtml, rela
 
                 {relatedStories && relatedStories.length ? (
                   <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {relatedStories.slice(0, 6).map((s, idx) => {
-                      const id = getStoryId(s);
-                      const localizedStory = getLocalizedArticleFields(s || {}, lang, STRICT_LOCALE_POLICY);
-                      if (!localizedStory.isVisible) return null;
-                      const href = id ? buildNewsUrl({ id, slug: localizedStory.slug || id, lang }) : '#';
-                      const img = resolveCoverImageUrl(s, { lang }) || COVER_PLACEHOLDER_SRC;
-                      const titleText = cleanText(localizedStory.title) || String(t('common.untitled') || 'Untitled').trim();
-                      const excerpt = String(localizedStory.summary || '').trim();
+                    {relatedStories.map((s) => {
+                      if (!s.card) return null;
+                      const { href, key, title, summary: excerpt, imageUrl } = s.card;
+                      const img = imageUrl || COVER_PLACEHOLDER_SRC;
+                      const titleText = cleanText(title) || String(t('common.untitled') || 'Untitled').trim();
 
                       debugStoryCard('article-related-grid', s, img);
 
                       return (
                         <RelatedStoryShell
-                          key={getStoryReactKey(s, href)}
+                          key={key}
                           href={href}
                           className="group h-full rounded-2xl border border-slate-200 bg-white shadow-sm hover:bg-slate-50 overflow-hidden"
                         >
                           <div className="flex h-full gap-3 p-3">
                             <StoryImage
-                              storyId={id}
+                              storyId={s._id}
                               src={img}
                               alt={titleText}
                               variant="list"
@@ -2400,22 +2402,12 @@ export const getServerSideProps = async (
 ): ReturnType<GetServerSideProps<Props>> => {
   const lang = normalizeLang(ctx.locale);
   const diagnostics = startArticlePreviewDiagnostics(ctx.req, ctx.res, lang, options.shortLink ? 'smart_share' : 'article');
-  const locale = String(ctx.locale || lang);
   const siteUrl = resolvePublicSiteUrl(ctx.req);
   ctx.res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   ctx.res.setHeader('Pragma', 'no-cache');
   ctx.res.setHeader('Expires', '0');
 
   if (options.shortLink && !isArticleId(ctx.params?.slug)) return { notFound: true };
-
-  const messages = await (async () => {
-    try {
-      const { getMessages } = await import('../../lib/getMessages');
-      return await getMessages(lang);
-    } catch {
-      return {};
-    }
-  })();
 
   const rawSlug = String((ctx.params as any)?.slug || '').trim();
   if (!rawSlug) {
@@ -2427,7 +2419,7 @@ export const getServerSideProps = async (
       translationFound: false,
     });
     return {
-      props: { messages, locale, lang, slug: '', article: null, safeHtml: '', topStories: [], relatedStories: [], error: 'Not found', pending: false, siteUrl },
+      props: { lang, slug: '', article: null, relatedStories: [], error: 'Not found', pending: false, siteUrl },
     };
   }
 
@@ -2504,13 +2496,9 @@ export const getServerSideProps = async (
       });
       return {
         props: {
-          messages,
-          locale,
           lang,
           slug: rawSlug,
           article: null,
-          safeHtml: '',
-          topStories: [],
           relatedStories: [],
           error: null,
           pending: true,
@@ -2600,41 +2588,22 @@ export const getServerSideProps = async (
       return { redirect: { destination, permanent: true } };
     }
 
-    const html = localized.bodyHtml;
     const alternatesPromise = fetchArticleAlternates(
       resolvedArticle, siteUrl, Math.min(1500, Math.max(0, readDeadlineAt - performance.now()))
     );
 
-    const extra = await (async () => {
-      const items = await relatedPromise;
-      const currentId = String((resolvedArticle as any)?._id || '').trim();
-
-      const filtered = items.filter((x) => {
-        const id = String((x as any)?._id || '').trim();
-        if (!id || isSponsoredContent(x)) return false;
-        return id !== currentId && id !== primaryArticleId;
-      });
-
-      const top = [...filtered];
-      top.sort((a, b) => (Number((b as any)?.reads || 0) || 0) - (Number((a as any)?.reads || 0) || 0));
-
-      return {
-        topStories: top.slice(0, 10),
-        relatedStories: filtered.slice(0, 12),
-      };
-    })();
+    const related = (await relatedPromise).filter((story) => {
+      const id = String(story._id || '').trim();
+      return id && id !== primaryArticleId && !isSponsoredContent(story);
+    });
 
     diagnostics?.captureArticle(resolvedArticle, siteUrl);
     return {
       props: {
-        messages,
-        locale,
         lang,
         slug: rawSlug,
-        article: resolvedArticle,
-        safeHtml: sanitizeContent(html),
-        topStories: extra.topStories,
-        relatedStories: extra.relatedStories,
+        ...packDetailArticle(resolvedArticle),
+        relatedStories: projectArticleRelatedStories(related, lang),
         error: null,
         pending: false,
         siteUrl,
@@ -2655,7 +2624,7 @@ export const getServerSideProps = async (
     ctx.res.statusCode = 503;
     ctx.res.setHeader('Retry-After', '30');
     return {
-      props: { messages, locale, lang, slug: rawSlug, article: null, safeHtml: '', topStories: [], relatedStories: [], error: 'Article temporarily unavailable', pending: false, siteUrl },
+      props: { lang, slug: rawSlug, article: null, relatedStories: [], error: 'Article temporarily unavailable', pending: false, siteUrl },
     };
   }
 };
