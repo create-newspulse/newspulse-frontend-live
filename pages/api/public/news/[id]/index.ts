@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 import { getPublicApiBaseUrl } from '../../../../../lib/publicApiBase';
+import { anonymousArticleGet } from '../../../../../lib/publicArticleRequest';
 import { getLocalizedArticleFields, normalizeRouteLocale, STRICT_LOCALE_POLICY } from '../../../../../lib/localizedArticleFields';
 import { isLegacyMissingArticle, isResolvedPublicArticleForLocale, parsePublicNewsArticle, parsePublicNewsGroupItems } from '../../../../../lib/publicNewsApi';
 import { pickFreshestArticleForLocale } from '../../../../../lib/translationGroupSync';
@@ -48,16 +49,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const { status, json } = await readWithPreviewDiagnostics(diagnostics, recordStatus => withPublicReadDeadline(4000, async (signal) => {
-      const upstream = await fetch(targetUrl, {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json',
-          cookie: String(req.headers.cookie || ''),
-          authorization: String(req.headers.authorization || ''),
-        },
-        cache: 'no-store',
-        signal,
-      });
+      const upstream = await fetch(targetUrl, anonymousArticleGet(signal));
       recordStatus(upstream.status);
       retryAfter = getSafeRetryAfter(upstream.headers?.get('Retry-After'));
       const json: unknown = upstream.ok ? JSON.parse(await upstream.text()) : null;
@@ -89,16 +81,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (groupTimeoutMs <= 0) throw new PublicReadTimeoutError();
         const groupItems = await readWithPreviewDiagnostics(diagnostics, recordStatus => withPublicReadDeadline(groupTimeoutMs, async (signal) => {
           const groupUrl = `${base}/api/public/news/group/${encodeURIComponent(translationGroupId)}${qs}`;
-          const groupRes = await fetch(groupUrl, {
-            method: 'GET',
-            headers: {
-              Accept: 'application/json',
-              cookie: String(req.headers.cookie || ''),
-              authorization: String(req.headers.authorization || ''),
-            },
-            cache: 'no-store',
-            signal,
-          });
+          const groupRes = await fetch(groupUrl, anonymousArticleGet(signal));
           recordStatus(groupRes.status);
           if (!groupRes.ok) throw new Error('PUBLIC_NEWS_GROUP_UNAVAILABLE');
           const items = parsePublicNewsGroupItems(JSON.parse(await groupRes.text()));

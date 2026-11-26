@@ -4,6 +4,7 @@ import React from 'react';
 import { ArrowLeft, Mail } from 'lucide-react';
 
 type PublicBusinessPageLayoutProps = {
+  backLabel?: string;
   title: string;
   description: string;
   contactEmail: string;
@@ -36,6 +37,7 @@ const toneClasses = {
 } as const;
 
 export default function PublicBusinessPageLayout({
+  backLabel = 'Back to News Pulse',
   title,
   description,
   contactEmail,
@@ -70,7 +72,7 @@ export default function PublicBusinessPageLayout({
                 className="inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-white/80 px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm backdrop-blur transition hover:bg-white"
               >
                 <ArrowLeft className="h-4 w-4" />
-                Back to News Pulse
+                {backLabel}
               </Link>
 
               <a

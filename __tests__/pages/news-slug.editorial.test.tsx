@@ -1828,7 +1828,7 @@ describe('pages/news/[slug] editorial detail', () => {
     const baseCtx: any = {
       locale: 'en',
       params: { slug: 'missing-editorial' },
-      req: { headers: { host: 'localhost:3000' } },
+      req: { headers: { host: 'localhost:3000' }, socket: { localAddress: '127.0.0.1', localPort: 3000 } },
       res: Object.assign(new EventEmitter(), { setHeader: jest.fn() }),
     };
 

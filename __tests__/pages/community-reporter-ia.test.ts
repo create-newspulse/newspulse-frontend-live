@@ -53,7 +53,7 @@ describe('Community Reporter public information architecture', () => {
 
   it('includes the guide in public discovery surfaces', () => {
     expect(homePage).toContain("label: t('common.communityReporter'), href: localizePath('/community-reporter', lang)");
-    expect(homePage).toContain("label: 'Community Reporter Guide', href: localizePath('/community-reporter/guidelines', lang)");
+    expect(homePage).toContain("label: t('footer.communityReporterGuide'), href: localizePath('/community-reporter/guidelines', lang)");
     expect(homePage.indexOf("localizePath('/community-reporter', lang)")).toBeLessThan(homePage.indexOf("localizePath('/community-reporter/guidelines', lang)"));
     expect(sitemap).toContain("'/community-reporter/guidelines'");
   });

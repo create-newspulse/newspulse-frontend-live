@@ -1,47 +1,32 @@
 import { getReporterDisplayName, loadReporterPortalProfile, saveReporterPortalProfile } from '../../lib/reporterPortal';
+import { clearReporterPrivateStorage, REPORTER_PRIVATE_RESET } from '../../lib/reporterPrivacy';
 
-describe('reporterPortal display name helpers', () => {
-  beforeEach(() => {
-    const store: Record<string, string> = {};
-    (global as any).window = {
-      localStorage: {
-        getItem: (key: string) => store[key] || null,
-        setItem: (key: string, value: string) => { store[key] = value; },
-        removeItem: (key: string) => { delete store[key]; },
-      },
-    } as any;
-  });
-
-  it('prefers fullName then name then firstName then email prefix', () => {
-    expect(getReporterDisplayName({ fullName: 'Kiran Parmar', name: 'Kiran', firstName: 'KP', email: 'reporter@example.com' })).toBe('Kiran Parmar');
-    expect(getReporterDisplayName({ name: 'Kiran', firstName: 'KP', email: 'reporter@example.com' })).toBe('Kiran');
-    expect(getReporterDisplayName({ firstName: 'Kiran', email: 'reporter@example.com' })).toBe('Kiran');
-    expect(getReporterDisplayName({ email: 'reporter@example.com' })).toBe('reporter');
-  });
-
-  it('loads legacy reporter profile name fields for shared display resolution', () => {
-    (global as any).window.localStorage.setItem('np_cr_profile_v1', JSON.stringify({
-      name: 'Kiran Parmar',
-      firstName: 'Kiran',
-      email: 'Reporter@Example.com',
-    }));
-
-    expect(loadReporterPortalProfile()).toEqual(expect.objectContaining({
-      fullName: 'Kiran Parmar',
-      name: 'Kiran Parmar',
-      firstName: 'Kiran',
-      email: 'reporter@example.com',
-    }));
-  });
-
-  it('persists full name, name, and firstName for later local session hydration', () => {
-    saveReporterPortalProfile({ fullName: 'Kiran Parmar', email: 'Reporter@Example.com' });
-
-    expect(loadReporterPortalProfile()).toEqual(expect.objectContaining({
-      fullName: 'Kiran Parmar',
-      name: 'Kiran Parmar',
-      firstName: 'Kiran',
-      email: 'reporter@example.com',
-    }));
-  });
+it('uses session display name precedence without loading a browser profile', () => {
+  expect(getReporterDisplayName({ fullName: 'One', name: 'Two', firstName: 'Three' })).toBe('One');
+  expect(getReporterDisplayName({ firstName: 'Three' })).toBe('Three');
+  expect(getReporterDisplayName({ email: 'one@example.test' })).toBe('one');
+});
+it('purges only reporter keys, never reads or writes a reporter identity, and notifies volatile consumers', () => {
+  for (const storage of [localStorage, sessionStorage]) {
+    storage.setItem('np_cr_profile_v1', '{"email":"old@example.test"}');
+    storage.setItem('np_communityReporterId', 'old');
+    storage.setItem('lang', 'hi');
+  }
+  const listener = jest.fn();
+  window.addEventListener(REPORTER_PRIVATE_RESET, listener);
+  const writes = jest.spyOn(Storage.prototype, 'setItem');
+  const reads = jest.spyOn(Storage.prototype, 'getItem');
+  expect(loadReporterPortalProfile()).toBeNull();
+  saveReporterPortalProfile({ email: 'new@example.test', fullName: 'DO NOT STORE' });
+  clearReporterPrivateStorage();
+  expect(reads).not.toHaveBeenCalled();
+  expect(writes).not.toHaveBeenCalled();
+  reads.mockRestore(); writes.mockRestore();
+  for (const storage of [localStorage, sessionStorage]) {
+    expect(storage.getItem('np_cr_profile_v1')).toBeNull();
+    expect(storage.getItem('np_communityReporterId')).toBeNull();
+    expect(storage.getItem('lang')).toBe('hi');
+  }
+  expect(listener).toHaveBeenCalledTimes(1);
+  window.removeEventListener(REPORTER_PRIVATE_RESET, listener);
 });

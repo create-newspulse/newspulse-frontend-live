@@ -1,28 +1,18 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { forwardReporterProxyCookies, getReporterForwardCookieHeader, resolveReporterAuthProxyUrl } from '../../../lib/reporterAuthProxy';
-import { clearChallengeCookie, clearOtpCookie, clearSessionCookie } from '../../../lib/reporterPortalAuth';
+import { PORTAL_PATH, reporterBackendFetch } from '../../../lib/reporterBackend.server';
+import { apiMethod, hasLogoutReceipt, reporterJson, revokedReporterCookies, revocationRetryCookie } from '../../../lib/reporterAuthProxy';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST');
-    return res.status(405).json({ ok: false, message: 'METHOD_NOT_ALLOWED' });
-  }
-
-  const backendUrl = resolveReporterAuthProxyUrl('/api/reporter-auth/logout', req);
-  if (backendUrl) {
-    try {
-      const upstream = await fetch(backendUrl, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          ...(getReporterForwardCookieHeader(req) ? { cookie: getReporterForwardCookieHeader(req) } : {}),
-        },
-      });
-      forwardReporterProxyCookies(res, upstream.headers, [clearSessionCookie(), clearOtpCookie(), clearChallengeCookie()]);
-      return res.status(200).json({ ok: true });
-    } catch {}
-  }
-
-  res.setHeader('Set-Cookie', [clearSessionCookie(), clearOtpCookie(), clearChallengeCookie()]);
-  return res.status(200).json({ ok: true });
+  if (!apiMethod(req, res, 'POST')) return;
+  // Never preflight /session: logout must revoke *all* presented credentials
+  // even when the portal is closed or the primary credential has expired.
+  try {
+    const upstream = await reporterBackendFetch(req, `${PORTAL_PATH}/auth/logout`, { method: 'POST' });
+    if (upstream.status === 200 && (await reporterJson(upstream)).ok === true && hasLogoutReceipt(upstream.headers, req)) {
+      res.setHeader('Set-Cookie', revokedReporterCookies(req));
+      return res.status(200).json({ ok: true, revoked: true });
+    }
+  } catch { /* Revocation is unconfirmed. Keep the credentials for retry. */ }
+  res.setHeader('Set-Cookie', revocationRetryCookie(req));
+  return res.status(503).json({ ok: false, revoked: false, code: 'LOGOUT_UNCONFIRMED' });
 }

@@ -1,48 +1,23 @@
-import type { NextApiRequest, NextApiResponse } from 'next'
-import { getPublicApiBaseUrl } from '../../../lib/publicApiBase'
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { publicReporterBackendFetch } from '../../../lib/reporterBackend.server';
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse,
-) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'GET') {
-    res.setHeader('Allow', 'GET')
-    return res.status(405).json({ ok: false, message: 'METHOD_NOT_ALLOWED' })
+    res.setHeader('Allow', 'GET');
+    return res.status(405).json({ ok: false, message: 'METHOD_NOT_ALLOWED' });
   }
-
-  const base = getPublicApiBaseUrl().trim().replace(/\/+$/, '')
-  if (!base) {
-    return res.status(500).json({ ok: false, message: 'BACKEND_NOT_CONFIGURED' })
-  }
-  const targetUrl = `${base}/api/community-reporter/config`
-
+  const unavailable = () => res.status(503).json({ ok: false, code: 'COMMUNITY_SETTINGS_UNAVAILABLE' });
   try {
-    const upstream = await fetch(targetUrl, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-    })
-
-    const text = await upstream.text().catch(() => '')
-
-    if (!upstream.ok) {
-      console.error('[community-reporter/config] upstream error', upstream.status, text)
-      let json: any = null
-      try { json = text ? JSON.parse(text) : null } catch {}
-      return res
-        .status(upstream.status || 500)
-        .json(json || { ok: false, message: 'Could not load community reporter config.' })
-    }
-
-    try {
-      const json = text ? JSON.parse(text) : { ok: false }
-      return res.status(upstream.status || 200).json(json)
-    } catch {
-      return res.status(upstream.status || 200).json({ ok: false })
-    }
-  } catch (err) {
-    console.error('[community-reporter/config] exception', err)
-    return res
-      .status(500)
-      .json({ ok: false, message: 'Could not load community reporter config.' })
+    const upstream = await publicReporterBackendFetch(req, '/api/community-reporter/config');
+    if (!upstream.ok) return unavailable();
+    const data = await upstream.json();
+    if (data?.ok !== true) return unavailable();
+    const { communityMyStoriesEnabled, communityReporterClosed, communityReporterEnabled, reporterPortalClosed, reporterPortalEnabled } = data;
+    const flags = { communityMyStoriesEnabled, communityReporterClosed, communityReporterEnabled, reporterPortalClosed, reporterPortalEnabled };
+    if (!Object.values(flags).every(flag => typeof flag === 'boolean')) return unavailable();
+    return res.status(200).json({ ok: true, ...flags });
+  } catch {
+    return unavailable();
   }
 }

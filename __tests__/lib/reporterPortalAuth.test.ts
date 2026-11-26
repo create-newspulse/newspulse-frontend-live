@@ -1,85 +1,42 @@
-import {
-  createMagicLinkToken,
-  createSessionCookie,
-  createOtpToken,
-  createSessionToken,
-  clearSessionCookie,
-  getMagicLinkFromToken,
-  getOtpFromCookie,
-  getReporterSessionFromRequest,
-  getSessionFromCookie,
-  hashOtp,
-  verifySignedToken,
-} from '../../lib/reporterPortalAuth';
+/** @jest-environment node */
+import { requireReporterSession } from '../../lib/reporterPortalAuth';
+import { accountId, backend, email, mockBackend, request, sessionBody, upstream } from '../pages/api/reporter-auth/contractFixtures';
 
-describe('reporterPortalAuth', () => {
-  beforeEach(() => {
-    process.env.REPORTER_PORTAL_AUTH_SECRET = 'test-reporter-secret';
-  });
+const fetchMock = mockBackend();
+const credential = request('GET', undefined, { cookie: 'reporter_portal_session=opaque-test' });
 
-  it('creates and verifies otp payloads', () => {
-    const token = createOtpToken('Reporter@Example.com', '123456');
-    const payload = getOtpFromCookie(token);
+it('accepts only a fresh canonical backend identity, not the rest of the private payload', async () => {
+  const body = sessionBody();
+  fetchMock().mockResolvedValue(upstream({ ...body, sessionToken: 'synthetic', internal: { example: true } }));
+  expect(await requireReporterSession(credential)).toEqual({ ok: true, reporter: { accountId, email, fullName: 'One', expiresAt: body.session.expiresAt } });
+  expect(fetchMock()).toHaveBeenCalledWith(`${backend}/auth/session`, expect.anything());
+});
+it('denies challenge-only and local-only cookies; never tries a second provider when gated or offline', async () => {
+  for (const cookie of ['np_reporter_portal_session=legacy', 'reporter_portal_login_challenge=pending']) {
+    expect(await requireReporterSession(request('GET', undefined, { cookie }))).toMatchObject({ ok: false, status: 401 });
+  }
+  delete process.env.REPORTER_PORTAL_CONTRACT;
+  expect(await requireReporterSession(request('GET'))).toMatchObject({ ok: false, status: 401, reason: 'REPORTER_SESSION_MISSING' });
+  expect(await requireReporterSession(credential)).toMatchObject({ ok: false, status: 503 });
+  expect(fetchMock()).not.toHaveBeenCalled();
+  process.env.REPORTER_PORTAL_CONTRACT = 'phase5ab';
+  expect(await requireReporterSession(credential)).toMatchObject({ ok: false, status: 503 });
+  expect(fetchMock()).toHaveBeenCalledTimes(1);
+});
 
-    expect(payload?.kind).toBe('otp');
-    expect(payload?.email).toBe('reporter@example.com');
-    expect(payload?.otpHash).toBe(hashOtp('reporter@example.com', '123456'));
-  });
-
-  it('creates and verifies session payloads', () => {
-    const token = createSessionToken('reporter@example.com');
-    const payload = getSessionFromCookie(token);
-
-    expect(payload?.kind).toBe('session');
-    expect(payload?.email).toBe('reporter@example.com');
-  });
-
-  it('validates reporter session requests through the canonical cookie helper', () => {
-    const token = createSessionToken('Reporter@Example.com');
-    const valid = getReporterSessionFromRequest({ cookies: { np_reporter_portal_session: token } });
-    expect(valid.ok).toBe(true);
-    if (valid.ok) expect(valid.session.email).toBe('reporter@example.com');
-
-    expect(getReporterSessionFromRequest({ cookies: {} })).toMatchObject({ ok: false, code: 'REPORTER_SESSION_MISSING', shouldClearCookie: false });
-    expect(getReporterSessionFromRequest({ cookies: { np_reporter_portal_session: 'bad-token' } })).toMatchObject({ ok: false, code: 'REPORTER_SESSION_MISSING', shouldClearCookie: true });
-  });
-
-  it('creates and verifies magic link payloads', () => {
-    const token = createMagicLinkToken('reporter@example.com');
-    const payload = getMagicLinkFromToken(token);
-
-    expect(payload?.kind).toBe('magic-link');
-    expect(payload?.email).toBe('reporter@example.com');
-  });
-
-  it('rejects tampered signed tokens', () => {
-    const token = createSessionToken('reporter@example.com');
-    const tampered = `${token}tampered`;
-
-    expect(verifySignedToken(tampered)).toBeNull();
-  });
-
-  it('serializes the canonical session cookie with environment-safe options', () => {
-    const originalNodeEnv = process.env.NODE_ENV;
-    const nodeEnvKey = ['NODE', 'ENV'].join('_');
-    (process.env as Record<string, string | undefined>)[nodeEnvKey] = 'development';
-    const devCookie = createSessionCookie('signed-token');
-
-    expect(devCookie).toContain('np_reporter_portal_session=signed-token');
-    expect(devCookie).toContain('Path=/');
-    expect(devCookie).toContain('SameSite=Lax');
-    expect(devCookie).toContain('HttpOnly');
-    expect(devCookie).not.toContain('Domain=');
-    expect(devCookie).not.toContain('Secure');
-
-    (process.env as Record<string, string | undefined>)[nodeEnvKey] = 'production';
-    const prodCookie = createSessionCookie('signed-token');
-    const clearCookie = clearSessionCookie();
-
-    expect(prodCookie).toContain('Secure');
-    expect(clearCookie).toContain('Max-Age=0');
-    expect(clearCookie).toContain('Path=/');
-
-    (process.env as Record<string, string | undefined>)[nodeEnvKey] = originalNodeEnv;
-  });
+it.each([
+  { summary: {} }, { summary: { totalSubmissions: 2 } }, { summary: { totalSubmissions: 1, received: 2 } },
+  { summary: { totalSubmissions: 1, received: -1 } }, { summary: { totalSubmissions: 1, received: 0.5 } },
+  { authenticated: false }, { session: { status: 'pending' } }, { ok: false }, { session: { expiresAt: '2000-01-01T00:00:00Z' } },
+  { reporter: { id: accountId, email, status: 'disabled' } }, { reporter: { email, status: 'active' } },
+  { reporter: { id: accountId, email: [email], status: 'active' } }, { reporter: { id: accountId, email, status: 'active', portalAccessEnabled: false } },
+])('fails closed on malformed, old or negative session evidence %#', async change => {
+  fetchMock().mockResolvedValue(upstream({ ...sessionBody(), ...change }));
+  expect(await requireReporterSession(credential)).toMatchObject({ ok: false, status: 401 });
+});
+it.each([401, 403, 503])('preserves a backend denial (%i) and never leaks upstream diagnostics', async status => {
+  fetchMock().mockResolvedValue(upstream({ ...sessionBody(), message: 'synthetic diagnostic' }, status));
+  const result = await requireReporterSession(credential);
+  expect(result).toMatchObject({ ok: false, status });
+  expect(JSON.stringify(result)).not.toContain('diagnostic');
 });

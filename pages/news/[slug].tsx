@@ -1,7 +1,8 @@
 import type { GetServerSideProps, GetServerSidePropsContext } from 'next';
 import { PublicReadTimeoutError, withPublicReadDeadline } from '../../lib/publicReadDeadline';
-import { fetchArticleAlternates } from '../../lib/articleSeo.server';
-import { startArticlePreviewDiagnostics } from '../../lib/socialPreviewDiagnostics.server';
+import { fetchArticleAlternates, getArticleReaderOrigin } from '../../lib/articleSeo.server';
+import { anonymousArticleGet } from '../../lib/publicArticleRequest';
+import { PREVIEW_TRACE_HEADER, startArticlePreviewDiagnostics } from '../../lib/socialPreviewDiagnostics.server';
 import { isArticleId, normalizeArticleSlug } from '../../lib/articleSlugs';
 import Head from 'next/head';
 import NextError from 'next/error';
@@ -1063,12 +1064,7 @@ export function ArticleDetailView({ lang, slug, article, safeHtml, relatedStorie
 
     try {
       const json = await withPublicReadDeadline(4000, async (signal) => {
-        const res = await fetch(endpoint, {
-          method: 'GET',
-          headers: { Accept: 'application/json' },
-          cache: 'no-store',
-          signal,
-        });
+        const res = await fetch(endpoint, anonymousArticleGet(signal));
         return res.json().catch(() => null);
       }, controller.signal);
       if (controller.signal.aborted) return;
@@ -2424,26 +2420,11 @@ export const getServerSideProps = async (
     };
   }
 
-  const getRequestOrigin = () => {
-    const req = ctx.req;
-    const protoHeader = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
-    const proto = protoHeader || 'http';
-    const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
-    if (!host) return '';
-    return `${proto}://${host}`;
-  };
-
   try {
-    const origin = getRequestOrigin();
+    const origin = getArticleReaderOrigin(ctx.req);
     const params = new URLSearchParams();
     params.set('lang', lang);
     params.set('language', lang);
-
-    const headers = {
-      Accept: 'application/json',
-      cookie: String(ctx.req.headers.cookie || ''),
-      authorization: String(ctx.req.headers.authorization || ''),
-    };
 
     const idEndpoint = `${origin}/api/public/news/${encodeURIComponent(rawSlug)}?${params.toString()}`;
     const endpoints = options.shortLink ? [idEndpoint] : [
@@ -2459,9 +2440,10 @@ export const getServerSideProps = async (
       let data: any = null;
       let article: Article | null = null;
       for (const endpoint of endpoints) {
-        const res = await fetch(endpoint, {
-          method: 'GET', headers: { ...headers, ...diagnostics?.requestHeaders }, cache: 'no-store', signal,
-        });
+        const init = anonymousArticleGet(signal);
+        const trace = diagnostics?.requestHeaders[PREVIEW_TRACE_HEADER];
+        // Only the local detail proxy consumes this server-generated correlation ID.
+        const res = await fetch(endpoint, trace ? { ...init, headers: { ...init.headers, [PREVIEW_TRACE_HEADER]: trace } } : init);
         if (res.status === 404 || res.status === 410) { data = null; continue; }
         if (res.ok === false) throw new Error('Article upstream unavailable');
         const next = await res.json();
@@ -2537,7 +2519,7 @@ export const getServerSideProps = async (
         relatedParams.set('limit', String(limit));
 
         const endpoint = `${origin}/api/public/news?${relatedParams.toString()}`;
-        const res = await fetch(endpoint, { method: 'GET', headers, cache: 'no-store', signal });
+        const res = await fetch(endpoint, anonymousArticleGet(signal));
         if (res.ok === false) return [] as Article[];
         const listData = await res.json().catch(() => null);
         const itemsRaw =

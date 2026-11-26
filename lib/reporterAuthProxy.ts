@@ -1,238 +1,108 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getPublicApiBaseUrl } from './publicApiBase';
+import { REPORTER_COOKIES, REVOCATION_LOCK, reporterProductionDeployment, validReporterCookieValue } from './reporterBackend.server';
 
-const DEFAULT_PROD_REPORTER_AUTH_BASE = 'https://newspulse-backend-real.onrender.com';
-const KNOWN_FRONTEND_HOSTS = new Set(['www.newspulse.co.in', 'newspulse.co.in', 'admin.newspulse.co.in']);
+export { getReporterForwardCookieHeader } from './reporterBackend.server';
+const LEGACY_COOKIES = ['np_reporter_portal_session', 'np_reporter_portal_otp', 'np_reporter_portal_challenge'];
+const SAFE_CODES = new Set([
+  'SESSION_EXPIRED', 'REPORTER_SESSION_MISSING', 'REPORTER_PORTAL_CLOSED', 'REPORTER_PORTAL_FORBIDDEN',
+  'OTP_REPLACED', 'OTP_EXPIRED', 'OTP_ALREADY_USED', 'INVALID_OTP', 'OTP_VERIFY_RATE_LIMITED',
+  'OTP_REQUEST_RATE_LIMITED', 'REPORTER_EMAIL_UNAVAILABLE', 'EMAIL_UNCHANGED', 'EMAIL_ALREADY_IN_USE',
+  'EMAIL_CHANGE_NOT_REQUESTED', 'EMAIL_REVERIFICATION_REQUIRED',
+]);
 
-type ReporterAuthProxyTarget = {
-  url: string | null;
-  base: string | null;
-  source: 'reporter_auth_env' | 'public_api_base' | 'prod_default' | 'unavailable';
-  reason: 'explicit_env' | 'configured_base' | 'frontend_target_rejected' | 'missing_base' | 'dev_same_host_rejected';
-};
-
-function isKnownProdHost(hostname: string): boolean {
-  return hostname === 'www.newspulse.co.in' || hostname === 'newspulse.co.in' || hostname === 'admin.newspulse.co.in';
+export function noStore(res: { setHeader(name: string, value: string): unknown }) {
+  res.setHeader('Cache-Control', 'private, no-store, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
 }
 
-function isProdDeployment(req?: NextApiRequest): boolean {
-  if (String(process.env.VERCEL_ENV || '').toLowerCase() === 'production') return true;
-  const explicit = String(process.env.NEWS_PULSE_DEPLOYMENT || process.env.NEWS_PULSE_ENV || '').toLowerCase();
-  if (explicit === 'production' || explicit === 'prod') return true;
-  return isKnownProdHost(getRequestHost(req));
-}
-
-function normalizePath(path: string): string {
-  return path.startsWith('/') ? path : `/${path}`;
-}
-
-function normalizeBase(value: string): string {
-  return String(value || '').trim().replace(/\/+$/, '').replace(/\/api\/?$/, '');
-}
-
-function getHostname(value: string): string {
-  try {
-    return new URL(value).hostname.toLowerCase();
-  } catch {
-    return '';
-  }
-}
-
-function getHostWithPort(value: string): string {
-  try {
-    return new URL(value).host.toLowerCase();
-  } catch {
-    return '';
-  }
-}
-
-function isLocalhostHostname(hostname: string): boolean {
-  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]';
-}
-
-function getRequestHost(req?: NextApiRequest): string {
-  return String(req?.headers['x-forwarded-host'] || req?.headers.host || '')
-    .split(',')[0]
-    .trim()
-    .toLowerCase();
-}
-
-function getConfiguredFrontendHosts(req?: NextApiRequest): Set<string> {
-  const hosts = new Set<string>();
-
-  [
-    getRequestHost(req),
-    String(process.env.VERCEL_URL || '').trim(),
-    String(process.env.VERCEL_PROJECT_PRODUCTION_URL || '').trim(),
-    String(process.env.NEXT_PUBLIC_SITE_URL || '').trim(),
-    String(process.env.NEXT_PUBLIC_APP_URL || '').trim(),
-    String(process.env.SITE_URL || '').trim(),
-  ].forEach((value) => {
-    const hostname = getHostname(/^https?:\/\//i.test(value) ? value : `https://${value}`);
-    if (hostname) {
-      hosts.add(hostname);
-    }
-  });
-
-  KNOWN_FRONTEND_HOSTS.forEach((hostname) => hosts.add(hostname));
-  return hosts;
-}
-
-function isLikelyFrontendHostname(hostname: string, req?: NextApiRequest): boolean {
-  if (!hostname) return false;
-  if (hostname.endsWith('.vercel.app')) return true;
-  if (hostname === 'vercel.app') return true;
-  if (getConfiguredFrontendHosts(req).has(hostname)) return true;
-  return false;
-}
-
-function isFrontendProxyBase(base: string, req?: NextApiRequest): boolean {
-  const hostname = getHostname(base);
-  if (!hostname) return false;
-
-  const requestHost = getRequestHost(req);
-  if (requestHost && isLocalhostHostname(hostname) && getHostWithPort(base) !== requestHost) {
+export function apiMethod(req: NextApiRequest, res: NextApiResponse, ...methods: string[]): boolean {
+  noStore(res);
+  if (!methods.includes(req.method || '')) {
+    res.setHeader('Allow', methods.join(', '));
+    res.status(405).json({ ok: false, code: 'METHOD_NOT_ALLOWED' });
     return false;
   }
-
-  if (isLikelyFrontendHostname(hostname, req)) {
-    return true;
-  }
-
-  return false;
-}
-
-function getReporterAuthConfiguredBase(): string {
-  return normalizeBase(
-    String(
-      process.env.REPORTER_AUTH_API_BASE ||
-      process.env.REPORTER_AUTH_BACKEND_URL ||
-      process.env.REPORTER_PORTAL_API_BASE ||
-      process.env.REPORTER_PORTAL_BACKEND_URL ||
-      ''
-    )
-  );
-}
-
-export function resolveReporterAuthProxyTarget(path: string, req?: NextApiRequest): ReporterAuthProxyTarget {
-  const explicitReporterBase = getReporterAuthConfiguredBase();
-  if (explicitReporterBase) {
-    if (isFrontendProxyBase(explicitReporterBase, req)) {
-      if (isProdDeployment(req)) {
-        return {
-          url: `${DEFAULT_PROD_REPORTER_AUTH_BASE}${normalizePath(path)}`,
-          base: DEFAULT_PROD_REPORTER_AUTH_BASE,
-          source: 'prod_default',
-          reason: 'frontend_target_rejected',
-        };
-      }
-
-      return {
-        url: null,
-        base: null,
-        source: 'unavailable',
-        reason: 'dev_same_host_rejected',
-      };
+  if (!['GET', 'HEAD'].includes(req.method || '') && req.headers.origin) {
+    try {
+      if (new URL(req.headers.origin).host !== req.headers.host) throw new Error();
+    } catch {
+      res.status(403).json({ ok: false, code: 'REQUEST_DENIED' });
+      return false;
     }
-
-    return {
-      url: `${explicitReporterBase}${normalizePath(path)}`,
-      base: explicitReporterBase,
-      source: 'reporter_auth_env',
-      reason: 'explicit_env',
-    };
   }
+  return true;
+}
 
-  if (isProdDeployment(req)) {
-    return {
-      url: `${DEFAULT_PROD_REPORTER_AUTH_BASE}${normalizePath(path)}`,
-      base: DEFAULT_PROD_REPORTER_AUTH_BASE,
-      source: 'prod_default',
-      reason: 'configured_base',
-    };
-  }
+export function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
 
-  const configuredBase = normalizeBase(String(getPublicApiBaseUrl() || ''));
-  if (configuredBase && !isFrontendProxyBase(configuredBase, req)) {
-    return {
-      url: `${configuredBase}${normalizePath(path)}`,
-      base: configuredBase,
-      source: 'public_api_base',
-      reason: 'configured_base',
-    };
-  }
+export async function reporterJson(response: Response): Promise<Record<string, unknown>> {
+  return record(await response.json().catch(() => null));
+}
 
+export function upstreamDenial(status: number, code: unknown) {
   return {
-    url: null,
-    base: null,
-    source: 'unavailable',
-    reason: configuredBase ? 'dev_same_host_rejected' : 'missing_base',
+    status: [400, 401, 403, 404, 409, 429, 503].includes(status) ? status : 502,
+    reason: typeof code === 'string' && SAFE_CODES.has(code) ? code
+      : status === 401 ? 'REPORTER_SESSION_MISSING' : 'REPORTER_UNAVAILABLE',
   };
 }
 
-export function resolveReporterAuthProxyUrl(path: string, req?: NextApiRequest): string | null {
-  return resolveReporterAuthProxyTarget(path, req).url;
+function cookiePolicy(req: ReporterRequestHeaders) {
+  const secure = reporterProductionDeployment() || req.headers['x-forwarded-proto'] === 'https'
+    || (req.socket as { encrypted?: boolean } | undefined)?.encrypted;
+  return `Path=/; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}`;
 }
+type ReporterRequestHeaders = Pick<NextApiRequest, 'headers'> & Partial<Pick<NextApiRequest, 'socket'>>;
 
-export function getDefaultReporterAuthProxyUrl(path: string): string {
-  return `${DEFAULT_PROD_REPORTER_AUTH_BASE}${normalizePath(path)}`;
-}
-
-export function getReporterProxySetCookies(headers: Headers): string[] {
-  const candidate = headers as Headers & { getSetCookie?: () => string[] };
-  if (typeof candidate.getSetCookie === 'function') {
-    return candidate.getSetCookie().filter(Boolean);
-  }
-
-  const single = headers.get('set-cookie');
-  return single ? [single] : [];
-}
-
-export function sanitizeReporterProxySetCookie(cookie: string): string | null {
-  const [nameValue, ...attributes] = String(cookie || '').split(';').map((part) => part.trim()).filter(Boolean);
-  if (!nameValue || !nameValue.includes('=')) return null;
-
-  const preserved = attributes.filter((attribute) => {
-    const key = attribute.split('=')[0]?.trim().toLowerCase();
-    return key === 'max-age' || key === 'expires';
+export function sanitizedReporterCookies(headers: Headers, req: ReporterRequestHeaders): string[] {
+  const values = typeof headers.getSetCookie === 'function' ? headers.getSetCookie()
+    : (headers.get('set-cookie') || '').split(/,(?=\s*[^;,=\s]+=)/);
+  return values.flatMap(raw => {
+    if (/[\r\n]/.test(raw)) return [];
+    const [pair, ...attrs] = raw.split(';').map(s => s.trim());
+    const at = pair.indexOf('=');
+    if (at < 1 || !(REPORTER_COOKIES as readonly string[]).includes(pair.slice(0, at))
+      || !validReporterCookieValue(pair.slice(at + 1))) return [];
+    const expiry: string[] = [];
+    for (const attr of attrs) {
+      if (/^max-age=-?\d{1,12}$/i.test(attr)) expiry.push(`Max-Age=${Math.max(0, Number(attr.slice(8)))}`);
+      if (/^expires=/i.test(attr)) {
+        const time = Date.parse(attr.slice(8));
+        if (Number.isFinite(time)) expiry.push(`Expires=${new Date(time).toUTCString()}`);
+      }
+    }
+    return [[pair, ...expiry, cookiePolicy(req)].join('; ')];
   });
-  const nodeEnvKey = ['NODE', 'ENV'].join('_');
-  return [
-    nameValue,
-    ...preserved,
-    'Path=/',
-    'SameSite=Lax',
-    'HttpOnly',
-    ...(process.env[nodeEnvKey] === 'production' ? ['Secure'] : []),
-  ].join('; ');
 }
 
-export function getSanitizedReporterProxySetCookies(headers: Headers): string[] {
-  return getReporterProxySetCookies(headers)
-    .map((cookie) => sanitizeReporterProxySetCookie(cookie))
-    .filter((cookie): cookie is string => Boolean(cookie));
+export function revokedReporterCookies(req: ReporterRequestHeaders): string[] {
+  return [...REPORTER_COOKIES, ...LEGACY_COOKIES, REVOCATION_LOCK]
+    .map(name => `${name}=; Max-Age=0; ${cookiePolicy(req)}`);
 }
 
-export function forwardReporterProxyCookies(res: NextApiResponse, headers: Headers, extraCookies: string[] = []) {
-  const cookies = [...getReporterProxySetCookies(headers), ...extraCookies].filter(Boolean);
-  if (cookies.length > 0) {
-    res.setHeader('Set-Cookie', cookies);
-  }
+export function expireLegacyReporterCookies(req: NextApiRequest, res: NextApiResponse) {
+  const obsolete = LEGACY_COOKIES.filter(name => req.cookies?.[name] !== undefined);
+  if (obsolete.length) res.setHeader('Set-Cookie', obsolete.map(name => `${name}=; Max-Age=0; ${cookiePolicy(req)}`));
 }
 
-export async function readReporterProxyBody(response: Response): Promise<{ data: any; text: string }> {
-  const text = await response.text().catch(() => '');
-  if (!text) {
-    return { data: null, text: '' };
-  }
-
-  try {
-    return { data: JSON.parse(text), text };
-  } catch {
-    return { data: null, text };
-  }
+export function hasLogoutReceipt(headers: Headers, req: ReporterRequestHeaders): boolean {
+  // Older backends also say {ok:true}. Only the lifecycle contract revokes
+  // and explicitly expires *all three* credential channels (including .sid).
+  const cookies = sanitizedReporterCookies(headers, req);
+  return REPORTER_COOKIES.every(name => {
+    const matches = cookies.filter(cookie => cookie.startsWith(`${name}=`));
+    if (matches.length !== 1 || !matches[0].startsWith(`${name}=;`)) return false;
+    const attrs = matches[0].split('; ');
+    const age = attrs.filter(attr => attr.startsWith('Max-Age='));
+    if (age.length) return age.length === 1 && age[0] === 'Max-Age=0';
+    const expiry = attrs.filter(attr => attr.startsWith('Expires='));
+    return expiry.length === 1 && Date.parse(expiry[0].slice(8)) <= Date.now();
+  });
 }
 
-export function getReporterForwardCookieHeader(req: NextApiRequest): string {
-  return String(req.headers.cookie || '').trim();
+export function revocationRetryCookie(req: ReporterRequestHeaders): string {
+  return `${REVOCATION_LOCK}=1; Max-Age=34560000; ${cookiePolicy(req)}`;
 }

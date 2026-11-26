@@ -176,7 +176,7 @@ describe.each<Route>(['group', 'article', 'slug'])('%s authoritative read bounda
     expect(readBody).not.toHaveBeenCalled();
   });
 
-  test.each(['en', 'hi', 'gu'])('retains %s identifiers, request headers and successful payloads', async (lang) => {
+  test.each(['en', 'hi', 'gu'])('retains %s identifiers and payloads without forwarding reader credentials', async (lang) => {
     const localized = { ...story, language: lang };
     const payload = route === 'group' ? { items: [localized] } : { article: localized };
     fetchMock.mockResolvedValue(new Response(JSON.stringify(payload)));
@@ -185,9 +185,9 @@ describe.each<Route>(['group', 'article', 'slug'])('%s authoritative read bounda
     expect(res.body).toEqual(payload);
     expect(String(fetchMock.mock.calls[0][0])).toBe(`http://backend.test${request(route, lang).url}`);
     expect(fetchMock.mock.calls[0][1]).toMatchObject({
-      cache: 'no-store',
-      headers: { cookie: 'test-session', authorization: 'test-authorization' },
+      cache: 'no-store', redirect: 'error', credentials: 'omit',
     });
+    expect(fetchMock.mock.calls[0][1]?.headers).toEqual({ Accept: 'application/json' });
   });
 
   test.each(['headers', 'body'])('bounds stalled %s without publishing absence', async (stage) => {
@@ -306,6 +306,7 @@ describe.each<Route>(['group', 'article', 'slug'])('%s validated public envelope
 function ssrContext(locale = 'en'): GetServerSidePropsContext {
   const req = request('article', locale);
   req.headers.host = 'frontend.test';
+  Object.defineProperties(req.socket, { localAddress: { value: '127.0.0.1' }, localPort: { value: 3000 } });
   return {
     req, res: response(req), locale, params: { slug: story._id }, query: {},
     resolvedUrl: `/news/${story._id}`,

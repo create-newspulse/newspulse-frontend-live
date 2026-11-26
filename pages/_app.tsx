@@ -86,7 +86,7 @@ function isCategoryRoute(asPath: string): boolean {
 
 function isProtectedReporterRoute(asPath: string): boolean {
   const pathOnly = (String(asPath || '/').split('?')[0] || '/').split('#')[0] || '/';
-  const normalized = pathOnly.toLowerCase().replace(/\/+$/, '') || '/';
+  const normalized = stripLocalePrefix(pathOnly).toLowerCase().replace(/\/+$/, '') || '/';
   return normalized.startsWith('/reporter/') && normalized !== '/reporter/login';
 }
 

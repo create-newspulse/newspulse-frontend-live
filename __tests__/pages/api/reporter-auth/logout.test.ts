@@ -1,56 +1,41 @@
-jest.mock('../../../../lib/publicApiBase', () => ({
-  getPublicApiBaseUrl: () => 'http://localhost:3010',
-}));
+/** @jest-environment node */
+import logout from '../../../../pages/api/reporter-auth/logout';
+import { backend, logoutReceipt, mockBackend, request, response, upstream } from './contractFixtures';
 
-import handler from '../../../../pages/api/reporter-auth/logout';
-
-describe('pages/api/reporter-auth/logout', () => {
-  beforeEach(() => {
-    (global as any).fetch = jest.fn();
-  });
-
-  it('returns 200 and clears local auth cookies even when upstream logout fails', async () => {
-    (global as any).fetch.mockResolvedValueOnce({
-      ok: false,
-      status: 500,
-      headers: new Headers(),
-    });
-
-    const req = {
-      method: 'POST',
-      headers: {},
-      cookies: {},
-    } as any;
-
-    const res = createMockResponse();
-    await handler(req, res as any);
-
-    expect(res.statusCode).toBe(200);
-    expect(res.body).toEqual({ ok: true });
-    const cookies = ([] as string[]).concat(res.headers['Set-Cookie'] || []);
-    expect(cookies.some((value) => value.includes('np_reporter_portal_session='))).toBe(true);
-    expect(cookies.some((value) => value.includes('np_reporter_portal_otp='))).toBe(true);
-    expect(cookies.some((value) => value.includes('np_reporter_portal_challenge='))).toBe(true);
-  });
+const fetchMock = mockBackend();
+const wire = 'reporter_portal_session=opaque-test; reporter_portal.sid=s%3Atest; reporter_portal_login_challenge=challenge-test';
+it('revokes directly with all credentials before expiring any, including on locked retries', async () => {
+  fetchMock().mockResolvedValue(upstream({ ok: true, message: 'Logged out successfully.' }, 200, [...logoutReceipt, 'arbitrary=ignore']));
+  const { res, data } = response();
+  await logout(request('POST', undefined, { cookie: wire + '; theme=light' }, { np_reporter_revocation_pending: '1' }), res);
+  expect(fetchMock()).toHaveBeenCalledTimes(1);
+  expect(fetchMock()).toHaveBeenCalledWith(`${backend}/auth/logout`, expect.objectContaining({ method: 'POST', headers: { Accept: 'application/json', cookie: wire, 'X-NP-Reporter-Build': process.env.REPORTER_RUNTIME_EXPECTED_BUILD } }));
+  expect(data.json).toEqual({ ok: true, revoked: true });
+  const cookies = data.headers['Set-Cookie'] as string[];
+  for (const name of ['reporter_portal_session', 'reporter_portal.sid', 'reporter_portal_login_challenge', 'np_reporter_revocation_pending']) {
+    expect(cookies).toContainEqual(expect.stringContaining(name + '=; Max-Age=0;'));
+  }
+  expect(cookies.join(' ')).not.toContain('arbitrary');
 });
-
-function createMockResponse() {
-  const response = {
-    statusCode: 200,
-    headers: {} as Record<string, string | string[]>,
-    body: undefined as any,
-    setHeader(name: string, value: string | string[]) {
-      response.headers[name] = value;
-    },
-    status(code: number) {
-      response.statusCode = code;
-      return response;
-    },
-    json(payload: any) {
-      response.body = payload;
-      return response;
-    },
-  };
-
-  return response;
-}
+it.each([
+  { kind: 'bare 200', cookies: [] },
+  { kind: 'missing express sid clear on old backend', cookies: logoutReceipt.slice(1) },
+  { kind: 'empty sid without expiry', cookies: ['reporter_portal.sid=; Path=/', ...logoutReceipt.slice(1)] },
+  { kind: 'sid whose max-age overrides past expires', cookies: [logoutReceipt[0] + '; Max-Age=300', ...logoutReceipt.slice(1)] },
+])('rejects an affirmative but incomplete logout receipt: $kind', async ({ cookies }) => {
+  fetchMock().mockResolvedValue(upstream({ ok: true, message: 'Logged out successfully.' }, 200, cookies));
+  const { res, data } = response();
+  await logout(request('POST', undefined, { cookie: wire }), res);
+  expect(data.status).toBe(503);
+  expect(data.json.revoked).toBe(false);
+  expect(data.headers['Set-Cookie']).toMatch(/^np_reporter_revocation_pending=1;/);
+});
+it.each(['missing gate', 'offline', 'malformed OK', 'upstream error'])('locks but retains every revocation credential on %s', async mode => {
+  if (mode === 'missing gate') delete process.env.REPORTER_PORTAL_CONTRACT;
+  if (mode === 'malformed OK' || mode === 'upstream error') fetchMock().mockResolvedValue(upstream({ ok: mode !== 'malformed OK' }, mode === 'upstream error' ? 503 : 200, ['reporter_portal_session=; Max-Age=0']));
+  const { res, data } = response();
+  await logout(request('POST', undefined, { cookie: wire }), res);
+  expect(data.status).toBe(503);
+  expect(data.json).toEqual({ ok: false, revoked: false, code: 'LOGOUT_UNCONFIRMED' });
+  expect(data.headers['Set-Cookie']).toMatch(/^np_reporter_revocation_pending=1;/);
+});

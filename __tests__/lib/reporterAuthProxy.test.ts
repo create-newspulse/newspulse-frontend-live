@@ -1,171 +1,67 @@
 /** @jest-environment node */
+import { getReporterForwardCookieHeader, sanitizedReporterCookies } from '../../lib/reporterAuthProxy';
+import { reporterBackendFetch } from '../../lib/reporterBackend.server';
+import { accountId, backend, mockBackend, pin, request, upstream } from '../pages/api/reporter-auth/contractFixtures';
 
-describe('lib/reporterAuthProxy', () => {
-  const originalEnv = { ...process.env };
+const fetchMock = mockBackend();
+const path = '/api/reporter-portal/auth/session';
+const req = request('GET', undefined, { cookie: 'theme=light; reporter_portal.sid=s%3Atest; reporter_portal_session=opaque-test; reporter_portal_login_challenge=challenge-test; np_reporter_portal_session=legacy' });
 
-  beforeEach(() => {
-    jest.resetModules();
-    process.env = { ...originalEnv };
-    delete process.env.REPORTER_AUTH_API_BASE;
-    delete process.env.REPORTER_AUTH_BACKEND_URL;
-    delete process.env.REPORTER_PORTAL_API_BASE;
-    delete process.env.REPORTER_PORTAL_BACKEND_URL;
-    delete process.env.NEXT_PUBLIC_API_BASE;
-    delete process.env.NEXT_PUBLIC_API_BASE_PROD;
-    delete process.env.NEXT_PUBLIC_API_BASE_DEV;
-    delete process.env.NEXT_PUBLIC_API_URL;
-    delete process.env.NEXT_PUBLIC_BACKEND_URL;
-    delete process.env.NEXT_PUBLIC_API_BASE_URL;
-    delete process.env.NEXT_PUBLIC_BACKEND_API_BASE_URL;
-    delete process.env.BACKEND_API_BASE_URL;
-    delete process.env.NEWS_PULSE_BACKEND_URL;
-    delete process.env.API_BASE_URL;
-    delete process.env.NEWS_PULSE_DEPLOYMENT;
-    delete process.env.NEWS_PULSE_ENV;
-    delete process.env.VERCEL_ENV;
+it('uses only the contract cookies, keeps wire encoding, and sets a deadline, no-store and no redirects', async () => {
+  fetchMock().mockResolvedValue(upstream({ ok: true }));
+  await reporterBackendFetch(req, path);
+  expect(fetchMock()).toHaveBeenCalledWith(backend + '/auth/session', expect.objectContaining({
+    cache: 'no-store', redirect: 'error', signal: expect.any(AbortSignal),
+    headers: { Accept: 'application/json', 'X-NP-Reporter-Build': pin, cookie: 'reporter_portal.sid=s%3Atest; reporter_portal_session=opaque-test; reporter_portal_login_challenge=challenge-test' },
+  }));
+  expect(getReporterForwardCookieHeader(request('GET', undefined, {}, { 'reporter_portal.sid': 's:test' }))).toBe('reporter_portal.sid=s%3Atest');
+});
+
+it.each(['', 'https://production.example.test', 'file:///unconfigured', 'http://localhost:3000', 'http://localhost:3010/other'])(
+  'denies missing, remote and non-backend local configuration (%s), without fallback', async base => {
+    process.env.REPORTER_AUTH_API_BASE = base;
+    if (!base) delete process.env.NEXT_PUBLIC_API_BASE_DEV;
+    process.env.NEXT_PUBLIC_ALLOW_PROD_BACKEND_IN_DEV = 'true';
+    await expect(reporterBackendFetch(req, path)).rejects.toThrow();
+    expect(fetchMock()).not.toHaveBeenCalled();
   });
 
-  afterAll(() => {
-    process.env = originalEnv;
-  });
+it('will not treat a request host as deployment proof or select a production default', async () => {
+  delete process.env.REPORTER_AUTH_API_BASE;
+  process.env.VERCEL_ENV = 'production';
+  await expect(reporterBackendFetch(request('GET', undefined, { host: 'frontend.example.test' }), path)).rejects.toThrow();
+  expect(fetchMock()).not.toHaveBeenCalled();
+});
+it('5C configuration or a different origin cannot attest to the 5E.1 serving pool', async () => {
+  for (const pin of ['', 'http://127.0.0.1:3011']) {
+    process.env.REPORTER_PHASE5E1_VERIFIED_ORIGIN = pin;
+    await expect(reporterBackendFetch(req, path)).rejects.toThrow();
+  }
+  process.env.REPORTER_PHASE5E1_VERIFIED_ORIGIN = process.env.REPORTER_AUTH_API_BASE;
+  process.env.NEXT_PUBLIC_API_BASE_DEV = 'http://127.0.0.1:3011';
+  await expect(reporterBackendFetch(req, path)).rejects.toThrow();
+  expect(fetchMock()).not.toHaveBeenCalled();
+});
 
-  it('falls back to the Render backend when the configured base matches the live frontend host', () => {
-    process.env.VERCEL_ENV = 'production';
-    process.env.NEXT_PUBLIC_API_BASE = 'https://www.newspulse.co.in';
+it('rebuilds host-only cookies, preserving expiry but never unapproved names or attributes', () => {
+  const headers = upstream({}, 200, [
+    'reporter_portal_session=synthetic; Domain=backend.example.test; Path=/different; SameSite=None; Max-Age=90',
+    'reporter_portal_login_challenge=; Expires=Thu, 01 Jan 1970 00:00:00 GMT',
+    'unrelated=other; HttpOnly',
+  ]).headers;
+  const cookies = sanitizedReporterCookies(headers, request('GET', undefined, { 'x-forwarded-proto': 'https' }));
+  expect(cookies).toEqual([
+    'reporter_portal_session=synthetic; Max-Age=90; Path=/; HttpOnly; SameSite=Lax; Secure',
+    'reporter_portal_login_challenge=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/; HttpOnly; SameSite=Lax; Secure',
+  ]);
+});
 
-    const { resolveReporterAuthProxyUrl } = require('../../lib/reporterAuthProxy');
-
-    expect(
-      resolveReporterAuthProxyUrl('/api/reporter-auth/request-code', {
-        headers: { host: 'www.newspulse.co.in' },
-      })
-    ).toBe('https://newspulse-backend-real.onrender.com/api/reporter-auth/request-code');
-  });
-
-  it('uses the stable Render backend in production even when the configured public base already points to a backend host', () => {
-    process.env.VERCEL_ENV = 'production';
-    process.env.NEXT_PUBLIC_API_BASE = 'https://some-other-backend.example.com';
-
-    const { resolveReporterAuthProxyTarget } = require('../../lib/reporterAuthProxy');
-
-    expect(
-      resolveReporterAuthProxyTarget('/api/reporter-auth/request-code', {
-        headers: { host: 'www.newspulse.co.in' },
-      })
-    ).toEqual({
-      url: 'https://newspulse-backend-real.onrender.com/api/reporter-auth/request-code',
-      base: 'https://newspulse-backend-real.onrender.com',
-      source: 'prod_default',
-      reason: 'configured_base',
-    });
-  });
-
-  it('falls back to the Render backend when the configured base matches the Vercel deployment host', () => {
-    process.env.VERCEL_ENV = 'production';
-    process.env.VERCEL_URL = 'newspulse-frontend-live.vercel.app';
-    process.env.NEXT_PUBLIC_API_BASE = 'https://newspulse-frontend-live.vercel.app';
-
-    const { resolveReporterAuthProxyUrl } = require('../../lib/reporterAuthProxy');
-
-    expect(resolveReporterAuthProxyUrl('/api/reporter-auth/request-code')).toBe(
-      'https://newspulse-backend-real.onrender.com/api/reporter-auth/request-code'
-    );
-  });
-
-  it('falls back to the Render backend for any vercel.app target in production', () => {
-    process.env.VERCEL_ENV = 'production';
-    process.env.NEXT_PUBLIC_API_BASE = 'https://newspulse-frontend-live-git-main-team.vercel.app';
-
-    const { resolveReporterAuthProxyUrl } = require('../../lib/reporterAuthProxy');
-
-    expect(resolveReporterAuthProxyUrl('/api/reporter-auth/request-code')).toBe(
-      'https://newspulse-backend-real.onrender.com/api/reporter-auth/request-code'
-    );
-  });
-
-  it('prefers the dedicated reporter auth backend env when it is set', () => {
-    process.env.VERCEL_ENV = 'production';
-    process.env.REPORTER_AUTH_API_BASE = 'https://reporter-auth-backend.example.com/api';
-    process.env.NEXT_PUBLIC_API_BASE = 'https://www.newspulse.co.in';
-
-    const { resolveReporterAuthProxyTarget } = require('../../lib/reporterAuthProxy');
-
-    expect(resolveReporterAuthProxyTarget('/api/reporter-auth/request-code')).toEqual({
-      url: 'https://reporter-auth-backend.example.com/api/reporter-auth/request-code',
-      base: 'https://reporter-auth-backend.example.com',
-      source: 'reporter_auth_env',
-      reason: 'explicit_env',
-    });
-  });
-
-  it('ignores the dedicated reporter auth env when it matches the live frontend host', () => {
-    process.env.VERCEL_ENV = 'production';
-    process.env.REPORTER_AUTH_API_BASE = 'https://www.newspulse.co.in';
-
-    const { resolveReporterAuthProxyTarget } = require('../../lib/reporterAuthProxy');
-
-    expect(
-      resolveReporterAuthProxyTarget('/api/reporter-auth/request-code', {
-        headers: { host: 'www.newspulse.co.in' },
-      })
-    ).toEqual({
-      url: 'https://newspulse-backend-real.onrender.com/api/reporter-auth/request-code',
-      base: 'https://newspulse-backend-real.onrender.com',
-      source: 'prod_default',
-      reason: 'frontend_target_rejected',
-    });
-  });
-
-  it('does not substitute a production backend for same-host self-proxying outside production', () => {
-    process.env.NEXT_PUBLIC_API_BASE = 'https://preview.newspulse.app';
-
-    const { resolveReporterAuthProxyUrl } = require('../../lib/reporterAuthProxy');
-
-    expect(
-      resolveReporterAuthProxyUrl('/api/reporter-auth/request-code', {
-        headers: { host: 'preview.newspulse.app' },
-      })
-    ).toBeNull();
-  });
-
-  it('allows localhost backends on a different port than the frontend dev server', () => {
-    process.env.NEXT_PUBLIC_API_BASE = 'http://localhost:5000';
-
-    const { resolveReporterAuthProxyUrl } = require('../../lib/reporterAuthProxy');
-
-    expect(
-      resolveReporterAuthProxyUrl('/api/reporter-auth/session', {
-        headers: { host: 'localhost:3000' },
-      })
-    ).toBe('http://localhost:5000/api/reporter-auth/session');
-  });
-
-  it('does not silently fall back to the production reporter backend in local dev', () => {
-    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-    process.env.NEXT_PUBLIC_API_BASE = 'https://newspulse-backend-real.onrender.com';
-
-    const { resolveReporterAuthProxyTarget } = require('../../lib/reporterAuthProxy');
-
-    expect(
-      resolveReporterAuthProxyTarget('/api/reporter-auth/session', {
-        headers: { host: 'localhost:3000' },
-      })
-    ).toEqual({
-      url: null,
-      base: null,
-      source: 'unavailable',
-      reason: 'missing_base',
-    });
-    warnSpy.mockRestore();
-  });
-
-  it('falls back to the Render backend on the live host even when runtime production env is absent', () => {
-    const { resolveReporterAuthProxyUrl } = require('../../lib/reporterAuthProxy');
-
-    expect(
-      resolveReporterAuthProxyUrl('/api/reporter-auth/request-code', {
-        headers: { host: 'www.newspulse.co.in' },
-      })
-    ).toBe('https://newspulse-backend-real.onrender.com/api/reporter-auth/request-code');
-  });
+it('permits only the exact authenticated withdraw transport exception', async () => {
+  const withdraw = `/api/public/community-reporter/${accountId}/withdraw`;
+  fetchMock().mockResolvedValue(upstream({ ok: true }));
+  await reporterBackendFetch(req, withdraw, { method: 'POST' });
+  await expect(reporterBackendFetch(req, withdraw, { method: 'GET' })).rejects.toThrow();
+  await expect(reporterBackendFetch(req, '/api/public/community-reporter/other/withdraw', { method: 'POST' })).rejects.toThrow();
+  await expect(reporterBackendFetch(request('POST', {}, {}, { np_reporter_logout: 'pending' }), withdraw, { method: 'POST' })).rejects.toThrow();
+  expect(fetchMock()).toHaveBeenCalledTimes(1);
 });

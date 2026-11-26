@@ -1,4 +1,5 @@
-import { submitCommunityStory, submitYouthPulseStory, type CommunityReporterAgeGroup } from '../../src/lib/communityReporterApi';
+import { patchReporterDraft, submitCommunityStory, submitYouthPulseStory, type CommunityReporterAgeGroup } from '../../src/lib/communityReporterApi';
+import { projectStory } from '../../lib/reporterStories';
 
 function createCommunityPayload(ageGroup: CommunityReporterAgeGroup = '18_24') {
   return {
@@ -9,7 +10,7 @@ function createCommunityPayload(ageGroup: CommunityReporterAgeGroup = '18_24') {
     coverageScope: 'regional' as const,
     headline: 'Hello',
     story: 'This is a sufficiently long story text to pass validation.',
-    reporterType: 'community' as const,
+    generalEthicsAccepted: true,
   };
 }
 
@@ -21,95 +22,40 @@ describe('submitCommunityStory (identity anchors)', () => {
     });
   });
 
-  it('posts one backend-compatible community submission payload', async () => {
-    await submitCommunityStory({
-      reporterAccountId: 'acct-1',
-      reporterProfileId: 'prof-1',
-      reporterName: 'Test User',
-      reporterEmail: ' TEST@Example.com ',
-      reporterPhone: '999',
-      reporterWhatsApp: '888',
-      city: 'Ahmedabad',
-      district: 'Ahmedabad',
-      state: 'Gujarat',
-      country: 'India',
-      consentToContact: true,
-      beats: ['Civic', 'Education'],
-      ageGroup: '18_24',
-      category: 'regional',
-      coverageScope: 'regional',
-      headline: 'Hello',
-      story: 'This is a sufficiently long story text to pass validation.',
-      reporterType: 'community',
-      preferredLanguages: ['en'],
-      communityInterests: ['Civic', 'Education'],
-      mediaLink: 'https://example.com/photo.jpg',
-    });
-
-    expect((global as any).fetch).toHaveBeenCalledTimes(1);
-    const [url, init] = (global as any).fetch.mock.calls[0];
-    const body = JSON.parse(init.body);
-
-    expect(url).toBe('/api/community/submissions');
-    expect(body).toEqual({
-      reporterAccountId: 'acct-1',
-      reporterProfileId: 'prof-1',
-      reporterType: 'community',
-      reporterName: 'Test User',
-      reporterEmail: 'test@example.com',
-      reporterPhone: '999',
-      reporterWhatsApp: '888',
-      city: 'Ahmedabad',
-      district: 'Ahmedabad',
-      state: 'Gujarat',
-      country: 'India',
-      ageGroup: '18_24',
-      category: 'regional',
-      coverageScope: 'regional',
-      headline: 'Hello',
-      story: 'This is a sufficiently long story text to pass validation.',
-      mediaLink: 'https://example.com/photo.jpg',
-      priority: 'normal',
-      preferredLanguages: ['en'],
-      consentToContact: true,
-      beats: ['Civic', 'Education'],
-      communityInterests: ['Civic', 'Education'],
-      journalistCharterAccepted: false,
-      generalEthicsAccepted: false,
-    });
-    expect(body.fullName).toBeUndefined();
-    expect(body.phone).toBeUndefined();
-    expect(body.storyText).toBeUndefined();
-    expect(body.reporterProfile).toBeUndefined();
-    expect(body.meta).toBeUndefined();
+  const id = '123456789012345678901234', accountId = 'abcdefabcdefabcdefabcdef';
+  const response = (status: number, body: unknown) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
+  it('requires the receipt of the requested kind and never retries or follows redirects', async () => {
+    const payload = createCommunityPayload();
+    (global.fetch as jest.Mock).mockResolvedValueOnce(response(201, { ok: true, actor: 'guest', referenceId: id }));
+    await expect(submitCommunityStory(payload, { kind: 'guest' })).resolves.toEqual({ ok: true, referenceId: id });
+    for (const [status, body] of [
+      [201, { ok: true, actor: 'guest', referenceId: id }], [200, { ok: true, actor: 'account', referenceId: id }],
+      [201, { ok: false, actor: 'account', referenceId: id }], [201, { ok: true, actor: 'account', referenceId: '' }],
+    ] as const) {
+      (global.fetch as jest.Mock).mockResolvedValueOnce(response(status, body));
+      await expect(submitCommunityStory(payload, { kind: 'account', accountId })).resolves.toEqual({ ok: false, reason: 'uncertain' });
+    }
+    expect(global.fetch).toHaveBeenCalledTimes(5);
+    expect(global.fetch).toHaveBeenLastCalledWith('/api/community/submissions', expect.objectContaining({
+      redirect: 'error', credentials: 'same-origin', headers: expect.objectContaining({ 'X-Reporter-Account': accountId }),
+    }));
   });
-
-  it.each([
-    ['Under 18', 'under_18'],
-    ['18–24', '18_24'],
-    ['25–40', '25_40'],
-    ['41+', '41_plus'],
-  ] as Array<[string, CommunityReporterAgeGroup]>)('posts %s as %s', async (_label, ageGroup) => {
-    await submitCommunityStory(createCommunityPayload(ageGroup));
-
-    const [, init] = (global as any).fetch.mock.calls[0];
-    expect(JSON.parse(init.body).ageGroup).toBe(ageGroup);
-  });
-
-  it('returns public-safe validation messages for HTTP 400 without throwing', async () => {
-    (global as any).fetch = jest.fn().mockResolvedValueOnce({
-      ok: false,
-      status: 400,
-      json: async () => ({ error: 'submit_failed', stack: 'Error: internal stack' }),
-    });
-
-    const result = await submitCommunityStory({
-      ...createCommunityPayload('18_24'),
-    });
-
-    expect((global as any).fetch).toHaveBeenCalledTimes(1);
-    expect(result.ok).toBe(false);
-    expect(result.message).toBe('Please check the highlighted details and try submitting again.');
+  it('accepts only the requested PATCH ID, content, language and transition', async () => {
+    const item = { id, headline: 'Old', story: 'Old sentence', category: 'Civic Issue', originalLanguage: 'gu',
+      reviewStatus: 'NEEDS_REVISION', publicationStatus: 'not_published', isPublished: false, publicUrl: null, editions: [], canEdit: true, reporterFeedback: null };
+    const existing = projectStory(item);
+    const edit = { headline: 'New', story: 'New text', category: 'civic_issue', action: 'draft' as const };
+    const expected = { ...item, headline: edit.headline, story: edit.story };
+    for (const override of [{ id: accountId }, { reviewStatus: 'DRAFT' }, { story: 'different' }, { originalLanguage: 'en' }]) {
+      (global.fetch as jest.Mock).mockResolvedValueOnce(response(200, { ok: true, item: { ...expected, ...override } }));
+      await expect(patchReporterDraft(existing, accountId, edit)).resolves.toEqual({ ok: false, reason: 'uncertain' });
+    }
+    (global.fetch as jest.Mock).mockResolvedValueOnce(response(200, { ok: true, item: expected }));
+    await expect(patchReporterDraft(existing, accountId, edit)).resolves.toMatchObject({ ok: true, item: { id, reviewStatus: 'NEEDS_REVISION' } });
+    const [url, init] = (global.fetch as jest.Mock).mock.calls[4];
+    expect(url).toBe(`/api/reporter-portal/submissions/${id}`);
+    expect(init.method).toBe('PATCH');
+    expect(JSON.parse(init.body)).toEqual({ ...edit, category: 'Civic Issue' });
   });
 
   it('tags Youth Pulse submissions for the Youth Pulse Desk workflow', async () => {

@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 
 import { getCategoryQueryKey, getCategoryRouteKey } from '../../../lib/categoryKeys';
 import { getPublicApiBaseUrl } from '../../../lib/publicApiBase';
+import { anonymousArticleGet } from '../../../lib/publicArticleRequest';
 import { filterVisibleArticlesForLocale, getLocalizedArticleFields, getPublicArticleStatus, normalizeRouteLocale, STRICT_LOCALE_POLICY } from '../../../lib/localizedArticleFields';
 import { compareArticleFreshness, pickFreshestArticlesForLocale } from '../../../lib/translationGroupSync';
 import { withPublicReadDeadline } from '../../../lib/publicReadDeadline';
@@ -74,18 +75,10 @@ type UpstreamNewsResult = (
   | { ok: false; json: null }
 ) & { status: number; retryAfter?: string };
 
-async function fetchUpstreamJson(url: string, req: NextApiRequest, deadlineAt?: number): Promise<UpstreamNewsResult> {
+async function fetchUpstreamJson(url: string, deadlineAt?: number): Promise<UpstreamNewsResult> {
   let retryAfter: string | undefined;
   const read = async (signal?: AbortSignal): Promise<UpstreamNewsResult> => {
-    const upstream = await fetch(url, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-        cookie: String(req.headers.cookie || ''),
-        authorization: String(req.headers.authorization || ''),
-      },
-      ...(signal ? { signal } : {}),
-    });
+    const upstream = await fetch(url, anonymousArticleGet(signal));
 
     retryAfter = getSafeRetryAfter(upstream.headers?.get('Retry-After'));
     if (!upstream.ok) {
@@ -227,7 +220,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     for (const candidateBase of candidateBases) {
       const candidateUrl = buildUpstreamUrl(candidateBase, localizedParams);
       try {
-        const response = await fetchUpstreamJson(candidateUrl, req, deadlineAt);
+        const response = await fetchUpstreamJson(candidateUrl, deadlineAt);
         if (response.retryAfter) retryAfter = response.retryAfter;
         if (response.ok) {
           upstream = response;
@@ -309,7 +302,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           widenedParams.delete('language');
           widenedParams.set('limit', String(Math.max(requestedLimit > 0 ? requestedLimit * 3 : 0, 90)));
 
-          const widened = await fetchUpstreamJson(buildUpstreamUrl(upstreamBase, widenedParams), req, deadlineAt);
+          const widened = await fetchUpstreamJson(buildUpstreamUrl(upstreamBase, widenedParams), deadlineAt);
           if (widened.ok) {
             const localizedPrimary = new Map(primaryItems
               .filter((item) => getLocalizedArticleFields(item, requestedLocale, STRICT_LOCALE_POLICY).isVisible)

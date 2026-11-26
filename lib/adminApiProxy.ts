@@ -4,7 +4,7 @@ import { getPublicApiBaseUrl } from './publicApiBase';
 
 const DEV_ALLOWED_ORIGINS = new Set(['http://localhost:5173', 'http://127.0.0.1:5173']);
 
-function setCors(req: NextApiRequest, res: NextApiResponse, methods: string[]) {
+export function setAdminProxyCors(req: NextApiRequest, res: NextApiResponse, methods: string[]) {
   const origin = String(req.headers.origin || '').trim();
   if (!origin) return;
 
@@ -71,7 +71,7 @@ export function createAdminApiProxyHandler(input: {
   const allowMethods = Array.from(new Set(input.allowMethods.map((method) => method.toUpperCase())));
 
   return async function handler(req: NextApiRequest, res: NextApiResponse) {
-    setCors(req, res, allowMethods);
+    setAdminProxyCors(req, res, allowMethods);
     noStore(res);
 
     if (req.method === 'OPTIONS') {

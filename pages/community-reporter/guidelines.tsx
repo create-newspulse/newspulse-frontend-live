@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { useRouter } from 'next/compat/router';
+import LocalizedReporterGuide from '../../components/community-reporter/LocalizedReporterGuide';
 import React from 'react';
 import { AlertTriangle, Camera, CheckCircle2, FileCheck, MapPinned, Megaphone, ShieldCheck, Users } from 'lucide-react';
 import PublicBusinessPageLayout, { PageEyebrow, SectionHeading, SurfacePanel } from '../../components/public/PublicBusinessPageLayout';
@@ -83,6 +85,8 @@ const workflowSteps = [
 ] as const;
 
 export default function CommunityReporterGuidelinesPage() {
+  const locale = useRouter()?.locale;
+  if (locale === 'hi' || locale === 'gu') return <LocalizedReporterGuide locale={locale} email={contactEmail} mailto={`mailto:${contactEmail}`} />;
   return (
     <PublicBusinessPageLayout
       title="News Pulse Community Reporter Guide"

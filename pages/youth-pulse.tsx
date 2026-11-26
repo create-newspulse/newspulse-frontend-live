@@ -11,6 +11,7 @@ import SubmitStoryModal from '../components/youth/SubmitStoryModal';
 import { useYouthPulse, type InitialYouthFeed } from '../features/youthPulse/useYouthPulse';
 import { getYouthTrendingByLanguage } from '../features/youthPulse/api';
 import { withPublicReadDeadline } from '../lib/publicReadDeadline';
+import { reporterText } from '../lib/reporterCopy';
 import { usePublicFounderToggles } from '../hooks/usePublicFounderToggles';
 import { DEFAULT_PUBLIC_FOUNDER_TOGGLES, fetchServerPublicFounderToggles, type PublicFounderToggles } from '../lib/publicFounderToggles';
 
@@ -18,6 +19,9 @@ type YouthPulsePageProps = {
   initialFounderToggles: PublicFounderToggles;
   initialYouthFeed?: InitialYouthFeed;
 };
+
+// The v1 community writer does not accept Youth Desk's moderation contract.
+const hasVersionedYouthWriter = false;
 
 export default function YouthPulsePage({ initialFounderToggles, initialYouthFeed }: YouthPulsePageProps) {
   const router = useRouter();
@@ -29,7 +33,7 @@ export default function YouthPulsePage({ initialFounderToggles, initialYouthFeed
   const view = typeof router.query?.view === 'string' ? router.query.view : '';
   const isViewAll = view.toLowerCase() === 'all';
   const { topics, trending, error } = useYouthPulse(isViewAll ? 30 : 12, initialYouthFeed);
-  const submissionsClosed = toggles.youthPulseSubmissionsClosed;
+  const submissionsClosed = !hasVersionedYouthWriter || toggles.youthPulseSubmissionsClosed;
   const spotlightStories = trending.slice(0, Math.min(4, trending.length));
   const latestStories = trending.slice(0, isViewAll ? 6 : 3);
 
@@ -102,7 +106,7 @@ export default function YouthPulsePage({ initialFounderToggles, initialYouthFeed
               </p>
               <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-100 px-5 py-4 text-sm leading-6 text-slate-600 dark:border-slate-700 dark:bg-slate-950/50 dark:text-slate-300">
                 {submissionsClosed
-                  ? 'Youth Pulse submissions are temporarily closed.'
+                  ? reporterText(router.locale, 'Youth Pulse submissions are temporarily closed.', 'यूथ पल्स में रिपोर्ट भेजना अभी बंद है।', 'યુથ પલ્સમાં અહેવાલ મોકલવાનું હાલ બંધ છે.')
                   : 'Submissions are reviewed by News Pulse before publication. Public readers see only approved published stories.'}
               </div>
               <div className="mt-6">
@@ -134,7 +138,7 @@ export default function YouthPulsePage({ initialFounderToggles, initialYouthFeed
             Trust and moderation
           </p>
           <h2 className="mt-3 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-            Youth Pulse is open to contributions, but not open to unreviewed publishing
+            Youth Pulse publishes editorially reviewed contributions
           </h2>
           <p className="mt-3 max-w-4xl text-sm leading-7 text-slate-600 dark:text-slate-300">
             Public readers see only approved published stories. That keeps Youth Pulse credible as a News Pulse

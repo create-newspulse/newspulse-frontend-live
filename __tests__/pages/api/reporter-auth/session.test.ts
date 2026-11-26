@@ -1,138 +1,28 @@
-jest.mock('../../../../lib/publicApiBase', () => ({
-  getPublicApiBaseUrl: () => 'http://localhost:3010',
-}));
+/** @jest-environment node */
+import session from '../../../../pages/api/reporter-auth/session';
+import { accountId, email, mockBackend, request, response, sessionBody, upstream } from './contractFixtures';
 
-import handler from '../../../../pages/api/reporter-auth/session';
-import { REPORTER_SESSION_COOKIE, createSessionToken } from '../../../../lib/reporterPortalAuth';
-
-describe('pages/api/reporter-auth/session', () => {
-  beforeEach(() => {
-    (global as any).fetch = jest.fn();
-  });
-
-  it('returns REPORTER_SESSION_MISSING when the canonical cookie is absent', async () => {
-    const req = {
-      method: 'GET',
-      cookies: {},
-      headers: {},
-    } as any;
-
-    const res = createMockResponse();
-    await handler(req, res as any);
-
-    expect(res.statusCode).toBe(401);
-    expect(res.body).toEqual({ ok: false, code: 'REPORTER_SESSION_MISSING', message: 'Reporter session missing or expired.' });
-    expect((global as any).fetch).not.toHaveBeenCalled();
-    expect(res.headers['Set-Cookie']).toBeUndefined();
-    expect(res.headers['Cache-Control']).toBe('private, no-store');
-    expect(res.headers.Pragma).toBe('no-cache');
-  });
-
-  it('expires the canonical cookie when it is invalid', async () => {
-    const req = {
-      method: 'GET',
-      cookies: {
-        [REPORTER_SESSION_COOKIE]: 'stale-cookie-token',
-      },
-      headers: {},
-    } as any;
-
-    const res = createMockResponse();
-    await handler(req, res as any);
-
-    expect(res.statusCode).toBe(401);
-    expect(res.body).toEqual({ ok: false, code: 'REPORTER_SESSION_MISSING', message: 'Reporter session missing or expired.' });
-    expect(res.headers['Set-Cookie']).toBeTruthy();
-  });
-
-  it('returns the active reporter session from the canonical cookie', async () => {
-    const sessionToken = createSessionToken('Reporter@Example.com');
-    (global as any).fetch.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify({ ok: true, session: { email: 'reporter@example.com' } }),
-    });
-
-    const req = {
-      method: 'GET',
-      cookies: {
-        [REPORTER_SESSION_COOKIE]: sessionToken,
-      },
-      headers: {
-        cookie: `${REPORTER_SESSION_COOKIE}=${sessionToken}`,
-      },
-    } as any;
-
-    const res = createMockResponse();
-    await handler(req, res as any);
-
-    expect(res.statusCode).toBe(200);
-    expect(res.body).toMatchObject({
-      ok: true,
-      reporter: {
-        email: 'reporter@example.com',
-      },
-      session: {
-        email: 'reporter@example.com',
-      },
-    });
-    expect((global as any).fetch).toHaveBeenCalledWith(
-      'http://localhost:3010/api/reporter-auth/session',
-      expect.objectContaining({
-        method: 'GET',
-        headers: expect.objectContaining({
-          Accept: 'application/json',
-          cookie: `${REPORTER_SESSION_COOKIE}=${sessionToken}`,
-        }),
-        cache: 'no-store',
-      })
-    );
-  });
-
-  it('rejects a local-only reporter cookie when the backend reporter session is missing', async () => {
-    const sessionToken = createSessionToken('Reporter@Example.com');
-    (global as any).fetch.mockResolvedValueOnce({
-      ok: false,
-      status: 401,
-      text: async () => JSON.stringify({ ok: false, code: 'REPORTER_SESSION_MISSING', message: 'Reporter session missing or expired.' }),
-    });
-
-    const req = {
-      method: 'GET',
-      cookies: {
-        [REPORTER_SESSION_COOKIE]: sessionToken,
-      },
-      headers: {
-        cookie: `${REPORTER_SESSION_COOKIE}=${sessionToken}`,
-      },
-    } as any;
-
-    const res = createMockResponse();
-    await handler(req, res as any);
-
-    expect(res.statusCode).toBe(401);
-    expect(res.body).toEqual({ ok: false, code: 'REPORTER_SESSION_MISSING', message: 'Reporter session missing or expired.' });
-    expect(res.headers['Set-Cookie']).toBeTruthy();
-  });
+const fetchMock = mockBackend();
+it('expires obsolete local credentials without authenticating or discarding backend revocation credentials', async () => {
+  const { data, res } = response();
+  await session(request('GET', undefined, {}, { np_reporter_portal_session: 'obsolete', unrelated: 'keep' }), res);
+  expect(data.status).toBe(401);
+  expect(data.headers['Set-Cookie']).toEqual([expect.stringMatching(/^np_reporter_portal_session=; Max-Age=0;/)]);
+  expect(fetchMock()).not.toHaveBeenCalled();
 });
-
-function createMockResponse() {
-  const response = {
-    statusCode: 200,
-    headers: {} as Record<string, string | string[]>,
-    body: undefined as any,
-    setHeader(name: string, value: string | string[]) {
-      response.headers[name] = value;
-    },
-    status(code: number) {
-      response.statusCode = code;
-      return response;
-    },
-    json(payload: any) {
-      response.body = payload;
-      return response;
-    },
-  };
-
-  return response;
-}
+it('returns a no-store affirmative session only after a backend-confirmed account', async () => {
+  const { res, data } = response();
+  const body = sessionBody();
+  fetchMock().mockResolvedValue(upstream(body));
+  await session(request('GET', undefined, { cookie: 'reporter_portal.sid=s%3Atest' }), res);
+  expect(data.json).toEqual({ ok: true, authenticated: true, session: { accountId, email, fullName: 'One', expiresAt: body.session.expiresAt } });
+  expect(data.headers['Cache-Control']).toContain('no-store');
+});
+it.each([['np_reporter_logout', 'pending', 409], ['np_reporter_revocation_pending', '1', 409], ['np_reporter_logout', 'signed-out', 401]] as const)(
+  'blocks %s=%s before upstream, without clearing revocation credentials', async (key, value, status) => {
+    const { data, res } = response();
+    await session(request('GET', undefined, {}, { reporter_portal_session: 'synthetic', [key]: value }), res);
+    expect(data.status).toBe(status);
+    expect(fetchMock()).not.toHaveBeenCalled();
+    expect(data.headers['Set-Cookie']).toBeUndefined();
+  });

@@ -1,4 +1,5 @@
 import { withPublicReadDeadline } from './lib/publicReadDeadline';
+import { anonymousArticleGet } from './lib/publicArticleRequest';
 import { isNewsSharePath } from './lib/newsRoutes';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -46,6 +47,7 @@ function getRedirectBackendBase(): string {
 
 function isPublicRedirectCandidate(pathname: string): boolean {
   const lower = pathname.toLowerCase();
+  if (/^\/(?:(?:en|hi|gu)\/)?(?:reporter|community-reporter(?:-my-stories)?|journalist-desk|public-api|admin-api|api)(?:\/|$)/.test(lower)) return false;
   if (isNewsSharePath(lower)) return false;
   if (lower === '/admin' || lower.startsWith('/admin/')) return false;
   if (lower === '/admin-api' || lower.startsWith('/admin-api/')) return false;
@@ -169,7 +171,8 @@ async function resolveDynamicSeoRedirect(req: NextRequest): Promise<NextResponse
       lookup.searchParams.set('host', currentUrl.host);
 
       const json = await withPublicReadDeadline(1200, async (signal) => {
-        const response = await fetch(lookup.toString(), {
+        const articleRule = /^\/(?:(?:en|hi|gu)\/)?news(?:\/|$)/i.test(normalizedPathname);
+        const response = await fetch(lookup.toString(), articleRule ? anonymousArticleGet(signal) : {
           method: 'GET',
           headers: { Accept: 'application/json' },
           signal,
@@ -217,6 +220,22 @@ function normalizeLocale(raw: unknown): Locale | null {
 export async function proxy(req: NextRequest) {
   const url = req.nextUrl;
   const pathname = url.pathname;
+  const route = pathname.toLowerCase().replace(/^\/(?:en|hi|gu)(?=\/)/, '');
+  const publicAlias = /^\/(?:public-api|admin-api\/public)(?:\/|$)/.test(route);
+  const reporterRoute = /^\/(?:api\/(?:reporter-auth|reporter-portal|community-reporter|community\/submissions)|reporter|community-reporter(?:-my-stories)?)(?:\/|$)/.test(route);
+  // Reporter sessions are host cookies (SSR + same-origin API). Do not let
+  // unrelated legacy public/admin proxies copy them into upstream requests.
+  function next() {
+    if (reporterRoute) return NextResponse.next();
+    const raw = req.headers.get('cookie');
+    const pairs = raw?.split(';').filter(pair => !/^(?:reporter_portal[._]|np_reporter_)/.test(pair.trim()));
+    const filtered = pairs?.join(';');
+    if (!publicAlias && (!raw || raw === filtered)) return NextResponse.next();
+    const headers = new Headers(req.headers);
+    if (publicAlias || !filtered) headers.delete('cookie'); else headers.set('cookie', filtered);
+    if (publicAlias) for (const name of ['authorization', 'idempotency-key', 'x-reporter-account', 'x-np-reporter-build']) headers.delete(name);
+    return NextResponse.next({ request: { headers } });
+  }
 
   // Hard-block legacy PWA endpoints so browsers stop requesting them.
   if (
@@ -236,11 +255,11 @@ export async function proxy(req: NextRequest) {
 
   // Skip API and Next internals. (Also skip files with extensions like .png, .js, .css, etc.)
   const originalPathname = new URL(req.url).pathname;
-  if (pathname.startsWith('/api') || pathname.startsWith('/_next')) {
-    return NextResponse.next();
+  if (route.startsWith('/api') || route.startsWith('/_next') || publicAlias || route.startsWith('/admin-api/')) {
+    return next();
   }
   if (/\.[a-zA-Z0-9]+$/.test(pathname)) {
-    return NextResponse.next();
+    return next();
   }
 
   const dynamicRedirect = await resolveDynamicSeoRedirect(req);
@@ -270,7 +289,7 @@ export async function proxy(req: NextRequest) {
 
   // When URL explicitly sets locale, keep NEXT_LOCALE aligned so Next doesn't mis-detect.
   if (localeInPath) {
-    const res = NextResponse.next();
+    const res = next();
     res.cookies.set(NEXT_LOCALE_COOKIE, localeInPath, { path: '/', maxAge: 60 * 60 * 24 * 365 });
     // Also persist our app preference cookies for consistency.
     res.cookies.set(COOKIE_KEY, localeInPath, { path: '/', maxAge: 60 * 60 * 24 * 365 });
@@ -314,7 +333,7 @@ export async function proxy(req: NextRequest) {
     const isDocument = fetchDest === 'document' || accept.includes('text/html');
 
     if (!isDocument || isNextData || isPrefetch) {
-      const res = NextResponse.next();
+      const res = next();
       if (pref) res.cookies.set(NEXT_LOCALE_COOKIE, pref, { path: '/', maxAge: 60 * 60 * 24 * 365 });
       return res;
     }
@@ -324,7 +343,7 @@ export async function proxy(req: NextRequest) {
     // normalize default-locale URLs back to the unprefixed form which can create
     // a self-redirect loop if middleware keeps trying to add /en.
     if (targetLocale === nextDefaultLocale) {
-      const res = NextResponse.next();
+      const res = next();
       if (pref) res.cookies.set(NEXT_LOCALE_COOKIE, pref, { path: '/', maxAge: 60 * 60 * 24 * 365 });
       return res;
     }
@@ -341,7 +360,7 @@ export async function proxy(req: NextRequest) {
     return res;
   }
 
-  const res = NextResponse.next();
+  const res = next();
   if (pref) {
     res.cookies.set(NEXT_LOCALE_COOKIE, pref, { path: '/', maxAge: 60 * 60 * 24 * 365 });
   }
@@ -350,6 +369,9 @@ export async function proxy(req: NextRequest) {
 
 export const config = {
   matcher: [
+    '/api/:path*',
+    '/public-api/:path*',
+    '/admin-api/:path*',
     '/manifest.json',
     '/sw.js',
     '/service-worker.js',

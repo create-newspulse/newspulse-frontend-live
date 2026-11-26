@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 import { getPublicApiBaseUrl } from '../../../../../lib/publicApiBase';
+import { anonymousArticleGet } from '../../../../../lib/publicArticleRequest';
 import { parsePublicNewsGroupItems } from '../../../../../lib/publicNewsApi';
 import { withPublicReadDeadline } from '../../../../../lib/publicReadDeadline';
 import { getSafeRetryAfter } from '../../../../../lib/retryAfter';
@@ -37,16 +38,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const json = await withPublicReadDeadline(4000, async (signal) => {
-      const upstream = await fetch(targetUrl, {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json',
-          cookie: String(req.headers.cookie || ''),
-          authorization: String(req.headers.authorization || ''),
-        },
-        cache: 'no-store',
-        signal,
-      });
+      const upstream = await fetch(targetUrl, anonymousArticleGet(signal));
       retryAfter = getSafeRetryAfter(upstream.headers?.get('Retry-After'));
       if (!upstream.ok) throw new Error('PUBLIC_NEWS_UNAVAILABLE');
       const payload: unknown = JSON.parse(await upstream.text());

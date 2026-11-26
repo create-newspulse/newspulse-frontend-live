@@ -148,14 +148,6 @@ const nextConfig = {
   },
 
   async rewrites() {
-    // Prefer Next.js API routes under pages/api for most proxying.
-    // BUT: broadcast tickers intentionally use same-origin `/admin-api/public/*` (and legacy `/public-api/*`)
-    // so Vercel rewrites can forward to backend without CORS.
-    const isProdDeployment =
-      String(process.env.VERCEL_ENV || '').toLowerCase() === 'production' ||
-      ['prod', 'production'].includes(
-        String(process.env.NEWS_PULSE_DEPLOYMENT || process.env.NEWS_PULSE_ENV || '').toLowerCase()
-      );
     const backend = resolveSafeBackendBase();
 
     // Locale-stable regional routes:
@@ -197,6 +189,8 @@ const nextConfig = {
 
     if (!backend) return [...regionalLocaleRewrites, ...localAliases];
 
+    const missingCredentials = ['cookie', 'authorization', 'x-reporter-account', 'idempotency-key', 'x-np-reporter-build']
+      .map(key => ({ type: 'header', key }));
     return [
       ...regionalLocaleRewrites,
       ...localAliases,
@@ -204,14 +198,19 @@ const nextConfig = {
         source: '/admin-api/admin/:path*',
         destination: '/api/admin/:path*',
       },
-      {
-        source: '/admin-api/public/:path*',
-        destination: `${backend}/admin-api/public/:path*`,
-      },
-      {
-        source: '/public-api/:path*',
-        destination: `${backend}/admin-api/public/:path*`,
-      },
+      ...['/admin-api/public', '/public-api'].flatMap(prefix => [
+        { source: `${prefix}/broadcast/stream`, destination: '/api/public/broadcast/stream' },
+        // Keep the distinct legacy translation action on its existing route, never in a read proxy.
+        { source: `${prefix}/news/:id([a-fA-F0-9]{24})/translate`, destination: `${backend}/admin-api/public/news/:id/translate`, missing: missingCredentials },
+        { source: `${prefix}/news/:parts*`, destination: '/api/public/news-reader/:parts*' },
+        {
+          source: `${prefix}/:area(broadcast|pulse-dialogue|push|translation|ticker-ads|tickers|ui-labels|version|settings|ad-settings|compliance-settings|live-tv|viral-videos)/:path*`,
+          destination: `${backend}/admin-api/public/:area/:path*`,
+          // The request proxy removes credentials on these public aliases.
+          // Never send them off-origin even if that middleware did not run.
+          missing: missingCredentials,
+        },
+      ]),
     ];
   },
 

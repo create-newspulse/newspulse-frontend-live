@@ -1,53 +1,34 @@
-export type CommunityReporterAgeGroup = 'under_18' | '18_24' | '25_40' | '41_plus';
+import { receiptIdsAgree, type AgeGroup, type Scope, type StoryLanguage } from '../../lib/communityReporterIntake';
+import { projectStory, record, reporterObjectId, type ReporterStory } from '../../lib/reporterStories';
+import { draftFields, draftReceipt, validDraftKey } from '../../lib/reporterDraft';
+
+export type CommunityReporterAgeGroup = AgeGroup;
+export type SubmissionActor = { kind: 'guest' } | { kind: 'account'; accountId: string };
 
 export interface SubmitCommunityStoryPayload {
-  reporterAccountId?: string;
-  reporterProfileId?: string;
-  reporterName: string;
-  reporterEmail?: string;
+  reporterName?: string;
+  reporterEmail: string;
   reporterPhone?: string;
   reporterWhatsApp?: string;
   city?: string;
   district?: string;
   state?: string;
   country?: string;
-  ageGroup: CommunityReporterAgeGroup;
+  ageGroup?: CommunityReporterAgeGroup;
   category: string;
-  coverageScope?: '' | 'regional' | 'national' | 'international';
+  coverageScope?: Scope;
+  originalLanguage?: StoryLanguage;
   headline: string;
   story: string;
-  mediaLink?: string;
-  priority?: 'normal' | 'high';
-  storyCity?: string;
-  storyDistrict?: string;
-  storyState?: string;
-  storyCountry?: string;
-  reporterType: 'community' | 'journalist';
-  preferredLanguages?: string[];
   consentToContact?: boolean;
-  beats?: string[];
   communityInterests?: string[];
-  journalistCharterAccepted?: boolean;
-  generalEthicsAccepted?: boolean;
-  organisationName?: string;
-  organisationType?: 'print' | 'tv' | 'radio' | 'digital' | 'freelance' | 'other';
-  positionTitle?: string;
-  beatsProfessional?: string[];
-  yearsExperience?: string;
-  professionalJournalistId?: string;
-  journalistIdFileId?: string;
-  websiteOrPortfolio?: string;
-  socialLinks?: { linkedin?: string; twitter?: string };
-  heardAbout?: string;
+  generalEthicsAccepted: boolean;
 }
 
-export interface SubmitCommunityStoryResult {
-  ok: boolean;
-  referenceId: string;
-  status: string;
-  reporterType: 'community' | 'journalist';
-  message?: string;
-}
+export type IntakeFailure = 'validation' | 'session' | 'unavailable' | 'notEditable' | 'draftConflict' | 'uncertain';
+export type IntakeError = { ok: false; reason: IntakeFailure };
+export type SubmitCommunityStoryResult = IntakeError | { ok: true; referenceId: string };
+export type DraftResult = IntakeError | { ok: true; item: ReporterStory };
 
 export type YouthPulseTrackSlug =
   | 'youth-pulse'
@@ -132,102 +113,118 @@ function getYouthPulseBackendCategory(track: YouthPulseTrackSlug): string {
   }
 }
 
-function cleanString(value: unknown): string {
-  return String(value || '').trim();
+const failed = (reason: IntakeFailure): IntakeError => ({ ok: false, reason });
+function failure(status: number, data: unknown): IntakeError {
+  const code = record(data) && data.ok === false ? data.code : null;
+  if (status === 401 || status === 403 || (status === 409 && (code === 'REPORTER_ACCOUNT_CHANGED' || code === 'LOGOUT_UNCONFIRMED'))) return failed('session');
+  if (status === 400 && (code === 'VALIDATION_ERROR' || code === 'VALIDATION_FAILED')) return failed('validation');
+  if (status === 409 && code === 'DRAFT_KEY_CONFLICT') return failed('draftConflict');
+  if ((status === 404 && code === 'SUBMISSION_NOT_FOUND') || (status === 409 && code === 'SUBMISSION_NOT_EDITABLE')) return failed('notEditable');
+  if (status === 503 && (code === 'SUBMISSIONS_PAUSED' || code === 'REPORTER_CONTRACT_UNAVAILABLE' || code === 'INTAKE_UNAVAILABLE')) return failed('unavailable');
+  return failed('uncertain');
 }
 
-function cleanStringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.map((item) => cleanString(item)).filter(Boolean)
-    : [];
-}
-
-function resolveSubmitErrorMessage(status: number, data: any): string {
-  if (status === 400) {
-    const message = cleanString(data?.message);
-    if (message && !/^submit_failed$/i.test(message)) return message;
-    return 'Please check the highlighted details and try submitting again.';
+const requestHeaders = (account: string) => ({
+  Accept: 'application/json', 'Content-Type': 'application/json', 'X-Reporter-Account': account,
+});
+async function intakeFetch(url: string, init: RequestInit) {
+  // Never replay writes, including across redirects. An abort isn't proof that a write didn't persist.
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  const deadline = setTimeout(abort, 15_000);
+  if (init.signal?.aborted) abort();
+  init.signal?.addEventListener('abort', abort, { once: true });
+  try {
+    const response = await fetch(url, {
+      ...init, signal: controller.signal, cache: 'no-store', credentials: 'same-origin', redirect: 'error',
+    });
+    const data: unknown = await response.json().catch(() => null);
+    return { response, data };
+  } finally {
+    clearTimeout(deadline);
+    init.signal?.removeEventListener('abort', abort);
   }
-
-  return "We couldn't submit your story right now. Please try again.";
 }
 
 export async function submitCommunityStory(
   payload: SubmitCommunityStoryPayload,
+  actor: SubmissionActor,
 ): Promise<SubmitCommunityStoryResult> {
-  const requestUrl = `/api/community/submissions`;
-  const beats = cleanStringArray(payload.beats?.length ? payload.beats : payload.communityInterests?.length ? payload.communityInterests : payload.beatsProfessional);
-
-  const requestBody = {
-    reporterAccountId: cleanString(payload.reporterAccountId) || undefined,
-    reporterProfileId: cleanString(payload.reporterProfileId) || undefined,
-    reporterType: payload.reporterType,
-    reporterName: cleanString(payload.reporterName),
-    reporterEmail: cleanString(payload.reporterEmail).toLowerCase(),
-    reporterPhone: cleanString(payload.reporterPhone),
-    reporterWhatsApp: cleanString(payload.reporterWhatsApp),
-    city: cleanString(payload.city),
-    district: cleanString(payload.district),
-    state: cleanString(payload.state),
-    country: cleanString(payload.country),
-    ageGroup: cleanString(payload.ageGroup),
-    category: cleanString(payload.category),
-    coverageScope: cleanString(payload.coverageScope),
-    headline: cleanString(payload.headline),
-    story: cleanString(payload.story),
-    mediaLink: cleanString(payload.mediaLink) || undefined,
-    priority: payload.priority || 'normal',
-    storyCity: cleanString(payload.storyCity) || undefined,
-    storyDistrict: cleanString(payload.storyDistrict) || undefined,
-    storyState: cleanString(payload.storyState) || undefined,
-    storyCountry: cleanString(payload.storyCountry) || undefined,
-    preferredLanguages: cleanStringArray(payload.preferredLanguages),
-    consentToContact: Boolean(payload.consentToContact),
-    beats,
-    communityInterests: payload.reporterType === 'community' ? cleanStringArray(payload.communityInterests || beats) : undefined,
-    journalistCharterAccepted: Boolean(payload.journalistCharterAccepted),
-    generalEthicsAccepted: Boolean(payload.generalEthicsAccepted),
-    organisationName: cleanString(payload.organisationName) || undefined,
-    organisationType: payload.organisationType || undefined,
-    positionTitle: cleanString(payload.positionTitle) || undefined,
-    beatsProfessional: payload.reporterType === 'journalist' ? cleanStringArray(payload.beatsProfessional || beats) : undefined,
-    yearsExperience: cleanString(payload.yearsExperience) || undefined,
-    professionalJournalistId: cleanString(payload.professionalJournalistId) || undefined,
-    journalistIdFileId: cleanString(payload.journalistIdFileId) || undefined,
-    heardAbout: cleanString(payload.heardAbout) || undefined,
-  };
-
-  if (process.env.NODE_ENV !== 'production') {
-    console.info('[community-reporter][submit]', {
-      ageGroup: requestBody.ageGroup,
-      category: requestBody.category,
-      coverageScope: requestBody.coverageScope,
-    });
-  }
-
-  const res = await fetch(requestUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(requestBody),
-  });
-
-  let data: any = null;
+  if (actor.kind !== 'guest' && !reporterObjectId(actor.accountId)) return failed('session');
+  if (payload.generalEthicsAccepted !== true) return failed('validation');
   try {
-    data = await res.json();
-  } catch {}
+    const { response, data } = await intakeFetch('/api/community/submissions', {
+      method: 'POST', headers: requestHeaders(actor.kind === 'guest' ? 'guest' : actor.accountId),
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) return failure(response.status, data);
+    if (response.status === 201 && record(data) && data.ok === true && (data.success === undefined || data.success === true)
+      && data.actor === actor.kind && reporterObjectId(data.referenceId) && receiptIdsAgree(data, data.referenceId)) return { ok: true, referenceId: data.referenceId };
+  } catch { /* Unknown delivery. */ }
+  return failed('uncertain');
+}
 
-  if (!res.ok) {
-    const ref = data?.referenceId || '';
-    const status = data?.status || 'under_review';
-    const type = (payload.reporterType as 'community' | 'journalist') || 'community';
-    return { ok: false, referenceId: ref, status, reporterType: type, message: resolveSubmitErrorMessage(res.status, data) };
+export async function openReporterDraft(id: string, accountId: string, signal: AbortSignal): Promise<DraftResult> {
+  if (!reporterObjectId(id) || !reporterObjectId(accountId)) return failed('notEditable');
+  try {
+    const { response, data } = await intakeFetch(`/api/reporter-portal/submissions/${id}`, {
+      method: 'GET', headers: requestHeaders(accountId), signal,
+    });
+    if (!response.ok) return failure(response.status, data);
+    if (response.status !== 200 || !record(data) || data.ok !== true || (data.success !== undefined && data.success !== true)
+      || !receiptIdsAgree(data, id)) return failed('unavailable');
+    const item = projectStory(data.item, id);
+    return item.canEdit ? { ok: true, item } : failed('notEditable');
+  } catch {
+    return failed('unavailable');
   }
+}
 
-  const referenceId = data?.referenceId || data?.id || '';
-  const status = data?.status || 'Under review';
-  const reporterType = (data?.reporterType as 'community' | 'journalist') || payload.reporterType;
+export type ArticleEdit = {
+  headline: string; story: string; category?: string; originalLanguage?: StoryLanguage; action: 'draft' | 'submit'; generalEthicsAccepted?: boolean;
+};
+type DraftPayload = NonNullable<ReturnType<typeof draftFields>>;
+export type FirstDraftAttempt = { accountId: string; key: string; json: string; body: DraftPayload };
 
-  return { ok: true, referenceId, status, reporterType };
+export function prepareFirstDraft(accountId: string, input: ArticleEdit & Partial<Record<'city'|'district'|'state'|'country'|'phone'|'whatsapp'|'beat'|'coverageScope', string>>,
+  previous: FirstDraftAttempt | null): FirstDraftAttempt | IntakeError {
+  if (!reporterObjectId(accountId)) return failed('session');
+  const body = draftFields(input, true);
+  if (!body) return failed('validation');
+  const json = JSON.stringify(body);
+  if (previous?.accountId === accountId && previous.json === json) return previous;
+  const key = globalThis.crypto?.randomUUID?.();
+  if (!validDraftKey(key)) return failed('unavailable');
+  return { accountId, key, json, body };
+}
+
+export async function createReporterDraft(accountId: string, attempt: FirstDraftAttempt): Promise<DraftResult> {
+  if (!reporterObjectId(accountId) || attempt.accountId !== accountId) return failed('session');
+  try {
+    const { response, data } = await intakeFetch('/api/reporter-portal/submissions', {
+      method: 'POST', headers: { ...requestHeaders(accountId), 'Idempotency-Key': attempt.key }, body: attempt.json,
+    });
+    if (!response.ok) return failure(response.status, data);
+    return { ok: true, item: draftReceipt(data, response.status, attempt.body) };
+  } catch { return failed('uncertain'); }
+}
+
+export async function patchReporterDraft(existing: ReporterStory, accountId: string, edit: ArticleEdit): Promise<DraftResult> {
+  if (!reporterObjectId(accountId) || !reporterObjectId(existing.id) || !existing.canEdit || existing.isPublished
+    || existing.publicationStatus !== 'not_published' || !['DRAFT', 'NEEDS_REVISION'].includes(existing.reviewStatus)) return failed('notEditable');
+  const payload = draftFields(edit, false);
+  if (!payload || (!payload.headline && !payload.story)
+    || (existing.reviewStatus === 'NEEDS_REVISION' && (!payload.headline || !payload.story))) return failed('validation');
+  try {
+    const { response, data } = await intakeFetch(`/api/reporter-portal/submissions/${existing.id}`, {
+      method: 'PATCH', headers: requestHeaders(accountId), body: JSON.stringify(payload),
+    });
+    if (!response.ok) return failure(response.status, data);
+    const item = draftReceipt(data, response.status, payload, existing.id);
+    if (item.category !== (payload.category ?? existing.category) || item.originalLanguage !== (edit.originalLanguage ?? existing.originalLanguage)
+      || item.reviewStatus !== (edit.action === 'draft' ? existing.reviewStatus : 'SUBMITTED')) return failed('uncertain');
+    return { ok: true, item };
+  } catch { return failed('uncertain'); }
 }
 
 export async function submitYouthPulseStory(

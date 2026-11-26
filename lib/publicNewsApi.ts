@@ -1,4 +1,5 @@
 import { getPublicApiBaseUrl } from './publicApiBase';
+import { anonymousArticleGet } from './publicArticleRequest';
 import { getCategoryQueryKey } from './categoryKeys';
 import { filterPubliclyPublishedArticles, getLocalizedArticleFields, getPublicArticleStatus, STRICT_LOCALE_POLICY, type RouteLocale } from './localizedArticleFields';
 import type { AuthorBylinePayload } from './authorByline';
@@ -718,12 +719,7 @@ export async function fetchPublicNewsById(options: {
   const endpoint = `${base}/api/public/news/${encodeURIComponent(id)}${langQuery}`;
 
   try {
-    const res = await fetch(endpoint, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-      cache: 'no-store',
-      signal: options.signal,
-    });
+    const res = await fetch(endpoint, anonymousArticleGet(options.signal));
 
     if (!res.ok) {
       logPublicNewsError('article_read_failed', { status: res.status });
@@ -762,12 +758,7 @@ export async function fetchPublicNewsGroup(options: {
   const endpoint = `${base}/api/public/news/group/${encodeURIComponent(groupId)}${langQuery}`;
 
   try {
-    const res = await fetch(endpoint, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-      cache: 'no-store',
-      signal: options.signal,
-    });
+    const res = await fetch(endpoint, anonymousArticleGet(options.signal));
 
     if (!res.ok) {
       logPublicNewsError('group_read_failed', { status: res.status });
@@ -808,11 +799,7 @@ export async function fetchPublicNewsTranslation(options: {
   const endpoint = `${base}/api/public/news/translation?${params.toString()}`;
 
   try {
-    const res = await fetch(endpoint, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-      signal: options.signal,
-    });
+    const res = await fetch(endpoint, anonymousArticleGet(options.signal));
 
     const data = await res.json().catch(() => null);
 
@@ -824,8 +811,9 @@ export async function fetchPublicNewsTranslation(options: {
       return { article: null, status: res.status, endpoint, error: msg ? `API ${res.status} (${msg})` : `API ${res.status}` };
     }
 
-    const article = unwrapArticle(data);
-    if (!article?._id) return { article: null, endpoint, status: 404, error: 'Article not found' };
+    const article = parsePublicNewsArticle(data);
+    if (!article) return { article: null, endpoint, error: 'Invalid public translation response' };
+    if (getPublicArticleStatus(article) !== 'published') return { article: null, endpoint, status: 404, error: 'Article not found' };
     return { article, endpoint };
   } catch {
     return { article: null, endpoint, error: 'Fetch failed' };

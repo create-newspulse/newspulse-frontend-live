@@ -1,150 +1,23 @@
-jest.mock('../../../../lib/publicApiBase', () => ({
-  getPublicApiBaseUrl: () => 'http://localhost:3010',
-}));
+/** @jest-environment node */
+import requestCode from '../../../../pages/api/reporter-auth/request-code';
+import { backend, email, mockBackend, request, response, upstream } from './contractFixtures';
 
-jest.mock('../../../../lib/reporterPortalAuth', () => {
-  const actual = jest.requireActual('../../../../lib/reporterPortalAuth');
-  return {
-    ...actual,
-    sendReporterPortalLoginEmail: jest.fn(async () => ({ delivered: false, provider: 'resend', debugCode: '123456' })),
-  };
+const fetchMock = mockBackend();
+it('maps the backend email request without disclosing codes or copying unrelated credentials', async () => {
+  fetchMock().mockResolvedValue(upstream({ ok: true, devCode: '000000', traceId: 'test' }, 200,
+    ['reporter_portal_login_challenge=test; Path=/api', 'reporter_portal_session=unexpected', 'unrelated=ignore']));
+  const { data, res } = response();
+  await requestCode(request('POST', { email: email.toUpperCase(), extra: 1 }), res);
+  expect(fetchMock()).toHaveBeenCalledWith(`${backend}/auth/request-login-otp`, expect.objectContaining({ body: JSON.stringify({ email }), method: 'POST' }));
+  expect(data.json).toEqual({ ok: true });
+  expect(data.headers['Set-Cookie']).toEqual(['reporter_portal_login_challenge=test; Path=/; HttpOnly; SameSite=Lax']);
 });
-
-import handler from '../../../../pages/api/reporter-auth/request-code';
-import { sendReporterPortalLoginEmail } from '../../../../lib/reporterPortalAuth';
-
-describe('pages/api/reporter-auth/request-code', () => {
-  beforeEach(() => {
-    (global as any).fetch = jest.fn();
-    (sendReporterPortalLoginEmail as jest.Mock).mockClear();
-  });
-
-  it('sets a frontend challenge cookie when the proxied request-code call succeeds', async () => {
-    (global as any).fetch.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      headers: new Headers(),
-      text: async () => JSON.stringify({ ok: true, email: 'reporter@example.com', expiresAt: '2026-04-08T12:00:00.000Z' }),
-    });
-
-    const req = {
-      method: 'POST',
-      body: { email: 'reporter@example.com' },
-      headers: {},
-    } as any;
-
-    const res = createMockResponse();
-    await handler(req, res as any);
-
-    expect(res.statusCode).toBe(200);
-    expect(res.headers['Cache-Control']).toBe('no-store, no-cache, must-revalidate, proxy-revalidate');
-    expect((global as any).fetch).toHaveBeenCalledWith(
-      'http://localhost:3010/api/reporter-auth/request-code',
-      expect.objectContaining({
-        method: 'POST',
-        headers: expect.objectContaining({
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-        }),
-        body: JSON.stringify({ email: 'reporter@example.com' }),
-      })
-    );
-    const cookies = ([] as string[]).concat(res.headers['Set-Cookie'] || []);
-    expect(cookies.some((value) => value.includes('np_reporter_portal_challenge='))).toBe(true);
-  });
-
-  it('returns the upstream status and body when the proxied request-code call returns 503', async () => {
-    (global as any).fetch.mockResolvedValueOnce({
-      ok: false,
-      status: 503,
-      headers: new Headers(),
-      text: async () => JSON.stringify({ ok: false, code: 'REPORTER_EMAIL_UNAVAILABLE', message: 'REPORTER_PORTAL_EMAIL_SEND_FAILED' }),
-    });
-
-    const req = {
-      method: 'POST',
-      body: { email: 'reporter@example.com' },
-      headers: {
-        host: 'www.newspulse.co.in',
-        'x-forwarded-proto': 'https',
-      },
-    } as any;
-
-    const res = createMockResponse();
-    await handler(req, res as any);
-
-    expect(res.statusCode).toBe(503);
-    expect(res.body).toEqual({ ok: false, code: 'REPORTER_EMAIL_UNAVAILABLE', message: 'REPORTER_PORTAL_EMAIL_SEND_FAILED' });
-    expect(sendReporterPortalLoginEmail).not.toHaveBeenCalled();
-  });
-
-  it('returns a precise proxy error when the upstream request throws', async () => {
-    (global as any).fetch.mockRejectedValueOnce(new Error('connect ETIMEDOUT'));
-
-    const req = {
-      method: 'POST',
-      body: { email: 'reporter@example.com' },
-      headers: {},
-    } as any;
-
-    const res = createMockResponse();
-    await handler(req, res as any);
-
-    expect(res.statusCode).toBe(502);
-    expect(res.body).toEqual({
-      ok: false,
-      code: 'REPORTER_REQUEST_CODE_PROXY_FAILED',
-      message: 'connect ETIMEDOUT',
-    });
-    expect(sendReporterPortalLoginEmail).not.toHaveBeenCalled();
-  });
-
-  it('returns development delivery fields for local fallback OTP without using email wording', async () => {
-    jest.doMock('../../../../lib/publicApiBase', () => ({
-      getPublicApiBaseUrl: () => '',
-    }));
-    jest.resetModules();
-    const localHandler = (await import('../../../../pages/api/reporter-auth/request-code')).default;
-    const { sendReporterPortalLoginEmail: localSendReporterPortalLoginEmail } = await import('../../../../lib/reporterPortalAuth');
-
-    const req = {
-      method: 'POST',
-      body: { email: 'reporter@example.com' },
-      headers: { host: 'localhost:3000' },
-    } as any;
-
-    const res = createMockResponse();
-    await localHandler(req, res as any);
-
-    expect(res.statusCode).toBe(200);
-    expect(res.body).toMatchObject({
-      ok: true,
-      email: 'reporter@example.com',
-      delivery: 'development',
-      developmentCode: '123456',
-    });
-    expect(res.body.debugCode).toBeUndefined();
-    expect(localSendReporterPortalLoginEmail).toHaveBeenCalled();
-  });
+it.each(['disabled', 'offline'])('has no local OTP or mail fallback (%s)', async condition => {
+  if (condition === 'disabled') delete process.env.REPORTER_PORTAL_CONTRACT;
+  const { data, res } = response();
+  await requestCode(request('POST', { email }), res);
+  expect(data.status).toBe(503);
+  expect(data.json.ok).toBe(false);
+  expect(data.headers['Set-Cookie']).toBeUndefined();
+  expect(fetchMock()).toHaveBeenCalledTimes(condition === 'disabled' ? 0 : 1);
 });
-
-function createMockResponse() {
-  const response = {
-    statusCode: 200,
-    headers: {} as Record<string, string | string[]>,
-    body: undefined as any,
-    setHeader(name: string, value: string | string[]) {
-      response.headers[name] = value;
-    },
-    status(code: number) {
-      response.statusCode = code;
-      return response;
-    },
-    json(payload: any) {
-      response.body = payload;
-      return response;
-    },
-  };
-
-  return response;
-}

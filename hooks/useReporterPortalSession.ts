@@ -1,283 +1,182 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
+import type { ReporterPortalSession } from '../lib/reporterPortal';
 import {
-  extractReporterIdentityFields,
-  getReporterDisplayName,
-  loadReporterPortalProfile,
-  type ReporterPortalProfile,
-  type ReporterPortalSession,
-} from '../lib/reporterPortal';
+  REPORTER_INVALID, REPORTER_LIFECYCLE, REPORTER_LIFECYCLE_KEY, beginReporterLogout, clearReporterPrivateStorage,
+  finishReporterLogout, removeReporterStorageKeys, reporterClientLock, reporterLifecycleStamp,
+} from '../lib/reporterPrivacy';
 
-type UseReporterPortalSessionOptions = {
-  reportUnauthorizedReason?: boolean;
-  skipInitialCheck?: boolean;
-};
+type Options = { reportUnauthorizedReason?: boolean; skipInitialCheck?: boolean };
+type Anonymous = { status: 'anonymous'; reason: string | null };
+type Result = Anonymous | { status: 'authenticated'; session: ReporterPortalSession };
+type State = Result | { status: 'checking' };
+const anonymous = (reason: string | null = null): Anonymous => ({ status: 'anonymous', reason });
+const locked = () => reporterClientLock() === 'pending' ? anonymous('LOGOUT_UNCONFIRMED') : anonymous();
+const safeReasons = new Set(['LOGOUT_UNCONFIRMED', 'SESSION_EXPIRED', 'REPORTER_SESSION_MISSING', 'REPORTER_PORTAL_CLOSED', 'REPORTER_PORTAL_FORBIDDEN']);
 
-type ReporterSessionStatus = 'checking' | 'authenticated' | 'anonymous';
-type ReporterBootstrapResult =
-  | { status: 'authenticated'; session: ReporterPortalSession; data: any }
-  | { status: 'anonymous'; reason: string | null; data?: any };
-
-const REPORTER_SESSION_BOOTSTRAP_TIMEOUT_MS = 10_000;
-
-function shouldLogReporterSessionDebug(): boolean {
-  const isJest = Boolean((globalThis as any)?.jest) || (typeof process !== 'undefined' && Boolean((process.env as any)?.JEST_WORKER_ID));
-  return typeof window !== 'undefined' && process.env.NODE_ENV === 'development' && !isJest;
-}
-
-function logReporterSessionDebug(event: string, details: Record<string, unknown>) {
-  if (!shouldLogReporterSessionDebug()) {
-    return;
-  }
-  // eslint-disable-next-line no-console
-  console.info(`[Reporter Portal] ${event}`, details);
-}
-
-const REPORTER_AUTH_STORAGE_KEYS = [
-  'np_reporter_portal_session',
-  'np_reporter_portal_otp',
-  'np_reporter_portal_challenge',
-  'reporterPortalSession',
-  'reporterPortalToken',
-  'reporterAuthToken',
-  'reporterSession',
-  'reporter_session',
-] as const;
-
-function isExpectedSignedOutSession(status: number, code: string, message: string): boolean {
-  if (status !== 401) return false;
-  const normalizedCode = code.toUpperCase();
-  const normalizedMessage = message.toUpperCase();
-  return normalizedCode === 'SESSION_EXPIRED'
-    || normalizedMessage === 'SESSION_EXPIRED'
-    || normalizedCode === 'REPORTER_SESSION_MISSING'
-    || normalizedMessage === 'REPORTER_SESSION_MISSING'
-    || normalizedCode === 'NO_SESSION'
-    || normalizedMessage === 'NO_SESSION'
-    || normalizedCode === 'UNAUTHENTICATED'
-    || normalizedMessage === 'UNAUTHENTICATED';
-}
-
-function clearReporterAuthClientStorage() {
-  if (typeof window === 'undefined') return;
-  for (const key of REPORTER_AUTH_STORAGE_KEYS) {
-    try {
-      window.localStorage?.removeItem(key);
-    } catch {}
-    try {
-      window.sessionStorage?.removeItem(key);
-    } catch {}
-  }
-}
-
-export async function bootstrapReporterSession(options?: { signal?: AbortSignal; timeoutMs?: number }): Promise<ReporterBootstrapResult> {
+export async function bootstrapReporterSession(options?: { signal?: AbortSignal; timeoutMs?: number }): Promise<Result> {
+  if (reporterClientLock()) return locked();
+  const stamp = reporterLifecycleStamp();
   const controller = new AbortController();
-  const timeoutMs = Math.max(1_000, options?.timeoutMs ?? REPORTER_SESSION_BOOTSTRAP_TIMEOUT_MS);
   let timedOut = false;
-  const timeout = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
-  const abortFromParent = () => controller.abort();
-
+  const abort = () => controller.abort();
+  const timer = setTimeout(() => { timedOut = true; abort(); }, options?.timeoutMs ?? 10_000);
   try {
-    if (options?.signal?.aborted) {
-      controller.abort();
-    } else {
-      options?.signal?.addEventListener('abort', abortFromParent, { once: true });
-    }
-
-    const res = await fetch('/api/reporter-auth/session', {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-      },
-      credentials: 'include',
-      cache: 'no-store',
-      signal: controller.signal,
+    if (options?.signal?.aborted) return anonymous();
+    options?.signal?.addEventListener('abort', abort, { once: true });
+    const response = await fetch('/api/reporter-auth/session', {
+      method: 'GET', credentials: 'include', cache: 'no-store', redirect: 'error',
+      headers: { Accept: 'application/json' }, signal: controller.signal,
     });
-    const data = await res.json().catch(() => null as any);
-    const responseCode = String(data?.code || '').trim();
-    const responseMessage = String(data?.message || '').trim();
-
-    if (res.ok && data?.ok === true && data?.session?.email) {
-      return {
-        status: 'authenticated',
-        data,
-        session: {
-          email: data.session.email,
-          expiresAt: typeof data.session.expiresAt === 'string' ? data.session.expiresAt : undefined,
-          fullName: typeof data.session.fullName === 'string' ? data.session.fullName : undefined,
-          name: typeof data.session.name === 'string' ? data.session.name : undefined,
-          firstName: typeof data.session.firstName === 'string' ? data.session.firstName : undefined,
-        },
-      };
+    const data = await response.json();
+    if (reporterClientLock() || stamp !== reporterLifecycleStamp() || controller.signal.aborted) return locked();
+    const s = data?.session;
+    if (response.status === 200 && data?.ok === true && data.authenticated === true
+      && typeof s?.accountId === 'string' && /^[a-f0-9]{24}$/i.test(s.accountId)
+      && typeof s.email === 'string' && /^[^\s@]+@[^\s@]+$/.test(s.email)
+      && typeof s.expiresAt === 'string' && Date.parse(s.expiresAt) > Date.now()) {
+      return { status: 'authenticated', session: { accountId: s.accountId, email: s.email, expiresAt: s.expiresAt,
+        ...(typeof s.fullName === 'string' ? { fullName: s.fullName } : {}) } };
     }
-
-    return {
-      status: 'anonymous',
-      reason: responseMessage || responseCode || (res.status === 401 ? 'REPORTER_SESSION_MISSING' : 'SESSION_CHECK_FAILED'),
-      data,
-    };
+    return anonymous(safeReasons.has(data?.code) ? data.code : response.status === 401 ? 'REPORTER_SESSION_MISSING' : 'SESSION_CHECK_FAILED');
   } catch {
-    return { status: 'anonymous', reason: timedOut ? 'SESSION_CHECK_TIMEOUT' : 'SESSION_CHECK_FAILED' };
+    return anonymous(timedOut ? 'SESSION_CHECK_TIMEOUT' : 'SESSION_CHECK_FAILED');
   } finally {
-    clearTimeout(timeout);
-    options?.signal?.removeEventListener('abort', abortFromParent);
+    clearTimeout(timer);
+    options?.signal?.removeEventListener('abort', abort);
   }
 }
 
-type ReporterPortalSessionValue = ReturnType<typeof useReporterPortalSessionState>;
-const ReporterAuthContext = createContext<ReporterPortalSessionValue | null>(null);
-
-function useReporterPortalSessionState(options?: UseReporterPortalSessionOptions) {
-  const reportUnauthorizedReason = Boolean(options?.reportUnauthorizedReason);
-  const skipInitialCheck = Boolean(options?.skipInitialCheck);
-  const latestRequestRef = useRef(0);
-  const activeControllerRef = useRef<AbortController | null>(null);
-  const [session, setSession] = useState<ReporterPortalSession | null>(null);
-  const [profile, setProfile] = useState<ReporterPortalProfile | null>(null);
-  const [status, setStatus] = useState<ReporterSessionStatus>(skipInitialCheck ? 'anonymous' : 'checking');
-  const [reason, setReason] = useState<string | null>(null);
-
-  const applyAnonymousState = useCallback((nextReason: string | null, responseStatus?: number) => {
-    setSession(null);
-    const responseCode = String(nextReason || '').trim();
-    if (responseStatus === 401 || isExpectedSignedOutSession(401, responseCode, responseCode)) {
-      clearReporterAuthClientStorage();
-      logReporterSessionDebug('session expired; continuing signed out', { status: responseStatus || 401, responseCode });
-    }
-    setProfile(null);
-    if (!reportUnauthorizedReason && isExpectedSignedOutSession(401, responseCode, responseCode)) {
-      setReason(null);
-    } else {
-      setReason(responseCode === 'REPORTER_SESSION_MISSING' ? 'SESSION_EXPIRED' : (responseCode || null));
-    }
-    setStatus('anonymous');
-  }, [reportUnauthorizedReason]);
-
-  const bootstrapSession = useCallback(async () => {
-    const requestId = latestRequestRef.current + 1;
-    latestRequestRef.current = requestId;
-    activeControllerRef.current?.abort();
-    const controller = new AbortController();
-    activeControllerRef.current = controller;
-
-    setStatus('checking');
-    logReporterSessionDebug('session request', {
-      url: '/api/reporter-auth/session',
-      credentialsIncluded: true,
-    });
-
+let signOutInFlight: Promise<boolean> | null = null;
+function logout(): Promise<boolean> {
+  if (signOutInFlight) return signOutInFlight;
+  const stamp = beginReporterLogout();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  signOutInFlight = (async () => {
     try {
-      const result = await bootstrapReporterSession({ signal: controller.signal });
-      if (latestRequestRef.current !== requestId) return result;
-
-      logReporterSessionDebug('session response', {
-        url: '/api/reporter-auth/session',
-        status: result.status === 'authenticated' ? 200 : 401,
-        responseCode: result.status === 'anonymous' ? result.reason : null,
-        credentialsIncluded: true,
-      });
-
-      if (result.status === 'authenticated') {
-        const storedProfile = loadReporterPortalProfile();
-        const responseIdentity = extractReporterIdentityFields(result.session, result.session.email);
-        const displayName = getReporterDisplayName({
-          fullName: responseIdentity.fullName || storedProfile?.fullName,
-          name: responseIdentity.name || storedProfile?.name,
-          firstName: responseIdentity.firstName || storedProfile?.firstName,
-          email: result.session.email,
-        }, '');
-        setProfile(storedProfile);
-        setSession({
-          ...result.session,
-          fullName: displayName || undefined,
-          name: responseIdentity.name || storedProfile?.name,
-          firstName: responseIdentity.firstName || storedProfile?.firstName,
-        });
-        setProfile((current) => ({
-          ...(current || {}),
-          ...(storedProfile || {}),
-          ...responseIdentity,
-        }));
-        setReason(null);
-        setStatus('authenticated');
-        return result;
-      }
-
-      applyAnonymousState(result.reason || 'SESSION_CHECK_FAILED', result.reason === 'SESSION_CHECK_FAILED' || result.reason === 'SESSION_CHECK_TIMEOUT' ? 500 : 401);
-      return result;
+      const response = await fetch('/api/reporter-auth/logout', { method: 'POST', credentials: 'include', cache: 'no-store',
+        redirect: 'error', headers: { Accept: 'application/json' }, signal: controller.signal });
+      const data = await response.json();
+      return response.status === 200 && data?.ok === true && data.revoked === true && finishReporterLogout(stamp);
+    } catch {
+      return false;
     } finally {
-      if (latestRequestRef.current === requestId) {
-        activeControllerRef.current = null;
-        setStatus((current) => current === 'checking' ? 'anonymous' : current);
-      }
+      clearTimeout(timeout);
     }
-  }, [applyAnonymousState]);
+  })().finally(() => { signOutInFlight = null; });
+  return signOutInFlight;
+}
+
+function useSessionState(skip: boolean, disabled = false) {
+  const [state, setState] = useState<State>(skip ? anonymous() : { status: 'checking' });
+  const active = useRef<AbortController | null>(null);
+  const lastAccount = useRef<string | null>(null);
+  const cancel = useCallback(() => {
+    active.current?.abort();
+    active.current = null;
+  }, []);
+  const mask = useCallback((next: State) => {
+    cancel();
+    lastAccount.current = null;
+    clearReporterPrivateStorage();
+    setState(next);
+  }, [cancel]);
+  const bootstrapSession = useCallback(async (): Promise<Result> => {
+    cancel();
+    if (reporterClientLock()) {
+      const result = locked();
+      if (lastAccount.current !== null) clearReporterPrivateStorage();
+      lastAccount.current = null;
+      removeReporterStorageKeys();
+      setState(result);
+      return result;
+    }
+    const controller = new AbortController();
+    active.current = controller;
+    setState({ status: 'checking' });
+    const result = await bootstrapReporterSession({ signal: controller.signal });
+    if (active.current !== controller || controller.signal.aborted) return locked();
+    active.current = null;
+    if (result.status === 'authenticated') {
+      if (lastAccount.current !== result.session.accountId) clearReporterPrivateStorage();
+      lastAccount.current = result.session.accountId;
+    } else {
+      if (lastAccount.current !== null) clearReporterPrivateStorage();
+      lastAccount.current = null;
+      removeReporterStorageKeys();
+    }
+    setState(result);
+    return result;
+  }, [cancel]);
 
   useEffect(() => {
-    if (skipInitialCheck) {
-      setProfile(null);
-      setSession(null);
-      setReason(null);
-      setStatus('anonymous');
-      return;
-    }
-    void bootstrapSession();
-    return () => {
-      latestRequestRef.current += 1;
-      activeControllerRef.current?.abort();
-      activeControllerRef.current = null;
+    if (disabled) return;
+    removeReporterStorageKeys();
+    const refresh = () => { void bootstrapSession(); };
+    const onChange = () => {
+      if (reporterClientLock()) mask(locked());
+      else {
+        mask({ status: 'checking' });
+        if (!skip) void bootstrapSession();
+        else setState(anonymous());
+      }
     };
-  }, [bootstrapSession, skipInitialCheck]);
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === REPORTER_LIFECYCLE_KEY || event.key === null) onChange();
+    };
+    const onInvalid = () => mask(reporterClientLock() ? locked() : anonymous('SESSION_EXPIRED'));
+    // Remove the private React subtree before a page is frozen into BFCache.
+    const onHide = () => flushSync(() => mask({ status: 'checking' }));
+    const onShow = (event: PageTransitionEvent) => { if (event.persisted) refresh(); };
+    const onFocus = () => { if (!skip) refresh(); };
+    const onVisibility = () => { if (document.visibilityState === 'visible') onFocus(); };
+    window.addEventListener(REPORTER_LIFECYCLE, onChange);
+    window.addEventListener(REPORTER_INVALID, onInvalid);
+    window.addEventListener('storage', onStorage);
+    window.addEventListener('pagehide', onHide);
+    window.addEventListener('pageshow', onShow);
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    if (!skip || reporterClientLock()) refresh();
+    return () => {
+      cancel();
+      window.removeEventListener(REPORTER_LIFECYCLE, onChange);
+      window.removeEventListener(REPORTER_INVALID, onInvalid);
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('pagehide', onHide);
+      window.removeEventListener('pageshow', onShow);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [bootstrapSession, cancel, disabled, mask, skip]);
 
-  const logout = async () => {
-    latestRequestRef.current += 1;
-    activeControllerRef.current?.abort();
-    activeControllerRef.current = null;
-    try {
-      await fetch('/api/reporter-auth/logout', {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-        },
-        credentials: 'include',
-      });
-    } catch {}
-    setSession(null);
-    setProfile(null);
-    setReason(null);
-    setStatus('anonymous');
-  };
+  const session = state.status === 'authenticated' ? state.session : null;
+  useEffect(() => {
+    if (!session?.expiresAt || disabled) return;
+    const remaining = Date.parse(session.expiresAt) - Date.now();
+    const timer = setTimeout(() => {
+      if (remaining > 2_147_483_647) void bootstrapSession();
+      else mask(anonymous('SESSION_EXPIRED'));
+    }, Math.min(Math.max(remaining, 0), 2_147_483_647));
+    return () => clearTimeout(timer);
+  }, [session, disabled, bootstrapSession, mask]);
 
-  const isReady = status !== 'checking';
-
-  return {
-    session,
-    reporter: session,
-    authenticated: Boolean(session),
-    profile,
-    isReady,
-    loading: status === 'checking',
-    status,
-    reason,
-    bootstrapSession,
-    logout,
-  } as const;
+  return { session, reporter: session, profile: session, status: state.status, reason: state.status === 'anonymous' ? state.reason : null,
+    authenticated: !!session, loading: state.status === 'checking', isReady: state.status !== 'checking', bootstrapSession, logout } as const;
 }
 
+const ReporterAuthContext = createContext<ReturnType<typeof useSessionState> | null>(null);
 export function ReporterAuthProvider({ children }: { children: ReactNode }) {
-  const value = useReporterPortalSessionState({ reportUnauthorizedReason: true });
+  const value = useSessionState(false);
   return createElement(ReporterAuthContext.Provider, { value }, children);
 }
-
-export function useReporterPortalSession(options?: UseReporterPortalSessionOptions) {
+export function useReporterPortalSession(options?: Options) {
   const context = useContext(ReporterAuthContext);
-  if (context && !options?.skipInitialCheck) {
-    if (!options?.reportUnauthorizedReason && context.reason === 'SESSION_EXPIRED') {
-      return { ...context, reason: null } as const;
-    }
-    return context;
+  const own = useSessionState(!!options?.skipInitialCheck, !!context);
+  const value = context || own;
+  if (!options?.reportUnauthorizedReason && (value.reason === 'SESSION_EXPIRED' || value.reason === 'REPORTER_SESSION_MISSING')) {
+    return { ...value, reason: null };
   }
-  return useReporterPortalSessionState(options);
+  return value;
 }

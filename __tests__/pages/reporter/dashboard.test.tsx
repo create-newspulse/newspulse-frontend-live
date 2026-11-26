@@ -1,202 +1,37 @@
-import React from 'react';
-import { render, screen } from '@testing-library/react';
-import ReporterDashboardPage from '../../../pages/reporter/dashboard';
+import { render, screen, waitFor } from '@testing-library/react';
+import ReporterDashboard from '../../../pages/reporter/dashboard';
+import { useReporterPortalSession } from '../../../hooks/useReporterPortalSession';
+import { readStoryList, readStorySummary, fetchPublicSettings, ReporterReadError } from '../../../lib/communityReporterApi';
 
-const routerState = {
-  asPath: '/reporter/dashboard',
-  push: jest.fn().mockResolvedValue(true),
-  replace: jest.fn().mockResolvedValue(true),
-};
-
-const useCommunityStoriesMock = jest.fn();
-const useReporterPortalSessionMock = jest.fn();
-
-jest.mock('next/router', () => ({
-  useRouter: () => routerState,
-}));
-
-jest.mock('../../../hooks/usePublicFounderToggles', () => ({
-  usePublicFounderToggles: () => ({
-    toggles: {
-      communityReporterClosed: false,
-      reporterPortalClosed: false,
-    },
-  }),
-}));
-
-jest.mock('../../../hooks/useCommunityStories', () => ({
-  useCommunityStories: (...args: any[]) => useCommunityStoriesMock(...args),
-}));
-
-jest.mock('../../../hooks/useReporterPortalSession', () => ({
-  useReporterPortalSession: (...args: any[]) => useReporterPortalSessionMock(...args),
-}));
-
-jest.mock('../../../components/reporter-portal/ReporterPortalLayout', () => ({
-  __esModule: true,
-  default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-}));
-
-jest.mock('../../../components/reporter-portal/PortalRouteState', () => ({
-  PortalRouteState: ({ title, description }: { title: string; description: string }) => <div><div>{title}</div><div>{description}</div></div>,
-}));
-
-describe('pages/reporter/dashboard', () => {
-  beforeEach(() => {
-    routerState.push.mockClear();
-    routerState.replace.mockClear();
-    routerState.asPath = '/reporter/dashboard';
-    useReporterPortalSessionMock.mockReturnValue({
-      session: { email: 'reporter@example.com' },
-      reporter: { email: 'reporter@example.com' },
-      authenticated: true,
-      status: 'authenticated',
-      isReady: true,
-      loading: false,
-      logout: jest.fn(),
-      reason: null,
-    });
-  });
-
-  it('keeps an authenticated reporter in the dashboard when records fail auth upstream', () => {
-    useCommunityStoriesMock.mockReturnValue({
-      settings: { communityReporterEnabled: true, allowMyStoriesPortal: true },
-      settingsLoading: false,
-      stories: [],
-      counts: { total: 0, pending: 0, approved: 0, rejected: 0, published: 0, withdrawn: 0 },
-      isLoading: false,
-      error: 'load failed',
-      errorStatus: 401,
-      hasLoadedOnce: true,
-    });
-
-    render(<ReporterDashboardPage communityReporterClosed={false} reporterPortalClosed={false} />);
-
-    expect(routerState.replace).not.toHaveBeenCalled();
-    expect(screen.getByText('Dashboard activity is temporarily unavailable for this verified reporter email. Please try again shortly.')).toBeTruthy();
-    expect(screen.queryByText('Total')).toBeNull();
-  });
-
-  it('does not render authenticated dashboard or start story loading while session is checking', () => {
-    useReporterPortalSessionMock.mockReturnValue({
-      session: { email: 'cached@example.com' },
-      reporter: null,
-      authenticated: false,
-      profile: null,
-      status: 'checking',
-      isReady: false,
-      loading: true,
-      logout: jest.fn(),
-      reason: null,
-    });
-    useCommunityStoriesMock.mockReturnValue({
-      settings: null,
-      settingsLoading: true,
-      stories: [],
-      counts: { total: 0, pending: 0, approved: 0, rejected: 0, published: 0, withdrawn: 0 },
-      isLoading: false,
-      error: null,
-      errorStatus: null,
-      hasLoadedOnce: false,
-    });
-
-    render(<ReporterDashboardPage communityReporterClosed={false} reporterPortalClosed={false} />);
-
-    expect(screen.getByText('Checking reporter session…')).toBeTruthy();
-    expect(screen.queryByText('Total')).toBeNull();
-    expect(useCommunityStoriesMock).toHaveBeenCalledWith(expect.objectContaining({
-      reporterEmail: null,
-      reporterAuth: true,
-      enabled: false,
-    }));
-  });
-
-  it('redirects to login when the protected dashboard session is expired', () => {
-    useReporterPortalSessionMock.mockReturnValue({
-      session: null,
-      reporter: null,
-      authenticated: false,
-      profile: null,
-      status: 'anonymous',
-      isReady: true,
-      loading: false,
-      logout: jest.fn(),
-      reason: 'SESSION_EXPIRED',
-    });
-    useCommunityStoriesMock.mockReturnValue({
-      settings: { communityReporterEnabled: true, allowMyStoriesPortal: true },
-      settingsLoading: false,
-      stories: [],
-      counts: { total: 0, pending: 0, approved: 0, rejected: 0, published: 0, withdrawn: 0 },
-      isLoading: false,
-      error: null,
-      errorStatus: null,
-      hasLoadedOnce: false,
-    });
-
-    render(<ReporterDashboardPage communityReporterClosed={false} reporterPortalClosed={false} />);
-
-    expect(useReporterPortalSessionMock).toHaveBeenCalledWith({ reportUnauthorizedReason: true });
-    expect(routerState.replace).toHaveBeenCalledWith('/reporter/login?next=%2Freporter%2Fdashboard');
-    expect(screen.getByText('Checking reporter session…')).toBeTruthy();
-    expect(screen.queryByText('Total')).toBeNull();
-  });
-
-  it('shows actual counts and recent records after a successful fetch', () => {
-    useCommunityStoriesMock.mockReturnValue({
-      settings: { communityReporterEnabled: true, allowMyStoriesPortal: true },
-      settingsLoading: false,
-      stories: [
-        { id: '1', headline: 'City update', category: 'Local', status: 'pending', createdAt: '2026-04-05T10:00:00.000Z' },
-        { id: '2', headline: 'Campus bulletin', category: 'Education', status: 'approved', createdAt: '2026-04-05T11:00:00.000Z' },
-      ],
-      counts: { total: 2, pending: 1, approved: 1, rejected: 0, published: 0, withdrawn: 0 },
-      isLoading: false,
-      error: null,
-      errorStatus: null,
-      hasLoadedOnce: true,
-    });
-
-    render(<ReporterDashboardPage communityReporterClosed={false} reporterPortalClosed={false} />);
-
-    expect(screen.getByText('Total')).toBeTruthy();
-    expect(screen.getByText('2')).toBeTruthy();
-    expect(screen.getByText('City update')).toBeTruthy();
-    expect(screen.getByText('Campus bulletin')).toBeTruthy();
-  });
-
-  it('renders a valid empty reporter-owned result without the temporary unavailable message', () => {
-    useCommunityStoriesMock.mockReturnValue({
-      settings: { communityReporterEnabled: true, allowMyStoriesPortal: true },
-      settingsLoading: false,
-      stories: [],
-      counts: { total: 0, pending: 0, approved: 0, rejected: 0, published: 0, withdrawn: 0 },
-      isLoading: false,
-      error: null,
-      errorStatus: null,
-      hasLoadedOnce: true,
-    });
-
-    render(<ReporterDashboardPage communityReporterClosed={false} reporterPortalClosed={false} />);
-
-    expect(screen.getByText('No submissions linked to this Reporter Portal account yet.')).toBeTruthy();
-    expect(screen.queryByText('Submission records are temporarily unavailable for this verified reporter email. Please try again shortly.')).toBeNull();
-  });
-
-  it('renders temporary unavailable for reporter stories API failures', () => {
-    useCommunityStoriesMock.mockReturnValue({
-      settings: { communityReporterEnabled: true, allowMyStoriesPortal: true },
-      settingsLoading: false,
-      stories: [],
-      counts: { total: 0, pending: 0, approved: 0, rejected: 0, published: 0, withdrawn: 0 },
-      isLoading: false,
-      error: 'load failed',
-      errorStatus: 500,
-      hasLoadedOnce: true,
-    });
-
-    render(<ReporterDashboardPage communityReporterClosed={false} reporterPortalClosed={false} />);
-
-    expect(screen.getByText('Submission records are temporarily unavailable for this verified reporter email. Please try again shortly.')).toBeTruthy();
-  });
+const mockRouter = { asPath:'/reporter/dashboard',locale:'en',query:{}, replace:jest.fn() };
+jest.mock('next/router',()=>({useRouter:()=>mockRouter}));
+jest.mock('../../../hooks/useReporterPortalSession',()=>({useReporterPortalSession:jest.fn()}));
+jest.mock('../../../hooks/usePublicFounderToggles',()=>({usePublicFounderToggles:()=>({toggles:{}})}));
+jest.mock('../../../lib/communityReporterApi',()=>({...jest.requireActual('../../../lib/communityReporterApi'),fetchPublicSettings:jest.fn(),readStoryList:jest.fn(),readStorySummary:jest.fn()}));
+const props={communityReporterClosed:false,reporterPortalClosed:false};
+beforeEach(()=>{
+  jest.clearAllMocks();
+  jest.mocked(fetchPublicSettings).mockResolvedValue({allowMyStoriesPortal:true, allowNewSubmissions:true, allowJournalistApplications:true, communityReporterEnabled:true});
+});
+test.each(['checking','anonymous'])('%s never loads private data from a stale local email',async status=>{
+  jest.mocked(useReporterPortalSession).mockReturnValue({status,session:{email:'old@example.invalid'}} as ReturnType<typeof useReporterPortalSession>);
+  render(<ReporterDashboard {...props} />);
+  expect(screen.getByText('Checking reporter session…')).toBeTruthy();
+  expect(readStoryList).not.toHaveBeenCalled();
+  if (status==='anonymous') await waitFor(()=>expect(mockRouter.replace).toHaveBeenCalledWith('/reporter/login?next=%2Freporter%2Fdashboard'));
+});
+test('counts from the owner summary, not number of visible editions or page rows',async()=>{
+  jest.mocked(useReporterPortalSession).mockReturnValue({status:'authenticated',session:{accountId:'a'.repeat(24),email:'a@example.invalid'}} as ReturnType<typeof useReporterPortalSession>);
+  jest.mocked(readStoryList).mockResolvedValue({page:1,limit:5,items:[],total:0});
+  jest.mocked(readStorySummary).mockResolvedValue({totalSubmissions:23,received:21,pending:17,approved:2,published:1,rejected:2});
+  render(<ReporterDashboard {...props} />);
+  expect((await screen.findByText('All stories, including private drafts')).nextElementSibling?.textContent).toBe('23');
+  expect(screen.getByText('Published stories').nextElementSibling?.textContent).toBe('1');
+});
+test('session denial during private reads clears the record view instead of treating it as empty',async()=>{
+  jest.mocked(useReporterPortalSession).mockReturnValue({status:'authenticated',session:{accountId:'b'.repeat(24),email:'b@example.invalid'}} as ReturnType<typeof useReporterPortalSession>);
+  jest.mocked(readStorySummary).mockRejectedValue(new ReporterReadError(403));
+  render(<ReporterDashboard {...props} />);
+  await waitFor(()=>expect(mockRouter.replace).toHaveBeenCalledWith('/reporter/login?next=%2Freporter%2Fdashboard'));
+  expect(screen.queryByText('All stories, including private drafts')).toBeNull();
 });

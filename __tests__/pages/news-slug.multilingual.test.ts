@@ -24,6 +24,7 @@ function context(slug: string, locale: string): GetServerSidePropsContext {
   const req = Object.assign(new IncomingMessage(new Socket()), {
     headers: { host: 'www.newspulse.co.in', 'x-forwarded-proto': 'https' }, cookies: {},
   });
+  Object.defineProperties(req.socket, { localAddress: { value: '127.0.0.1' }, localPort: { value: 3000 } });
   return {
     locale, params: { slug }, query: {}, resolvedUrl: `/news/${slug}`,
     req, res: new ServerResponse(req),

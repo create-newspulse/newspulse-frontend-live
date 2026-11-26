@@ -2,6 +2,7 @@ import { getCategoryIdentity } from './categoryKeys';
 import { getLocalizedArticleFields, getPublicArticleStatus, STRICT_LOCALE_POLICY, type RouteLocale } from './localizedArticleFields';
 import { getOrdinaryCategoryPagination } from './ordinaryCategoryPagination';
 import { getPublicApiBaseUrl } from './publicApiBase';
+import { anonymousArticleGet } from './publicArticleRequest';
 import { parsePublicNewsList, type Article } from './publicNewsApi';
 import { withPublicReadDeadline } from './publicReadDeadline';
 import { getSafeRetryAfter } from './retryAfter';
@@ -136,9 +137,7 @@ export async function fetchSponsoredNewsPage(lang: RouteLocale, page: number, pa
     sponsoredOnly: 'true', lang, page: String(page), limit: String(SPONSORED_NEWS_PAGE_SIZE),
   });
   return withPublicReadDeadline(SPONSORED_NEWS_TIMEOUT_MS, async (signal) => {
-    const response = await fetch(`${base}/api/public/news?${params}`, {
-      method: 'GET', headers: { Accept: 'application/json' }, cache: 'no-store', signal,
-    });
+    const response = await fetch(`${base}/api/public/news?${params}`, anonymousArticleGet(signal));
     const retryAfter = getSafeRetryAfter(response.headers.get('Retry-After'));
     const text = await response.text();
     let payload: unknown;

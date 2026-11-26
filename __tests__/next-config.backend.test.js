@@ -42,7 +42,21 @@ describe('next.config backend separation', () => {
 
     const rewrites = await config.rewrites();
 
-    expect(JSON.stringify(rewrites)).toContain('http://localhost:3010/admin-api/public/:path*');
+    for (const prefix of ['/public-api', '/admin-api/public']) {
+      expect(rewrites).toContainEqual({ source: `${prefix}/news/:parts*`, destination: '/api/public/news-reader/:parts*' });
+      const translationAction = rewrites.find(r => r.source === `${prefix}/news/:id([a-fA-F0-9]{24})/translate`);
+      expect(translationAction.destination).toBe('http://localhost:3010/admin-api/public/news/:id/translate');
+      expect(translationAction.missing).toContainEqual({ type: 'header', key: 'authorization' });
+    }
+    const external = rewrites.filter(r => r.source.includes(':area('));
+    expect(external).toHaveLength(2);
+    for (const rule of external) {
+      expect(rule.destination).toBe('http://localhost:3010/admin-api/public/:area/:path*');
+      expect(rule.source).toContain('broadcast|');
+      expect(rule.source).not.toContain('|news|');
+      expect(rule.source).not.toMatch(/community|reporter|journalist/);
+      expect(rule.missing).toContainEqual({ type: 'header', key: 'cookie' });
+    }
     expect(JSON.stringify(rewrites)).not.toContain('newspulse-backend-real.onrender.com/admin-api/public');
   });
 
@@ -53,7 +67,11 @@ describe('next.config backend separation', () => {
 
     const rewrites = await config.rewrites();
 
-    expect(JSON.stringify(rewrites)).toContain('https://newspulse-backend-real.onrender.com/admin-api/public/:path*');
+    expect(rewrites.filter(r => r.destination.startsWith('https:')).map(r => r.destination).sort()).toEqual([
+      ...Array(2).fill('https://newspulse-backend-real.onrender.com/admin-api/public/:area/:path*'),
+      ...Array(2).fill('https://newspulse-backend-real.onrender.com/admin-api/public/news/:id/translate'),
+    ].sort());
+    expect(require('../vercel.json').rewrites.every(r => r.destination.startsWith('/'))).toBe(true);
   });
 
   it('allows the next/image qualities used by article cards and hero images', () => {

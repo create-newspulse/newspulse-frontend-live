@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { useRouter } from 'next/compat/router';
+import LocalizedReporterGuide from '../components/community-reporter/LocalizedReporterGuide';
 import React from 'react';
 import { CheckCircle2, ClipboardList, FilePenLine, Mail, Newspaper, SearchCheck, ShieldCheck, UserRoundCheck, Users, Video } from 'lucide-react';
 import PublicBusinessPageLayout, { PageEyebrow, SectionHeading, SurfacePanel } from '../components/public/PublicBusinessPageLayout';
@@ -89,6 +91,8 @@ const ethicalRestrictions = [
 ] as const;
 
 export default function JournalistDeskPage() {
+  const locale = useRouter()?.locale;
+  if (locale === 'hi' || locale === 'gu') return <LocalizedReporterGuide desk locale={locale} email={contactEmail} mailto={contactHref} />;
   return (
     <PublicBusinessPageLayout
       title="Journalist Desk"

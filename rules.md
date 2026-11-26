@@ -39,9 +39,8 @@ The environment contract is documented in [BACKEND_ENV_SEPARATION.md](./BACKEND_
 
 ### Reporter Portal OTP and email
 
-- Localhost may generate and display a local/development OTP for localhost sign-in. It must not silently use production OTP or email services.
-- Inspect both [lib/reporterAuthProxy.ts](./lib/reporterAuthProxy.ts) and [lib/reporterPortalAuth.ts](./lib/reporterPortalAuth.ts), not just the public API base.
-- The current local email helper returns a development code only when no mail provider is configured and `NODE_ENV` is not `production`. Configured Resend/SMTP credentials can select real delivery; localhost is not, by itself, an email sandbox.
+- Use synthetic OTP responses from an isolated, non-delivering Backend for localhost tests. The frontend must not generate login authority or contact production mail.
+- Inspect [lib/reporterBackend.server.ts](./lib/reporterBackend.server.ts), [lib/reporterAuthProxy.ts](./lib/reporterAuthProxy.ts) and [lib/reporterPortalAuth.ts](./lib/reporterPortalAuth.ts), not just the public API base.
 - Keep production mail credentials and production reporter-auth overrides out of the normal local environment. When testing delivery explicitly, use an authorized isolated provider and recipient.
 - Preserve session validation, cookie handling, expiry, no-store responses, and logout behavior. Never use browser-stored profile data as authorization.
 

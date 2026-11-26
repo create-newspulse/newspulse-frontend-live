@@ -53,7 +53,13 @@ NEXT_PUBLIC_ALLOW_PROD_BACKEND_IN_DEV=true
 
 If no local backend is configured, local development returns no backend base and API proxy routes fail clearly instead of silently falling back to production.
 
-Reporter Portal localhost login may generate a local/dev OTP for signing in on localhost. This must stay isolated from production OTP/email services unless production delivery is being tested explicitly.
+Reporter Portal sign-in is Backend-authoritative. There is no frontend-only OTP or mail fallback. Use a task-owned loopback fixture with simulated delivery. Never point a local reporter-auth override at production. Neither a successful endpoint nor `summary.received` identifies the serving release: the 5A+5B and 5E.1 session envelopes are alike.
+
+The two existing server-only settings (`REPORTER_PORTAL_CONTRACT=phase5ab` and `REPORTER_PHASE5E1_VERIFIED_ORIGIN` matching both resolved origins) are necessary but **not** deployment evidence. `REPORTER_RUNTIME_EXPECTED_BUILD` is an independent serving-build pin (`sha256:` plus 64 lowercase hex digits), **not** a Git commit, the changed-file manifest digest, or a value learned from the Backend being queried. Do not copy a test pin into a deployment.
+
+For each operation, the server requires a fresh, anonymous, uncached `GET /api/reporter-runtime/v1/contract`, the expected build, `np.community-reporter.v1` and all seven capabilities. It then calls the corresponding operation under `/api/reporter-runtime/v1/` with the pinned `X-NP-Reporter-Build`. Check the returned build and contract even on failures. A bad write receipt is **uncertain**; never retry against another destination. Readiness is not cached; authentication, owner checks and Founder settings still apply.
+
+The isolated loopback host can bind a short-lived transport directly to an independently verified target. There is **no production transport** in this candidate. Before any future enablement, an independently administered ingress must attest the artifact and live membership, confine **each** connection to compatible destinations, prevent direct-origin and legacy access at the network edge, and close on stale evidence, churn or rollback. A load balancer that can pick a different instance after a probe is insufficient. Neither an environment toggle nor the Backend's response header prevents a body from reaching an incompatible process. First close intake/private access and drain in-flight operations before changing the pool or pin; do not roll back to a client that permits unversioned writes. Never verify compatibility using real credentials or a live mutation.
 
 ## Backend configuration (what to implement in backend repo)
 The backend must select the database based on its deployment environment.

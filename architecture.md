@@ -8,7 +8,7 @@ The root [package.json](./package.json) defines a Next.js 16 / React 19 applicat
 
 - The application uses the **Pages Router**, rooted at [pages/](./pages/), not an App Router tree.
 - Rendering is mixed: [the homepage](./pages/index.tsx) and [article detail](./pages/news/[slug].tsx) use server-side props; routes such as [business](./pages/business/index.tsx) use static props through [categoryPageProps.ts](./lib/categoryPageProps.ts). Client hooks refresh public data after hydration.
-- Next.js API handlers live in [pages/api/](./pages/api/). Many proxy backend endpoints; others implement frontend-owned behavior such as settings compatibility, authentication fallback, or upload integration.
+- Next.js API handlers live in [pages/api/](./pages/api/). Many proxy backend endpoints; others implement frontend-owned behavior such as settings compatibility or upload integration.
 - The main news/admin backend is a separate service. Its DEV/PROD database contract is described in [BACKEND_ENV_SEPARATION.md](./BACKEND_ENV_SEPARATION.md); the public frontend is not the backend deployment or database schema.
 - Root scripts launch Next.js, not [server/](./server/) or the nested [newspulse-app/](./newspulse-app/) projects. Do not assume every top-level directory belongs to the active web application.
 
@@ -29,7 +29,7 @@ The exact path matters:
 
 - [proxy.ts](./proxy.ts) handles backend-driven SEO redirects, locale routing, and blocking legacy PWA endpoints. It skips API routes and Next internals.
 - [next.config.js](./next.config.js) configures locales, image sources, redirects, rewrites, and response headers. It disables automatic trailing-slash redirects.
-- [vercel.json](./vercel.json) adds deployment-specific rewrites, headers, and API function duration limits. Its public broadcast rewrites contain a fixed production backend target.
+- [vercel.json](./vercel.json) adds sitemap rewrites, headers, and API function duration limits. The credential-free public alias families and the bounded ticker stream are routed by Next, not by an external Vercel wildcard.
 - The homepage ticker [stream](./pages/api/public/broadcast/stream.ts) is not the Live TV video transport. It returns one no-store SSE snapshot per request, with a six-second shared upstream deadline. The [ticker hook](./hooks/usePublicBroadcastTicker.ts) lets EventSource reconnect after five seconds; `Last-Event-ID` yields a `ping` when unchanged. Incomplete connections still use the HTTP/version-refresh fallback. Live TV playback and schedules use their separate [page and public APIs](./pages/live-tv.tsx).
 - Browser calls through [lib/publicApiBase.ts](./lib/publicApiBase.ts) use an empty base so requests reach same-origin API routes. Server-side calls can go directly to the configured backend instead of making a loopback request to Next.js.
 
@@ -43,7 +43,7 @@ The shared resolver in [lib/publicApiBase.ts](./lib/publicApiBase.ts) and the re
 
 Production is identified using `VERCEL_ENV=production` or the explicit `NEWS_PULSE_DEPLOYMENT` / `NEWS_PULSE_ENV` production values, not `NODE_ENV` alone. The shared resolver can use the known production backend when production configuration is absent; normal non-production use returns no base and warns when missing or when a known production target is refused.
 
-**Boundary:** not every outbound request uses this resolver. [proxy.ts](./proxy.ts) has a separate SEO-redirect resolver with a production fallback, [vercel.json](./vercel.json) has fixed rewrite destinations, and [reporterAuthProxy.ts](./lib/reporterAuthProxy.ts) supports reporter-specific targets. Review those paths explicitly when checking environment isolation; do not infer a universal guard from the shared helper.
+**Boundary:** not every outbound request uses this resolver. [proxy.ts](./proxy.ts) has a separate SEO-redirect resolver (excluding Reporter routes); [Reporter operations](./lib/reporterBackend.server.ts) have a separate verified transport. Do not infer environment isolation from the shared helper alone.
 
 ## 3. Application shell and source layout
 
@@ -81,6 +81,10 @@ Both root-level and `src` modules are used by the live page tree. Similar names 
 ## 4. Main feature and data flows
 
 ### News, categories, and article detail
+
+Article readers are anonymous, even on a device with Reporter or staff sessions. The [JSON request policy](./lib/publicArticleRequest.ts) builds a fresh `Accept: application/json` request, omits credentials, disables fetch caching and refuses upstream redirects. Public ID, slug, group, translation, list/widening, recommendation and SEO edition reads carry no incoming headers. Only the SSR-to-Frontend detail hop adds a server-generated preview correlation ID; the Backend does not receive it. The [SSR network origin](./lib/articleSeo.server.ts) comes from deployment configuration or the actual local listener, not forwarded Host fields. This does not change browser canonical links or locale selection.
+
+The legacy `/public-api/news` and `/admin-api/public/news` read aliases use a [local GET/HEAD handler](./pages/api/public/news-reader/[[...parts]].ts) instead of a general external rewrite. The Backend's separate edition-ID translation action does not use the anonymous reader. Reporter admission and ordinary authorized editorial operations retain their own transports.
 
 The [homepage](./pages/index.tsx), [category feed](./components/CategoryFeedPage.tsx), [national routes](./pages/national/), [regional routes](./pages/regional/), and [article routes](./pages/news/) share news/domain helpers:
 
@@ -162,13 +166,14 @@ File-backed settings are compatibility/fallback behavior, not evidence that a se
 
 The public [Community Reporter page](./pages/community-reporter.tsx) and [submission experience](./components/community-reporter/SubmissionExperience.tsx) are distinct from the authenticated [reporter routes](./pages/reporter/). Shared contracts and requests live in [communityReporterApi.ts](./lib/communityReporterApi.ts) and [the community-reporter API handlers](./pages/api/community-reporter/).
 
-Reporter sign-in uses same-origin [reporter-auth API handlers](./pages/api/reporter-auth/) for code requests, verification, session checks, and logout:
+The [auth handlers](./pages/api/reporter-auth/) retain their same-origin URLs. All Reporter operations use the [versioned server transport](./lib/reporterRuntime.server.ts): fresh anonymous contract evidence and the independently expected `X-NP-Reporter-Build` on each operation. Only a host-bound route that excludes incompatible destinations **before each dispatch** can carry a credential or body. A successful login, matching origin, flag, or probe is not enough. [Hosted access remains unavailable](./BACKEND_ENV_SEPARATION.md) without independently enforced ingress. No frontend-issued OTP, magic-link session, email-only lookup, owner-ID fallback or real mail transport. Code verification must establish a Backend session and verified email changes require a fresh sign-in. Youth Desk intake lacks a versioned writer for its moderation contract; the form endpoint never substitutes the general community writer.
 
-- [reporterAuthProxy.ts](./lib/reporterAuthProxy.ts) selects an upstream target, handles proxy response bodies/cookies, and rejects frontend-loop targets.
-- When no upstream is selected, route-specific local authentication behavior uses [reporterPortalAuth.ts](./lib/reporterPortalAuth.ts) for signed tokens/cookies and Resend/SMTP email delivery.
-- The local email helper can return a development OTP when no provider is configured outside production mode. Configured mail providers can still send email in development; use the isolation rules in [rules.md](./rules.md).
-- [useReporterPortalSession.ts](./hooks/useReporterPortalSession.ts) bootstraps the session with credentials and no-store requests, tracks checking/authenticated/anonymous states, and coordinates client cleanup.
-- [reporterPortalPage.ts](./lib/reporterPortalPage.ts) supplies server-loaded closure toggles and messages; it is not itself an authorization check.
+- [Private records](./lib/reporterRecords.server.ts) use only session-authorized Backend routes, never directory IDs or mailbox matches. The account header prevents writes or reads from a stale screen; it cannot grant access. Both legacy My Stories URLs redirect without forwarding identity query parameters. Unwitnessed historical rows are withheld, not deleted.
+- [Story projection](./lib/reporterStories.ts) copies only reporter-facing fields, displays only explicit `reporterFeedback`, and separates editorial review from publication. Counts are per submission. Only Backend-confirmed edition reader paths become exact-edition News Pulse links.
+- [Session lifecycle](./hooks/useReporterPortalSession.ts) removes legacy reporter storage, masks records across account changes and history restores, and distinguishes confirmed revocation from an unconfirmed logout. Failed logout leaves the private UI locked and the server credentials available only for retry through the reporter boundary. Unsent text stays in the current form, not shared storage.
+- [Submission intake](./pages/api/community/submissions.ts) checks upstream settings and requires a durable receipt. The credential-free guest writer must resolve to the same verified Backend origin; private intake never falls back to guest. Both authenticated final paths require the reporter's current affirmative `generalEthicsAccepted` input; this declaration is not verification of the story's facts. Direct final and guest writes have no idempotency guarantee and an uncertain write is not retried.
+- First private saves use `POST /api/reporter-portal/submissions`, `action:"draft"` and one account-scoped UUID `Idempotency-Key`. A headline or body suffices; absent category/language are omitted and no declaration is required. The form holds the exact request in memory for an explicit identical retry only. The [receipt validator](./lib/reporterDraft.ts) checks new (201/created) or replayed (200/not created) content, durable ID and editable private state. Conflict locks creation; check My Stories rather than minting a new key. All later edits and explicit finalization PATCH the returned ID. A private draft is not editorial intake and counts in neither received nor published; a requested revision is not a new private draft. No draft content or retry key is stored across accounts or browser reloads.
+- [SSR helper](./lib/reporterPortalPage.ts) provides settings, messages and private/no-store headers; it is not authorization. Keep private access closed on incompatible Backends; rollback must not reintroduce legacy local authentication or expose historical records.
 
 ### Other public surfaces
 

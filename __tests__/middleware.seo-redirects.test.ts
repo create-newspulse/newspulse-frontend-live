@@ -32,6 +32,22 @@ describe('dynamic SEO redirects middleware', () => {
 
   afterEach(() => { jest.useRealTimers(); });
 
+  test.each(['/reporter/login', '/hi/reporter/submissions/fixture', '/gu/community-reporter-my-stories', '/public-api/community-reporter/submit'])('does not send Reporter URLs or queries to the SEO resolver: %s', async path => {
+    global.fetch = jest.fn() as typeof fetch;
+    await middleware(request(`https://www.newspulse.co.in${path}?reference=private-fixture`));
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  test('ordinary API requests keep unrelated preferences but cannot carry Reporter credentials upstream', async () => {
+    const req = request('https://www.newspulse.co.in/api/public/broadcast');
+    req.headers.set('cookie', 'theme=light; reporter_portal_session=fixture; reporter_portal.sid=other');
+    const result = await middleware(req);
+    expect(result.headers.get('x-middleware-request-cookie')).toBe('theme=light');
+    req.nextUrl.pathname = '/api/reporter-auth/session';
+    const own = await middleware(req);
+    expect(own.headers.get('x-middleware-override-headers')).toBeNull();
+  });
+
   test.each(['headers', 'body'])('stalled %s fails open within the bounded lookup budget', async (stage) => {
     jest.useFakeTimers();
     const signals: AbortSignal[] = [];
@@ -61,6 +77,18 @@ describe('dynamic SEO redirects middleware', () => {
 
     expect(response.status).toBe(301);
     expect(response.headers.get('location')).toBe('https://www.newspulse.co.in/new-destination?utm_source=x&keep=1');
+  });
+
+  test('an article rule lookup is anonymous and does not follow upstream redirects', async () => {
+    const req = request(`https://www.newspulse.co.in/hi/news/test-rule-${requestCounter}`);
+    req.headers.set('authorization', 'synthetic');
+    req.headers.set('cookie', 'font-size=large');
+    global.fetch = jest.fn().mockResolvedValue(jsonResponse({ destination: '/hi/news/revised-slug', statusCode: 301 }));
+    const result = await middleware(req);
+    expect(result.headers.get('location')).toBe('https://www.newspulse.co.in/hi/news/revised-slug');
+    const [, init] = jest.mocked(global.fetch).mock.calls[0];
+    expect(init).toMatchObject({ redirect: 'error', credentials: 'omit', cache: 'no-store' });
+    expect(init?.headers).toEqual({ Accept: 'application/json' });
   });
 
   test('matching 302 returns a server-side 302 redirect', async () => {

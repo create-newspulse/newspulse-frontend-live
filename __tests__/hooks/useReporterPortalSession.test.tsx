@@ -1,266 +1,135 @@
 import React from 'react';
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { ReporterAuthProvider, useReporterPortalSession } from '../../hooks/useReporterPortalSession';
+import { REPORTER_LIFECYCLE_KEY, REPORTER_PRIVATE_RESET, reporterLifecycleStamp, signalReporterSessionInvalid, verifiedReporterLogin } from '../../lib/reporterPrivacy';
 
-function createDeferred<T = any>() {
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  let reject!: (reason?: any) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
+const a = '111111111111111111111111', b = '222222222222222222222222';
+const json = (body: unknown, status = 200) => ({ status, ok: status === 200, json: async () => body });
+const response = (accountId = a) => json({ ok: true, authenticated: true, session:
+  { accountId, email: accountId === a ? 'one@example.test' : 'two@example.test', expiresAt: new Date(Date.now() + 90_000).toISOString() } });
+function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(r => { resolve = r; }); return { promise, resolve }; }
+const fetchMock = () => global.fetch as jest.Mock;
+const hooked = () => useReporterPortalSession({ reportUnauthorizedReason: true });
+const original = global.fetch;
+beforeEach(() => {
+  global.fetch = jest.fn().mockRejectedValue(new Error('offline'));
+  localStorage.setItem(REPORTER_LIFECYCLE_KEY, 'check:initial');
+  document.cookie = 'np_reporter_logout=; Path=/; Max-Age=0';
+});
+afterEach(() => { global.fetch = original; });
 
-describe('useReporterPortalSession', () => {
-  beforeEach(() => {
-    const localStore: Record<string, string> = {};
-    const sessionStore: Record<string, string> = {};
-    (global as any).window = {
-      localStorage: {
-        getItem: (key: string) => localStore[key] || null,
-        setItem: (key: string, value: string) => { localStore[key] = value; },
-        removeItem: (key: string) => { delete localStore[key]; },
-      },
-      sessionStorage: {
-        getItem: (key: string) => sessionStore[key] || null,
-        setItem: (key: string, value: string) => { sessionStore[key] = value; },
-        removeItem: (key: string) => { delete sessionStore[key]; },
-      },
-    } as any;
-    (global as any).fetch = jest.fn();
-  });
-
-  it('checks the reporter session with cookie credentials only', async () => {
-    const sessionResponse = createDeferred<any>();
-    (global as any).fetch.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => sessionResponse.promise,
-    });
-
-    const { result } = renderHook(() => useReporterPortalSession());
-
-    expect(result.current.status).toBe('checking');
-    expect(result.current.session).toBeNull();
-    expect(result.current.reporter).toBeNull();
-
-    sessionResponse.resolve({ ok: true, session: { email: 'reporter@example.com', expiresAt: new Date().toISOString() } });
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect((global as any).fetch).toHaveBeenCalledWith(
-      '/api/reporter-auth/session',
-      expect.objectContaining({
-        method: 'GET',
-        credentials: 'include',
-        cache: 'no-store',
-        headers: { Accept: 'application/json' },
-      })
-    );
-    expect(result.current.session?.email).toBe('reporter@example.com');
-    expect(result.current.reporter?.email).toBe('reporter@example.com');
-    expect(result.current.authenticated).toBe(true);
-    expect(result.current.loading).toBe(false);
-    expect(result.current.status).toBe('authenticated');
+it('shares one validated bootstrap, without hydrating profile or token from storage', async () => {
+  localStorage.setItem('np_cr_profile_v1', '{"fullName":"Previous"}');
+  fetchMock().mockResolvedValueOnce(response());
+  const wrapper = ({ children }: { children: React.ReactNode }) => <ReporterAuthProvider>{children}</ReporterAuthProvider>;
+  const hook = renderHook(() => [hooked(), hooked()], { wrapper });
+  await waitFor(() => expect(hook.result.current[0].status).toBe('authenticated'));
+  expect(fetchMock()).toHaveBeenCalledTimes(1);
+  expect(fetchMock()).toHaveBeenCalledWith('/api/reporter-auth/session', expect.objectContaining({ method: 'GET', credentials: 'include', cache: 'no-store' }));
+  expect(hook.result.current[1].session?.accountId).toBe(a);
+  expect(hook.result.current[0].profile?.fullName).toBeUndefined();
+  expect(localStorage.getItem('np_cr_profile_v1')).toBeNull();
+});
+it.each([{ ok: true, session: { email: 'old@example.test' } }, { ok: false }, { ok: true, authenticated: false, session: { accountId: a } }])(
+  'never authenticates from a malformed or nonaffirmative response %#', async payload => {
+    fetchMock().mockResolvedValueOnce(json(payload));
+    const h = renderHook(hooked);
+    await waitFor(() => expect(h.result.current.status).toBe('anonymous'));
+    expect(h.result.current.session).toBeNull();
   });
 
-  it('does not treat old localStorage reporter profile as authenticated before bootstrap finishes', async () => {
-    const sessionResponse = createDeferred<any>();
-    (global as any).window.localStorage.setItem('np_cr_profile_v1', JSON.stringify({ email: 'saved@example.com', fullName: 'Saved Reporter' }));
-    (global as any).fetch.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => sessionResponse.promise,
-    });
+it('masks logout at intent, rejects a late session, retains a reloadable retry lock and needs confirmed revocation', async () => {
+  fetchMock().mockResolvedValueOnce(response());
+  const h = renderHook(hooked);
+  await waitFor(() => expect(h.result.current.authenticated).toBe(true));
+  const old = deferred<ReturnType<typeof response>>();
+  fetchMock().mockReturnValueOnce(old.promise);
+  act(() => { void h.result.current.bootstrapSession(); });
+  fetchMock().mockResolvedValueOnce(json({ ok: true })); // No positive revocation result.
+  await act(async () => { expect(await h.result.current.logout()).toBe(false); });
+  expect(h.result.current.reason).toBe('LOGOUT_UNCONFIRMED');
+  await act(async () => { old.resolve(response()); });
+  expect(h.result.current.session).toBeNull();
+  h.unmount();
+  const reloaded = renderHook(hooked);
+  await waitFor(() => expect(reloaded.result.current.reason).toBe('LOGOUT_UNCONFIRMED'));
+  expect(fetchMock()).toHaveBeenCalledTimes(3);
+  expect(verifiedReporterLogin(reporterLifecycleStamp())).toBe(false);
+  fetchMock().mockResolvedValueOnce(json({ ok: true, revoked: true }));
+  await act(async () => { expect(await reloaded.result.current.logout()).toBe(true); });
+  expect(reloaded.result.current.reason).toBeNull();
+  await act(async () => { await reloaded.result.current.bootstrapSession(); });
+  expect(reloaded.result.current.authenticated).toBe(false);
+  expect(fetchMock()).toHaveBeenCalledTimes(4);
+});
 
-    const { result } = renderHook(() => useReporterPortalSession());
-
-    expect(result.current.status).toBe('checking');
-    expect(result.current.authenticated).toBe(false);
-    expect(result.current.session).toBeNull();
-    expect(result.current.profile).toBeNull();
-
-    sessionResponse.resolve({ ok: true, session: { email: 'reporter@example.com' } });
-    await act(async () => { await Promise.resolve(); });
-    expect(result.current.status).toBe('authenticated');
+it('honors another tab’s logout while fetching, and discards stale invalidations after a fresh login', async () => {
+  const first = deferred<ReturnType<typeof response>>();
+  fetchMock().mockReturnValueOnce(first.promise);
+  const h = renderHook(hooked);
+  const staleStamp = reporterLifecycleStamp();
+  act(() => {
+    localStorage.setItem(REPORTER_LIFECYCLE_KEY, 'pending:other-tab');
+    window.dispatchEvent(new StorageEvent('storage', { key: REPORTER_LIFECYCLE_KEY, newValue: 'pending:other-tab' }));
   });
-
-  it('uses the shared reporter name precedence when hydrating session identity', async () => {
-    (global as any).window.localStorage.setItem('np_cr_profile_v1', JSON.stringify({
-      firstName: 'Kiran',
-      email: 'reporter@example.com',
-    }));
-
-    (global as any).fetch.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({ ok: true, session: { email: 'reporter@example.com', expiresAt: new Date().toISOString() } }),
-    });
-
-    const { result } = renderHook(() => useReporterPortalSession());
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(result.current.session?.fullName).toBe('Kiran');
-    expect(result.current.session?.firstName).toBe('Kiran');
+  expect(h.result.current.reason).toBe('LOGOUT_UNCONFIRMED');
+  await act(async () => { first.resolve(response()); });
+  expect(h.result.current.authenticated).toBe(false);
+  fetchMock().mockResolvedValueOnce(response(b));
+  act(() => {
+    localStorage.setItem(REPORTER_LIFECYCLE_KEY, 'check:new-login');
+    window.dispatchEvent(new StorageEvent('storage', { key: REPORTER_LIFECYCLE_KEY, newValue: 'check:new-login' }));
   });
+  await waitFor(() => expect(h.result.current.session?.accountId).toBe(b));
+  act(() => signalReporterSessionInvalid(staleStamp));
+  expect(h.result.current.session?.accountId).toBe(b);
+  act(() => signalReporterSessionInvalid(reporterLifecycleStamp()));
+  expect(h.result.current.session).toBeNull();
+});
 
-  it('treats anonymous reporter-session 401 responses as unauthenticated without logging errors', async () => {
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
-    (global as any).window.localStorage.setItem('np_reporter_portal_session', 'stale-client-session');
-    (global as any).window.localStorage.setItem('np_cr_profile_v1', JSON.stringify({ fullName: 'Saved Reporter', email: 'saved@example.com' }));
-    (global as any).window.localStorage.setItem('lang', 'gu');
-    (global as any).window.sessionStorage.setItem('reporterPortalToken', 'stale-session-token');
-    (global as any).window.sessionStorage.setItem('theme', 'aurora');
-    (global as any).fetch.mockResolvedValueOnce({
-      ok: false,
-      status: 401,
-      json: async () => ({ ok: false, code: 'REPORTER_SESSION_MISSING', message: 'REPORTER_SESSION_MISSING' }),
-    });
+it('masks BFCache before freeze and waits for a fresh session on restore', async () => {
+  fetchMock().mockResolvedValueOnce(response());
+  const h = renderHook(hooked);
+  await waitFor(() => expect(h.result.current.session?.accountId).toBe(a));
+  act(() => window.dispatchEvent(new Event('pagehide')));
+  expect(h.result.current.session).toBeNull();
+  expect(h.result.current.status).toBe('checking');
+  const next = deferred<ReturnType<typeof response>>();
+  fetchMock().mockReturnValueOnce(next.promise);
+  act(() => window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: true })));
+  expect(h.result.current.session).toBeNull();
+  await act(async () => { next.resolve(response(b)); });
+  expect(h.result.current.session?.accountId).toBe(b);
+});
 
-    const { result } = renderHook(() => useReporterPortalSession());
+it('preserves an anonymous guest form on ordinary focus rechecks, but resets across identity boundaries', async () => {
+  const noSession = json({ ok: false, code: 'REPORTER_SESSION_MISSING' }, 401);
+  fetchMock().mockResolvedValue(noSession);
+  const reset = jest.fn();
+  window.addEventListener(REPORTER_PRIVATE_RESET, reset);
+  try {
+    const h = renderHook(hooked);
+    await waitFor(() => expect(h.result.current.status).toBe('anonymous'));
+    sessionStorage.setItem('np_cr_email', 'old@example.test');
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    expect(sessionStorage.getItem('np_cr_email')).toBeNull();
+    expect(reset).not.toHaveBeenCalled();
+    fetchMock().mockResolvedValueOnce(response());
+    await act(async () => { await h.result.current.bootstrapSession(); });
+    fetchMock().mockResolvedValueOnce(response(b));
+    await act(async () => { await h.result.current.bootstrapSession(); });
+    await act(async () => { await h.result.current.bootstrapSession(); });
+    expect(reset).toHaveBeenCalledTimes(3);
+  } finally { window.removeEventListener(REPORTER_PRIVATE_RESET, reset); }
+});
 
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(result.current.session).toBeNull();
-    expect(result.current.reporter).toBeNull();
-    expect(result.current.authenticated).toBe(false);
-    expect(result.current.profile).toBeNull();
-    expect(result.current.reason).toBeNull();
-    expect(result.current.isReady).toBe(true);
-    expect(result.current.loading).toBe(false);
-    expect(result.current.status).toBe('anonymous');
-    expect((global as any).window.localStorage.getItem('np_reporter_portal_session')).toBeNull();
-    expect((global as any).window.sessionStorage.getItem('reporterPortalToken')).toBeNull();
-    expect((global as any).window.localStorage.getItem('np_cr_profile_v1')).toBeTruthy();
-    expect((global as any).window.localStorage.getItem('lang')).toBe('gu');
-    expect((global as any).window.sessionStorage.getItem('theme')).toBe('aurora');
-    expect(consoleErrorSpy).not.toHaveBeenCalled();
-
-    consoleErrorSpy.mockRestore();
-  });
-
-  it('treats SESSION_EXPIRED as anonymous state and does not retry during rerenders', async () => {
-    (global as any).fetch.mockResolvedValueOnce({
-      ok: false,
-      status: 401,
-      json: async () => ({ ok: false, code: 'SESSION_EXPIRED', message: 'SESSION_EXPIRED' }),
-    });
-
-    const { result, rerender } = renderHook(() => useReporterPortalSession());
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    rerender();
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect((global as any).fetch).toHaveBeenCalledTimes(1);
-    expect(result.current.session).toBeNull();
-    expect(result.current.reporter).toBeNull();
-    expect(result.current.authenticated).toBe(false);
-    expect(result.current.reason).toBeNull();
-    expect(result.current.loading).toBe(false);
-  });
-
-  it('preserves protected-page expired-session reason when requested', async () => {
-    (global as any).fetch.mockResolvedValueOnce({
-      ok: false,
-      status: 401,
-      json: async () => ({ ok: false, code: 'SESSION_EXPIRED', message: 'SESSION_EXPIRED' }),
-    });
-
-    const { result } = renderHook(() => useReporterPortalSession({ reportUnauthorizedReason: true }));
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(result.current.authenticated).toBe(false);
-    expect(result.current.reason).toBe('SESSION_EXPIRED');
-  });
-
-  it('exits checking when the session request fails', async () => {
-    (global as any).fetch.mockRejectedValueOnce(new Error('network down'));
-
-    const { result } = renderHook(() => useReporterPortalSession({ reportUnauthorizedReason: true }));
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(result.current.status).toBe('anonymous');
-    expect(result.current.loading).toBe(false);
-    expect(result.current.reason).toBe('SESSION_CHECK_FAILED');
-  });
-
-  it('times out a hung session request instead of staying in checking forever', async () => {
-    jest.useFakeTimers();
-    (global as any).fetch.mockImplementationOnce((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
-      init.signal?.addEventListener('abort', () => reject(new Error('aborted')));
-    }));
-
-    const { result } = renderHook(() => useReporterPortalSession({ reportUnauthorizedReason: true }));
-    expect(result.current.status).toBe('checking');
-
-    await act(async () => {
-      jest.advanceTimersByTime(10_001);
-      await Promise.resolve();
-    });
-
-    expect(result.current.status).toBe('anonymous');
-    expect(result.current.loading).toBe(false);
-    expect(result.current.reason).toBe('SESSION_CHECK_TIMEOUT');
-    jest.useRealTimers();
-  });
-
-  it('ignores stale session bootstrap responses after a newer authenticated bootstrap wins', async () => {
-    const firstJson = createDeferred<any>();
-    const secondJson = createDeferred<any>();
-    (global as any).fetch
-      .mockResolvedValueOnce({ ok: false, status: 401, json: async () => firstJson.promise })
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => secondJson.promise });
-
-    const { result } = renderHook(() => useReporterPortalSession({ skipInitialCheck: true }));
-
-    act(() => { void result.current.bootstrapSession(); });
-    act(() => { void result.current.bootstrapSession(); });
-
-    secondJson.resolve({ ok: true, session: { email: 'reporter@example.com' } });
-    await act(async () => { await Promise.resolve(); });
-    expect(result.current.status).toBe('authenticated');
-
-    firstJson.resolve({ ok: false, code: 'REPORTER_SESSION_MISSING', message: 'REPORTER_SESSION_MISSING' });
-    await act(async () => { await Promise.resolve(); });
-    expect(result.current.status).toBe('authenticated');
-    expect(result.current.session?.email).toBe('reporter@example.com');
-  });
-
-  it('shares one provider bootstrap across multiple reporter auth consumers', async () => {
-    (global as any).fetch.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({ ok: true, session: { email: 'reporter@example.com' } }),
-    });
-
-    const wrapper = ({ children }: { children: React.ReactNode }) => <ReporterAuthProvider>{children}</ReporterAuthProvider>;
-    const { result } = renderHook(() => [useReporterPortalSession(), useReporterPortalSession()], { wrapper });
-
-    await act(async () => { await Promise.resolve(); });
-
-    expect((global as any).fetch).toHaveBeenCalledTimes(1);
-    expect(result.current[0].status).toBe('authenticated');
-    expect(result.current[1].status).toBe('authenticated');
-  });
-
+it('fails closed on a session deadline', async () => {
+  jest.useFakeTimers();
+  try {
+    fetchMock().mockImplementationOnce((_url, init) => new Promise((_resolve, reject) => init.signal.addEventListener('abort', () => reject(new Error('timeout')))));
+    const h = renderHook(hooked);
+    await act(async () => { jest.advanceTimersByTime(10_001); });
+    expect(h.result.current.reason).toBe('SESSION_CHECK_TIMEOUT');
+    expect(h.result.current.session).toBeNull();
+  } finally { jest.useRealTimers(); }
 });

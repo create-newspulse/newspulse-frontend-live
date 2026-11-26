@@ -40,6 +40,7 @@ function createCtx(slug: string, locale = 'en'): GetServerSidePropsContext {
   const req = Object.assign(new IncomingMessage(new Socket()), {
     headers: { host: 'www.newspulse.co.in', 'x-forwarded-proto': 'https' }, cookies: {},
   });
+  Object.defineProperties(req.socket, { localAddress: { value: '127.0.0.1' }, localPort: { value: 3000 } });
   return {
     locale, params: { slug }, query: {}, resolvedUrl: `/news/${slug}`,
     req, res: new ServerResponse(req),
@@ -180,7 +181,7 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
         const resolved = publicArticles.find((_item, index) =>
           url.pathname === `/api/public/news/slug/${encodeURIComponent(stories[index].canonicalSlug)}`);
         if (!resolved) throw new Error(`Unexpected fixture lookup: ${target}`);
-        expect(url.origin).toBe('http://localhost:3000');
+        expect(url.origin).toBe('http://127.0.0.1:3000');
         expect(url.searchParams.get('lang')).toBe(lang);
         expect(url.searchParams.get('language')).toBe(lang);
         return { article: resolved };
@@ -282,10 +283,12 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
           const url = new URL(String(input));
           expect(url.searchParams.get('lang')).toBe(lang);
           expect(url.searchParams.get('language')).toBe(lang);
-          expect(init).toMatchObject({
-            method: 'GET', cache: 'no-store',
-            headers: { cookie: 'session=test-session', authorization: 'Bearer test-token' },
-          });
+          expect(url.origin).toBe('http://127.0.0.1:3000');
+          expect(init).toMatchObject({ method: 'GET', cache: 'no-store', credentials: 'omit', redirect: 'error' });
+          const trace = `article:${ctx.res.getHeader('x-newspulse-preview-id')}`;
+          expect(init?.headers).toEqual(url.pathname === '/api/public/news'
+            ? { Accept: 'application/json' }
+            : { Accept: 'application/json', 'x-newspulse-preview-trace': trace });
         }
         expect(relatedSignal?.aborted).toBe(true);
         expect(Date.now() - startedAt).toBe(detailMs + relatedMs);
@@ -347,6 +350,17 @@ describe('pages/news/[slug] getServerSideProps performance contract', () => {
     expect(await pending).toEqual({ props: { unavailable: true } });
     expect(ctx.res.statusCode).toBe(503);
     expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  test('a legacy redirect does not turn a malformed alternate lookup after a 404 into article absence', async () => {
+    global.fetch = jest.fn().mockResolvedValueOnce(new Response(null, { status:404 }))
+      .mockImplementation(async () => new Response('{'));
+    const ctx = createCtx('unused');
+    ctx.params = { parts: ['synthetic-id', 'old-slug'] };
+    const result = await getLegacyProps(ctx);
+    expect(ctx.res.statusCode).toBe(503);
+    expect(result).toEqual({ props: { unavailable:true } });
+    expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
   test('returns the article and its related lists', async () => {

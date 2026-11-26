@@ -1,52 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { REPORTER_CHALLENGE_COOKIE, REPORTER_OTP_COOKIE, REPORTER_SESSION_COOKIE, getChallengeFromCookie, getOtpFromCookie, getSessionFromCookie } from '../../../lib/reporterPortalAuth';
+import { loginAction } from '../../../lib/reporterPortalAuth';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
-
-  if (req.method !== 'GET') {
-    res.setHeader('Allow', 'GET');
-    return res.status(405).json({ ok: false, code: 'METHOD_NOT_ALLOWED', message: 'METHOD_NOT_ALLOWED' });
-  }
-
-  const challengeToken = String(req.cookies?.[REPORTER_CHALLENGE_COOKIE] || '').trim();
-  const challengePayload = getChallengeFromCookie(challengeToken);
-  if (challengePayload) {
-    return res.status(200).json({
-      ok: true,
-      challenge: {
-        email: challengePayload.email,
-        expiresAt: new Date(challengePayload.exp).toISOString(),
-      },
-    });
-  }
-
-  const otpToken = String(req.cookies?.[REPORTER_OTP_COOKIE] || '').trim();
-  const otpPayload = getOtpFromCookie(otpToken);
-  if (otpPayload) {
-    return res.status(200).json({
-      ok: true,
-      challenge: {
-        email: otpPayload.email,
-        expiresAt: new Date(otpPayload.exp).toISOString(),
-        attemptsRemaining: Math.max(0, 5 - otpPayload.attempts),
-      },
-    });
-  }
-
-  const sessionToken = String(req.cookies?.[REPORTER_SESSION_COOKIE] || '').trim();
-  const sessionPayload = getSessionFromCookie(sessionToken);
-  if (sessionPayload) {
-    return res.status(200).json({
-      ok: true,
-      challenge: {
-        email: sessionPayload.email,
-        expiresAt: new Date(sessionPayload.exp).toISOString(),
-      },
-    });
-  }
-
-  return res.status(401).json({ ok: false, code: 'SESSION_EXPIRED', message: 'SESSION_EXPIRED' });
+export default function handler(req: NextApiRequest, res: NextApiResponse) {
+  return loginAction('challenge-session', req, res);
 }

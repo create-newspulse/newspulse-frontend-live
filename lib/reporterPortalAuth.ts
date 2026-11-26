@@ -1,674 +1,163 @@
-import crypto from 'crypto';
-import nodemailer from 'nodemailer';
-import { getReporterForwardCookieHeader, readReporterProxyBody, resolveReporterAuthProxyUrl } from './reporterAuthProxy';
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { PORTAL_PATH, hasReporterCredential, reporterBackendFetch, reporterIngressAvailable, reporterLock, type ReporterRequest } from './reporterBackend.server';
+import { apiMethod, record, reporterJson, revokedReporterCookies, sanitizedReporterCookies, upstreamDenial } from './reporterAuthProxy';
+import type { ReporterPortalSession } from './reporterPortal';
 
-export const REPORTER_SESSION_COOKIE = 'np_reporter_portal_session';
-export const REPORTER_OTP_COOKIE = 'np_reporter_portal_otp';
-export const REPORTER_CHALLENGE_COOKIE = 'np_reporter_portal_challenge';
-const OTP_TTL_SECONDS = 10 * 60;
-const SESSION_TTL_SECONDS = 12 * 60 * 60;
-const MAX_OTP_ATTEMPTS = 5;
-
-type SignedPayload = Record<string, unknown> & {
-  kind: 'otp' | 'session' | 'magic-link' | 'challenge';
-  email: string;
-  exp: number;
-};
-
-export type ReporterOtpPayload = SignedPayload & {
-  kind: 'otp';
-  otpHash: string;
-  attempts: number;
-};
-
-export type ReporterSessionPayload = SignedPayload & {
-  kind: 'session';
-};
-
-export type ReporterMagicLinkPayload = SignedPayload & {
-  kind: 'magic-link';
-};
-
-export type ReporterChallengePayload = SignedPayload & {
-  kind: 'challenge';
-};
-
-export type ReporterMailFailureCategory =
-  | 'CONFIG_MISSING'
-  | 'MAIL_AUTH_FAILED'
-  | 'MAIL_PROVIDER_UNAVAILABLE'
-  | 'UPSTREAM_BACKEND_FAILED'
-  | 'SESSION_STORE_FAILED'
-  | 'UNKNOWN_EXCEPTION';
-
-type ReporterMailProvider = 'resend' | 'smtp';
-
-type ReporterMailSendResult = {
-  delivered: boolean;
-  provider: ReporterMailProvider;
-  debugCode?: string;
-};
-
-type ReporterMailErrorOptions = {
-  category: ReporterMailFailureCategory;
-  source: 'mail-config' | 'mail-provider' | 'session-store' | 'unknown';
-  statusCode?: number;
-  provider?: ReporterMailProvider;
-  safeBody?: string;
-  code?: string;
-  cause?: unknown;
-};
-
-type ReporterSmtpConfig = {
-  host: string;
-  port: number;
-  secure: boolean;
-  user: string;
-  pass: string;
-  from: string;
-};
-
-export class ReporterPortalMailError extends Error {
-  category: ReporterMailFailureCategory;
-  source: 'mail-config' | 'mail-provider' | 'session-store' | 'unknown';
-  statusCode?: number;
-  provider?: ReporterMailProvider;
-  safeBody?: string;
-  code?: string;
-
-  constructor(message: string, options: ReporterMailErrorOptions) {
-    super(message);
-    this.name = 'ReporterPortalMailError';
-    this.category = options.category;
-    this.source = options.source;
-    this.statusCode = options.statusCode;
-    this.provider = options.provider;
-    this.safeBody = options.safeBody;
-    this.code = options.code;
-    if (options.cause !== undefined) {
-      (this as Error & { cause?: unknown }).cause = options.cause;
-    }
-  }
+export function normalizeReporterAuthEmail(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const email = value.trim().toLowerCase();
+  return email.length <= 254 && email.indexOf('@') <= 64 && !email.includes('..')
+    && /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9.-]+$/i.test(email) ? email : '';
+}
+export function validReporterId(value: unknown): value is string {
+  return typeof value === 'string' && /^[a-f0-9]{24}$/i.test(value);
+}
+export function validExpiry(value: unknown): value is string {
+  return typeof value === 'string' && Date.parse(value) > Date.now();
 }
 
-function firstEnv(...keys: string[]): string {
-  for (const key of keys) {
-    const value = String(process.env[key] || '').trim();
-    if (value) return value;
-  }
-  return '';
-}
+type Denial = { ok: false; reason: string; status: number; code: string };
+const deny = (status: number, reason: string): Denial => ({ ok: false, status, reason, code: reason });
 
-function safeProviderErrorBody(input: string): string {
-  return String(input || '').trim().slice(0, 500);
-}
-
-function reporterAuthLog(event: string, details?: Record<string, unknown>) {
-  console.info(`[reporter-auth] ${event}`, details || {});
-}
-
-function reporterAuthError(event: string, details?: Record<string, unknown>) {
-  console.error(`[reporter-auth] ${event}`, details || {});
-}
-
-function base64urlEncode(input: string | Buffer): string {
-  return Buffer.from(input).toString('base64url');
-}
-
-function base64urlDecode(input: string): string {
-  return Buffer.from(input, 'base64url').toString('utf8');
-}
-
-export function normalizeReporterAuthEmail(email: string | null | undefined): string {
-  return String(email || '').trim().toLowerCase();
-}
-
-export function maskReporterEmail(email: string | null | undefined): string {
-  const normalized = normalizeReporterAuthEmail(email);
-  const [localPart, domain] = normalized.split('@');
-  if (!localPart || !domain) return normalized;
-  if (localPart.length <= 2) return `${localPart[0] || '*'}***@${domain}`;
-  return `${localPart.slice(0, 2)}***@${domain}`;
-}
-
-function getAuthSecret(): string {
-  const secret = String(
-    process.env.REPORTER_AUTH_SECRET ||
-    process.env.REPORTER_PORTAL_AUTH_SECRET ||
-    process.env.NEXTAUTH_SECRET ||
-    ''
-  ).trim();
-
-  if (secret) return secret;
-  if (process.env.NODE_ENV !== 'production') return 'dev-reporter-portal-auth-secret';
-
-  throw new Error('REPORTER_PORTAL_AUTH_SECRET is required in production');
-}
-
-function signValue(value: string): string {
-  return crypto.createHmac('sha256', getAuthSecret()).update(value).digest('base64url');
-}
-
-function constantTimeEquals(left: string, right: string): boolean {
-  const leftBuffer = Buffer.from(left);
-  const rightBuffer = Buffer.from(right);
-  if (leftBuffer.length !== rightBuffer.length) return false;
-  return crypto.timingSafeEqual(leftBuffer, rightBuffer);
-}
-
-export function createSignedToken<T extends SignedPayload>(payload: T): string {
-  const encodedPayload = base64urlEncode(JSON.stringify(payload));
-  const signature = signValue(encodedPayload);
-  return `${encodedPayload}.${signature}`;
-}
-
-export function verifySignedToken<T extends SignedPayload>(token: string | null | undefined): T | null {
-  const raw = String(token || '').trim();
-  if (!raw || !raw.includes('.')) return null;
-  const [encodedPayload, signature] = raw.split('.');
-  if (!encodedPayload || !signature) return null;
-  const expected = signValue(encodedPayload);
-  if (!constantTimeEquals(signature, expected)) return null;
-
+export async function requireReporterSession(req: ReporterRequest, _options?: { route?: string }): Promise<
+  { ok: true; reporter: ReporterPortalSession } | Denial
+> {
   try {
-    const parsed = JSON.parse(base64urlDecode(encodedPayload));
-    if (!parsed || typeof parsed !== 'object') return null;
-    if (typeof parsed.email !== 'string' || typeof parsed.exp !== 'number' || typeof parsed.kind !== 'string') return null;
-    return parsed as T;
-  } catch {
-    return null;
-  }
-}
-
-export function isExpired(exp: number): boolean {
-  return !Number.isFinite(exp) || Date.now() >= exp;
-}
-
-export function generateOtpCode(): string {
-  return String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
-}
-
-export function hashOtp(email: string, code: string): string {
-  return crypto
-    .createHash('sha256')
-    .update(`${getAuthSecret()}:${normalizeReporterAuthEmail(email)}:${String(code || '').trim()}`)
-    .digest('hex');
-}
-
-export function createOtpToken(email: string, code: string): string {
-  const normalizedEmail = normalizeReporterAuthEmail(email);
-  const payload: ReporterOtpPayload = {
-    kind: 'otp',
-    email: normalizedEmail,
-    exp: Date.now() + OTP_TTL_SECONDS * 1000,
-    otpHash: hashOtp(normalizedEmail, code),
-    attempts: 0,
-  };
-  return createSignedToken(payload);
-}
-
-export function createMagicLinkToken(email: string): string {
-  const normalizedEmail = normalizeReporterAuthEmail(email);
-  const payload: ReporterMagicLinkPayload = {
-    kind: 'magic-link',
-    email: normalizedEmail,
-    exp: Date.now() + OTP_TTL_SECONDS * 1000,
-  };
-  return createSignedToken(payload);
-}
-
-export function createSessionToken(email: string): string {
-  const normalizedEmail = normalizeReporterAuthEmail(email);
-  const payload: ReporterSessionPayload = {
-    kind: 'session',
-    email: normalizedEmail,
-    exp: Date.now() + SESSION_TTL_SECONDS * 1000,
-  };
-  return createSignedToken(payload);
-}
-
-export function createChallengeToken(email: string, expiresAt?: string | number | null): string {
-  const normalizedEmail = normalizeReporterAuthEmail(email);
-  const parsedExp = typeof expiresAt === 'number'
-    ? expiresAt
-    : (typeof expiresAt === 'string' ? Date.parse(expiresAt) : Number.NaN);
-  const payload: ReporterChallengePayload = {
-    kind: 'challenge',
-    email: normalizedEmail,
-    exp: Number.isFinite(parsedExp) ? parsedExp : (Date.now() + OTP_TTL_SECONDS * 1000),
-  };
-  return createSignedToken(payload);
-}
-
-export function getOtpExpiryIso(): string {
-  return new Date(Date.now() + OTP_TTL_SECONDS * 1000).toISOString();
-}
-
-export function getSessionExpiryIso(): string {
-  return new Date(Date.now() + SESSION_TTL_SECONDS * 1000).toISOString();
-}
-
-export function updateOtpAttempts(token: string, nextAttempts: number): string | null {
-  const payload = verifySignedToken<ReporterOtpPayload>(token);
-  if (!payload || payload.kind !== 'otp') return null;
-  return createSignedToken<ReporterOtpPayload>({
-    ...payload,
-    attempts: nextAttempts,
-  });
-}
-
-function serializeCookie(name: string, value: string, options: { maxAge?: number; httpOnly?: boolean } = {}): string {
-  const parts = [`${name}=${encodeURIComponent(value)}`, 'Path=/', 'SameSite=Lax'];
-  if (options.maxAge != null) parts.push(`Max-Age=${Math.max(0, Math.floor(options.maxAge))}`);
-  if (options.httpOnly !== false) parts.push('HttpOnly');
-  const nodeEnvKey = ['NODE', 'ENV'].join('_');
-  if (process.env[nodeEnvKey] === 'production') parts.push('Secure');
-  return parts.join('; ');
-}
-
-export function createOtpCookie(token: string): string {
-  return serializeCookie(REPORTER_OTP_COOKIE, token, { maxAge: OTP_TTL_SECONDS, httpOnly: true });
-}
-
-export function createChallengeCookie(token: string): string {
-  return serializeCookie(REPORTER_CHALLENGE_COOKIE, token, { maxAge: OTP_TTL_SECONDS, httpOnly: true });
-}
-
-export function createSessionCookie(token: string): string {
-  return serializeCookie(REPORTER_SESSION_COOKIE, token, { maxAge: SESSION_TTL_SECONDS, httpOnly: true });
-}
-
-export function clearOtpCookie(): string {
-  return serializeCookie(REPORTER_OTP_COOKIE, '', { maxAge: 0, httpOnly: true });
-}
-
-export function clearChallengeCookie(): string {
-  return serializeCookie(REPORTER_CHALLENGE_COOKIE, '', { maxAge: 0, httpOnly: true });
-}
-
-export function clearSessionCookie(): string {
-  return serializeCookie(REPORTER_SESSION_COOKIE, '', { maxAge: 0, httpOnly: true });
-}
-
-export function getSessionFromCookie(cookieValue: string | null | undefined): ReporterSessionPayload | null {
-  const payload = verifySignedToken<ReporterSessionPayload>(cookieValue);
-  if (!payload || payload.kind !== 'session' || isExpired(payload.exp)) return null;
-  return payload;
-}
-
-export function getReporterSessionFromRequest(req: { cookies?: Partial<Record<string, string | string[]>> }): {
-  ok: true;
-  session: ReporterSessionPayload;
-} | {
-  ok: false;
-  code: 'REPORTER_SESSION_MISSING';
-  message: string;
-  shouldClearCookie: boolean;
-} {
-  const rawCookie = req.cookies?.[REPORTER_SESSION_COOKIE];
-  const token = String(Array.isArray(rawCookie) ? rawCookie[0] : rawCookie || '').trim();
-  if (!token) {
-    return { ok: false, code: 'REPORTER_SESSION_MISSING', message: 'Reporter session missing or expired.', shouldClearCookie: false };
-  }
-
-  const session = getSessionFromCookie(token);
-  if (!session) {
-    return { ok: false, code: 'REPORTER_SESSION_MISSING', message: 'Reporter session missing or expired.', shouldClearCookie: true };
-  }
-
-  return { ok: true, session };
-}
-
-export function getAuthenticatedReporter(req: { cookies?: Partial<Record<string, string | string[]>> }, options?: { route?: string }): {
-  ok: true;
-  reporter: { email: string; expiresAt: string };
-  session: ReporterSessionPayload;
-} | {
-  ok: false;
-  code: 'REPORTER_SESSION_MISSING';
-  message: string;
-  shouldClearCookie: boolean;
-} {
-  const rawCookie = req.cookies?.[REPORTER_SESSION_COOKIE];
-  const cookiePresent = Boolean(String(Array.isArray(rawCookie) ? rawCookie[0] : rawCookie || '').trim());
-  const validation = getReporterSessionFromRequest(req);
-
-  if (process.env.NODE_ENV === 'development') {
-    const isJest = Boolean((globalThis as any)?.jest) || Boolean((process.env as any)?.JEST_WORKER_ID);
-    if (!isJest) {
-      // eslint-disable-next-line no-console
-      console.info('[reporter-session]', {
-        route: options?.route || null,
-        cookiePresent,
-        authenticated: validation.ok,
-      });
+    const lock = reporterLock(req);
+    if (lock === 'pending') return deny(409, 'LOGOUT_UNCONFIRMED');
+    if (lock === 'signed-out') return deny(401, 'REPORTER_SESSION_MISSING');
+    if (!hasReporterCredential(req)) return deny(401, 'REPORTER_SESSION_MISSING');
+    if (!reporterIngressAvailable(req)) return deny(503, 'REPORTER_UNAVAILABLE');
+    const upstream = await reporterBackendFetch(req, `${PORTAL_PATH}/auth/session`);
+    const data = await reporterJson(upstream);
+    if (!upstream.ok) {
+      const { status, reason } = upstreamDenial(upstream.status, data.code);
+      return deny(status, reason);
     }
-  }
-
-  if (!validation.ok) {
-    return validation;
-  }
-
-  return {
-    ok: true,
-    reporter: {
-      email: validation.session.email,
-      expiresAt: new Date(validation.session.exp).toISOString(),
-    },
-    session: validation.session,
-  };
-}
-
-export async function requireReporterSession(req: { cookies?: Partial<Record<string, string | string[]>>; headers?: Record<string, string | string[] | undefined> }, options?: { route?: string }): Promise<ReturnType<typeof getAuthenticatedReporter>> {
-  const localValidation = getAuthenticatedReporter(req, options);
-  if (!localValidation.ok) {
-    return localValidation;
-  }
-
-  const backendUrl = resolveReporterAuthProxyUrl('/api/reporter-auth/session', req as any);
-  if (!backendUrl) {
-    return localValidation;
-  }
-
-  try {
-    const forwardedCookie = getReporterForwardCookieHeader(req as any);
-    const upstream = await fetch(backendUrl, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-        ...(forwardedCookie ? { cookie: forwardedCookie } : {}),
-      },
-      cache: 'no-store',
-    });
-    const { data } = await readReporterProxyBody(upstream);
-    const upstreamEmail = normalizeReporterAuthEmail(data?.session?.email || data?.reporter?.email || data?.user?.email || data?.email);
-
-    if (!upstream.ok || (upstreamEmail && upstreamEmail !== localValidation.reporter.email)) {
-      return { ok: false, code: 'REPORTER_SESSION_MISSING', message: 'Reporter session missing or expired.', shouldClearCookie: upstream.status === 401 || upstream.status === 403 };
+    const reporter = record(data.reporter);
+    const session = record(data.session);
+    const summary = record(data.summary);
+    const email = normalizeReporterAuthEmail(reporter.email);
+    if (upstream.status !== 200 || data.ok !== true || (data.authenticated !== undefined && data.authenticated !== true)
+      || data.challenge != null || session.status === 'pending' || !validReporterId(reporter.id)
+      || !email || reporter.email !== email || !['active', 'watchlist'].includes(String(reporter.status))
+      || reporter.portalAccessEnabled === false || !validExpiry(session.expiresAt)
+      || typeof summary.received !== 'number' || !Number.isSafeInteger(summary.received) || summary.received < 0
+      || typeof summary.totalSubmissions !== 'number' || !Number.isSafeInteger(summary.totalSubmissions)
+      || summary.received > summary.totalSubmissions) {
+      return deny(401, 'REPORTER_SESSION_MISSING');
     }
-
     return {
-      ...localValidation,
+      ok: true,
       reporter: {
-        ...localValidation.reporter,
-        ...(upstreamEmail ? { email: upstreamEmail } : {}),
+        accountId: reporter.id, email, expiresAt: session.expiresAt,
+        ...(typeof reporter.fullName === 'string' && reporter.fullName.length <= 256 ? { fullName: reporter.fullName } : {}),
       },
     };
   } catch {
-    return { ok: false, code: 'REPORTER_SESSION_MISSING', message: 'Reporter session missing or expired.', shouldClearCookie: false };
+    return deny(503, 'REPORTER_UNAVAILABLE');
   }
 }
 
-export function getOtpFromCookie(cookieValue: string | null | undefined): ReporterOtpPayload | null {
-  const payload = verifySignedToken<ReporterOtpPayload>(cookieValue);
-  if (!payload || payload.kind !== 'otp' || isExpired(payload.exp)) return null;
-  return payload;
-}
-
-export function getChallengeFromCookie(cookieValue: string | null | undefined): ReporterChallengePayload | null {
-  const payload = verifySignedToken<ReporterChallengePayload>(cookieValue);
-  if (!payload || payload.kind !== 'challenge' || isExpired(payload.exp)) return null;
-  return payload;
-}
-
-export function getMagicLinkFromToken(token: string | null | undefined): ReporterMagicLinkPayload | null {
-  const payload = verifySignedToken<ReporterMagicLinkPayload>(token);
-  if (!payload || payload.kind !== 'magic-link' || isExpired(payload.exp)) return null;
-  return payload;
-}
-
-export function isOtpDeliveryConfigured(): boolean {
-  return Boolean(resolveReporterPortalResendKey() && resolveReporterPortalFromEmail());
-}
-
-export function resolveReporterPortalResendKey(): string {
-  return firstEnv('RESEND_API_KEY', 'REPORTER_PORTAL_RESEND_API_KEY');
-}
-
-export function resolveReporterPortalFromEmail(): string {
-  return firstEnv(
-    'REPORTER_PORTAL_FROM_EMAIL',
-    'RESEND_FROM_EMAIL',
-    'REPORTER_PORTAL_EMAIL_FROM',
-    'SMTP_FROM_EMAIL',
-    'SMTP_FROM',
-    'MAIL_FROM',
-    'FROM_EMAIL',
-    'EMAIL_FROM'
-  );
-}
-
-export function resolveReporterPortalSmtpConfig(): ReporterSmtpConfig | null {
-  const host = firstEnv('REPORTER_PORTAL_SMTP_HOST', 'SMTP_HOST', 'MAIL_HOST', 'EMAIL_HOST');
-  const portRaw = firstEnv('REPORTER_PORTAL_SMTP_PORT', 'SMTP_PORT', 'MAIL_PORT', 'EMAIL_PORT');
-  const user = firstEnv('REPORTER_PORTAL_SMTP_USER', 'REPORTER_PORTAL_SMTP_USERNAME', 'SMTP_USER', 'SMTP_USERNAME', 'MAIL_USER', 'MAIL_USERNAME', 'EMAIL_USER');
-  const pass = firstEnv('REPORTER_PORTAL_SMTP_PASS', 'REPORTER_PORTAL_SMTP_PASSWORD', 'SMTP_PASS', 'SMTP_PASSWORD', 'MAIL_PASS', 'MAIL_PASSWORD', 'EMAIL_PASS');
-  const from = resolveReporterPortalFromEmail();
-
-  if (!host || !portRaw || !user || !pass || !from) {
-    return null;
-  }
-
-  const port = Number.parseInt(portRaw, 10);
-  if (!Number.isFinite(port)) {
-    return null;
-  }
-
-  const secureRaw = firstEnv('REPORTER_PORTAL_SMTP_SECURE', 'SMTP_SECURE', 'MAIL_SECURE', 'EMAIL_SECURE').toLowerCase();
-  const secure = secureRaw ? ['1', 'true', 'yes'].includes(secureRaw) : port === 465;
-
-  return {
-    host,
-    port,
-    secure,
-    user,
-    pass,
-    from,
-  };
-}
-
-export function getReporterPortalAuthEnvPresence() {
-  const smtp = resolveReporterPortalSmtpConfig();
-  return {
-    hasAuthSecret: Boolean(String(process.env.REPORTER_AUTH_SECRET || process.env.REPORTER_PORTAL_AUTH_SECRET || process.env.NEXTAUTH_SECRET || '').trim()),
-    hasResendKey: Boolean(resolveReporterPortalResendKey()),
-    hasFromEmail: Boolean(resolveReporterPortalFromEmail()),
-    hasSmtpHost: Boolean(firstEnv('REPORTER_PORTAL_SMTP_HOST', 'SMTP_HOST', 'MAIL_HOST', 'EMAIL_HOST')),
-    hasSmtpPort: Boolean(firstEnv('REPORTER_PORTAL_SMTP_PORT', 'SMTP_PORT', 'MAIL_PORT', 'EMAIL_PORT')),
-    hasSmtpUser: Boolean(firstEnv('REPORTER_PORTAL_SMTP_USER', 'REPORTER_PORTAL_SMTP_USERNAME', 'SMTP_USER', 'SMTP_USERNAME', 'MAIL_USER', 'MAIL_USERNAME', 'EMAIL_USER')),
-    hasSmtpPass: Boolean(firstEnv('REPORTER_PORTAL_SMTP_PASS', 'REPORTER_PORTAL_SMTP_PASSWORD', 'SMTP_PASS', 'SMTP_PASSWORD', 'MAIL_PASS', 'MAIL_PASSWORD', 'EMAIL_PASS')),
-    smtpReady: Boolean(smtp),
-  };
-}
-
-function classifyResendFailure(status: number): ReporterMailFailureCategory {
-  if (status === 401 || status === 403) return 'MAIL_AUTH_FAILED';
-  if (status === 429 || status >= 500) return 'MAIL_PROVIDER_UNAVAILABLE';
-  return 'UNKNOWN_EXCEPTION';
-}
-
-function classifySmtpFailure(error: unknown): ReporterMailFailureCategory {
-  const code = String((error as { code?: string })?.code || '').toUpperCase();
-  if (code === 'EAUTH') return 'MAIL_AUTH_FAILED';
-  if (['ECONNECTION', 'ESOCKET', 'ETIMEDOUT', 'EDNS', 'ENOTFOUND', 'ECONNREFUSED'].includes(code)) {
-    return 'MAIL_PROVIDER_UNAVAILABLE';
-  }
-  return 'UNKNOWN_EXCEPTION';
-}
-
-function getPreferredReporterPortalMailProvider(): ReporterMailProvider | null {
-  if (resolveReporterPortalResendKey() && resolveReporterPortalFromEmail()) {
-    return 'resend';
-  }
-  if (resolveReporterPortalSmtpConfig()) {
-    return 'smtp';
-  }
-  return null;
-}
-
-export async function sendReporterPortalLoginEmail(input: { email: string; code: string; magicLink: string }) {
-  const to = normalizeReporterAuthEmail(input.email);
-  const resendKey = resolveReporterPortalResendKey();
-  const from = resolveReporterPortalFromEmail();
-  const smtp = resolveReporterPortalSmtpConfig();
-  const provider = getPreferredReporterPortalMailProvider();
-
-  reporterAuthLog('mail transport initialized', {
-    provider,
-    hasResendKey: Boolean(resendKey),
-    hasFromEmail: Boolean(from),
-    hasSmtpConfig: Boolean(smtp),
-    fromDomain: from.includes('@') ? from.split('@')[1] : '',
-    recipient: maskReporterEmail(to),
-  });
-
-  if (!provider) {
-    if (process.env.NODE_ENV !== 'production') {
-      reporterAuthLog('mail transport fallback debug code', { recipient: maskReporterEmail(to) });
-      return { delivered: false, debugCode: input.code, provider: 'resend' } as const;
-    }
-    reporterAuthError('mail transport misconfigured', {
-      hasResendKey: Boolean(resendKey),
-      hasFromEmail: Boolean(from),
-      hasSmtpConfig: Boolean(smtp),
-    });
-    throw new ReporterPortalMailError('REPORTER_PORTAL_EMAIL_NOT_CONFIGURED', {
-      category: 'CONFIG_MISSING',
-      source: 'mail-config',
-      code: 'REPORTER_PORTAL_EMAIL_NOT_CONFIGURED',
-    });
-  }
-
-  const subject = 'Your News Pulse Reporter Portal verification';
-  const html = `
-    <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827;max-width:560px;margin:0 auto;">
-      <h2 style="margin-bottom:12px;">Reporter Portal verification</h2>
-      <p>Use this one-time code to finish signing in to your News Pulse Reporter Portal:</p>
-      <div style="margin:20px 0;padding:16px 20px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;font-size:28px;font-weight:700;letter-spacing:0.22em;text-align:center;">${input.code}</div>
-      <p>The code expires in 10 minutes.</p>
-      <p>You can also sign in using this secure link:</p>
-      <p><a href="${input.magicLink}" style="display:inline-block;padding:12px 18px;background:#2563eb;color:#fff;text-decoration:none;border-radius:999px;font-weight:600;">Open Reporter Portal</a></p>
-      <p style="font-size:12px;color:#6b7280;">If you did not request this email, you can ignore it.</p>
-    </div>
-  `;
-
-  if (provider === 'resend') {
-    reporterAuthLog('upstream call start', { provider: 'resend', url: 'https://api.resend.com/emails' });
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${resendKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from,
-        to: [to],
-        subject,
-        html,
-      }),
-    });
-
-    reporterAuthLog('upstream call end', { provider: 'resend', status: response.status });
-    if (!response.ok) {
-      const text = await response.text().catch(() => '');
-      reporterAuthError('mail send failed', {
-        provider: 'resend',
-        status: response.status,
-        body: safeProviderErrorBody(text),
-        recipient: maskReporterEmail(to),
-      });
-      throw new ReporterPortalMailError('REPORTER_PORTAL_EMAIL_SEND_FAILED', {
-        category: classifyResendFailure(response.status),
-        source: 'mail-provider',
-        provider: 'resend',
-        statusCode: response.status,
-        safeBody: safeProviderErrorBody(text),
-        code: 'REPORTER_PORTAL_EMAIL_SEND_FAILED',
-      });
-    }
-
-    reporterAuthLog('mail send success', {
-      provider: 'resend',
-      status: response.status,
-      recipient: maskReporterEmail(to),
-    });
-
-    return { delivered: true, provider: 'resend' };
-  }
-
+export async function loginAction(action: 'request-login-otp' | 'verify-login-otp' | 'challenge-session', req: NextApiRequest, res: NextApiResponse) {
+  const challenge = action === 'challenge-session';
+  const verify = action === 'verify-login-otp';
+  if (!apiMethod(req, res, challenge ? 'GET' : 'POST')) return;
+  if (reporterLock(req) === 'pending') return res.status(409).json({ ok: false, code: 'LOGOUT_UNCONFIRMED' });
+  if (!reporterIngressAvailable(req)) return res.status(503).json({ ok: false, code: 'REPORTER_UNAVAILABLE' });
+  const email = normalizeReporterAuthEmail(req.body?.email);
+  const otp = req.body?.code;
+  if (!challenge && !email) return res.status(400).json({ ok: false, code: 'EMAIL_REQUIRED' });
+  if (verify && (typeof otp !== 'string' || !/^\d{6}$/.test(otp))) return res.status(400).json({ ok: false, code: 'OTP_REQUIRED' });
   try {
-    const transporter = nodemailer.createTransport({
-      host: smtp!.host,
-      port: smtp!.port,
-      secure: smtp!.secure,
-      auth: {
-        user: smtp!.user,
-        pass: smtp!.pass,
-      },
+    const upstream = await reporterBackendFetch(req, `${PORTAL_PATH}/auth/${action}`, {
+      method: challenge ? 'GET' : 'POST', body: challenge ? undefined : verify ? { email, otp } : { email },
     });
-
-    reporterAuthLog('upstream call start', {
-      provider: 'smtp',
-      host: smtp!.host,
-      port: smtp!.port,
-      secure: smtp!.secure,
-    });
-
-    await transporter.verify();
-    reporterAuthLog('transporter verify success', {
-      provider: 'smtp',
-      host: smtp!.host,
-      port: smtp!.port,
-      secure: smtp!.secure,
-    });
-
-    const info = await transporter.sendMail({
-      from: smtp!.from,
-      to,
-      subject,
-      html,
-    });
-
-    reporterAuthLog('upstream call end', {
-      provider: 'smtp',
-      accepted: info.accepted.length,
-      rejected: info.rejected.length,
-      response: safeProviderErrorBody(info.response || ''),
-    });
-
-    reporterAuthLog('mail send success', {
-      provider: 'smtp',
-      recipient: maskReporterEmail(to),
-      accepted: info.accepted.length,
-      rejected: info.rejected.length,
-    });
-  } catch (error) {
-    reporterAuthError('mail send failed', {
-      provider: 'smtp',
-      code: String((error as { code?: string })?.code || ''),
-      command: String((error as { command?: string })?.command || ''),
-      responseCode: Number((error as { responseCode?: number })?.responseCode || 0) || undefined,
-      response: safeProviderErrorBody(String((error as { response?: string })?.response || '')),
-      recipient: maskReporterEmail(to),
-    });
-    throw new ReporterPortalMailError('REPORTER_PORTAL_EMAIL_SEND_FAILED', {
-      category: classifySmtpFailure(error),
-      source: 'mail-provider',
-      provider: 'smtp',
-      statusCode: Number((error as { responseCode?: number })?.responseCode || 0) || undefined,
-      safeBody: safeProviderErrorBody(String((error as { response?: string })?.response || '')),
-      code: String((error as { code?: string })?.code || 'REPORTER_PORTAL_EMAIL_SEND_FAILED'),
-      cause: error,
-    });
+    const data = await reporterJson(upstream);
+    if (upstream.status !== 200 || data.ok !== true) {
+      const { status, reason } = upstreamDenial(upstream.status, data.code);
+      return res.status(status).json({ ok: false, code: reason });
+    }
+    const cookies = sanitizedReporterCookies(upstream.headers, req);
+    if (verify) {
+      const identity = record(data.reporter);
+      if (!validReporterId(identity.id) || identity.email !== email || !validExpiry(data.expiresAt)
+        || !cookies.some(value => /^reporter_portal_session=[^;]+;/.test(value))) {
+        return res.status(502).json({ ok: false, code: 'VERIFICATION_UNCONFIRMED' });
+      }
+    } else if (challenge && (data.authenticated !== false || record(data.challenge).status !== 'pending'
+      || !validExpiry(record(data.challenge).expiresAt))) {
+      return res.status(401).json({ ok: false, code: 'SESSION_EXPIRED' });
+    }
+    // A code request or pending challenge can never establish login authority.
+    const allowed = verify ? cookies : cookies.filter(value => !value.startsWith('reporter_portal_session='));
+    if (allowed.length) res.setHeader('Set-Cookie', allowed);
+    return res.status(200).json(challenge ? { ok: true, authenticated: false, challenge: { status: 'pending' } }
+      : verify ? { ok: true, accountId: record(data.reporter).id } : { ok: true });
+  } catch {
+    return res.status(503).json({ ok: false, code: 'REPORTER_UNAVAILABLE' });
   }
-
-  return { delivered: true, provider: 'smtp' };
 }
 
-export function getOtpAttemptsRemaining(attempts: number): number {
-  return Math.max(0, MAX_OTP_ATTEMPTS - attempts);
-}
-
-export function hasOtpAttemptsRemaining(attempts: number): boolean {
-  return attempts < MAX_OTP_ATTEMPTS;
+const PROFILE_FIELDS = ['fullName', 'phone', 'country', 'stateName', 'districtName', 'cityTownVillage'] as const;
+export async function profileAction(action: 'profile' | 'request-change' | 'confirm-change', req: NextApiRequest, res: NextApiResponse) {
+  const profile = action === 'profile';
+  if (!apiMethod(req, res, ...(profile ? ['GET', 'PATCH'] : ['POST']))) return;
+  const auth = await requireReporterSession(req);
+  if (!auth.ok) return res.status(auth.status).json({ ok: false, code: auth.reason });
+  if (req.headers['x-reporter-account'] !== auth.reporter.accountId) {
+    return res.status(409).json({ ok: false, code: 'ACCOUNT_CHANGED' });
+  }
+  let body: Record<string, string> | undefined;
+  if (req.method !== 'GET') {
+    const input = record(req.body);
+    body = {};
+    if (profile) {
+      if (Object.hasOwn(input, 'email')) return res.status(400).json({ ok: false, code: 'EMAIL_REVERIFICATION_REQUIRED' });
+      if (!Object.keys(input).length || Object.keys(input).some(key => !(PROFILE_FIELDS as readonly string[]).includes(key))) {
+        return res.status(400).json({ ok: false, code: 'INVALID_PROFILE' });
+      }
+      for (const key of PROFILE_FIELDS) {
+        const val = input[key];
+        if (val === undefined) continue;
+        if (typeof val !== 'string' || val.length > 256) return res.status(400).json({ ok: false, code: 'INVALID_PROFILE' });
+        body[key] = val.trim();
+      }
+    } else {
+      body.email = normalizeReporterAuthEmail(input.email);
+      if (!body.email || body.email === auth.reporter.email) return res.status(400).json({ ok: false, code: 'INVALID_NEW_EMAIL' });
+      if (action === 'confirm-change') {
+        if (typeof input.code !== 'string' || !/^\d{6}$/.test(input.code)) return res.status(400).json({ ok: false, code: 'OTP_REQUIRED' });
+        body.otp = input.code;
+      }
+    }
+  }
+  try {
+    const upstream = await reporterBackendFetch(req, `${PORTAL_PATH}/profile${profile ? '' : `/email/${action}`}`, { method: req.method, body });
+    const data = await reporterJson(upstream);
+    if (upstream.status !== 200 || data.ok !== true) {
+      const { status, reason } = upstreamDenial(upstream.status, data.code);
+      return res.status(status).json({ ok: false, code: reason });
+    }
+    if (action === 'request-change') return res.status(200).json({ ok: true });
+    const result = record(data.profile);
+    const expectedEmail = profile ? auth.reporter.email : body?.email;
+    if (result.id !== auth.reporter.accountId || result.email !== expectedEmail
+      || (action === 'confirm-change' && data.reverifyRequired !== true)) {
+      return res.status(502).json({ ok: false, code: 'PROFILE_UNCONFIRMED' });
+    }
+    if (action === 'confirm-change') {
+      res.setHeader('Set-Cookie', revokedReporterCookies(req));
+      return res.status(200).json({ ok: true, reverifyRequired: true });
+    }
+    const fields: Record<string, string> = {};
+    for (const key of PROFILE_FIELDS) {
+      if (typeof result[key] === 'string') fields[key] = result[key];
+    }
+    // This read-only classification is distinct from mailbox verification.
+    const verifiedJournalist = result.reporterType === 'journalist' && result.verificationLevel === 'verified';
+    return res.status(200).json({ ok: true, profile: { accountId: auth.reporter.accountId, email: expectedEmail, verifiedJournalist, ...fields } });
+  } catch {
+    return res.status(503).json({ ok: false, code: 'REPORTER_UNAVAILABLE' });
+  }
 }

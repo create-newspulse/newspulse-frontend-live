@@ -1,6 +1,8 @@
 import type { CommunityStorySummary, CommunitySubmissionCounts } from '../types/community-reporter';
+import { removeReporterStorageKeys } from './reporterPrivacy';
 
 export type ReporterPortalSession = {
+  accountId: string;
   email: string;
   fullName?: string;
   name?: string;
@@ -20,32 +22,6 @@ export type ReporterPortalProfile = {
   state?: string;
   country?: string;
 };
-
-const REPORTER_PROFILE_KEY = 'np_cr_profile_v1';
-const REPORTER_EMAIL_KEY = 'np_cr_email';
-
-function readStorage(key: string): string | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function writeStorage(key: string, value: string) {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {}
-}
-
-function removeStorage(key: string) {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.removeItem(key);
-  } catch {}
-}
 
 export function normalizeReporterEmail(email: string | null | undefined): string {
   return String(email || '').trim().toLowerCase();
@@ -147,30 +123,8 @@ export function getStoryBody(story: CommunityStorySummary | null | undefined): s
 }
 
 export function getStoryNotes(story: CommunityStorySummary | null | undefined): string[] {
-  if (!story) return [];
-  const values = [
-    story.notes,
-    story.note,
-    story.editorNotes,
-    story.editorNote,
-    story.reviewNotes,
-    story.reviewNote,
-    story.feedback,
-    story.rejectionReason,
-    story.internalComment,
-    story.comment,
-  ];
-
-  const flat = values.flatMap((value) => {
-    if (Array.isArray(value)) return value;
-    if (value == null) return [];
-    return [value];
-  });
-
-  return flat
-    .map((value) => String(value || '').trim())
-    .filter(Boolean)
-    .filter((value, index, items) => items.indexOf(value) === index);
+  const feedback = story?.reporterFeedback;
+  return typeof feedback === 'string' && feedback.trim() ? [feedback.trim()] : [];
 }
 
 export function getStorySubmittedAt(story: CommunityStorySummary | null | undefined): string {
@@ -217,50 +171,13 @@ export function canEditStory(story: CommunityStorySummary | null | undefined): b
 }
 
 export function loadReporterPortalProfile(): ReporterPortalProfile | null {
-  const raw = readStorage(REPORTER_PROFILE_KEY);
-  if (!raw) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return null;
-    return {
-      ...extractReporterIdentityFields(parsed),
-      phone: typeof parsed.phone === 'string' ? parsed.phone : undefined,
-      whatsapp: typeof parsed.whatsapp === 'string' ? parsed.whatsapp : (typeof parsed.reporterWhatsApp === 'string' ? parsed.reporterWhatsApp : undefined),
-      city: typeof parsed.city === 'string' ? parsed.city : undefined,
-      district: typeof parsed.district === 'string' ? parsed.district : undefined,
-      state: typeof parsed.state === 'string' ? parsed.state : undefined,
-      country: typeof parsed.country === 'string' ? parsed.country : undefined,
-    };
-  } catch {
-    return null;
-  }
+  removeReporterStorageKeys();
+  return null;
 }
 
-export function saveReporterPortalProfile(profile: ReporterPortalProfile) {
-  const identity = extractReporterIdentityFields(profile);
-  const normalizedEmail = normalizeReporterEmail(identity.email || profile.email);
-  const fullName = normalizeReporterNamePart(identity.fullName || profile.fullName);
-  const name = normalizeReporterNamePart(identity.name || profile.name || fullName);
-  const firstName = normalizeReporterNamePart(identity.firstName || profile.firstName || fullName.split(/\s+/)[0] || name.split(/\s+/)[0]);
-  const payload = {
-    fullName,
-    name,
-    firstName,
-    email: normalizedEmail,
-    phone: String(profile.phone || '').trim(),
-    whatsapp: String(profile.whatsapp || '').trim(),
-    city: String(profile.city || '').trim(),
-    district: String(profile.district || '').trim(),
-    state: String(profile.state || '').trim(),
-    country: String(profile.country || '').trim() || 'India',
-  };
-  writeStorage(REPORTER_PROFILE_KEY, JSON.stringify(payload));
-  if (normalizedEmail) {
-    writeStorage(REPORTER_EMAIL_KEY, normalizedEmail);
-  }
+export function saveReporterPortalProfile(_profile: ReporterPortalProfile) {
+  // Compatibility for old callers, never a private-data cache.
+  removeReporterStorageKeys();
 }
 
 export function formatSubmissionDate(value: string | null | undefined): string {

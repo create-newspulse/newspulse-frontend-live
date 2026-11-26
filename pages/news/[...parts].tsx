@@ -1,9 +1,11 @@
 import type { GetServerSideProps } from 'next';
 import ErrorPage from 'next/error';
 import { withPublicReadDeadline } from '../../lib/publicReadDeadline';
+import { anonymousArticleGet } from '../../lib/publicArticleRequest';
+import { getArticleReaderOrigin } from '../../lib/articleSeo.server';
 
 import { buildNewsUrl } from '../../lib/newsRoutes';
-import { unwrapArticle } from '../../lib/publicNewsApi';
+import { isLegacyMissingArticle, parsePublicNewsArticle, type Article } from '../../lib/publicNewsApi';
 import { getLocalizedArticleFields, normalizeRouteLocale, type RouteLocale } from '../../lib/localizedArticleFields';
 
 function normalizeLang(value: unknown): 'en' | 'hi' | 'gu' {
@@ -13,22 +15,13 @@ function normalizeLang(value: unknown): 'en' | 'hi' | 'gu' {
   return 'en';
 }
 
-function getRequestOrigin(ctx: any): string {
-  const req = ctx.req;
-  const protoHeader = String(req?.headers?.['x-forwarded-proto'] || '').split(',')[0].trim();
-  const proto = protoHeader || 'http';
-  const host = String(req?.headers?.['x-forwarded-host'] || req?.headers?.host || '').split(',')[0].trim();
-  if (!host) return '';
-  return `${proto}://${host}`;
-}
-
 export default function LegacyNewsRedirectPage({ unavailable = false }: { unavailable?: boolean }) {
   return unavailable ? <ErrorPage statusCode={503} /> : null;
 }
 
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
   const lang = normalizeLang(ctx.locale);
-  const partsRaw = (ctx.params as any)?.parts;
+  const partsRaw = ctx.params?.parts;
   const parts = Array.isArray(partsRaw) ? partsRaw.map((p) => String(p || '').trim()).filter(Boolean) : [];
 
   // Only handle legacy multi-segment URLs like /news/:id/:slug
@@ -39,76 +32,40 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   const idCandidate = parts[0];
   const slugCandidate = parts[parts.length - 1];
 
-  const origin = getRequestOrigin(ctx);
-  if (!origin) return { notFound: true };
-
   const attempts: RouteLocale[] = [lang, 'en', 'hi', 'gu'].filter((v, idx, arr) => arr.indexOf(v) === idx) as RouteLocale[];
 
-  const fetchById = async (attemptLang: RouteLocale, signal: AbortSignal): Promise<any | null> => {
-    const qs = new URLSearchParams();
-    qs.set('lang', attemptLang);
-    qs.set('language', attemptLang);
-    const endpoint = `${origin}/api/public/news/${encodeURIComponent(idCandidate)}?${qs.toString()}`;
-    const res = await fetch(endpoint, { method: 'GET', headers: { Accept: 'application/json' }, cache: 'no-store', signal });
-    if (res.status === 404 || res.status === 410) return null;
-    if (!res.ok) throw new Error('Article upstream unavailable');
-    const data = await res.json().catch(() => null);
-    signal.throwIfAborted();
-    return unwrapArticle(data);
-  };
-
-  const fetchBySlug = async (attemptLang: RouteLocale, signal: AbortSignal): Promise<any | null> => {
-    const qs = new URLSearchParams();
-    qs.set('lang', attemptLang);
-    qs.set('language', attemptLang);
-    const endpoint = `${origin}/api/public/news/slug/${encodeURIComponent(slugCandidate)}?${qs.toString()}`;
-    const res = await fetch(endpoint, { method: 'GET', headers: { Accept: 'application/json' }, cache: 'no-store', signal });
-    if (res.status === 404 || res.status === 410) return null;
-    if (!res.ok) throw new Error('Article upstream unavailable');
-    const data = await res.json().catch(() => null);
-    signal.throwIfAborted();
-    return unwrapArticle(data);
-  };
-
   try {
+    const origin = getArticleReaderOrigin(ctx.req);
     return await withPublicReadDeadline(4000, async (signal) => {
-    let found: any | null = null;
-    let foundLang: RouteLocale | null = null;
-
-    for (const attemptLang of attempts) {
-      const article = await fetchById(attemptLang, signal);
-      if (article?._id) {
-        found = article;
-        foundLang = attemptLang;
-        break;
-      }
-    }
-
-    if (!found) {
-      for (const attemptLang of attempts) {
-        const article = await fetchBySlug(attemptLang, signal);
-        if (article?._id) {
-          found = article;
-          foundLang = attemptLang;
-          break;
+      let pending = false;
+      for (const path of [encodeURIComponent(idCandidate), `slug/${encodeURIComponent(slugCandidate)}`]) {
+        for (const attemptLang of attempts) {
+          const qs = new URLSearchParams({ lang: attemptLang, language: attemptLang });
+          const res = await fetch(`${origin}/api/public/news/${path}?${qs}`, anonymousArticleGet(signal));
+          if (res.status === 404 || res.status === 410) continue;
+          if (!res.ok) throw new Error('Article upstream unavailable');
+          const data: unknown = await res.json();
+          signal.throwIfAborted();
+          if (isLegacyMissingArticle(data)) continue;
+          // Only the local slug reader can emit these legacy envelopes.
+          if (path.startsWith('slug/') && data && typeof data === 'object') {
+            if ('article' in data && data.article === null && Object.keys(data).length === 1) continue;
+            if ('status' in data && (data.status === 'pending' || data.status === 'translating') &&
+                Object.keys(data).every(key => key === 'status' || key === 'sourceLang')) {
+              pending = true;
+              continue;
+            }
+          }
+          const article: Article | null = parsePublicNewsArticle(data);
+          if (!article) throw new Error('Invalid article response');
+          const localized = getLocalizedArticleFields(article, attemptLang);
+          if (!localized.isVisible) return { notFound: true };
+          const destination = buildNewsUrl({ id: article._id, slug: localized.slug || article._id, lang: normalizeRouteLocale(attemptLang) });
+          return { redirect: { destination, permanent: true } };
         }
       }
-    }
-
-    if (!found?._id || !foundLang) return { notFound: true };
-
-    const localized = getLocalizedArticleFields(found, foundLang);
-    if (!localized.isVisible) return { notFound: true };
-
-    const id = String(found._id || '').trim();
-    const destination = buildNewsUrl({ id, slug: localized.slug || id, lang: normalizeRouteLocale(foundLang) });
-
-    return {
-      redirect: {
-        destination,
-        permanent: true,
-      },
-    };
+      if (pending) throw new Error('Public edition pending');
+      return { notFound: true };
     });
   } catch {
     ctx.res.statusCode = 503;

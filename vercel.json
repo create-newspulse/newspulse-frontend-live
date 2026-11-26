@@ -4,14 +4,6 @@
   
   "rewrites": [
     {
-      "source": "/admin-api/public/:path*",
-      "destination": "https://newspulse-backend-real.onrender.com/admin-api/public/:path*"
-    },
-    {
-      "source": "/public-api/:path*",
-      "destination": "https://newspulse-backend-real.onrender.com/admin-api/public/:path*"
-    },
-    {
       "source": "/sitemap.xml",
       "destination": "/api/sitemap"
     },

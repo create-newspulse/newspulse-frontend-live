@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 import { getPublicApiBaseUrl } from '../../../../../lib/publicApiBase';
+import { anonymousArticleGet } from '../../../../../lib/publicArticleRequest';
 import { getArticleEditionLocale } from '../../../../../lib/articleSlugs';
 import { conflictingStoryIdentity, sameStory } from '../../../../../lib/articleSeo.server';
 import { getLocalizedArticleFields, getLocalizedSlug, normalizeRouteLocale, STRICT_LOCALE_POLICY, type RouteLocale } from '../../../../../lib/localizedArticleFields';
@@ -127,12 +128,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const normalizedRequestedSlug = normalizeSlugValue(slug);
 
-  const requestHeaders = {
-    Accept: 'application/json',
-    cookie: String(req.headers.cookie || ''),
-    authorization: String(req.headers.authorization || ''),
-  };
-
   const deadlineAt = Date.now() + 4000;
   let retryAfter: string | undefined;
   const readJson: ReadPublicJson = async (url, timeoutMs = 4000) => {
@@ -142,7 +137,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       throw new Error('PUBLIC_NEWS_UNAVAILABLE');
     }
     return readWithPreviewDiagnostics(diagnostics, recordStatus => withPublicReadDeadline(remaining, async (signal) => {
-      const upstream = await fetch(url, { method: 'GET', headers: requestHeaders, cache: 'no-store', signal });
+      const upstream = await fetch(url, anonymousArticleGet(signal));
       recordStatus(upstream.status);
       retryAfter = getSafeRetryAfter(upstream.headers?.get('Retry-After'));
       const payload: unknown = upstream.ok ? JSON.parse(await upstream.text()) : null;

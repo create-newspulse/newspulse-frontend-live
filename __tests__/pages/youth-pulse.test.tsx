@@ -49,13 +49,13 @@ jest.mock('../../components/youth/SubmitStoryModal', () => ({
 }));
 
 describe('pages/youth-pulse', () => {
-  it('keeps published stories visible while disabling submissions when the Youth Pulse toggle is closed', () => {
+  it.each([true, false])('keeps published stories visible without offering unsupported intake (Founder closed: %s)', closed => {
     render(
       <YouthPulsePage
         initialFounderToggles={{
           communityReporterClosed: false,
           reporterPortalClosed: false,
-          youthPulseSubmissionsClosed: true,
+          youthPulseSubmissionsClosed: closed,
           viralVideosFrontendEnabled: true,
           updatedAt: null,
         }}
